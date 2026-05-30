@@ -1,11 +1,16 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence, Literal
+from typing import Sequence, Literal, Any
+
 from box import Box
+
+from ..utils.logger import LogOptions
+
 
 @dataclass
 class APIOptions:
     enabled: bool = True
+    name: str | None = None
     delay: Sequence[float] = (3, 5)
     timeout: float = 30
     retry_times: int = 3
@@ -32,20 +37,17 @@ class BrowserOptions:
     retry_times: int = 3
     backoff_factor: float = 2
     headless: bool = False
-    page_count: int | None = None
     user_data_dir: Path | str | None = None
-    storage_state_path: Path | str | None = None
-    viewport: dict[str, int] | None = field(default_factory=lambda: {"width": 1280, "height": 720})
+    viewport: dict[str, int] | None = None
 
 @dataclass
 class DownloadOptions:
-    max_workers: int = 5
+    max_workers: int = 3
 
 @dataclass
 class ExportOptions:
-    output_dir: Path | str
+    output_path: Path | str
     enabled: bool = True
-    group: str = "default"
     file_name_template: str = "{name}"
     extension: str = "default"
 
@@ -56,10 +58,10 @@ class Options:
         _browser: BrowserOptions = BrowserOptions()
         _api: APIOptions = APIOptions()
         _download: DownloadOptions = DownloadOptions()
-        _storage: Path | str | None = None
-        _exports: Box = field(default_factory=Box)
+        _storage: Path | str = Path(__file__).parent.parent.parent / "app_data" / "storage"
+        _log: LogOptions = field(default_factory=LogOptions)
+        _exports: dict[str, Any] = field(default_factory=dict)
 
-        # 链式设置方法
         def set_mode(self, mode: Literal["api", "browser", "requests"]) -> "Options":
             self._mode = mode
             return self
@@ -72,16 +74,34 @@ class Options:
             self._requests = RequestsOptions(**kwargs)
             return self
 
-        def set_browser_options(self, **kwargs) -> "Options":
-            self._browser = BrowserOptions(**kwargs)
+        def set_browser_options(self,
+                                browser_type: str = "chromium",
+                                delay: Sequence[float] = (3, 5),
+                                timeout: float = 30,
+                                retry_times: int = 3,
+                                backoff_factor: float = 2,
+                                headless: bool = False,
+                                user_data_dir: Path | str | None = None,
+                                viewport: dict[str, int] | None = None) -> "Options":
+            self._browser = BrowserOptions(browser_type=browser_type, delay=delay, timeout=timeout, retry_times=retry_times,
+                                           backoff_factor=backoff_factor, headless=headless,
+                                           user_data_dir=user_data_dir, viewport=viewport)
             return self
 
-        def set_download_options(self, **kwargs) -> "Options":
-            self._download = DownloadOptions(**kwargs)
+        def set_download_options(self, max_workers: int) -> "Options":
+            self._download = DownloadOptions(max_workers=max_workers)
             return self
 
-        def set_export_options(self, name: str, options) -> "Options":
-            self._exports[name] = options
+        def set_storage_options(self, path: Path | str) -> "Options":
+            self._storage = Path(path)
+            return self
+
+        def set_log_options(self, **kwargs) -> "Options":
+            self._log = LogOptions(**kwargs)
+            return self
+
+        def set_export_options(self, options) -> "Options":
+            self._exports[options.format] = options
             return self
 
         def enable_format(self, name: str, enabled: bool = True, **extra) -> "Options":
@@ -108,7 +128,10 @@ class Options:
         def download(self) -> DownloadOptions: return self._download
 
         @property
+        def log(self) -> LogOptions: return self._log
+
+        @property
         def exports(self) -> dict[str, ExportOptions]:return self._exports
 
         @property
-        def storage(self) -> Path | str | None: return self._storage
+        def storage(self) -> Path | str: return self._storage
