@@ -1,11 +1,12 @@
+import time
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
-from datetime import datetime
-from core.options import ExportOptions
-from dataclasses import dataclass
-from exporters.base import BaseExporter
-from models.novel import Chapter, Novel
-import time
+
+from .base import BaseExporter
+from ..core.options import ExportOptions
+from ..models.novel import Chapter, Novel
 
 
 @dataclass
@@ -13,7 +14,6 @@ class TXTExportOptions(ExportOptions):
     format = "txt"
     encoding: str = "utf-8"
     extension = ".txt"
-    single_file_path = None  # 默认 output_dir / group / novel.name / file_name
 
 
 class TXTExporter(BaseExporter):
@@ -21,32 +21,25 @@ class TXTExporter(BaseExporter):
 
     def __init__(self, options: TXTExportOptions, novel: Novel):
         encoding = getattr(options, "encoding", "utf-8")
-        file_name_template = getattr(options, "file_name_template", "{title} - {author}")
-        output_dir = Path(getattr(options, "output_dir"))
-        group = getattr(options, "group", "default")
+        output_path = Path(getattr(options, "output_path"))
         extension = getattr(options, "extension", ".txt")
 
         self.novel = novel
         self.options = options
         self.extension = extension
         self.encoding = encoding
-        self.file_name_template = file_name_template
-        self.group = group
 
         self._ordered_chapter_dict = {}
 
-        # 计算输出文件路径
+        # output_path 是精确的文件路径模板，直接格式化后使用
         variables = {
-            "title": novel.name if novel else "",
+            "name": novel.name if novel else "",
             "author": novel.author if novel else "",
-            "group": self.group,
             "novel_id": novel.id if novel else "",
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
-
-        file_name = self.file_name_template.format(**variables) + extension if extension is not "default" else ".txt"
-        self.file_path = Path(output_dir) / group / (novel.name if novel else "unknown") / file_name
+        self.file_path = Path(str(output_path).format(**variables))
         self._header_written = False
 
     def export(self, chapters: Chapter | Iterable[Chapter], **kwargs):
@@ -63,16 +56,13 @@ class TXTExporter(BaseExporter):
         chapters.sort(key=lambda x: x.order)
         chapters = [x for x in chapters if x.content is not None]
 
-        if not self._header_written:
-            self._write_header()
-            self._header_written = True
-        if self.options.single_file_path:
-            self.file_path = Path(self.options.single_file_path)
+        self._write_header()
         # 写入章节内容
-        with open(self.file_path, "w", encoding=self.encoding) as f:
+        with open(self.file_path, "a", encoding=self.encoding) as f:
+            text = ""
             for chapter in chapters:
-                text = self._format_chapter(chapter)
-                f.write(text)
+                text += self._format_chapter(chapter)
+            f.write(text)
 
     def _write_header(self):
         """生成小说信息头部并创建/覆盖文件"""
