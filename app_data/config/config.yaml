@@ -1,0 +1,5 @@
+version: 1.0.0
+mode: browser
+group: default
+download:
+  max_workers: 3
