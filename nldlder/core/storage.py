@@ -3,8 +3,12 @@ import os
 from pathlib import Path
 from typing import Sequence
 
-from models.novel import Novel, Chapter, Chapters
-from core.progress import DownloadProgress
+from .exceptions import StorageError
+from .progress import DownloadProgress
+from ..models.novel import Novel, Chapter, Chapters
+from ..utils.logger import get_logger
+
+_log = get_logger("nldlder.core.storage")
 
 
 class Storage:
@@ -56,6 +60,7 @@ class Storage:
         return self.get_novel_dir(novel_id) / "chapters" / f"{chapter_id}.json"
 
     def save_meta(self, novel: Novel):
+        _log.debug("save_meta: id=%s", novel.id)
         """保存小说元数据（标题、作者、封面等）。"""
         path = self.get_meta_path(novel.id)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,19 +119,33 @@ class Storage:
                 encoding="utf-8"
             )
 
-    def load_chapter(self, novel_id: str, chapter_id: str, index_url: str = None) -> Chapter | None:
+    def load_chapter(self,
+                     novel_id: str,
+                     chapter_id: str,
+                     index_url: str | None = None,
+                     err_ok: bool = False) -> Chapter | None:
         """
         读取单个章节的保存数据。
         """
         if index_url is None:
             novel = self.load_meta(novel_id)
             if novel is None:
-                raise FileNotFoundError(f"Cannot find meta.json: {novel_id}")
+                if err_ok:
+                    raise StorageError(
+                        "Novel metadata not found",
+                        path=str(self.get_meta_path(novel_id)),
+                    )
             else:
                 index_url = novel.url
         path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
         if not path.exists():
-            return None
+            if err_ok:
+                raise StorageError(
+                    "Chapter data not found",
+                    path=str(path)
+                )
+            else:
+                return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
         json_data["index_url"] = index_url
         chapter = Chapter.loads(**json_data)
@@ -142,12 +161,15 @@ class Storage:
             return Chapters()
         novel = self.load_meta(novel_id)
         if novel is None:
-            raise FileNotFoundError(f"Cannot find meta.json: {novel_id}")
+            raise StorageError(
+                "Novel metadata not found",
+                path=str(self.get_meta_path(novel_id)),
+            )
         else:
             index_url = novel.url
         for file in path.glob("*.json"):
             try:
-                chapter = self.load_chapter(novel_id = novel_id, chapter_id = file.stem, index_url = index_url)
+                chapter = self.load_chapter(novel_id = novel_id, chapter_id = file.stem, index_url = index_url, err_ok=False)
                 chapters.append(chapter)
             finally:
                 pass
@@ -159,9 +181,6 @@ class Storage:
         """
         获取已保存的所有章节序号并排序。
         """
-        chapters_dir = self.get_novel_dir(novel_id) / "chapters"
-        if not chapters_dir.exists():
-            return []
         chapters = self.load_chapters(novel_id = novel_id)
         if chapters is None:
             return None
