@@ -11,7 +11,7 @@ def register_export_options() -> dict[str, Any]:
         if file.endswith('.py') and file not in ['__init__.py',"base.py"]:
             module_name = file[:-3]
             try:
-                module = import_module(f'exporters.{module_name}', __name__)
+                module = import_module(f'..exporters.{module_name}', __package__)
                 output_class = getattr(module, f'{module_name.upper()}ExportOptions')
                 export_options[module_name] = output_class
             except (ImportError, AttributeError) as e:
@@ -27,7 +27,7 @@ def register_exporter() -> dict[str, Any]:
         if file.endswith('.py') and file not in ['__init__.py',"base.py"]:
             module_name = file[:-3]
             try:
-                module = import_module(f'exporters.{module_name}', __name__)
+                module = import_module(f'..exporters.{module_name}', __package__)
                 output_class = getattr(module, f'{module_name.upper()}Exporter')
                 exporter[module_name] = output_class
             except (ImportError, AttributeError) as e:
@@ -43,7 +43,7 @@ def register_parser() -> dict[str, Any]:
         if file.endswith('.py') and file not in ['__init__.py',"base.py"]:
             module_name = file[:-3]
             try:
-                module = import_module(f'parsers.{module_name}', __name__)
+                module = import_module(f'..parsers.{module_name}', __package__)
                 output_class = getattr(module, f'{module_name.capitalize()}Parser')
                 parser[module_name] = output_class
             except (ImportError, AttributeError) as e:
