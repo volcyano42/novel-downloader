@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import threading
+from base64 import b64encode, b64decode
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from base64 import b64encode, b64decode
 from typing import Any, Sequence, Iterator
 
 threading_lock = threading.Lock()
@@ -42,13 +43,13 @@ class Illustration:
 
 class Chapters(Sequence):
 
-    def __init__(self, chapters: Chapter | Sequence[Chapter] = None) -> None:
+    def __init__(self, chapters: Chapter | Sequence[Chapter] | None = None) -> None:
         if chapters is None:
             self._chapters = tuple()
         else:
             self._chapters = tuple(chapters) if isinstance(chapters, Sequence) else (chapters, )
         self._chapters: tuple[Chapter, ...] = tuple(sorted(self._chapters, key=lambda chapter: chapter.order))
-        self._by_id = {ch.order: ch for ch in self._chapters}
+        self._by_id = {ch.id: ch for ch in self._chapters}
         self._by_url = {ch.url: ch for ch in self._chapters}
         self._by_order = {ch.order: ch for ch in self._chapters}
 
@@ -75,9 +76,9 @@ class Chapters(Sequence):
     def __hash__(self):
         return hash(self._chapters)
 
-    def get_chapter_by_id(self, order: int) -> Chapter | None:
-        """根据章节序号（从1开始）获取章节"""
-        return self._by_id.get(order)
+    def get_chapter_by_id(self, chapter_id: str) -> Chapter | None:
+        """根据章节 ID 获取章节"""
+        return self._by_id.get(chapter_id)
 
     def get_chapter_by_url(self, url: str) -> Chapter | None:
         """根据章节 URL 获取章节"""
@@ -93,6 +94,29 @@ class Chapters(Sequence):
             return None
         else:
             return Chapters(target_chapters)
+
+    def merge(self, other: Chapter | Iterable[Chapter]) -> Chapters:
+        """合并章节，按 id 去重（other 覆盖已存在的同名章节）。
+
+        返回新的 Chapters 对象，不修改自身。
+
+        Args:
+            other: 要合并的章节（单个或可迭代对象）。
+
+        Returns:
+            合并后的新 Chapters 实例。
+        """
+        if isinstance(other, Chapter):
+            other = (other,)
+
+        merged = {
+            c.id: c
+            for c in self._chapters
+        }
+        for c in other:
+            merged[c.id] = c
+
+        return Chapters(list(merged.values()))
 
     # 可选的便利方法
     @property
@@ -123,10 +147,10 @@ class Chapter:
               index_url: str,
               title: str,
               order: int,
-              volume: str = None,
-              content: str = None,
-              time: float = None,
-              count: int = None,
+              volume: str | None = None,
+              content: str | None = None,
+              time: float| None = None,
+              count: int | None = None,
               is_complete: bool = False,
               images: Sequence[dict] = tuple(),
               **kwargs
