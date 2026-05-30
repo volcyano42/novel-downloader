@@ -1,17 +1,20 @@
 import json
 import re
 import time
+from typing import Sequence
 
 import requests
-from typing import Sequence
 from bs4 import BeautifulSoup, Tag
-
-from core.engine import BrowserEngine
-from core.exceptions import ChapterNotFoundError, FeatureNotSupportedError
-from models.auth import AuthCredential
-from models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
-from parsers.base import BaseParser
 from yarl import URL
+
+from .base import BaseParser
+from ..core.engine import BrowserEngine
+from ..core.exceptions import AntiCrawlError, ChapterNotFoundError, FeatureNotSupportedError, NovelNotFoundError
+from ..models.auth import AuthCredential
+from ..models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
+from ..utils.logger import get_logger
+
+_log = get_logger("nldlder.parsers.fanqie")
 
 # 小说内容转码表
 content_transcoding = {"58670": "0", "58413": "1", "58678": "2", "58371": "3", "58353": "4", "58480": "5", "58359": "6",
@@ -193,7 +196,7 @@ def standardize_id(ref: str | Novel | Chapter) -> str:
 
 
 # 通过html获取小说相关信息的基类
-class _FanqieBase(BaseParser):
+class FanqieHTMLParser(BaseParser):
 
     @staticmethod
     def can_handle(identifier: str | int) -> bool:
@@ -230,9 +233,10 @@ class _FanqieBase(BaseParser):
             description = abstract_elem.get_text(strip=True) if abstract_elem else ''
 
             url = None
-            cover_img = item.select_one('.book-cover-img')
-            if cover_img and cover_img.get('src'):
-                pass
+            link_elem = item.find('a')
+            if link_elem and link_elem.get('href'):
+                href = link_elem['href']
+                url = href if href.startswith('http') else f"https://fanqienovel.com{href}"
 
             # 构造结果对象
             results.append(SearchResult(
@@ -244,7 +248,9 @@ class _FanqieBase(BaseParser):
 
         return tuple(results)
 
-    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
+        if BeautifulSoup(novel_ref, 'lxml').find("div", class_="no-content"):
+            raise NovelNotFoundError()
         json_data = extract_json(novel_ref)
         page_data = json_data.get('page')
         book_url = f"https://fanqienovel.com/page/{page_data['bookId']}"
@@ -263,7 +269,10 @@ class _FanqieBase(BaseParser):
         count_word = page_data.get("wordNumber")
         abstract = page_data.get("abstract")
         book_cover_url = page_data.get("thumbUri")
-        book_cover_data = requests.get(book_cover_url).content
+        try:
+            book_cover_data = requests.get(book_cover_url, timeout=10).content
+        except Exception:
+            book_cover_data = b""
         cover_image = Illustration(raw_data=book_cover_data, alt= name, url=book_cover_url)
         chapter_list_with_volume = json_data.get("page", {}).get("chapterListWithVolume", {})
         serial = 0
@@ -281,8 +290,10 @@ class _FanqieBase(BaseParser):
                       )
         return novel
 
-    def parse_chapter_list(self, novel_ref: str, engine, **kwargs) -> tuple[Chapter, ...] | None:
+    def parse_chapter_list(self, novel_ref: str, engine, **kwargs) -> tuple[Chapter, ...]:
 
+        if BeautifulSoup(novel_ref, 'lxml').find("div", class_="no-content"):
+            raise ChapterNotFoundError("Chapter list not found")
         json_data = extract_json(novel_ref)
         chapter_list_with_volume = json_data.get("page").get("chapterListWithVolume")
         book_url = "https://fanqienovel.com/page/" + json_data.get("page", {}).get("bookId")
@@ -292,7 +303,7 @@ class _FanqieBase(BaseParser):
                 title = chapter_item["title"]
                 chapter_url = 'https://fanqienovel.com/reader/' + chapter_item.get("itemId")
                 first_pass_time = int(chapter_item.get("firstPassTime"))
-                order = int(chapter_item.get("order"))
+                order = int(chapter_item.get("realChapterOrder"))
                 volume_name = chapter_item.get("volume_name")
                 chapter = Chapter(title=title,
                                   url=chapter_url,
@@ -310,6 +321,8 @@ class _FanqieBase(BaseParser):
 
         chapter: Chapter = kwargs["chapter"]
         # 定位json起始和终点位置
+        if BeautifulSoup(chapter_ref, 'lxml').find("div", class_="no-content"):
+            raise ChapterNotFoundError()
         json_data = extract_json(chapter_ref)
         count = json_data.get("reader", {}).get("chapterData", {}).get("chapterWordNumber")
         parent_soup = BeautifulSoup(chapter_ref, 'lxml')
@@ -320,72 +333,112 @@ class _FanqieBase(BaseParser):
         # 减小范围以准确定位text和img
         html_content = str(parent_soup.find('div', class_='muye-reader-content noselect'))
         soup = BeautifulSoup(translate(html_content), 'lxml')
-        img_items: list[Illustration] = []
+
+        # 定位内容容器
+        content_div = soup.find('div', class_='muye-reader-content noselect')
+        if not content_div:
+            content_div = soup.find('div', class_='muye-reader-content')
+
+        SEPARATOR = "\n\n"
         img_counter = 0
+        img_items: list[Illustration] = []
+        text_paragraphs: list[str] = []
 
-        img_tags = soup.find_all('img')
-        for img in img_tags:
-            img_counter += 1
-            group_id = img_counter
-
-            # 获取图片描述
-            picture_desc = ""
-            parent = img.parent
-            while parent and isinstance(parent, Tag):
-                if parent.name == 'div' and parent.get('data-fanqie-type') == 'image':
-                    picture_desc_tag = parent.find('p', class_='pictureDesc')
-                    if (picture_desc_tag and
-                            isinstance(picture_desc_tag, Tag) and
-                            picture_desc_tag.get('group-id') == str(group_id)):
-                        picture_desc = picture_desc_tag.get_text(strip=True)
-                        break
-
-                if (parent.name == 'p' and
-                        'pictureDesc' in (parent.get('class') or [])):
-                    picture_desc = parent.get_text(strip=True)
-                    break
-
-                parent = parent.parent
-
-            raw_url = img.get('src', '')
-            img_url: str | list[str] | None = raw_url
-
-            if isinstance(img_url, list):
-                img_url = img_url[0] if img_url else None
-            if not isinstance(img_url, str) or not img_url.strip():
-                continue
-
-            # 下载图片
-            img_data = requests.get(img_url).content
-
-            chapter_img = Illustration(
-                alt=picture_desc,
-                raw_data=img_data,
-                insert=None,
-                url=img_url
-            )
-            img_items.append(chapter_img)
-
-            img.decompose()
-
-        # 2. 提取纯文本段落，同时确定每张图片的插入位置
-        content_div = soup.find('div', class_='muye-reader-content')
-        text_content = []
+        # 按直接子元素顺序遍历，同时提取文本和图片位置
         if content_div:
-            for element in content_div.descendants:
-                if isinstance(element, str):
-                    text = element.strip()
+            inner = content_div.find('div')
+            target = inner if inner else content_div
+
+            for element in target.children:
+                if not isinstance(element, Tag):
+                    text = element.strip() if isinstance(element, str) else ''
                     if text:
-                        text_content.append(text)
-                elif isinstance(element, Tag) and element.name == 'p':
+                        text_paragraphs.append(text)
+                    continue
+
+                if element.name == 'p':
+                    cls = element.get('class') or []
+
+                    if 'picture' in cls:
+                        # 图片段落
+                        img_tag = element.find('img')
+                        if img_tag:
+                            img_counter += 1
+                            group_id = img_counter
+
+                            # 获取图片描述
+                            picture_desc = ""
+                            picdesc_p = element.find_next_sibling('p', class_='pictureDesc')
+                            if not picdesc_p:
+                                parent = element.parent
+                                while parent and isinstance(parent, Tag):
+                                    if parent.name == 'div' and parent.get('data-fanqie-type') == 'image':
+                                        picdesc_tag = parent.find('p', class_='pictureDesc')
+                                        if picdesc_tag and isinstance(picdesc_tag, Tag):
+                                            if picdesc_tag.get('group-id') == str(group_id):
+                                                picture_desc = picdesc_tag.get_text(strip=True)
+                                        break
+                                    if parent.name == 'p' and 'pictureDesc' in (parent.get('class') or []):
+                                        picture_desc = parent.get_text(strip=True)
+                                        break
+                                    parent = parent.parent
+                            else:
+                                if picdesc_p.get('group-id') == str(group_id):
+                                    picture_desc = picdesc_p.get_text(strip=True)
+
+                            img_url = img_tag.get('src', '')
+                            if isinstance(img_url, list):
+                                img_url = img_url[0] if img_url else None
+                            if isinstance(img_url, str) and img_url.strip():
+                                try:
+                                    img_data = requests.get(img_url, timeout=10).content
+                                except Exception:
+                                    img_data = b""
+                                prefix = SEPARATOR.join(text_paragraphs)
+                                insert_pos = len(prefix) if text_paragraphs else 0
+                                chapter_img = Illustration(
+                                    alt=picture_desc, raw_data=img_data,
+                                    insert=insert_pos, url=img_url
+                                )
+                                img_items.append(chapter_img)
+                        continue
+
+                    if 'pictureDesc' in cls:
+                        continue
+
                     text = element.get_text(strip=True)
                     if text:
-                        text_content.append(text)
+                        text_paragraphs.append(text)
 
-        for img_item in img_items:
-            img_item.insert = len(text_content)
+                elif element.name == 'div' and element.get('data-fanqie-type') == 'image':
+                    img_tag = element.find('img')
+                    if img_tag:
+                        img_counter += 1
+                        group_id = img_counter
 
-        novel_content = "\n".join(text_content)
+                        picture_desc = ""
+                        picdesc_tag = element.find('p', class_='pictureDesc')
+                        if picdesc_tag and isinstance(picdesc_tag, Tag):
+                            if picdesc_tag.get('group-id') == str(group_id):
+                                picture_desc = picdesc_tag.get_text(strip=True)
+
+                        img_url = img_tag.get('src', '')
+                        if isinstance(img_url, list):
+                            img_url = img_url[0] if img_url else None
+                        if isinstance(img_url, str) and img_url.strip():
+                            try:
+                                img_data = requests.get(img_url, timeout=10).content
+                            except Exception:
+                                img_data = b""
+                            prefix = SEPARATOR.join(text_paragraphs)
+                            insert_pos = len(prefix) if text_paragraphs else 0
+                            chapter_img = Illustration(
+                                alt=picture_desc, raw_data=img_data,
+                                insert=insert_pos, url=img_url
+                            )
+                            img_items.append(chapter_img)
+
+        novel_content = SEPARATOR.join(text_paragraphs)
         if '已经是最新一章' in novel_content:
             novel_content = novel_content.replace('已经是最新一章', '')
 
@@ -397,42 +450,38 @@ class _FanqieBase(BaseParser):
         return chapter
 
 
-class FanqieBrowserParser(_FanqieBase):
+class FanqieBrowserParser(FanqieHTMLParser):
 
     @staticmethod
     def can_handle(identifier: str) -> bool:
         pass
 
     def login(self, engine: BrowserEngine, **credentials) -> AuthCredential:
-        context = engine.context
-        page = context.new_page()
+        _log.info("login start")
+        page = engine.new_page()
 
         try:
-            page.goto("https://fanqienovel.com/main/writer/login", timeout=60000)
+            page.get("https://fanqienovel.com/main/writer/login")
 
             print("请在打开的浏览器窗口中完成登录（扫码/手机号）...")
-            page.wait_for_url("https://fanqienovel.com/main/writer/author*", timeout=120000)
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                if "author" in page.url:
+                    break
+                time.sleep(0.5)
 
             time.sleep(2)
+            _log.info("login completed")
 
-            storage_state = context.storage_state(path=engine.options.storage_state_path)
-            if engine.options.storage_state_path:
-                print(f"已自动保存存储态： {engine.options.storage_state_path}")
+            raw_cookies = page.cookies()
+            cookies = {c["name"]: c["value"] for c in raw_cookies}
 
-            cookies = {}
-            for c in storage_state.get("cookies", []):
-                cookies[c["name"]] = c["value"]
-
-            # 可选：某些网站可能需要特定的 Authorization header，可尝试从 localStorage 提取
             headers = {}
-            # 例如：
-            # local_storage = await page.evaluate("() => JSON.parse(JSON.stringify(window.localStorage))")
-            # 但同步方法不易执行，可忽略或预先在 BrowserEngine 中处理
 
             return AuthCredential(
                 cookies=cookies,
                 headers=headers,
-                extra={"storage_state": storage_state}  # 保留完整状态，方便后续直接恢复
+                extra={}
             )
         finally:
             page.close()
@@ -443,41 +492,42 @@ class FanqieBrowserParser(_FanqieBase):
                           page: int = 0,
                           choice: int | None = None,
                           **kwargs) -> tuple[SearchResult, ...] | str | None:
+        _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
         search_url = f"https://fanqienovel.com/search/{search_ref}"
         if page >= 1:
-            browser_page = engine.context.new_page()
-            browser_page.goto(search_url)
+            browser_page = engine.new_page()
+            browser_page.get(search_url)
             next_page_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[5]/ul/li[{page + 1}]"
-            browser_page.click(next_page_xpath)
-            html = browser_page.content()
+            browser_page.ele(f"xpath:{next_page_xpath}").click()
+            html = browser_page.html
         else:
             html = engine.fetch_text(search_url)
         result = super().parse_search_info(search_ref=html, engine=engine, page=page, choice=choice, **kwargs)
         if not result:
             return None
         if choice is not None:
-            browser_page = engine.context.new_page()
+            browser_page = engine.new_page()
             button_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[4]/div[{choice - 1}]/div[2]/div[1]/span"
-            with engine.context.expect_page() as new_page_info:
-                browser_page.locator(button_xpath).click()  # 触发新页面的点击操作
-            new_page = new_page_info.value
+            browser_page.listen.new_tab()
+            browser_page.ele(f"xpath:{button_xpath}").click()
+            new_page = browser_page.wait.new_tab(timeout=10)
             book_url: str = new_page.url
             return book_url
         else:
             return result
 
-    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
 
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
         html = engine.fetch_text(url=url)
-        novel = super().parse_novel_info(content=html, engine=engine, **kwargs)
+        novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
-    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters | None:
+    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
         html = engine.fetch_text(url=url)
-        chapter_list = super().parse_chapter_list(content=html, engine=engine, **kwargs)
-        return Chapters(chapter_list) if chapter_list else None
+        chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
+        return Chapters(chapter_list)
 
     def parse_chapter_content(self,
                               chapter_ref: Sequence[Chapter],
@@ -486,12 +536,12 @@ class FanqieBrowserParser(_FanqieBase):
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter_ref[0])}"
         html = engine.fetch_text(url=url)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
-            raise ChapterNotFoundError(chapter_ref[0].url)
-        chapter = super().parse_chapter_content(chapter_ref=html,chapter = chapter_ref[0], **kwargs)
+            raise ChapterNotFoundError()
+        chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter = chapter_ref[0], **kwargs)
         return Chapters(chapter)
 
 
-class FanqieAPIParser(BaseParser):
+class FanqieOIAPIParser(BaseParser):
 
     @staticmethod
     def can_handle(identifier: str) -> bool:
@@ -535,7 +585,7 @@ class FanqieAPIParser(BaseParser):
         return tuple(results)
 
     @staticmethod
-    def parse_novel_info(novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(novel_ref: str, engine, **kwargs) -> Novel:
 
         novel_id = standardize_id(novel_ref)
         post_data = {
@@ -547,12 +597,15 @@ class FanqieAPIParser(BaseParser):
         json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
         data = json_data.get('data')
         if not data:
-            return None
+            raise NovelNotFoundError()
         else:
             serial = data.get("serial")
             url = f"https://fanqienovel.com/page/{data.get('id')}"
             book_cover_url = data.get('thumb')
-            book_cover_data = requests.get(data.get('thumb')).content
+            try:
+                book_cover_data = requests.get(book_cover_url, timeout=10).content
+            except Exception:
+                book_cover_data = b""
             name = data.get('title')
             novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
             author = data.get('author')
@@ -570,7 +623,7 @@ class FanqieAPIParser(BaseParser):
             return novel
 
     @staticmethod
-    def parse_chapter_list(novel_ref: Novel, engine, **kwargs) -> Chapters | None:
+    def parse_chapter_list(novel_ref: Novel, engine, **kwargs) -> Chapters:
 
         novel_id = standardize_id(novel_ref)
         post_data = {
@@ -580,25 +633,28 @@ class FanqieAPIParser(BaseParser):
             "type": "json"
         }
         json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
-        chapter_items = json_data.get('data')
+        chapter_items_volume = json_data.get('data')
+        if not chapter_items_volume:
+            raise ChapterNotFoundError("Chapter list not found")
         results = []
-        for chapter_item in chapter_items[0]:
-            chapter_id: int = chapter_item.get("chapter_id")
-            chapter_url = "https://fanqienovel.com/reader/" + str(chapter_id)
-            title: str = chapter_item["title"]
-            order: int = chapter_item["index"]
-            timestamp: float = chapter_item["time"]
-            volume_name = chapter_item["volume_name"]
-            chapter = Chapter(
-                title=title,
-                url=chapter_url,
-                id = str(chapter_id),
-                order=order,
-                index_url=novel_ref.url,
-                volume=volume_name,
-                time=timestamp
-            )
-            results.append(chapter)
+        for chapter_items in chapter_items_volume:
+            for chapter_item in chapter_items:
+                chapter_id: int = chapter_item.get("chapter_id")
+                chapter_url = "https://fanqienovel.com/reader/" + str(chapter_id)
+                title: str = chapter_item["title"]
+                order: int = chapter_item["index"]
+                timestamp: float = chapter_item["time"]
+                volume_name = chapter_item["volume_name"]
+                chapter = Chapter(
+                    title=title,
+                    url=chapter_url,
+                    id = str(chapter_id),
+                    order=order,
+                    index_url=novel_ref.url,
+                    volume=volume_name,
+                    time=timestamp
+                )
+                results.append(chapter)
         return Chapters(results)
 
     @staticmethod
@@ -611,20 +667,27 @@ class FanqieAPIParser(BaseParser):
         novel_url = chapter_ref[0].index_url
         chapter_ref = sorted(chapter_ref, key=lambda chapter: chapter.order)
         novel_id = standardize_id(novel_url)
+        orders = ",".join([str(chapter.order) for chapter in chapter_ref])
         post_data = {
             "id": novel_id,
-            "chapter": ",".join([str(chapter.order) for chapter in chapter_ref]),
+            "chapter": orders,
             "key": engine.options.key,
             "method": "chapter",
             "type": "json"
         }
         response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
-        print(f"{','.join([str(chapter.order) for chapter in chapter_ref])}: {time.time()}")
         data_list = response.get('data')
         if data_list is None:
-            raise ChapterNotFoundError(chapter_ref[0].url, message="Invalid chapter order")
+            message = response.get('message',"")
+            if message == "请检测章节选择是否正确":
+                raise ChapterNotFoundError(message=f"Invalid chapter order: {orders}")
+            elif message == "实例化失败: Trying to access array offset on value of type bool line 197in api.php":
+                raise AntiCrawlError()
+            else:
+                raise ChapterNotFoundError(message=f"The API did not return the expected data")
         for idx, data in enumerate(sorted(data_list, key=lambda item: item["chapter"])):
-            content = data['content'].replace('已经是最新一章', '')
+            title = data['chapter_title']
+            content = data['content'].replace(f"{title}\n\n","")
             chapter = chapter_ref[idx]
             chapter.content = content
             chapter.count = data['word_number']
@@ -632,7 +695,7 @@ class FanqieAPIParser(BaseParser):
         return Chapters(chapter_ref)
 
 
-class FanqieRequestsParser(_FanqieBase):
+class FanqieRequestsParser(FanqieHTMLParser):
 
     @staticmethod
     def can_handle(identifier: str) -> bool:
@@ -647,19 +710,19 @@ class FanqieRequestsParser(_FanqieBase):
                           page: int = 0,
                           choice: int | None = None,
                           **kwargs) -> tuple[SearchResult] | str | None:
-        return None
+        raise FeatureNotSupportedError("search")
 
-    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
         html = engine.fetch_text(url=url)
-        novel = super().parse_novel_info(content=html, engine=engine, **kwargs)
+        novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
-    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters | None:
+    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
         html = engine.fetch_text(url=url)
-        chapter_list = super().parse_chapter_list(content=html, engine=engine, **kwargs)
-        return Chapters(chapter_list) if chapter_list else None
+        chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
+        return Chapters(chapter_list)
 
     def parse_chapter_content(self,
                               chapter_ref: Sequence[Chapter],
@@ -669,16 +732,22 @@ class FanqieRequestsParser(_FanqieBase):
         html = engine.fetch_text(url=url)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
             raise ChapterNotFoundError(chapter_ref[0].url)
-        chapter = super().parse_chapter_content(chapter_ref=html,chapter = chapter_ref[0], **kwargs)
+        chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter = chapter_ref[0], **kwargs)
         return Chapters(chapter)
 
-def use_parser(engine) -> type[FanqieRequestsParser] | type[FanqieBrowserParser] | type[FanqieAPIParser]:
+def use_parser(engine) -> type[FanqieRequestsParser] | type[FanqieBrowserParser] | type[FanqieOIAPIParser]:
     if engine.name == "browser":
         return FanqieBrowserParser
     elif engine.name == "requests":
         return FanqieRequestsParser
     elif engine.name == "API":
-        return FanqieAPIParser
+        api_name = engine.options.name
+        if api_name is None or api_name == "oiapi":
+            return FanqieOIAPIParser
+        raise ValueError(
+            f"Unsupported API backend: {api_name!r}. "
+            f"Only 'oiapi' is supported."
+        )
     else:
         raise ValueError(f"Unknown engine: {engine.name}")
 
@@ -707,11 +776,11 @@ class FanqieParser(BaseParser):
         parser = use_parser(engine=engine)()
         return parser.parse_search_info(search_ref=search_ref, engine=engine, page=page, choice=choice, **kwargs)
 
-    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         parser = use_parser(engine=engine)()
         return parser.parse_novel_info(novel_ref=novel_ref, engine=engine, **kwargs)
 
-    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters | None:
+    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         parser = use_parser(engine=engine)()
         return parser.parse_chapter_list(novel_ref=novel_ref, engine=engine, **kwargs)
 
