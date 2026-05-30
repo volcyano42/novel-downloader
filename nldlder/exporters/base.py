@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterable
 
-from models.novel import Chapter, Novel
+from ..models.novel import Chapter, Novel
 
 
 class BaseExporter(ABC):
