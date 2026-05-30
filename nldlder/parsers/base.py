@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Sequence, Iterable
-from models.novel import SearchResult, Novel, Chapter, Chapters
-from models.auth import AuthCredential
+
+from ..models.auth import AuthCredential
+from ..models.novel import SearchResult, Novel, Chapter, Chapters
 
 
 class BaseParser(ABC):
@@ -25,11 +26,11 @@ class BaseParser(ABC):
         pass
 
     @abstractmethod
-    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel | None:
+    def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         pass
 
     @abstractmethod
-    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters | None:
+    def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         pass
 
     @abstractmethod
