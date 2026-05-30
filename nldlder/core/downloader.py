@@ -1,172 +1,310 @@
-import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-from typing import Sequence, Any
-from models.auth import AuthCredential
-from models.novel import Novel, Chapter, Chapters, SearchResult
+from contextlib import nullcontext
+from typing import Any, Sequence
 
-from core.exceptions import FeatureNotSupportedError
-from core.progress import DownloadProgress
-from core.engine import create_engine, Engine
-from core.options import Options
-from core.storage import Storage
+from .engine import Engine
+from .exceptions import (
+    AntiCrawlError, ChapterNotFoundError, FeatureNotSupportedError,
+    ParserNotFoundError,
+)
+from .options import Options
+from .progress import DownloadProgress
+from ..models.auth import AuthCredential
+from ..models.novel import Novel, Chapter, Chapters, SearchResult
+from ..parsers.base import BaseParser
+from ..utils.logger import get_logger
 
-from parsers.base import BaseParser
+_log = get_logger("nldlder.core.downloader")
+
+try:
+    from rich.console import Console
+    from rich.progress import (
+        Progress, BarColumn, TextColumn, TimeRemainingColumn,
+        TaskProgressColumn,
+    )
+    _RICH_AVAILABLE = True
+except ImportError:
+    _RICH_AVAILABLE = False
+
 threading_lock = threading.Lock()
 
+
+# ═══════════════════════════════════════════════════════════════════
+# 模块级工具函数（无状态，不依赖 NovelDownloader 实例）
+# ═══════════════════════════════════════════════════════════════════
+
+def get_parser_for_url(url: str):
+    """根据 URL 查找匹配的 Parser 类。"""
+    from ..utils.registry import register_parser
+    for parser_cls in register_parser().values():
+        if parser_cls.can_handle(url):
+            return parser_cls
+    return None
+
+
+def get_parsers() -> dict[str, Any]:
+    """返回所有已注册的 Parser 类（{platform: ParserCls}）。"""
+    from ..utils.registry import register_parser
+    return register_parser()
+
+
+def get_exporters() -> dict[str, Any]:
+    """返回所有已注册的 Exporter 类（{format: ExporterCls}）。"""
+    from ..utils.registry import register_exporter
+    return register_exporter()
+
+
+def get_exporter_options() -> dict[str, Any]:
+    from ..utils.registry import register_export_options
+    return register_export_options()
+
+
+def split_into_groups(target: Sequence, group: int) -> tuple[Sequence, ...]:
+    """将章节列表按批次大小分组。"""
+    return tuple(target[i:i + group] for i in range(0, len(target), group))
+
+
+def search(platform: str,
+           query: str,
+           engine: Engine,
+           page: int = 0,
+           choice: int | None = None) -> Sequence[SearchResult] | str | None:
+    """搜索小说。
+
+    Args:
+        platform: 平台标识（如 ``"fanqie"``）。
+        query:    搜索关键词。
+        engine:   下载引擎实例。
+        page:     页码（从 0 开始）。
+        choice:   结果选择索引。
+    """
+    parser_cls = get_parsers().get(platform)
+    if parser_cls is None:
+        raise ParserNotFoundError(f"parser not found: {platform}")
+    parser = parser_cls()
+    return parser.parse_search_info(search_ref=query, engine=engine,
+                                    page=page, choice=choice)
+
+
+def login(platform: str, engine: Engine) -> AuthCredential:
+    """登录指定平台。
+
+    Args:
+        platform: 平台标识。
+        engine:   下载引擎实例。
+    """
+    parser_cls = get_parsers().get(platform)
+    if parser_cls is None:
+        raise ParserNotFoundError(f"parser not found: {platform}")
+    parser = parser_cls()
+    if not isinstance(parser, BaseParser):
+        raise FeatureNotSupportedError("login", f"Not Supported Platform: {platform}")
+    return parser.login(engine=engine)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NovelDownloader — 下载编排器（无状态，不绑定小说）
+# ═══════════════════════════════════════════════════════════════════
+
 class NovelDownloader:
-    def __init__(self, options: Options):
-        self._options = options
-        self._engine = None
-        self._parser = None
-        self._progress = None
-        app_data_dir = Path(__file__).parent.parent.parent / "app_data"
-        if novel_storage_dir:=self._options.storage:pass
-        else:
-            os.environ.get("NOVEL_STORAGE_DIR", app_data_dir / "storage")
-            novel_storage_dir = app_data_dir / "storage"
-        self._storage = Storage(novel_storage_dir)
-        self.create_engine(options)
+    """小说下载编排器。
 
-    @staticmethod
-    def get_search_info(search_ref: str,
-                        parser,
-                        engine,
-                        page: int = 0,
-                        choice: int | None = None) -> Sequence[SearchResult] | str | None:
-        search_result = parser.parse_search_info(search_ref=search_ref,
-                                                 engine=engine,
-                                                 page=page,
-                                                 choice=choice)
-        return search_result
+    不持有 Novel 或 Parser 状态，每次调用独立解析。
+    调用者负责编排完整流程：fetch_novel → fetch_chapter_list
+    → download_chapters → [save] → [export]。
 
-    @staticmethod
-    def get_novel_info(url: str, parser,engine) -> Novel | None:
-        novel = parser.parse_novel_info(novel_ref=url, engine = engine)
-        return novel
+    用法::
 
-    @staticmethod
-    def get_chapter_list(novel: Novel, parser,engine) -> Chapters | None:
-        chapter_list = parser.parse_chapter_list(novel_ref=novel, engine = engine)
-        return chapter_list
+        from nldlder import NovelDownloader, Options
+        from nldlder.core.engine import create_engine
 
-    @staticmethod
-    def get_chapter_content(chapters: Sequence[Chapter], parser,engine) -> Chapters:
-        chapters = parser.parse_chapter_content(chapter_ref=chapters, engine = engine)
-        return chapters
+        engine = create_engine(options)
+        dl = NovelDownloader(engine, options=options)
 
-    @staticmethod
-    def get_parser_for_url(url) -> Any:
-        from utils.registry import register_parser
-        parser_item = register_parser()
-        for name, parser in parser_item.items():
-            if parser.can_handle(url):
-                return parser
-        else:
-            return None
+        novel = dl.fetch_novel(url)
+        chapters = dl.fetch_chapter_list(novel)
 
-    @staticmethod
-    def get_parsers() -> dict[str, Any]:
-        from utils.registry import register_parser
-        return register_parser()
+        target = chapters.get_incompleted_chapters() or chapters
+        downloaded = dl.download_chapters(target)
 
-    @staticmethod
-    def get_exporters() -> dict[str, Any]:
-        from utils.registry import register_exporter
-        return register_exporter()
+        # 调用者自行保存和导出
+        storage.save_chapter(novel, downloaded)
+        for exp in exporters:
+            exp.export(novel.chapters)
+    """
 
-    @staticmethod
-    def split_into_groups(target: Sequence[Chapter], group: int) -> tuple[Sequence[Chapter], ...]:
-        return tuple([target[i:i + group] for i in range(0, len(target), group)])
-
-    def login(self, platform: str) -> AuthCredential:
-        if self._parser: parser = self._parser
-        else:parser = self.get_parsers().get(platform)
-        if isinstance(parser, BaseParser):
-            return parser.login(engine=self._engine)
-        else:
-            raise FeatureNotSupportedError("login", f"Not Supported Platform: {platform}")
-
-    def search(self, search_ref, page: int = 0, choice: int | None = None):
-
-        search_result = self.get_search_info(search_ref=search_ref,
-                                             parser=self._parser,
-                                             engine=self._engine,
-                                             page=page,
-                                             choice=choice)
-        return search_result
-
-    def download(self, url: str, orders: Sequence[int] | None = None):
-        if self._parser: parser = self._parser
-        else: parser = self.get_parser_for_url(url)
-        novel = self.get_novel_info(url=url, parser=parser, engine=self._engine)
-        if novel is None:
-            raise ValueError(f"Not Supported Url: {url}")
-        all_chapters = self.get_chapter_list(novel=novel, parser=parser, engine=self._engine)
-        if all_chapters is None:
-            raise ValueError(f"Can not get chapter list: {url}")
-        self._progress = DownloadProgress(novel.url)
-        if progress := self._progress.load(self._storage.get_progress_path(novel.id)):
-            self._progress = progress
-        else:
-            self._progress = DownloadProgress(novel.url)
-            self._storage.save_progress(self._progress, novel.id)
-        novel.update_chapter(all_chapters)
-        existing_chapters = self._storage.load_chapters(novel.id)
-        if existing_chapters: novel.update_chapter(existing_chapters)
-        incompleted_chapters = novel.chapters.get_incompleted_chapters()
-        if incompleted_chapters is None:incompleted_chapters = []
-        target_chapters = list(incompleted_chapters) + list(chapter for chapter in all_chapters
-                                                       if chapter not in existing_chapters)
-        target_chapters.sort(key=lambda x: x.order)
-        # 分配任务
-        if orders:
-            target_chapters = []
-            for order in orders:
-                if chapter := novel.chapters.get_chapter_by_order(order):
-                    target_chapters.append(chapter)
-
-        split_groups = self._options.api.batch_size if self._options.mode == "api" else 1
-        group_chapters = self.split_into_groups(target=target_chapters, group=split_groups)
-
-        from exporters.txt import TXTExporter, TXTExportOptions
-        txt_options = TXTExportOptions(output_dir=Path(__file__).parent.parent.parent /"app_data" / "txt")
-        txt_exporter = TXTExporter(options=txt_options, novel=novel)
-        txt_exporter.export(novel.chapters)
-        with ThreadPoolExecutor(max_workers=self._options.download.max_workers) as executor:
-            future_to_chapter = [
-                executor.submit(self.get_chapter_content, chapter, parser, self._engine)
-                for chapter in group_chapters
-            ]
-
-            for future in as_completed(future_to_chapter):
-
-                    result_chapters = future.result()
-                    self._storage.save_chapter(novel, result_chapters)
-                    self._progress.add_downloaded_chapter_id(result_chapters)
-                    self._progress.update_timestamp()
-                    self._storage.save_progress(self._progress, novel.id)
-                    txt_exporter.export(novel.chapters)
-
-    def create_engine(self, options: Options):
-        self._engine = create_engine(options)
-
-    def mount_engine(self, engine):
+    def __init__(self,
+                 engine: Engine,
+                 *,
+                 options: Options | None = None):
+        """
+        Args:
+            engine:  下载引擎（由调用者创建和管理，可多实例共享）。
+            options: 下载配置（影响 batch_size / max_workers 等）。
+        """
         self._engine = engine
+        self._options = options or Options()
+        self._progress = DownloadProgress("")
+        self._partial: list[Chapter] = []
 
-    def mount_storage(self, storage_dir: Path | str):
-        self._storage = Storage(storage_dir)
+    # ── 公开 API ─────────────────────────────────────────────────
 
-    def mount_parser(self, parser: Any | None):
-        self._parser = parser
+    def fetch_novel(self, url: str) -> Novel:
+        """获取小说元数据。
 
-    @property
-    def storage(self) -> Storage:
-        return self._storage
-    @property
-    def parser(self) -> Any:
-        return self._parser
+        Args:
+            url: 小说页面 URL。
+
+        Returns:
+            包含书名、作者、简介、封面等信息的 Novel 对象。
+        """
+        parser = self._resolve_parser(url)
+        return parser.parse_novel_info(novel_ref=url, engine=self._engine)
+
+    def fetch_chapter_list(self, novel: Novel) -> Chapters:
+        """获取章节列表。
+
+        Args:
+            novel: 小说对象（需包含 url 属性供解析器识别平台）。
+
+        Returns:
+            按 order 排序的章节列表。
+        """
+        parser = self._resolve_parser(novel.url)
+        return parser.parse_chapter_list(novel_ref=novel, engine=self._engine)
+
+    def download_chapters(self,
+                          chapters: Sequence[Chapter] | Chapter,
+                          *,
+                          parser=None) -> Chapters:
+        """并发下载章节正文内容。
+
+        自动管理 DownloadProgress（仅内存更新，不持久化）。
+        不自动调用 storage.save_chapter 或 exporter.export——调用者负责。
+
+        Args:
+            chapters: 要下载的章节列表。
+            parser:   可选解析器实例。为 None 时自动从首个章节 URL 解析。
+
+        Returns:
+            已下载完成的章节（Chapters 对象）。
+        """
+        if not chapters:
+            return Chapters()
+
+        if isinstance(chapters, Chapter):
+            chapters = [chapters]
+        # 每次调用重置进度追踪
+        self._progress = DownloadProgress("")
+
+        # 解析器
+        if parser is None:
+            parser = self._resolve_parser(chapters[0].index_url)
+
+        # 分批
+        batch_size = self._options.api.batch_size if self._options.mode == "api" else 1
+        groups = split_into_groups(list(chapters), batch_size)
+
+        # 进度条
+        total = len(chapters)
+        progress_ctx, task = self._create_progress(total)
+
+        all_downloaded: list[Chapter] = []
+        self._partial = []
+
+        with progress_ctx as progress:
+            with ThreadPoolExecutor(max_workers=self._options.download.max_workers) as executor:
+                future_to_group = {
+                    executor.submit(
+                        NovelDownloader._get_chapter_content,
+                        group, parser, self._engine,
+                    ): group
+                    for group in groups
+                }
+
+                for future in as_completed(future_to_group):
+                    group = future_to_group[future]
+                    try:
+                        result_chapters: Chapters = future.result()
+                    except ChapterNotFoundError as e:
+                        _log.warning("章节内容获取失败，跳过: %s", e)
+                        self._progress.add_failed_chapter_id(group)
+                        continue
+                    except AntiCrawlError:
+                        _log.error("触发反爬机制，中断下载")
+                        self._progress.add_failed_chapter_id(group)
+                        self._partial = list(all_downloaded)
+                        raise
+
+                    all_downloaded.extend(result_chapters)
+                    self._progress.add_downloaded_chapter_id(result_chapters)
+
+                    last_title = result_chapters[-1].title if result_chapters else "?"
+                    self._advance_progress(progress, task, len(result_chapters), last_title)
+
+        return Chapters(all_downloaded)
+
+    # ── 属性 ─────────────────────────────────────────────────────
+
     @property
     def engine(self) -> Engine:
         return self._engine
+
+    @property
+    def progress(self) -> DownloadProgress:
+        """内存中的下载进度（未持久化，调用者可按需 save_progress）。"""
+        return self._progress
+
+    @property
+    def partial(self) -> Chapters:
+        """异常中断时已成功下载的部分章节（正常返回时为空）。"""
+        return Chapters(self._partial)
+
+
+    # ═══════════════════════════════════════════════════════════
+    # 内部实现
+    # ═══════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _resolve_parser(url: str):
+        parser_cls = get_parser_for_url(url)
+        if parser_cls is None:
+            raise ParserNotFoundError(f"parser not found for: {url}")
+        return parser_cls()
+
+    @staticmethod
+    def _get_chapter_content(chapters: Sequence[Chapter],
+                             parser,
+                             engine: Engine) -> Chapters:
+        return parser.parse_chapter_content(chapter_ref=chapters, engine=engine)
+
+    # ── Rich 进度条 ────────────────────────────────────────────
+
+    def _create_progress(self, total: int):
+        if _RICH_AVAILABLE:
+            progress = Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TextColumn("*"),
+                TimeRemainingColumn(),
+                transient=False,
+                console=Console(force_terminal=True),
+            )
+            task = progress.add_task(
+                "[cyan]Downloading...",
+                total=total,
+                completed=0,
+            )
+            return progress, task
+        return nullcontext(), None
+
+    def _advance_progress(self, progress, task, advance: int,
+                          last_title: str):
+        if _RICH_AVAILABLE and task is not None:
+            progress.update(
+                task,
+                advance=advance,
+                description=f"[cyan]Downloading...[/] — {last_title}",
+            )
