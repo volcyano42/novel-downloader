@@ -84,7 +84,7 @@ img {
 .chapter-meta {
     font-size: 0.8em;
     color: #888;
-    text-align: center;
+    text-align: left;
     margin-bottom: 1.2em;
 }
 .illustration {
@@ -109,8 +109,8 @@ img {
 
     def __init__(self, options: EPUBExportOptions, novel: Novel):
         encoding = getattr(options, "encoding", "utf-8")
-        output_path = Path(getattr(options, "output_path", "."))
         extension = getattr(options, "extension", ".epub")
+        file_name_template = getattr(options, "file_name_template", "{title}")
 
         self.novel = novel
         self.options = options
@@ -127,15 +127,20 @@ img {
         self._img_name_seen: set[str] = set()
         self._img_counter: int = 0
 
-        # output_path 是精确的文件路径模板，直接格式化后使用
+        # output_path 此时只替换了 {group}，还需替换 {file_name_template} + 扩展名
+        raw = str(getattr(options, "output_path", "."))
+        raw = raw.replace("{file_name_template}", file_name_template)
+        ext = extension if extension != "default" else ".epub"
+        raw = raw + ext
+        # 再用 novel 变量格式化
         variables = {
-            "name": novel.name if novel else "",
+            "title": novel.title if novel else "",
             "author": novel.author if novel else "",
             "novel_id": novel.id if novel else "",
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
-        self.file_path = Path(str(output_path).format(**variables))
+        self.file_path = Path(raw.format(**variables))
 
     # ═══════════════════════════════════════════════════════════════
     # 公开 API
@@ -227,11 +232,11 @@ img {
                 self._render_opf(chapter_xhtml, cover_img_name, novel_uuid),
             )
 
-            # ⑧ toc.ncx
+            # ⑧ nav.xhtml（EPUB3 目录）
             if self.options.include_toc:
                 zf.writestr(
-                    "OEBPS/toc.ncx",
-                    self._render_ncx(chapter_xhtml, novel_uuid),
+                    "OEBPS/nav.xhtml",
+                    self._render_nav(chapter_xhtml),
                 )
 
     # ═══════════════════════════════════════════════════════════════
@@ -313,7 +318,7 @@ img {
         )
 
     def _render_cover_xhtml(self, cover_img_name: str) -> str:
-        title = html_lib.escape(self.novel.name) if self.novel else ""
+        title = html_lib.escape(self.novel.title) if self.novel else ""
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE html>\n'
@@ -364,7 +369,7 @@ img {
             '</head>\n'
             '<body>\n'
             f'  <h1>{title}</h1>\n'
-            f'  <div class="chapter-meta">字数：{word_count}　更新时间：{update_time}</div>\n'
+            f'  <div class="chapter-meta">字数：{word_count} ｜ 更新时间：{update_time}</div>\n'
             f'{body}\n'
             '</body>\n'
             '</html>'
@@ -497,18 +502,18 @@ img {
     ) -> str:
         """生成 content.opf 文件内容。"""
         novel = self.novel
-        title = html_lib.escape(novel.name) if novel else "Unknown"
+        title = html_lib.escape(novel.title) if novel else "Unknown"
         author = html_lib.escape(novel.author) if novel else "Unknown"
         desc = html_lib.escape(novel.description or "") if novel else ""
 
         manifest: list[str] = []
         spine: list[str] = []
 
-        # NCX
+        # nav.xhtml（EPUB3 目录）
         if self.options.include_toc:
             manifest.append(
-                '    <item id="ncx" href="toc.ncx" '
-                'media-type="application/x-dtbncx+xml"/>'
+                '    <item id="nav" href="nav.xhtml" '
+                'media-type="application/xhtml+xml" properties="nav"/>'
             )
 
         # CSS
@@ -570,22 +575,21 @@ img {
             '  <manifest>\n'
             + "\n".join(manifest)
             + "\n  </manifest>\n"
-            '  <spine toc="ncx">\n'
+            '  <spine>\n'
             + "\n".join(spine)
             + "\n  </spine>\n"
             '</package>'
         )
 
-    def _render_ncx(
+    def _render_nav(
         self,
         chapter_xhtml: list[tuple[Chapter, int, str]],
-        novel_uuid: str,
     ) -> str:
-        """生成 toc.ncx 文件内容。"""
+        """生成 EPUB3 nav.xhtml 目录文件。"""
         novel = self.novel
-        title = html_lib.escape(novel.name) if novel else "Unknown"
+        title = html_lib.escape(novel.title) if novel else "Unknown"
 
-        nav_points: list[str] = []
+        items: list[str] = []
         has_cover = bool(
             self.novel
             and self.novel.cover
@@ -593,37 +597,36 @@ img {
         )
 
         if has_cover:
-            nav_points.append(
-                '    <navPoint id="cover" playOrder="1">\n'
-                '      <navLabel><text>封面</text></navLabel>\n'
-                '      <content src="cover.xhtml"/>\n'
-                '    </navPoint>'
+            items.append(
+                '      <li>\n'
+                '        <a href="cover.xhtml">封面</a>\n'
+                '      </li>'
             )
 
-        play_order = 2 if has_cover else 1
         for ch, order, _ in chapter_xhtml:
-            nav_points.append(
-                f'    <navPoint id="chapter_{order:04d}" playOrder="{play_order}">\n'
-                f'      <navLabel><text>{html_lib.escape(ch.title)}</text></navLabel>\n'
-                f'      <content src="chapter_{order:04d}.xhtml"/>\n'
-                f'    </navPoint>'
+            items.append(
+                f'      <li>\n'
+                f'        <a href="chapter_{order:04d}.xhtml">{html_lib.escape(ch.title)}</a>\n'
+                f'      </li>'
             )
-            play_order += 1
 
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n'
-            '  <head>\n'
-            f'    <meta name="dtb:uid" content="urn:uuid:{novel_uuid}"/>\n'
-            '    <meta name="dtb:depth" content="1"/>\n'
-            '    <meta name="dtb:totalPageCount" content="0"/>\n'
-            '    <meta name="dtb:maxPageNumber" content="0"/>\n'
-            '  </head>\n'
-            f'  <docTitle><text>{title}</text></docTitle>\n'
-            '  <navMap>\n'
-            + "\n".join(nav_points)
-            + "\n  </navMap>\n"
-            '</ncx>'
+            '<!DOCTYPE html>\n'
+            '<html xmlns="http://www.w3.org/1999/xhtml"'
+            ' xmlns:epub="http://www.idpf.org/2007/ops">\n'
+            '<head>\n'
+            f'  <title>{title} — 目录</title>\n'
+            '</head>\n'
+            '<body>\n'
+            '  <nav epub:type="toc" id="toc">\n'
+            '    <h1>目录</h1>\n'
+            '    <ol>\n'
+            + "\n".join(items)
+            + "\n    </ol>\n"
+            '  </nav>\n'
+            '</body>\n'
+            '</html>'
         )
 
     # ═══════════════════════════════════════════════════════════════
