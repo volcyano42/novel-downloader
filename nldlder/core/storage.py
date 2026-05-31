@@ -65,7 +65,7 @@ class Storage:
         path = self.get_meta_path(novel.id)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "name": novel.name,
+            "title": novel.title,
             "url": novel.url,
             "id": novel.id,
             "serial": novel.serial,
