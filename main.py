@@ -2,18 +2,11 @@
 novel-downloader — 交互式 CLI
 功能：登录 / 搜索 / 更新 / 下载
 配置文件：app_data/config/*.yaml
-导出路径：app_data/{group}/{novel.name}/
+导出路径：app_data/{group}/{novel.title}/
 """
-import sys
 from pathlib import Path
 
 import yaml
-
-try:
-    import questionary
-    _HAS_QUESTIONARY = True
-except ImportError:
-    _HAS_QUESTIONARY = False
 
 from nldlder import (
     NovelDownloader, Options, create_engine,
@@ -37,20 +30,7 @@ def _select(message: str, choices: list[tuple[str, object]]) -> object | None:
     """显示选项菜单，返回选中的 value。
 
     choices: [(label, value), ...] 或 [("标签", value), ..., ("返回", None)]
-
-    questionary 可用时使用上下键选择；不可用时降级为数字输入。
     """
-    if _HAS_QUESTIONARY:
-        try:
-            q_choices = [
-                questionary.Choice(title=label, value=value)
-                for label, value in choices
-            ]
-            return questionary.select(message, choices=q_choices).ask()
-        except Exception:
-            pass  # 降级到 input()
-
-    # ── input() 降级 ──
     print(f"\n{message}")
     for i, (label, _) in enumerate(choices, 1):
         print(f"  {i}. {label}")
@@ -69,11 +49,6 @@ def _select(message: str, choices: list[tuple[str, object]]) -> object | None:
 
 def _text_input(message: str) -> str | None:
     """获取文本输入。"""
-    if _HAS_QUESTIONARY:
-        try:
-            return questionary.text(message).ask()
-        except Exception:
-            pass
     return input(f"{message} ").strip() or None
 
 
@@ -193,8 +168,11 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
 # 核心功能
 # ═══════════════════════════════════════════════════════════════════
 
-def do_login(engine):
-    """打开浏览器让用户手动登录番茄小说。"""
+def do_login(site_cfg: dict):
+    """打开浏览器让用户手动登录番茄小说。
+
+    登录始终使用 BrowserEngine，不受当前 mode 配置影响。
+    """
     platform_choice = _select(
         "选择网站：",
         choices=[
@@ -209,8 +187,20 @@ def do_login(engine):
     print("\n正在打开浏览器，请在浏览器窗口中完成登录...")
     print("（程序将自动检测登录完成，最多等待 120 秒）\n")
 
+    # 登录始终使用浏览器引擎
+    browser_cfg = site_cfg.get("browser", {})
+    login_engine = create_engine(
+        Options().set_mode("browser").set_browser_options(
+            headless=False,
+            user_data_dir=browser_cfg.get("user_data_dir") or None,
+            timeout=browser_cfg.get("timeout", 30),
+            retry_times=browser_cfg.get("retry_times", 3),
+            backoff_factor=browser_cfg.get("backoff_factor", 2),
+            delay=tuple(browser_cfg.get("delay", [3, 5])),
+        )
+    )
     try:
-        cred = login(platform_choice, engine)
+        cred = login(platform_choice, login_engine)
         cookie_count = len(cred.cookies) if cred and cred.cookies else 0
         if cookie_count > 0:
             print(f"✓ 登录成功！获取到 {cookie_count} 个 cookies")
@@ -218,6 +208,8 @@ def do_login(engine):
             print("⚠ 登录完成但未获取到 cookies，请确认已在浏览器中完成登录")
     except Exception as e:
         print(f"✗ 登录失败: {e}")
+    finally:
+        login_engine.close()
 
 
 def do_search(engine, dl) -> str | None:
@@ -239,7 +231,7 @@ def do_search(engine, dl) -> str | None:
 
     choices = []
     for r in results:
-        name = getattr(r, "name", "") or ""
+        name = getattr(r, "title", "") or ""
         author = getattr(r, "author", "") or ""
         desc = getattr(r, "description", "") or ""
         desc_short = desc[:60] + "..." if len(desc) > 60 else desc
@@ -275,7 +267,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
     # ── 1. 获取小说信息 ──────────────────────────────────────────
     print("正在获取小说信息...")
     novel = dl.fetch_novel(url)
-    print(f"  书名：{novel.name}")
+    print(f"  书名：{novel.title}")
     print(f"  作者：{novel.author}")
     tags_str = "、".join(novel.tags) if novel.tags else ""
     print(f"  标签：{tags_str}")
@@ -345,18 +337,9 @@ def _do_export(novel, group: str, format_configs: dict):
             _log.debug("跳过无选项类的格式: %s", fmt)
             continue
 
-        # 构建 output_path：填充 {group} 和 {file_name_template}
+        # 构建 output_path：只填充 {group}，其余由导出器处理
         raw_path = fmt_cfg.get("output_path", "")
         raw_path = raw_path.replace("{group}", group)
-        raw_path = raw_path.replace(
-            "{file_name_template}", fmt_cfg.get("file_name_template", "{name}")
-        )
-        # TXT / EPUB 追加扩展名
-        if fmt != "img":
-            ext = fmt_cfg.get("extension", "default")
-            if ext == "default":
-                ext = f".{fmt}"
-            raw_path = raw_path + ext
 
         # 从格式配置提取其他构造参数
         extra = {}
@@ -369,6 +352,62 @@ def _do_export(novel, group: str, format_configs: dict):
         exporter = exporter_cls(options=export_opts, novel=novel)
         exporter.export(novel.chapters)
         _log.info("Exported: %s → %s", fmt, raw_path)
+
+
+def do_re_export(group: str, format_configs: dict):
+    """重新导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
+    storage = Storage(APP_DATA / "storage")
+    storage_dir = APP_DATA / "storage"
+
+    if not storage_dir.exists():
+        print("未找到已下载的小说（storage 目录不存在）")
+        return
+
+    novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
+    if not novel_dirs:
+        print("未找到已下载的小说")
+        return
+
+    novels_info = []
+    for d in novel_dirs:
+        meta = storage.load_meta(d.name)
+        if meta:
+            novels_info.append(meta)
+
+    if not novels_info:
+        print("未找到有效的小说元数据")
+        return
+
+    print(f"\n找到 {len(novels_info)} 本已下载小说：")
+    for i, novel in enumerate(novels_info, 1):
+        local = storage.load_chapters(novel.id)
+        downloaded = len(local) if local else 0
+        print(f"  {i}. {novel.title}  (已下载 {downloaded} 章)")
+
+    choices = [(f"{n.title}  — {n.author}", n) for n in novels_info]
+    choices.append(("▸ 全部导出", "all"))
+    choices.append(("返回", None))
+
+    selection = _select("选择要导出的小说：", choices=choices)
+
+    if selection is None:
+        return
+
+    targets = novels_info if selection == "all" else [selection]
+
+    for novel in targets:
+        print(f"\n── 正在导出: {novel.title} ──")
+        try:
+            local = storage.load_chapters(novel.id)
+            if local:
+                novel.update_chapter(local)
+            _do_export(novel, group, format_configs)
+            print(f"  导出完成 → app_data/export/{group}/")
+        except Exception as e:
+            print(f"✗ 导出失败: {e}")
+            _log.exception("re-export failed: %s", novel.title)
+
+    print("\n导出完成！")
 
 
 def do_update(engine, dl, group: str, format_configs: dict):
@@ -400,10 +439,10 @@ def do_update(engine, dl, group: str, format_configs: dict):
     for i, novel in enumerate(novels_info, 1):
         local = storage.load_chapters(novel.id)
         downloaded = len(local) if local else 0
-        print(f"  {i}. {novel.name}  (已下载 {downloaded} 章)")
+        print(f"  {i}. {novel.title}  (已下载 {downloaded} 章)")
 
     # 让用户选择
-    choices = [(f"{n.name}  — {n.author}", n) for n in novels_info]
+    choices = [(f"{n.title}  — {n.author}", n) for n in novels_info]
     choices.append(("▸ 全部更新", "all"))
     choices.append(("返回", None))
 
@@ -415,14 +454,14 @@ def do_update(engine, dl, group: str, format_configs: dict):
     targets = novels_info if selection == "all" else [selection]
 
     for novel in targets:
-        print(f"\n── 正在更新: {novel.name} ──")
+        print(f"\n── 正在更新: {novel.title} ──")
         try:
             do_download(engine, dl, novel.url, group, format_configs)
         except AntiCrawlError:
             print("⚠ 触发反爬，更新中断（已保存部分进度）")
         except Exception as e:
             print(f"✗ 更新失败: {e}")
-            _log.exception("update failed: %s", novel.name)
+            _log.exception("update failed: %s", novel.title)
 
     print("\n更新完成！")
 
@@ -460,6 +499,7 @@ def main():
                     ("🔑 登录", "login"),
                     ("🔍 搜索 & 下载", "search"),
                     ("🔄 更新已下载", "update"),
+                    ("📦 重新导出", "re_export"),
                     ("📥 直接下载 (输入 URL)", "download"),
                     ("退出", "quit"),
                 ],
@@ -469,7 +509,7 @@ def main():
                 break
 
             elif action == "login":
-                do_login(engine)
+                do_login(site_cfg)
 
             elif action == "search":
                 url = do_search(engine, dl)
@@ -494,6 +534,13 @@ def main():
                     except Exception as e:
                         print(f"✗ 下载失败: {e}")
                         _log.exception("download failed")
+
+            elif action == "re_export":
+                try:
+                    do_re_export(group, format_configs)
+                except Exception as e:
+                    print(f"✗ 导出失败: {e}")
+                    _log.exception("re_export failed")
 
             elif action == "update":
                 try:
