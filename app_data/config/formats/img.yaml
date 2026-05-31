@@ -2,7 +2,7 @@ img:
   # 是否启用
   enabled: true
   # 输出目录路径模板。{group} 由 main.py 填充，{title} 由导出器用小说名替换
-  output_path: "app_data/export/{group}/{title}/img"
+  output_path: "app_data/exports/{group}/{title}/img"
   # 文件名模板，{n} 为图片全局序号（0 = 封面，1,2,3…）
   # 支持 Python format 格式，如 "{n:03d}" → 000.jpg
   file_name_template: "{n}"
