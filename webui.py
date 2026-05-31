@@ -449,7 +449,7 @@ async def index():
             tags_html = "".join(f'<span class="tag">{t}</span>' for t in (n["tags"] or [])[:3])
             items.append(f'''<li><div>
         <strong>{n["title"]}</strong><span class="status"> — {n["author"]}</span>
-        <div>{tags_html}<span class="status">已下载 {n["downloaded"]}/{n["serial"] or "?"} 章</span></div>
+        <div>{tags_html}<span class="status">已下载 {n["downloaded"]} 章</span></div>
       </div>
       <div class="row">
         <button class="success" onclick="doAction('update','{n["id"]}')">更新</button>
@@ -876,4 +876,4 @@ async def progress(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("service:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("webui:app", host="127.0.0.1", port=8000, reload=True)
