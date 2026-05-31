@@ -1,6 +1,6 @@
 from pathlib import Path
 
-sample_dir = Path(__file__).parent / "sample"
+sample_dir = Path(__file__).parent / "sample" / "7499553647647263806"
 from nldlder.core.storage import Storage
 from nldlder.core.options import Options
 from nldlder.parsers.fanqie import FanqieHTMLParser
