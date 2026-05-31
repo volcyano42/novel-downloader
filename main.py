@@ -204,6 +204,16 @@ def do_login(site_cfg: dict):
         cookie_count = len(cred.cookies) if cred and cred.cookies else 0
         if cookie_count > 0:
             print(f"✓ 登录成功！获取到 {cookie_count} 个 cookies")
+            # 保存 cookies 到站点配置
+            site_path = CONFIG_DIR / "sites" / f"{platform_choice}.yaml"
+            with open(site_path, encoding="utf-8") as f:
+                site_yaml = yaml.safe_load(f) or {}
+            if "requests" not in site_yaml:
+                site_yaml["requests"] = {}
+            site_yaml["requests"]["cookies"] = cred.cookies
+            with open(site_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(site_yaml, f, allow_unicode=True)
+            print(f"  Cookies 已保存到 {site_path}")
         else:
             print("⚠ 登录完成但未获取到 cookies，请确认已在浏览器中完成登录")
     except Exception as e:
