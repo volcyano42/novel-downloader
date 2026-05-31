@@ -21,8 +21,8 @@ class TXTExporter(BaseExporter):
 
     def __init__(self, options: TXTExportOptions, novel: Novel):
         encoding = getattr(options, "encoding", "utf-8")
-        output_path = Path(getattr(options, "output_path"))
         extension = getattr(options, "extension", ".txt")
+        file_name_template = getattr(options, "file_name_template", "{title}")
 
         self.novel = novel
         self.options = options
@@ -31,15 +31,20 @@ class TXTExporter(BaseExporter):
 
         self._ordered_chapter_dict = {}
 
-        # output_path 是精确的文件路径模板，直接格式化后使用
+        # output_path 此时只替换了 {group}，还需替换 {file_name_template} + 扩展名
+        raw = str(getattr(options, "output_path"))
+        raw = raw.replace("{file_name_template}", file_name_template)
+        ext = extension if extension != "default" else ".txt"
+        raw = raw + ext
+        # 再用 novel 变量格式化
         variables = {
-            "name": novel.name if novel else "",
+            "title": novel.title if novel else "",
             "author": novel.author if novel else "",
             "novel_id": novel.id if novel else "",
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
-        self.file_path = Path(str(output_path).format(**variables))
+        self.file_path = Path(raw.format(**variables))
         self._header_written = False
 
     def export(self, chapters: Chapter | Iterable[Chapter], **kwargs):
@@ -75,7 +80,7 @@ class TXTExporter(BaseExporter):
             return ""
         novel = self.novel
         return (
-            f"小说名：{novel.name}\n"
+            f"小说名：{novel.title}\n"
             f"作者：{novel.author}\n"
             f"简介：{novel.description}\n"
             f"标签：{' '.join(novel.tags) if novel.tags else ''}\n"
