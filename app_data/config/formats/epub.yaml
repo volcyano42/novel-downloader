@@ -2,9 +2,9 @@ epub:
   # 是否启用
   enabled: true
   # 输出文件路径模板。{group} 由 main.py 填充，{file_name_template} 替换为下方同名配置项的值
-  output_path: "app_data/export/{group}/{file_name_template}"
-  # 文件名模板，可用变量: {name} {author} {novel_id} {total_chapters} {date}
-  file_name_template: "{name}"
+  output_path: "app_data/export/{group}/{title}/{file_name_template}"
+  # 文件名模板，可用变量: {title} {author} {novel_id} {total_chapters} {date}
+  file_name_template: "{title}"
   encoding: "utf-8"
   extension: ".epub"
   css_style: "default"
