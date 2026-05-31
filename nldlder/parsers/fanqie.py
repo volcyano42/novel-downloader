@@ -240,7 +240,7 @@ class FanqieHTMLParser(BaseParser):
 
             # 构造结果对象
             results.append(SearchResult(
-                name=translate(name, 1),
+                title=translate(name, 1),
                 author=translate(author, 1),
                 url=translate(url, 1),
                 description=translate(description, 1)
@@ -280,7 +280,7 @@ class FanqieHTMLParser(BaseParser):
 
         novel = Novel(url=book_url,
                       id = standardize_id(book_url),
-                      name=name,
+                      title=name,
                       author=author,
                       serial=serial,
                       tags=tuple(label_list),
@@ -575,7 +575,7 @@ class FanqieOIAPIParser(BaseParser):
                 description = book_info.get("docs")
 
                 results.append(SearchResult(
-                    name=book_name,
+                    title=book_name,
                     author=author,
                     url=book_url,
                     description=description,
@@ -613,7 +613,7 @@ class FanqieOIAPIParser(BaseParser):
             # 更新小说信息
             novel = Novel(url=url,
                           id=novel_id,
-                          name=name,
+                          title=name,
                           serial=serial,
                           author=author,
                           count=word_number,
