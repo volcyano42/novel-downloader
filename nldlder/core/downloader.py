@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from typing import Any, Sequence
 
-from .engine import Engine
+from .engine import BrowserEngine
 from .exceptions import (
     AntiCrawlError, ChapterNotFoundError, FeatureNotSupportedError,
     ParserNotFoundError,
@@ -67,7 +67,7 @@ def split_into_groups(target: Sequence, group: int) -> tuple[Sequence, ...]:
 
 def search(platform: str,
            query: str,
-           engine: Engine,
+           engine,
            page: int = 0,
            choice: int | None = None) -> Sequence[SearchResult] | str | None:
     """搜索小说。
@@ -87,7 +87,7 @@ def search(platform: str,
                                     page=page, choice=choice)
 
 
-def login(platform: str, engine: Engine) -> AuthCredential:
+def login(platform: str, engine: BrowserEngine) -> AuthCredential:
     """登录指定平台。
 
     Args:
@@ -111,31 +111,10 @@ class NovelDownloader:
     """小说下载编排器。
 
     不持有 Novel 或 Parser 状态，每次调用独立解析。
-    调用者负责编排完整流程：fetch_novel → fetch_chapter_list
-    → download_chapters → [save] → [export]。
-
-    用法::
-
-        from nldlder import NovelDownloader, Options
-        from nldlder.core.engine import create_engine
-
-        engine = create_engine(options)
-        dl = NovelDownloader(engine, options=options)
-
-        novel = dl.fetch_novel(url)
-        chapters = dl.fetch_chapter_list(novel)
-
-        target = chapters.get_incompleted_chapters() or chapters
-        downloaded = dl.download_chapters(target)
-
-        # 调用者自行保存和导出
-        storage.save_chapter(novel, downloaded)
-        for exp in exporters:
-            exp.export(novel.chapters)
     """
 
     def __init__(self,
-                 engine: Engine,
+                 engine,
                  *,
                  options: Options | None = None):
         """
@@ -181,7 +160,6 @@ class NovelDownloader:
         """并发下载章节正文内容。
 
         自动管理 DownloadProgress（仅内存更新，不持久化）。
-        不自动调用 storage.save_chapter 或 exporter.export——调用者负责。
 
         Args:
             chapters: 要下载的章节列表。
@@ -248,7 +226,7 @@ class NovelDownloader:
     # ── 属性 ─────────────────────────────────────────────────────
 
     @property
-    def engine(self) -> Engine:
+    def engine(self) -> Any:
         return self._engine
 
     @property
@@ -276,7 +254,7 @@ class NovelDownloader:
     @staticmethod
     def _get_chapter_content(chapters: Sequence[Chapter],
                              parser,
-                             engine: Engine) -> Chapters:
+                             engine) -> Chapters:
         return parser.parse_chapter_content(chapter_ref=chapters, engine=engine)
 
     # ── Rich 进度条 ────────────────────────────────────────────
