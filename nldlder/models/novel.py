@@ -174,7 +174,7 @@ class Chapter:
 
 @dataclass
 class Novel:
-    name: str
+    title: str
     url: str
     id: str
     serial: int
@@ -187,13 +187,13 @@ class Novel:
     chapters: Chapters = field(default_factory=Chapters)
 
     @staticmethod
-    def loads(name: str, url: str, id: str, serial: int, author: str, description: str,
+    def loads(title: str, url: str, id: str, serial: int, author: str, description: str,
               tags: Sequence[str], count: int, rating: float, cover: dict | None = None,
               chapters: Sequence[dict] = tuple(), **kwargs
               ) -> Novel:
         cover = Illustration.loads(**cover) if cover else None
         chapters = Chapters([Chapter.loads(**chapter) for chapter in chapters])
-        novel = Novel(name=name, url=url,id=id, serial=serial, author=author, description=description,
+        novel = Novel(title=title, url=url,id=id, serial=serial, author=author, description=description,
                      tags=tags,count=count, rating=rating, cover=cover, chapters=chapters)
         for k, v in kwargs.items():
             setattr(novel, k, v)
@@ -216,7 +216,7 @@ class Novel:
 
 @dataclass
 class SearchResult:
-    name: str
+    title: str
     author: str
     url: str | None = None
     description: str | None = None
