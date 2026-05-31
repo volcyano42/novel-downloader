@@ -35,6 +35,22 @@ class IMGExporter(BaseExporter):
         self.options = options
         # 全局序号计数器：0 = 封面，1+ = 章节图片
         self._img_counter = 0
+        # 用 novel 变量格式化 output_path（与 TXT/EPUB 一致）
+        # {n} 留给 file_name_template 逐图片处理，此处不参与格式化
+        from datetime import datetime
+
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+
+        variables = _SafeDict({
+            "title": novel.title if novel else "",
+            "author": novel.author if novel else "",
+            "novel_id": novel.id if novel else "",
+            "total_chapters": novel.serial if novel else 0,
+            "date": datetime.now().strftime("%Y%m%d"),
+        })
+        self.options.output_path = str(self.options.output_path).format_map(variables)
 
     # ── 公开 API ─────────────────────────────────────────────────
 
