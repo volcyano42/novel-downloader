@@ -6,7 +6,7 @@ api:
     - 3
     - 5
     enabled: true
-    key: 
+    key: ""
     params: {}
     retry_times: 3
     timeout: 30
@@ -14,8 +14,8 @@ browser:
   backoff_factor: 2
   browser_type: chromium
   delay:
-  - 3
-  - 5
+  - 3.0
+  - 5.0
   headless: false
   retry_times: 3
   timeout: 30
@@ -25,32 +25,7 @@ browser:
     width: 1280
 requests:
   backoff_factor: 2
-  cookies:
-    HMACCOUNT: 
-    Hm_lpvt_2667d29c8e792e6fa9182c20a3013175: 
-    Hm_lvt_2667d29c8e792e6fa9182c20a3013175: 
-    csrf_session_id: 
-    gfkadpd: 
-    has_biz_token: 
-    is_staff_user: 
-    n_mh: 
-    novel_web_id: 
-    odin_tt: 
-    passport_csrf_token: 
-    passport_csrf_token_default: 
-    s_v_web_id: 
-    serial_uuid: 
-    serial_webid: 
-    session_tlb_tag: 
-    sessionid: 
-    sessionid_ss: 
-    sid_guard: 
-    sid_tt: 
-    sid_ucp_v1: 
-    ssid_ucp_v1: 
-    ttwid: 
-    uid_tt: 
-    uid_tt_ss: 
+  cookies: {}
   delay:
   - 3
   - 5
