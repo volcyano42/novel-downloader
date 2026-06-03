@@ -58,7 +58,6 @@ class Options:
         _browser: BrowserOptions = BrowserOptions()
         _api: APIOptions = APIOptions()
         _download: DownloadOptions = DownloadOptions()
-        _storage: Path | str = Path(__file__).parent.parent.parent / "app_data" / "storage"
         _log: LogOptions = field(default_factory=LogOptions)
         _exports: dict[str, Any] = field(default_factory=dict)
 
@@ -90,10 +89,6 @@ class Options:
 
         def set_download_options(self, max_workers: int) -> "Options":
             self._download = DownloadOptions(max_workers=max_workers)
-            return self
-
-        def set_storage_options(self, path: Path | str) -> "Options":
-            self._storage = Path(path)
             return self
 
         def set_log_options(self, **kwargs) -> "Options":
@@ -133,5 +128,3 @@ class Options:
         @property
         def exports(self) -> dict[str, ExportOptions]:return self._exports
 
-        @property
-        def storage(self) -> Path | str: return self._storage
