@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>站点配置 - {{ plat_label }}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 3px; }
+hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+a { color: var(--accent); }
+.flash { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+.flash.success { background: #1a3a1a; color: var(--success); border: 1px solid var(--success); }
+.flash.error { background: #3a1a1a; color: var(--danger); border: 1px solid var(--danger); }
+</style>
+</head>
+<body>
+
+<h1>{{ plat_label }} 站点配置</h1>
+<div class="status-bar"><a href="/settings">← 返回设置</a></div>
+
+{% if flash %}
+<div class="flash {{ flash.type }}">{{ flash.text }}</div>
+{% endif %}
+
+<form method="POST" action="/settings/site/save">
+<input type="hidden" name="site_platform" value="{{ site_platform }}">
+
+<div class="card">
+  <h2>Browser 模式</h2>
+  <div class="form-group">
+    <label>User Data 目录（相对于项目根路径，或绝对路径）</label>
+    <input name="browser_user_data_dir" value="{{ bc.user_data_dir or '' }}">
+  </div>
+  <div class="form-group">
+    <label>headless（无窗口模式）</label>
+    <select name="browser_headless">
+      <option value="false" {% if not bc.get('headless') %}selected{% endif %}>否</option>
+      <option value="true" {% if bc.get('headless') %}selected{% endif %}>是</option>
+    </select>
+  </div>
+  <div class="row">
+    <div class="flex-1 form-group">
+      <label>timeout (秒)</label>
+      <input name="browser_timeout" type="number" value="{{ bc.get('timeout', 30) }}">
+    </div>
+    <div class="flex-1 form-group">
+      <label>retry_times</label>
+      <input name="browser_retry_times" type="number" value="{{ bc.get('retry_times', 3) }}">
+    </div>
+  </div>
+  <div class="form-group">
+    <label>delay（最小,最大 秒）</label>
+    <input name="browser_delay" value="{{ bc.get('delay', [3,5]) }}">
+  </div>
+</div>
+
+<hr>
+
+<div class="card">
+  <h2>API 模式（oiapi）</h2>
+  <div class="form-group">
+    <label>API Key</label>
+    <div class="row">
+      <input id="api-key-field" name="api_key" type="password" value="{{ ac.get('key', '') }}" placeholder="输入 API Key" style="flex:1;">
+      <button type="button" onclick="toggleKey()" style="background:#444;color:#ddd;padding:8px 12px;">👁</button>
+    </div>
+    <div class="text-muted mt-8" id="key-hint">当前: {{ (ac.get('key', '')[:8] + '…') if ac.get('key') else '未设置' }}</div>
+  </div>
+  <div class="row">
+    <div class="flex-1 form-group">
+      <label>timeout (秒)</label>
+      <input name="api_timeout" type="number" value="{{ ac.get('timeout', 30) }}">
+    </div>
+    <div class="flex-1 form-group">
+      <label>batch_size</label>
+      <input name="api_batch_size" type="number" value="{{ ac.get('batch_size', 3) }}">
+    </div>
+    <div class="flex-1 form-group">
+      <label>retry_times</label>
+      <input name="api_retry_times" type="number" value="{{ ac.get('retry_times', 3) }}">
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<div class="card">
+  <h2>Requests 模式</h2>
+  <div class="form-group">
+    <label>User-Agent</label>
+    <input name="req_ua" value="{{ rc.get('headers', {}).get('User-Agent', '') }}">
+  </div>
+  <div class="form-group">
+    <label>Cookies</label>
+    <div class="row">
+      <textarea id="cookies-field" name="req_cookies" rows="3" style="flex:1;display:none;">{{ rc.get('cookies', '') }}</textarea>
+      <input id="cookies-mask" type="password" value="••••••••" readonly style="flex:1;">
+      <button type="button" onclick="toggleCookies()" style="background:#444;color:#ddd;padding:8px 12px;">👁</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="flex-1 form-group">
+      <label>timeout (秒)</label>
+      <input name="req_timeout" type="number" value="{{ rc.get('timeout', 30) }}">
+    </div>
+    <div class="flex-1 form-group">
+      <label>retry_times</label>
+      <input name="req_retry_times" type="number" value="{{ rc.get('retry_times', 3) }}">
+    </div>
+  </div>
+</div>
+
+<button type="submit" class="btn-success">保存 {{ plat_label }} 配置</button>
+</form>
+
+<script>
+function toggleKey() {
+  const f = document.getElementById('api-key-field');
+  f.type = f.type === 'password' ? 'text' : 'password';
+}
+function toggleCookies() {
+  const f = document.getElementById('cookies-field');
+  const m = document.getElementById('cookies-mask');
+  if (f.style.display === 'none') {
+    f.style.display = '';
+    m.style.display = 'none';
+  } else {
+    f.style.display = 'none';
+    m.style.display = '';
+  }
+}
+</script>
+</body>
+</html>
