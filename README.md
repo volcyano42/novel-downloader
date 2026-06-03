@@ -53,8 +53,6 @@ Cookie是账号的唯一凭证，也通过`登录功能`获取的。自动保存
 
 ## 安装
 
-Termux用户需要把 requirements.txt 的`DrissionPage`删除然后再pip
-
 ```bash
 git clone https://github.com/volcyano42/novel-downloader.git
 cd novel-downloader
@@ -84,7 +82,7 @@ python main.py
 WEB UI模式：
 
 ```bash
-python service.py
+python webui.py
 ```
 启动后进入界面  
 
@@ -100,7 +98,7 @@ python service.py
 
 本项目以兴趣和研究为目的，使用者请在遵守相关法律法规下下载。**不过度采集，越权采集或售卖，引发的风险和后果，违者需自行承担**  
 
-如果您有任何疑问可以提交[issues](https://github.com/volcyano42/novel-downloader/issues)，作者虽然没有时间，但是一定会回的
+如果您有任何疑问可以提交[issues](https://github.com/volcyano42/novel-downloader/issues)
 
 # 作者
-volcyano
+volcyano42
