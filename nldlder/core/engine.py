@@ -138,13 +138,8 @@ class APIEngine(Engine):
                 self._sessions.remove(session)
         del self._session_local.session
 
-
-# ═══════════════════════════════════════════════════════════════════
-# BrowserEngine — 通过 DrissionPage Chromium 浏览器获取渲染后 HTML
-# ═══════════════════════════════════════════════════════════════════
-
 class BrowserEngine(Engine):
-
+    from DrissionPage._pages.mix_tab import MixTab
     def __init__(self, options: BrowserOptions) -> None:
         self.name = "browser"
         self.options = options
@@ -176,7 +171,7 @@ class BrowserEngine(Engine):
 
     # ── 线程独占 Page ────────────────────────────────────────────
 
-    def _get_page(self) -> Any:
+    def get_page(self) -> MixTab:
         """获取当前线程独占的 ChromiumPage。
 
         每个线程第一次调用时创建新 page 并加入池中；
@@ -188,14 +183,14 @@ class BrowserEngine(Engine):
                 self._page_pool.append(self._thread_local.page)
         return self._thread_local.page
 
-    def new_page(self) -> Any:
+    def new_page(self) -> MixTab:
         return self._browser.new_tab()
 
     # ── 请求 ─────────────────────────────────────────────────────
 
     def fetch_text(self, url: str, **kwargs: Any) -> str:
         _log.debug("fetch_text start: url=%s", url[:80])
-        page = self._get_page()
+        page = self.get_page()
 
         for i in range(self.options.retry_times):
             if i > 0:
