@@ -1,7 +1,7 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from .engine import BrowserEngine
 from .exceptions import (
@@ -124,8 +124,7 @@ class NovelDownloader:
         """
         self._engine = engine
         self._options = options or Options()
-        self._progress = DownloadProgress("")
-        self._partial: list[Chapter] = []
+        self._progress = DownloadProgress()
 
     # ── 公开 API ─────────────────────────────────────────────────
 
@@ -156,7 +155,8 @@ class NovelDownloader:
     def download_chapters(self,
                           chapters: Sequence[Chapter] | Chapter,
                           *,
-                          parser=None) -> Chapters:
+                          parser=None,
+                          on_batch_complete: Callable[[Chapters], None] | None = None) -> Chapters:
         """并发下载章节正文内容。
 
         自动管理 DownloadProgress（仅内存更新，不持久化）。
@@ -164,6 +164,7 @@ class NovelDownloader:
         Args:
             chapters: 要下载的章节列表。
             parser:   可选解析器实例。为 None 时自动从首个章节 URL 解析。
+            on_batch_complete: 每批下载完成后的回调。可用于增量持久化。
 
         Returns:
             已下载完成的章节（Chapters 对象）。
@@ -174,7 +175,7 @@ class NovelDownloader:
         if isinstance(chapters, Chapter):
             chapters = [chapters]
         # 每次调用重置进度追踪
-        self._progress = DownloadProgress("")
+        self._progress = DownloadProgress(total_chapters=Chapters(chapters))
 
         # 解析器
         if parser is None:
@@ -189,7 +190,6 @@ class NovelDownloader:
         progress_ctx, task = self._create_progress(total)
 
         all_downloaded: list[Chapter] = []
-        self._partial = []
 
         with progress_ctx as progress:
             with ThreadPoolExecutor(max_workers=self._options.download.max_workers) as executor:
@@ -200,23 +200,30 @@ class NovelDownloader:
                     ): group
                     for group in groups
                 }
+                pending_futures = set(future_to_group.keys())
 
                 for future in as_completed(future_to_group):
                     group = future_to_group[future]
+                    pending_futures.discard(future)
                     try:
                         result_chapters: Chapters = future.result()
                     except ChapterNotFoundError as e:
                         _log.warning("章节内容获取失败，跳过: %s", e)
-                        self._progress.add_failed_chapter_id(group)
+                        self._progress.add_failed(group)
                         continue
                     except AntiCrawlError:
                         _log.error("触发反爬机制，中断下载")
-                        self._progress.add_failed_chapter_id(group)
-                        self._partial = list(all_downloaded)
+                        self._progress.add_failed(group)
+                        # 剩余未完成的批次也标记为失败
+                        for pf in pending_futures:
+                            pf.cancel()
+                            self._progress.add_failed(future_to_group[pf])
                         raise
 
                     all_downloaded.extend(result_chapters)
-                    self._progress.add_downloaded_chapter_id(result_chapters)
+                    self._progress.add_downloaded(result_chapters)
+                    if on_batch_complete:
+                        on_batch_complete(result_chapters)
 
                     last_title = result_chapters[-1].title if result_chapters else "?"
                     self._advance_progress(progress, task, len(result_chapters), last_title)
@@ -231,13 +238,8 @@ class NovelDownloader:
 
     @property
     def progress(self) -> DownloadProgress:
-        """内存中的下载进度（未持久化，调用者可按需 save_progress）。"""
+        """当前批次的下载进度。"""
         return self._progress
-
-    @property
-    def partial(self) -> Chapters:
-        """异常中断时已成功下载的部分章节（正常返回时为空）。"""
-        return Chapters(self._partial)
 
 
     # ═══════════════════════════════════════════════════════════
