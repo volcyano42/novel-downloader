@@ -232,17 +232,10 @@ class FanqieHTMLParser(BaseParser):
             abstract_elem = item.select_one('.abstract')
             description = abstract_elem.get_text(strip=True) if abstract_elem else ''
 
-            url = None
-            link_elem = item.find('a')
-            if link_elem and link_elem.get('href'):
-                href = link_elem['href']
-                url = href if href.startswith('http') else f"https://fanqienovel.com{href}"
-
             # 构造结果对象
             results.append(SearchResult(
                 title=translate(name, 1),
                 author=translate(author, 1),
-                url=translate(url, 1),
                 description=translate(description, 1)
             ))
 
@@ -488,30 +481,27 @@ class FanqieBrowserParser(FanqieHTMLParser):
 
     def parse_search_info(self,
                           search_ref: str,
-                          engine,
+                          engine: BrowserEngine,
                           page: int = 0,
                           choice: int | None = None,
                           **kwargs) -> tuple[SearchResult, ...] | str | None:
         _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
         search_url = f"https://fanqienovel.com/search/{search_ref}"
+        html = engine.fetch_text(search_url)
+        browser_page = engine.get_page()
         if page >= 1:
-            browser_page = engine.new_page()
-            browser_page.get(search_url)
             next_page_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[5]/ul/li[{page + 1}]"
             browser_page.ele(f"xpath:{next_page_xpath}").click()
             html = browser_page.html
-        else:
-            html = engine.fetch_text(search_url)
         result = super().parse_search_info(search_ref=html, engine=engine, page=page, choice=choice, **kwargs)
         if not result:
             return None
         if choice is not None:
-            browser_page = engine.new_page()
-            button_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[4]/div[{choice - 1}]/div[2]/div[1]/span"
-            browser_page.listen.new_tab()
+            button_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[4]/div[{choice + 1}]/div[2]/div[1]/span"
             browser_page.ele(f"xpath:{button_xpath}").click()
-            new_page = browser_page.wait.new_tab(timeout=10)
-            book_url: str = new_page.url
+            tab_id = browser_page.browser.wait.new_tab(timeout=10)
+            new_page = browser_page.browser.get_tab(tab_id)
+            book_url = new_page.url
             return book_url
         else:
             return result
@@ -580,7 +570,7 @@ class FanqieOIAPIParser(BaseParser):
                     url=book_url,
                     description=description,
                 ))
-        if choice:
+        if choice is not None:
             return results[choice].url
         return tuple(results)
 
