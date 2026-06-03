@@ -1,0 +1,163 @@
+/* novel-downloader Web UI 全局样式 */
+:root {
+  --bg: #111;
+  --card: #1a1a1a;
+  --text: #ddd;
+  --muted: #888;
+  --accent: #4af;
+  --danger: #e55;
+  --success: #4a4;
+  --border: #333;
+  --tab-active: #222;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font: 15px/1.5 system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ── 标题 ───────────────────────────────────── */
+h1 { margin-bottom: 6px; font-size: 22px; }
+.status-bar {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.status-bar a { color: var(--accent); text-decoration: none; }
+
+/* ── Tab 导航 ────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--tab-active);
+}
+
+/* ── 卡片 ────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.card h2 { font-size: 16px; margin-bottom: 10px; }
+.card h3 { font-size: 14px; margin-bottom: 8px; color: var(--muted); }
+
+/* ── 表单控件 ────────────────────────────────── */
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+input, button, select, textarea {
+  background: #222;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font: inherit;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+input { flex: 1; min-width: 180px; }
+button {
+  cursor: pointer;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+button:hover { opacity: .88; }
+button:disabled { opacity: .4; cursor: default; }
+.btn-success { background: var(--success); color: #000; }
+.btn-danger  { background: var(--danger); }
+.btn-muted   { background: #444; color: var(--text); }
+.btn-sm      { padding: 4px 10px; font-size: 13px; }
+
+/* ── 列表 ────────────────────────────────────── */
+.list-item {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.list-item:last-child { border-bottom: none; }
+.tag {
+  display: inline-block;
+  background: #333;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+/* ── 日志面板 ────────────────────────────────── */
+#log {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  height: 260px;
+  overflow-y: auto;
+  font: 13px monospace;
+  white-space: pre-wrap;
+}
+#log .info  { color: var(--muted); }
+#log .error { color: var(--danger); }
+#log .done  { color: var(--success); }
+
+/* ── 工具类 ──────────────────────────────────── */
+.hidden { display: none !important; }
+.flex-1 { flex: 1; min-width: 120px; }
+.mt-8  { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.mb-8  { margin-bottom: 8px; }
+.text-muted { color: var(--muted); font-size: 13px; }
+.spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 搜索结果显示区 ──────────────────────────── */
+#search-results { margin-top: 10px; }
+#search-results .list-item .title { font-weight: 600; }
+#search-results .list-item .meta { font-size: 13px; color: var(--muted); }
