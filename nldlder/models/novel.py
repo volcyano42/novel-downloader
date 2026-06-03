@@ -43,15 +43,12 @@ class Illustration:
 
 class Chapters(Sequence):
 
-    def __init__(self, chapters: Chapter | Sequence[Chapter] | None = None) -> None:
+    def __init__(self, chapters: Chapter | Iterable[Chapter] | None = None) -> None:
         if chapters is None:
             self._chapters = tuple()
         else:
-            self._chapters = tuple(chapters) if isinstance(chapters, Sequence) else (chapters, )
+            self._chapters = tuple(chapters) if isinstance(chapters, Iterable) else (chapters, )
         self._chapters: tuple[Chapter, ...] = tuple(sorted(self._chapters, key=lambda chapter: chapter.order))
-        self._by_id = {ch.id: ch for ch in self._chapters}
-        self._by_url = {ch.url: ch for ch in self._chapters}
-        self._by_order = {ch.order: ch for ch in self._chapters}
 
     def __getitem__(self, index: int) -> Chapter:
         return self._chapters[index]
@@ -78,14 +75,23 @@ class Chapters(Sequence):
 
     def get_chapter_by_id(self, chapter_id: str) -> Chapter | None:
         """根据章节 ID 获取章节"""
-        return self._by_id.get(chapter_id)
+        for ch in self._chapters:
+            if ch.id == chapter_id:
+                return ch
+        return None
 
     def get_chapter_by_url(self, url: str) -> Chapter | None:
         """根据章节 URL 获取章节"""
-        return self._by_url.get(url)
+        for ch in self._chapters:
+            if ch.url == url:
+                return ch
+        return None
 
     def get_chapter_by_order(self, order: int) -> Chapter | None:
-        return self._by_order.get(order)
+        for ch in self._chapters:
+            if ch.order == order:
+                return ch
+        return None
 
     def get_incompleted_chapters(self) -> Chapters | None:
         """获取不完整的章节"""
