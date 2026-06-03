@@ -9,3 +9,17 @@ epub:
   extension: ".epub"
   css_style: "default"
   include_toc: true
+
+  # ── 压缩选项 ──────────────────────────────────────────────────
+  # 压缩算法: deflate（通用）, bzip2（更高压缩率，兼容性稍差）, stored（不压缩）
+  compression: deflate
+  # deflate 压缩等级 0-9（9 最高）
+  compresslevel: 9
+
+  # ── 图片优化选项（需安装 Pillow）──────────────────────────────
+  # 启用图片重压缩（JPEG 重压缩、PNG 优化）
+  optimize_images: true
+  # JPEG/WebP 质量 1-100（85 肉眼不可感知但体积减半）
+  jpeg_quality: 85
+  # 图片最大宽度（0 = 不缩放，800 = 等比缩小到 800px 宽）
+  max_image_width: 0
