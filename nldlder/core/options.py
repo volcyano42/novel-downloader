@@ -2,8 +2,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence, Literal, Any
 
-from box import Box
-
 from ..utils.logger import LogOptions
 
 
