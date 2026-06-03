@@ -11,7 +11,7 @@ import yaml
 from nldlder import (
     NovelDownloader, Options, create_engine,
     get_exporter_options, get_exporters,
-    search, login,
+    get_parsers, search, login,
 )
 from nldlder.core.storage import Storage
 from nldlder.core.exceptions import AntiCrawlError
@@ -50,6 +50,16 @@ def _select(message: str, choices: list[tuple[str, object]]) -> object | None:
 def _text_input(message: str) -> str | None:
     """获取文本输入。"""
     return input(f"{message} ").strip() or None
+
+
+def _show_platforms() -> dict:
+    """返回 {label: name} 的可用平台字典。"""
+    parsers = get_parsers()
+    labels = {
+        "fanqie": "番茄小说 (fanqie)",
+        "qidian": "起点中文网 (qidian)",
+    }
+    return {labels.get(k, k): k for k in parsers}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -122,7 +132,6 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
 
     elif mode == "api":
         api_section = site_cfg.get("api", {})
-        # 取第一个启用的 provider
         for name, provider in api_section.items():
             if isinstance(provider, dict) and provider.get("enabled", True):
                 options.set_api_options(
@@ -141,7 +150,6 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
         req_cfg = site_cfg.get("requests", {})
         cookies_val = req_cfg.get("cookies")
         if isinstance(cookies_val, str) and cookies_val:
-            # 字符串格式 "k1=v1; k2=v2" → dict
             cookies_dict = {}
             for item in cookies_val.split(";"):
                 item = item.strip()
@@ -168,26 +176,26 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
 # 核心功能
 # ═══════════════════════════════════════════════════════════════════
 
-def do_login(site_cfg: dict):
-    """打开浏览器让用户手动登录番茄小说。
+def do_login(platform: str):
+    """打开浏览器让用户登录指定平台。
 
     登录始终使用 BrowserEngine，不受当前 mode 配置影响。
     """
+    platform_labels = _show_platforms()
     platform_choice = _select(
         "选择网站：",
-        choices=[
-            ("番茄小说 (fanqie)", "fanqie"),
-            ("返回", None),
-        ],
+        choices=[(label, name) for label, name in platform_labels.items()] + [("返回", None)],
     )
 
     if platform_choice is None:
-        return
+        return platform
+
+    platform = platform_choice
+    site_cfg = load_site_config(platform)
 
     print("\n正在打开浏览器，请在浏览器窗口中完成登录...")
     print("（程序将自动检测登录完成，最多等待 120 秒）\n")
 
-    # 登录始终使用浏览器引擎
     browser_cfg = site_cfg.get("browser", {})
     login_engine = create_engine(
         Options().set_mode("browser").set_browser_options(
@@ -200,12 +208,11 @@ def do_login(site_cfg: dict):
         )
     )
     try:
-        cred = login(platform_choice, login_engine)
+        cred = login(platform, login_engine)
         cookie_count = len(cred.cookies) if cred and cred.cookies else 0
         if cookie_count > 0:
             print(f"✓ 登录成功！获取到 {cookie_count} 个 cookies")
-            # 保存 cookies 到站点配置
-            site_path = CONFIG_DIR / "sites" / f"{platform_choice}.yaml"
+            site_path = CONFIG_DIR / "sites" / f"{platform}.yaml"
             with open(site_path, encoding="utf-8") as f:
                 site_yaml = yaml.safe_load(f) or {}
             if "requests" not in site_yaml:
@@ -222,7 +229,7 @@ def do_login(site_cfg: dict):
         login_engine.close()
 
 
-def do_search(engine, dl) -> str | None:
+def do_search(engine, dl, platform: str, page: int = 0) -> str | None:
     """搜索小说，选择后返回小说 URL（或 None 表示取消）。"""
     query = _text_input("请输入搜索关键词：")
     if not query or not query.strip():
@@ -230,7 +237,7 @@ def do_search(engine, dl) -> str | None:
 
     print(f"\n正在搜索「{query}」...")
     try:
-        results = search("fanqie", query, engine)
+        results = search(platform, query, engine, page=page)
     except Exception as e:
         print(f"✗ 搜索失败: {e}")
         return None
@@ -240,7 +247,7 @@ def do_search(engine, dl) -> str | None:
         return None
 
     choices = []
-    for r in results:
+    for i, r in enumerate(results):
         name = getattr(r, "title", "") or ""
         author = getattr(r, "author", "") or ""
         desc = getattr(r, "description", "") or ""
@@ -248,16 +255,19 @@ def do_search(engine, dl) -> str | None:
         title = f"{name}  — {author}"
         if desc_short:
             title += f"  ({desc_short})"
-        choices.append((title, r.url))
+        choices.append((title, i))
 
     choices.append(("返回", None))
 
-    selected_url = _select(
+    selected_idx = _select(
         f"搜索到 {len(results)} 个结果，选择要下载的小说：",
         choices=choices,
     )
 
-    return selected_url
+    if selected_idx is None:
+        return None
+
+    return search(platform, query, engine, page=page, choice=selected_idx)
 
 
 def do_download(engine, dl, url: str, group: str, format_configs: dict):
@@ -302,20 +312,21 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         print("所有章节已下载完毕！")
     else:
         print(f"待下载: {len(target)} 章")
+        def _on_batch(ch):
+            storage.save_chapter(novel, ch)
+            novel.update_chapter(ch)
         try:
-            downloaded = dl.download_chapters(target)
+            downloaded = dl.download_chapters(target, on_batch_complete=_on_batch)
             print(f"  下载完成: {len(downloaded)} 章")
         except AntiCrawlError:
-            print("⚠ 触发反爬，保存已下载部分...")
-            if dl.partial:
-                storage.save_chapter(novel, dl.partial)
-                storage.save_progress(dl.progress, novel.id)
-                novel.update_chapter(dl.partial)
+            if dl.progress.remaining:
+                print(f"⚠ 触发反爬，保存已下载部分（剩余 {dl.progress.remaining} 章未下载）...")
+            else:
+                print("⚠ 触发反爬，保存已下载部分...")
+            if dl.progress.downloaded_chapters:
+                storage.save_chapter(novel, dl.progress.downloaded_chapters)
+                novel.update_chapter(dl.progress.downloaded_chapters)
             raise
-        else:
-            storage.save_chapter(novel, downloaded)
-            storage.save_progress(dl.progress, novel.id)
-            novel.update_chapter(downloaded)
 
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
@@ -347,11 +358,9 @@ def _do_export(novel, group: str, format_configs: dict):
             _log.debug("跳过无选项类的格式: %s", fmt)
             continue
 
-        # 构建 output_path：只填充 {group}，其余由导出器处理
         raw_path = fmt_cfg.get("output_path", "")
         raw_path = raw_path.replace("{group}", group)
 
-        # 从格式配置提取其他构造参数
         extra = {}
         for k in ("encoding", "file_name_template", "extension",
                    "css_style", "include_toc"):
@@ -434,7 +443,6 @@ def do_update(engine, dl, group: str, format_configs: dict):
         print("未找到已下载的小说")
         return
 
-    # 收集所有小说的元数据
     novels_info = []
     for d in novel_dirs:
         meta = storage.load_meta(d.name)
@@ -451,7 +459,6 @@ def do_update(engine, dl, group: str, format_configs: dict):
         downloaded = len(local) if local else 0
         print(f"  {i}. {novel.title}  (已下载 {downloaded} 章)")
 
-    # 让用户选择
     choices = [(f"{n.title}  — {n.author}", n) for n in novels_info]
     choices.append(("▸ 全部更新", "all"))
     choices.append(("返回", None))
@@ -487,7 +494,8 @@ def main():
     cfg = load_main_config()
     group = cfg.get("group", "default")
     mode = cfg.get("mode", "browser")
-    site_cfg = load_site_config("fanqie")
+    platform = cfg.get("platform", "fanqie")
+    site_cfg = load_site_config(platform)
     format_configs = load_format_configs()
 
     if not format_configs:
@@ -495,17 +503,37 @@ def main():
 
     options = build_options(cfg, site_cfg)
 
-    # 初始化引擎和下载器
-    print(f"模式: {mode}  |  分组: {group}")
-    _log.debug("creating engine: mode=%s", mode)
-    engine = create_engine(options)
-    dl = NovelDownloader(engine, options=options)
+    # 延迟初始化引擎和下载器（首次使用时创建）
+    print(f"平台: {platform}  |  模式: {mode}  |  分组: {group}")
+    engine = None
+    dl = None
+
+    def _get_engine_dl():
+        nonlocal engine, dl
+        if engine is None:
+            _log.debug("creating engine: mode=%s", mode)
+            e = create_engine(options)
+            d = NovelDownloader(e, options=options)
+            engine, dl = e, d
+        return engine, dl
+
+    platform_labels = _show_platforms()
+    available = list(platform_labels.keys())
 
     try:
         while True:
+            platform_label = platform_labels.get(platform, platform)
+
+            # 平台选择行
+            platform_choices = []
+            for label, name in platform_labels.items():
+                prefix = "▸ " if name == platform else "  "
+                platform_choices.append((f"{prefix}{label}", name))
+
             action = _select(
-                f"当前分组: {group}  |  模式: {mode}",
+                f"平台: {platform_label}  |  分组: {group}  |  模式: {mode}",
                 choices=[
+                    ("🌐 切换平台", "switch_platform"),
                     ("🔑 登录", "login"),
                     ("🔍 搜索 & 下载", "search"),
                     ("🔄 更新已下载", "update"),
@@ -518,14 +546,30 @@ def main():
             if action is None or action == "quit":
                 break
 
+            elif action == "switch_platform":
+                new_platform = _select(
+                    "选择平台：",
+                    choices=[(label, name) for label, name in platform_labels.items()] + [("取消", None)],
+                )
+                if new_platform and new_platform != platform:
+                    platform = new_platform
+                    site_cfg = load_site_config(platform)
+                    options = build_options(cfg, site_cfg)
+                    if engine is not None:
+                        engine.close()
+                    engine, dl = None, None
+                    print(f"✓ 已切换到: {platform_labels.get(platform, platform)}")
+
             elif action == "login":
-                do_login(site_cfg)
+                do_login(platform)
 
             elif action == "search":
-                url = do_search(engine, dl)
+                e, d = _get_engine_dl()
+                url = do_search(e, d, platform)
                 if url:
                     try:
-                        do_download(engine, dl, url, group, format_configs)
+                        e, d = _get_engine_dl()
+                        do_download(e, d, url, group, format_configs)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
@@ -534,11 +578,12 @@ def main():
 
             elif action == "download":
                 url = _text_input(
-                    "请输入小说链接（如 https://fanqienovel.com/page/...）："
+                    "请输入小说链接（如 https://...）："
                 )
                 if url and url.strip():
                     try:
-                        do_download(engine, dl, url.strip(), group, format_configs)
+                        e, d = _get_engine_dl()
+                        do_download(e, d, url.strip(), group, format_configs)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
@@ -554,7 +599,8 @@ def main():
 
             elif action == "update":
                 try:
-                    do_update(engine, dl, group, format_configs)
+                    e, d = _get_engine_dl()
+                    do_update(e, d, group, format_configs)
                 except Exception as e:
                     print(f"✗ 更新失败: {e}")
                     _log.exception("update failed")
@@ -564,7 +610,8 @@ def main():
     except KeyboardInterrupt:
         print("\n用户中断")
     finally:
-        engine.close()
+        if engine is not None:
+            engine.close()
         _log.info("===== novel-downloader CLI end =====")
 
 
