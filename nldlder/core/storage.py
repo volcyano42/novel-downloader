@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Sequence
 
 from .exceptions import StorageError
-from .progress import DownloadProgress
 from ..models.novel import Novel, Chapter, Chapters
 from ..utils.logger import get_logger
 
@@ -19,7 +18,6 @@ class Storage:
         base_dir/
             {novel_id}/
                 meta.json          # 小说元数据
-                progress.json      # 下载进度
                 chapters/
                     id1.json     # 每章独立文件
                     id2.json
@@ -49,9 +47,6 @@ class Storage:
 
     def get_meta_path(self, novel_id: str) -> Path:
         return self.get_novel_dir(novel_id) / "meta.json"
-
-    def get_progress_path(self, novel_id: str) -> Path:
-        return self.get_novel_dir(novel_id) / "progress.json"
 
     def get_chapters_path(self, novel_id: str) -> Path:
         return self.get_novel_dir(novel_id) / "chapters"
@@ -191,11 +186,3 @@ class Storage:
         """delete chapter"""
         path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
         os.remove(path)
-
-    def load_progress(self, novel_id: str) -> DownloadProgress | None:
-        """加载下载进度，若无则返回 None。"""
-        return DownloadProgress.load(self.get_progress_path(novel_id))
-
-    def save_progress(self, progress: DownloadProgress, novel_id: str):
-        """保存下载进度"""
-        progress.save(self.get_progress_path(novel_id))
