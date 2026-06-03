@@ -1,49 +1,35 @@
 from __future__ import annotations
 
-import json
 import time
-from dataclasses import dataclass, field, asdict
-from pathlib import Path
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Iterable, Sequence
 
-from ..models.novel import Chapter
+from ..models.novel import Chapter, Chapters
 
 
 @dataclass
 class DownloadProgress:
-    novel_url: str
-    downloaded_chapters_id: set[str] = field(default_factory=set)
-    failed_chapters_id: set[str] = field(default_factory=set)
+    total_chapters: Chapters = field(default_factory=Chapters)
+    downloaded_chapters: Chapters = field(default_factory=Chapters)
+    failed_chapters: Chapters = field(default_factory=Chapters)
     last_update: float = 0.0
 
-    @classmethod
-    def load(cls, path: Path) -> DownloadProgress | None:
-        if not path.exists():
-            return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            data["downloaded_chapters_id"] = set(data.get("downloaded_chapters_id", []))
-            return cls(**data)
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return None
+    def set_total(self, chapters: Chapter | Iterable[Chapter]) -> None:
+        """设置总章节列表。"""
+        self.total_chapters = Chapters(chapters)
 
-    def add_downloaded_chapter_id(self, chapters: Sequence[Chapter]) -> None:
-        for chapter in chapters:
-            self.downloaded_chapters_id.add(chapter.id)
+    @property
+    def remaining(self) -> int:
+        """剩余未完成的章节数。"""
+        return len(self.total_chapters) - len(self.downloaded_chapters) - len(self.failed_chapters)
 
-    def add_failed_chapter_id(self, chapters: Sequence[Chapter]) -> None:
-        for chapter in chapters:
-            self.failed_chapters_id.add(chapter.id)
+    def add_downloaded(self, chapters: Chapter | Iterable[Chapter]) -> None:
+        """记录成功下载的章节。"""
+        self.downloaded_chapters = self.downloaded_chapters.merge(chapters)
+
+    def add_failed(self, chapters: Chapter | Iterable[Chapter]) -> None:
+        """记录下载失败的章节。"""
+        self.failed_chapters = self.failed_chapters.merge(chapters)
 
     def update_timestamp(self):
         self.last_update = time.time()
-
-    def save(self, path: Path):
-        data = asdict(self)
-        data["downloaded_chapters_id"] = list(self.downloaded_chapters_id)
-        data["failed_chapters_id"] = list(self.failed_chapters_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
