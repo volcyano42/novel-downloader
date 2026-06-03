@@ -1,5 +1,5 @@
-version: 1.0.0
-mode: api
-group: default
 download:
   max_workers: 3
+group: default
+mode: api
+version: 1.0.0
