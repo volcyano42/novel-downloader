@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>novel-downloader</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<h1>📚 novel-downloader</h1>
+<div class="status-bar">
+  <span>平台: <strong>{{ platform_label }}</strong></span>
+  <span>模式: {{ mode }}</span>
+  <span>分组: {{ group }}</span>
+  <span>已存储: <strong>{{ novel_count }}</strong> 本</span>
+  <a href="/settings">⚙️ 设置</a>
+</div>
+
+<!-- Tab 导航 -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="download" onclick="switchTab('download')">📥 下载</button>
+  <button class="tab-btn" data-tab="library" onclick="switchTab('library')">📚 已存储</button>
+  <button class="tab-btn" data-tab="export" onclick="switchTab('export')">📦 重新导出</button>
+</div>
+
+<!-- ── 下载 Tab ──────────────────────────────── -->
+<div id="tab-download" class="tab-panel">
+  <div class="card">
+    <h2>🌐 平台选择</h2>
+    <div class="row">
+      <select id="platform-select" onchange="switchPlatform()">
+        {% for name, label in platforms.items() %}
+        <option value="{{ name }}" {% if name == platform %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="text-muted" id="platform-status"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 搜索 & 下载</h2>
+    <div class="row">
+      <input id="search-input" placeholder="输入关键词搜索小说..." onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()">搜索</button>
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <div class="card">
+    <h2>📥 直接下载</h2>
+    <div class="row">
+      <input id="url-input" placeholder="粘贴小说链接 https://..." onkeydown="if(event.key==='Enter')doDirectDownload()">
+      <button onclick="doDirectDownload()">下载</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔑 登录</h2>
+    <button onclick="doLogin()">打开浏览器登录</button>
+    <span class="text-muted">（需要在运行服务器的机器上有桌面环境）</span>
+  </div>
+</div>
+
+<!-- ── 已存储 Tab ────────────────────────────── -->
+<div id="tab-library" class="tab-panel hidden">
+  <div class="card">
+    <h2>📚 已存储小说</h2>
+    <div id="novel-list"><div class="text-muted">加载中...</div></div>
+    <div class="row mt-16">
+      <button class="btn-success" onclick="doAction('update_all',fetchNovels)">🔄 全部更新</button>
+      <button onclick="doAction('export_all',fetchNovels)">📦 全部导出</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 重新导出 Tab ──────────────────────────── -->
+<div id="tab-export" class="tab-panel hidden">
+  <div class="card">
+    <h2>📦 重新导出</h2>
+    <div class="form-group">
+      <label>导出目录</label>
+      <select id="export-dir" onchange="onExportDirChange()">
+        <option value="">加载中...</option>
+      </select>
+      <input id="export-dir-custom" class="hidden mt-8" placeholder="输入自定义路径..." style="display:none;">
+    </div>
+    <div class="form-group mt-16">
+      <label>导出格式</label>
+      <div class="row">
+        {% for fmt in available_formats %}
+        <label style="cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" name="export-fmt" value="{{ fmt }}" checked> {{ fmt }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <button class="btn-success mt-16" onclick="doReExport()">开始导出</button>
+  </div>
+</div>
+
+<!-- 日志面板（全局） -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;">
+    <h2>📋 运行日志</h2>
+    <button class="btn-sm btn-muted" onclick="clearLog()">清空</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
