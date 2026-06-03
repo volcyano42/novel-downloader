@@ -1,15 +1,40 @@
 import html as html_lib
+import io as _io
 import re
 import uuid
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
 
 from .base import BaseExporter
 from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel, Illustration
+from ..utils.logger import get_logger
+
+_log = get_logger("nldlder.exporters.epub")
+
+# 尝试导入 Pillow（可选）
+try:
+    from PIL import Image
+    _HAS_PILLOW = True
+except ImportError:
+    _HAS_PILLOW = False
+
+# 压缩算法常量
+_COMPRESSION_MAP: dict[str, int] = {
+    "stored": zipfile.ZIP_STORED,
+    "deflate": zipfile.ZIP_DEFLATED,
+}
+try:
+    _COMPRESSION_MAP["bzip2"] = zipfile.ZIP_BZIP2
+except AttributeError:
+    pass
+try:
+    _COMPRESSION_MAP["lzma"] = zipfile.ZIP_LZMA
+except AttributeError:
+    pass
 
 
 @dataclass
@@ -21,6 +46,15 @@ class EPUBExportOptions(ExportOptions):
     include_toc: bool = True
     extension: str = ".epub"
     encoding: str = "utf-8"
+
+    # ── 压缩选项 ────────────────────────────────────────────────
+    compression: Literal["deflate", "bzip2", "stored"] = "deflate"
+    compresslevel: int = 9
+
+    # ── 图片优化选项 ────────────────────────────────────────────
+    optimize_images: bool = True
+    jpeg_quality: int = 85
+    max_image_width: int = 0  # 0 = 不缩放
 
 
 class EPUBExporter(BaseExporter):
@@ -121,7 +155,6 @@ img {
         self._ordered_chapter_dict: dict[int, Chapter] = {}
 
         # 图片注册表（每次 build 前重置）
-        # _img_list:  [(Illustration, filename)]  按注册顺序，去重后仅保留唯一图片
         self._img_list: list[tuple[Illustration, str]] = []
         self._img_hash_seen: set[int] = set()
         self._img_name_seen: set[str] = set()
@@ -134,6 +167,7 @@ img {
         raw = raw + ext
         # 再用 novel 变量格式化
         variables = {
+            "name": novel.title if novel else "",
             "title": novel.title if novel else "",
             "author": novel.author if novel else "",
             "novel_id": novel.id if novel else "",
@@ -152,7 +186,6 @@ img {
         参数 *chapters* 可以是单个 ``Chapter`` 或可迭代对象。
         内部按 ``order`` 排序并去重，仅导出 ``content is not None`` 的章节。
         """
-        # ── 标准化 & 累积 ──
         if isinstance(chapters, Chapter):
             chapters = [chapters]
         else:
@@ -168,7 +201,7 @@ img {
         if not ordered:
             return
 
-        # ── 全量重建 EPUB ──
+        # 全量重建 EPUB
         self._build_epub(ordered)
 
     # ═══════════════════════════════════════════════════════════════
@@ -198,8 +231,18 @@ img {
             html_body = self._render_chapter(ch)
             chapter_xhtml.append((ch, idx, html_body))
 
-        # ── 写入 ZIP ──
-        with zipfile.ZipFile(self.file_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # 选择压缩算法
+        comp_algo = _COMPRESSION_MAP.get(self.options.compression, zipfile.ZIP_DEFLATED)
+        comp_kw: dict = {}
+        if comp_algo == zipfile.ZIP_DEFLATED:
+            comp_kw["compresslevel"] = self.options.compresslevel
+        _log.debug(
+            "EPUB compression: algo=%s level=%s",
+            self.options.compression, self.options.compresslevel,
+        )
+
+        # 写入 ZIP
+        with zipfile.ZipFile(self.file_path, "w", comp_algo, **comp_kw) as zf:
             # ① mimetype — 必须首文件、不压缩
             info = zipfile.ZipInfo("mimetype")
             info.compress_type = zipfile.ZIP_STORED
@@ -211,9 +254,10 @@ img {
             # ③ CSS
             zf.writestr("OEBPS/css/style.css", self._render_css())
 
-            # ④ 所有图片（包括封面）
+            # ④ 所有图片（包括封面）— 可选优化
             for img, fname in self._img_list:
-                zf.writestr(f"OEBPS/images/{fname}", img.raw_data)
+                data = self._optimize_image(img.raw_data) if self.options.optimize_images else img.raw_data
+                zf.writestr(f"OEBPS/images/{fname}", data)
 
             # ⑤ 章节 XHTML
             for _, order, html_str in chapter_xhtml:
@@ -250,14 +294,11 @@ img {
         """
         h = hash(img.raw_data)
         if h in self._img_hash_seen:
-            # 已注册过相同字节的图片，找回其文件名
             for registered_img, fname in self._img_list:
                 if hash(registered_img.raw_data) == h:
                     return fname
-            # 理论上不会走到这里，但兜底
             return self._img_list[0][1] if self._img_list else "unknown.jpg"
 
-        # 生成文件名
         self._img_counter += 1
         if img.alt and img.alt.strip():
             base = self._sanitize_filename(img.alt.strip())[:30]
@@ -267,7 +308,6 @@ img {
         ext = self._guess_ext(img.raw_data)
         filename = f"{base}{ext}"
 
-        # 处理重名
         suffix = 1
         while filename in self._img_name_seen:
             filename = f"{base}_{suffix}{ext}"
@@ -279,7 +319,6 @@ img {
         return filename
 
     def _img_filename(self, img: Illustration) -> str | None:
-        """返回已注册图片的文件名（未注册则返回 None）。"""
         h = hash(img.raw_data)
         for registered_img, fname in self._img_list:
             if hash(registered_img.raw_data) == h:
@@ -287,7 +326,6 @@ img {
         return None
 
     def _guess_ext(self, data: bytes) -> str:
-        """根据文件头魔数返回扩展名（含点）。"""
         for magic, ext in self._MAGIC_EXT:
             if data.startswith(magic):
                 if magic == b'RIFF' and b'WEBP' not in data[:12]:
@@ -297,9 +335,57 @@ img {
 
     @staticmethod
     def _mime_type(filename: str) -> str:
-        """根据文件名扩展名返回 MIME 类型。"""
         _, dot, ext = filename.rpartition('.')
         return EPUBExporter._MIME_MAP.get(f".{ext.lower()}", "image/jpeg")
+
+    # ═══════════════════════════════════════════════════════════════
+    # 图片优化（Pillow 可选）
+    # ═══════════════════════════════════════════════════════════════
+
+    def _optimize_image(self, data: bytes) -> bytes:
+        """使用 Pillow 优化图片（JPEG 重压缩、PNG 优化、缩放）。
+
+        当 Pillow 不可用或出错时返回原始数据。
+        """
+        if not _HAS_PILLOW:
+            return data
+        try:
+            img = Image.open(_io.BytesIO(data))
+            fmt = img.format or "JPEG"
+
+            # 缩放
+            max_w = self.options.max_image_width or 0
+            if max_w > 0 and img.width > max_w:
+                ratio = max_w / img.width
+                new_h = int(img.height * ratio)
+                img = img.resize((max_w, new_h), Image.LANCZOS)
+
+            out = _io.BytesIO()
+            save_kw: dict = {"optimize": True}
+
+            if fmt.upper() in ("JPEG", "JPG"):
+                if img.mode in ("P", "RGBA"):
+                    img = img.convert("RGB")
+                save_kw["quality"] = self.options.jpeg_quality
+                img.save(out, format="JPEG", **save_kw)
+            elif fmt.upper() == "PNG":
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                img.save(out, format="PNG", **save_kw)
+            elif fmt.upper() == "GIF":
+                img.save(out, format="GIF", **save_kw)
+            elif fmt.upper() == "WEBP":
+                save_kw["quality"] = self.options.jpeg_quality
+                img.save(out, format="WEBP", **save_kw)
+            else:
+                img.save(out, format=fmt, **save_kw)
+
+            optimized = out.getvalue()
+            # 确保优化后不会更大
+            return optimized if len(optimized) < len(data) else data
+        except Exception as exc:
+            _log.debug("Image optimization skipped: %s", exc)
+            return data
 
     # ═══════════════════════════════════════════════════════════════
     # XML / XHTML 片段渲染
@@ -338,10 +424,17 @@ img {
     def _render_css(self) -> str:
         style = getattr(self.options, "css_style", "default")
         if style == "default" or not style:
-            return self.DEFAULT_CSS
-        if isinstance(style, str) and style != "default":
-            return style
-        return self.DEFAULT_CSS
+            raw = self.DEFAULT_CSS
+        elif isinstance(style, str) and style != "default":
+            raw = style
+        else:
+            raw = self.DEFAULT_CSS
+        # 缩小体积：压缩空白和符号间距
+        raw = re.sub(r'\s+', ' ', raw)
+        raw = raw.replace('; ', ';').replace(': ', ':')
+        raw = raw.replace(' {', '{').replace('{ ', '{')
+        raw = raw.replace(' }', '}').replace(';}', '}')
+        return raw
 
     def _render_chapter(self, chapter: Chapter) -> str:
         """将单个 Chapter 渲染为完整 XHTML 页面的字符串。"""
@@ -405,7 +498,6 @@ img {
             else:
                 unpositioned.append(img)
 
-        # 按 insert 升序排序，然后从后往前插入（保证前面偏移量不变）
         positioned.sort(key=lambda x: x[1])
 
         result = content
@@ -413,38 +505,30 @@ img {
         end_placeholders: list[str] = []
         idx = 0
 
-        # 从后往前插入有位置的图
         for img, pos in reversed(positioned):
             ph = f"{{{{IMG_{idx:04d}}}}}"
             placeholder_map[ph] = img
-            # 边界裁剪
             pos = max(0, min(pos, len(result)))
             result = result[:pos] + ph + result[pos:]
             idx += 1
 
-        # 无位置的图放入末尾列表
         for img in unpositioned:
             ph = f"{{{{IMG_{idx:04d}}}}}"
             placeholder_map[ph] = img
             end_placeholders.append(ph)
             idx += 1
 
-        # 转换为 XHTML
         xhtml = self._text_to_xhtml(result)
 
-        # 替换占位符为实际 <img> 标签
         for ph, img in placeholder_map.items():
             fname = self._register_image(img)
             alt = html_lib.escape(img.alt or "")
             if ph in end_placeholders:
-                # 末尾图：不在此处替换（后面统一追加）
                 continue
             else:
-                # 内联图：仅 <img>（在 <p> 内部合法）
                 tag = f'<img src="images/{fname}" alt="{alt}"/>'
             xhtml = xhtml.replace(ph, tag)
 
-        # 追加末尾图片
         if end_placeholders:
             end_tags: list[str] = []
             for ph in end_placeholders:
@@ -466,8 +550,7 @@ img {
 
         return xhtml
 
-    @staticmethod
-    def _text_to_xhtml(text: str) -> str:
+    def _text_to_xhtml(self, text: str) -> str:
         """将纯文本转换为 XHTML 段落。
 
         - 连续两个及以上换行 → 段落分隔。
@@ -476,19 +559,20 @@ img {
         """
         if not text:
             return ""
-        # 转义 XML 敏感字符
         text = html_lib.escape(text, quote=False)
-        # 按空行拆分段落
         blocks = re.split(r"\n\s*\n", text)
         parts: list[str] = []
         for block in blocks:
             block = block.strip()
             if not block:
                 continue
-            # 段落内换行 → <br/>
             block = block.replace("\n", "<br/>\n")
             parts.append(f"<p>{block}</p>")
-        return "\n".join(parts)
+        result = "\n".join(parts)
+        # 缩小体积：多行空白合并
+        if self.options.compression != "stored":
+            result = re.sub(r'\n{3,}', '\n\n', result)
+        return result
 
     # ═══════════════════════════════════════════════════════════════
     # OPF / NCX
@@ -500,7 +584,6 @@ img {
         cover_img_name: str | None,
         novel_uuid: str,
     ) -> str:
-        """生成 content.opf 文件内容。"""
         novel = self.novel
         title = html_lib.escape(novel.title) if novel else "Unknown"
         author = html_lib.escape(novel.author) if novel else "Unknown"
@@ -509,19 +592,16 @@ img {
         manifest: list[str] = []
         spine: list[str] = []
 
-        # nav.xhtml（EPUB3 目录）
         if self.options.include_toc:
             manifest.append(
                 '    <item id="nav" href="nav.xhtml" '
                 'media-type="application/xhtml+xml" properties="nav"/>'
             )
 
-        # CSS
         manifest.append(
             '    <item id="css" href="css/style.css" media-type="text/css"/>'
         )
 
-        # 封面
         if cover_img_name:
             mime = self._mime_type(cover_img_name)
             manifest.append(
@@ -534,7 +614,6 @@ img {
             )
             spine.append('    <itemref idref="cover"/>')
 
-        # 章节
         for _, order, _ in chapter_xhtml:
             cid = f"chapter_{order:04d}"
             manifest.append(
@@ -543,14 +622,12 @@ img {
             )
             spine.append(f'    <itemref idref="{cid}"/>')
 
-        # 插图（去重：封面图片已在上面处理，跳过）
         cover_fname = cover_img_name
         img_seq = 0
         for img, fname in self._img_list:
             if cover_fname and fname == cover_fname:
                 continue
             img_seq += 1
-            # 生成唯一 id：img_ + 序号（保证不重复）
             img_id = f"img_{img_seq:04d}"
             mime = self._mime_type(fname)
             manifest.append(
@@ -585,7 +662,6 @@ img {
         self,
         chapter_xhtml: list[tuple[Chapter, int, str]],
     ) -> str:
-        """生成 EPUB3 nav.xhtml 目录文件。"""
         novel = self.novel
         title = html_lib.escape(novel.title) if novel else "Unknown"
 
