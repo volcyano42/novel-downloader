@@ -16,14 +16,23 @@ async def index_page(request: Request):
     novels = get_stored_novels(state.storage)
     plat_label = state.PLATFORM_LABELS.get(state.platform, state.platform)
 
+    # 格式配置（含详细参数）
     fmt_dir = CONFIG_DIR / "formats"
     available_formats = []
+    format_details = {}
     if fmt_dir.exists():
         for f in fmt_dir.glob("*.yaml"):
             data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
             for name, fc in data.items():
                 if fc.get("enabled", True):
                     available_formats.append(name)
+                format_details[name] = fc
+
+    # 站点配置
+    site_path = CONFIG_DIR / "sites" / f"{state.platform}.yaml"
+    site_config = yaml.safe_load(site_path.read_text(encoding="utf-8")) if site_path.exists() else {}
+
+    max_workers = state.cfg.get("download", {}).get("max_workers", 3)
 
     return render("index.html",
         request=request,
@@ -34,6 +43,9 @@ async def index_page(request: Request):
         group=state.group,
         novel_count=len(novels),
         available_formats=available_formats,
+        format_details=format_details,
+        site_config=site_config,
+        max_workers=max_workers,
     )
 
 
