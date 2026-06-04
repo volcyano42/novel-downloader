@@ -2,7 +2,7 @@
 
 一个可拓展的小说下载工具  
 > 目前只支持番茄平台的  
-> 由之前的项目：[NovelDownloader](https://github.com/canyang2008/NovelDownloader) 重构而来。由于此项目结构过于混乱，所以秽土转生了。
+> 由之前的项目[NovelDownloader](https://github.com/canyang2008/NovelDownloader) 重构而来  
 
 ## 特色
 1. 三种下载模式： `API`,`Browser`, `Requests`
@@ -78,16 +78,6 @@ python main.py
   📥 直接下载 (输入 URL)
   退出
 ```
-
-WEB UI模式：
-
-```bash
-python webui.py
-```
-启动后进入界面  
-
-![WEBUI page](docs/img/webui_page.png)
-
 
 #### 如何使用
 
