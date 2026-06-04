@@ -21,8 +21,7 @@ class BaseParser(ABC):
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> Sequence[SearchResult] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         pass
 
     @abstractmethod
