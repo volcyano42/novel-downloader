@@ -9,13 +9,26 @@ _progress_queues: dict[str, asyncio.Queue] = {}
 _progress_lock = threading.Lock()
 
 
-def emit(task_id: str, typ: str, text: str):
-    """向 task_id 对应的 SSE 队列发送一条消息。"""
+def emit(task_id: str, typ: str, text: str,
+         downloaded: int | None = None, total: int | None = None,
+         title: str | None = None):
+    """向 task_id 对应的 SSE 队列发送一条消息。
+
+    typ 可以是 'log', 'progress', 'done', 'error', 'end'。
+    结构化字段 downloaded/total 用于进度条渲染。
+    """
     with _progress_lock:
         q = _progress_queues.get(task_id)
     if q:
+        payload = {"type": typ, "text": text}
+        if downloaded is not None:
+            payload["downloaded"] = downloaded
+        if total is not None:
+            payload["total"] = total
+        if title is not None:
+            payload["title"] = title
         try:
-            q.put_nowait(json.dumps({"type": typ, "text": text}))
+            q.put_nowait(json.dumps(payload))
         except asyncio.QueueFull:
             pass
 
