@@ -267,7 +267,7 @@ def do_search(engine, dl, platform: str, page: int = 0) -> str | None:
     if selected_idx is None:
         return None
 
-    return search(platform, query, engine, page=page, choice=selected_idx)
+    return results[selected_idx].url
 
 
 def do_download(engine, dl, url: str, group: str, format_configs: dict):
