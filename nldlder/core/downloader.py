@@ -68,8 +68,7 @@ def split_into_groups(target: Sequence, group: int) -> tuple[Sequence, ...]:
 def search(platform: str,
            query: str,
            engine,
-           page: int = 0,
-           choice: int | None = None) -> Sequence[SearchResult] | str | None:
+           page: int = 0) -> tuple[SearchResult, ...] | None:
     """搜索小说。
 
     Args:
@@ -77,14 +76,13 @@ def search(platform: str,
         query:    搜索关键词。
         engine:   下载引擎实例。
         page:     页码（从 0 开始）。
-        choice:   结果选择索引。
     """
     parser_cls = get_parsers().get(platform)
     if parser_cls is None:
         raise ParserNotFoundError(f"parser not found: {platform}")
     parser = parser_cls()
     return parser.parse_search_info(search_ref=query, engine=engine,
-                                    page=page, choice=choice)
+                                    page=page)
 
 
 def login(platform: str, engine: BrowserEngine) -> AuthCredential:
