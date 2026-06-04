@@ -1,113 +1,267 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>novel-downloader</title>
+<title>小说下载器</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div class="container-fluid">
+  <div class="row">
 
-<h1>📚 novel-downloader</h1>
-<div class="status-bar">
-  <span>平台: <strong>{{ platform_label }}</strong></span>
-  <span>模式: {{ mode }}</span>
-  <span>分组: {{ group }}</span>
-  <span>已存储: <strong>{{ novel_count }}</strong> 本</span>
-  <a href="/settings">⚙️ 设置</a>
+    <!-- ═══════════ 侧边栏 ═══════════ -->
+    <nav class="col-md-2 d-md-block sidebar p-0">
+      <div class="brand"><i class="bi bi-book"></i> 小说下载器</div>
+      <ul class="nav flex-column pt-2">
+        <li class="nav-item">
+          <button class="nav-link active" data-panel="tasks" onclick="switchPanel('tasks')">
+            <i class="bi bi-list-task"></i> 任务
+            <span class="badge bg-primary ms-auto task-count-badge hidden" id="task-count">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-panel="download" onclick="switchPanel('download')">
+            <i class="bi bi-search"></i> 下载
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-panel="library" onclick="switchPanel('library')">
+            <i class="bi bi-journal-text"></i> 已下载
+            <span class="badge bg-secondary ms-auto" id="novel-count-badge">{{ novel_count }}</span>
+          </button>
+        </li>
+        <li class="nav-item mt-3">
+          <button class="nav-link" data-panel="settings" onclick="switchPanel('settings')">
+            <i class="bi bi-gear"></i> 设置
+          </button>
+        </li>
+      </ul>
+      <div class="sidebar-footer">
+        <small class="text-white-50">平台: {{ platform_label }}</small>
+      </div>
+    </nav>
+
+    <!-- ═══════════ 主内容区 ═══════════ -->
+    <main class="col-md-10 ms-sm-auto main-content">
+
+      <!-- 消息提示 -->
+      <div id="message-area"></div>
+
+      <!-- ═══════════ 任务面板 ═══════════ -->
+      <div id="panel-tasks" class="panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0"><i class="bi bi-list-task"></i> 下载任务</h4>
+        </div>
+        <div class="card">
+          <div class="card-body" id="task-list">
+            <div class="text-muted text-center py-4">暂无运行中的任务</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ 下载面板 ═══════════ -->
+      <div id="panel-download" class="panel hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0"><i class="bi bi-search"></i> 搜索 &amp; 下载</h4>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">搜索关键词或粘贴小说链接</label>
+              <div class="input-group">
+                <input id="search-input" class="form-control" placeholder="输入关键词搜索，或粘贴 http(s):// 链接直接下载..."
+                       onkeydown="if(event.key==='Enter')doSearchOrDownload()">
+                <button class="btn btn-primary" onclick="doSearchOrDownload()">
+                  <i class="bi bi-search"></i> 搜索
+                </button>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">平台</label>
+              <select id="platform-select" class="form-select w-auto" onchange="switchPlatform()">
+                {% for name, label in platforms.items() %}
+                <option value="{{ name }}" {% if name == platform %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div id="search-results"></div>
+          </div>
+        </div>
+        <div class="card mt-3">
+          <div class="card-body">
+            <h5 class="card-title"><i class="bi bi-box-arrow-in-right"></i> 网站登录</h5>
+            <p class="text-muted small">需要在运行服务器的机器上有桌面环境</p>
+            <button class="btn btn-outline-secondary" onclick="doLogin()">
+              <i class="bi bi-browser-chrome"></i> 打开浏览器登录
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ 已下载面板 ═══════════ -->
+      <div id="panel-library" class="panel hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0"><i class="bi bi-journal-text"></i> 已下载小说</h4>
+          <button class="btn btn-outline-warning btn-sm" onclick="doUpdateAll()">
+            <i class="bi bi-arrow-repeat"></i> 全部更新
+          </button>
+        </div>
+        <div id="novel-groups">
+          <div class="text-muted text-center py-4">加载中...</div>
+        </div>
+      </div>
+
+      <!-- ═══════════ 设置面板 ═══════════ -->
+      <div id="panel-settings" class="panel hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0"><i class="bi bi-gear"></i> 设置</h4>
+          <button class="btn btn-success" onclick="saveAllSettings()">
+            <i class="bi bi-check-lg"></i> 保存全部配置
+          </button>
+        </div>
+        <div class="row g-4">
+          <!-- 左栏：基本配置 -->
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-header"><i class="bi bi-sliders"></i> 基本配置</div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label">运行模式</label>
+                  <select id="set-mode" class="form-select">
+                    <option value="browser" {% if mode == 'browser' %}selected{% endif %}>Browser (浏览器)</option>
+                    <option value="requests" {% if mode == 'requests' %}selected{% endif %}>Requests (HTTP)</option>
+                    <option value="api" {% if mode == 'api' %}selected{% endif %}>API (oiapi)</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">默认分组</label>
+                  <input id="set-group" class="form-control" value="{{ group }}">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">最大并发数</label>
+                  <input id="set-max-workers" type="number" class="form-control" value="{{ max_workers }}" min="1" max="20">
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 右栏 -->
+          <div class="col-md-6">
+            <!-- 站点配置（可折叠，默认收缩） -->
+            <div class="card mb-3" id="site-config-card">
+              <div class="card-header collapsed" onclick="toggleSiteConfig()" style="cursor:pointer;user-select:none;">
+                <i class="bi bi-globe"></i>
+                <span class="ms-2 site-config-label" id="site-config-label">{{ platform_label }}</span>
+                <i class="bi bi-chevron-down float-end group-arrow" id="site-config-arrow"></i>
+              </div>
+              <div class="card-body hidden" id="site-config-body">
+                <div class="mb-2">
+                  <select id="set-site-platform" class="form-select" onchange="onSitePlatformChange()">
+                    {% for name, label in platforms.items() %}
+                    <option value="{{ name }}" {% if name == platform %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div id="site-config-fields">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small">超时 (秒)</label>
+                      <input id="site-browser-timeout" class="form-control form-control-sm" type="number"
+                             value="{{ site_config.get('browser', {}).get('timeout', 30) }}">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small">重试次数</label>
+                      <input id="site-browser-retry" class="form-control form-control-sm" type="number"
+                             value="{{ site_config.get('browser', {}).get('retry_times', 3) }}">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small">延迟 (秒, 逗号分隔)</label>
+                      <input id="site-browser-delay" class="form-control form-control-sm"
+                             value="{{ site_config.get('browser', {}).get('delay', [3,5])|join(',') }}">
+                    </div>
+                    <div class="col-12">
+                      <div class="form-check mt-1">
+                        <input class="form-check-input" type="checkbox" id="site-browser-headless"
+                               {% if site_config.get('browser', {}).get('headless', false) %}checked{% endif %}>
+                        <label class="form-check-label small">无头模式</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- 导出设置 -->
+            <div class="card">
+              <div class="card-header"><i class="bi bi-file-earmark"></i> 导出设置</div>
+              <div class="card-body">
+                <div id="export-config-list">
+                  {% for name, fc in format_details.items() %}
+                  <div class="mb-2 pb-2 border-bottom">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input export-fmt-toggle" type="checkbox" data-fmt="{{ name }}"
+                             {% if fc.get('enabled', true) %}checked{% endif %}>
+                      <label class="form-check-label"><strong>{{ name.upper() }}</strong></label>
+                    </div>
+                    <input class="form-control form-control-sm mt-1 export-fmt-path" data-fmt="{{ name }}"
+                           value="{{ fc.get('output_path', '') }}" placeholder="输出路径">
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
 </div>
 
-<!-- Tab 导航 -->
-<div class="tabs">
-  <button class="tab-btn active" data-tab="download" onclick="switchTab('download')">📥 下载</button>
-  <button class="tab-btn" data-tab="library" onclick="switchTab('library')">📚 已存储</button>
-  <button class="tab-btn" data-tab="export" onclick="switchTab('export')">📦 重新导出</button>
-</div>
-
-<!-- ── 下载 Tab ──────────────────────────────── -->
-<div id="tab-download" class="tab-panel">
-  <div class="card">
-    <h2>🌐 平台选择</h2>
-    <div class="row">
-      <select id="platform-select" onchange="switchPlatform()">
-        {% for name, label in platforms.items() %}
-        <option value="{{ name }}" {% if name == platform %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <span class="text-muted" id="platform-status"></span>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>🔍 搜索 & 下载</h2>
-    <div class="row">
-      <input id="search-input" placeholder="输入关键词搜索小说..." onkeydown="if(event.key==='Enter')doSearch()">
-      <button onclick="doSearch()">搜索</button>
-    </div>
-    <div id="search-results"></div>
-  </div>
-
-  <div class="card">
-    <h2>📥 直接下载</h2>
-    <div class="row">
-      <input id="url-input" placeholder="粘贴小说链接 https://..." onkeydown="if(event.key==='Enter')doDirectDownload()">
-      <button onclick="doDirectDownload()">下载</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>🔑 登录</h2>
-    <button onclick="doLogin()">打开浏览器登录</button>
-    <span class="text-muted">（需要在运行服务器的机器上有桌面环境）</span>
-  </div>
-</div>
-
-<!-- ── 已存储 Tab ────────────────────────────── -->
-<div id="tab-library" class="tab-panel hidden">
-  <div class="card">
-    <h2>📚 已存储小说</h2>
-    <div id="novel-list"><div class="text-muted">加载中...</div></div>
-    <div class="row mt-16">
-      <button class="btn-success" onclick="doAction('update_all',fetchNovels)">🔄 全部更新</button>
-      <button onclick="doAction('export_all',fetchNovels)">📦 全部导出</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── 重新导出 Tab ──────────────────────────── -->
-<div id="tab-export" class="tab-panel hidden">
-  <div class="card">
-    <h2>📦 重新导出</h2>
-    <div class="form-group">
-      <label>导出目录</label>
-      <select id="export-dir" onchange="onExportDirChange()">
-        <option value="">加载中...</option>
-      </select>
-      <input id="export-dir-custom" class="hidden mt-8" placeholder="输入自定义路径..." style="display:none;">
-    </div>
-    <div class="form-group mt-16">
-      <label>导出格式</label>
-      <div class="row">
-        {% for fmt in available_formats %}
-        <label style="cursor:pointer;display:flex;align-items:center;gap:4px;">
-          <input type="checkbox" name="export-fmt" value="{{ fmt }}" checked> {{ fmt }}
-        </label>
-        {% endfor %}
+<!-- ═══════════ 导出格式弹窗 ═══════════ -->
+<div class="modal fade" id="export-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-download"></i> 选择导出格式</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="export-modal-title" class="text-muted"></p>
+        <div id="export-modal-formats" class="d-flex gap-3 flex-wrap">
+          {% for fmt in available_formats %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="modal-export-fmt" value="{{ fmt }}" checked>
+            <label class="form-check-label">{{ fmt }}</label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-success" id="export-modal-confirm">
+          <i class="bi bi-check-lg"></i> 确认导出
+        </button>
       </div>
     </div>
-    <button class="btn-success mt-16" onclick="doReExport()">开始导出</button>
   </div>
 </div>
 
-<!-- 日志面板（全局） -->
-<div class="card">
-  <div class="row" style="justify-content:space-between;">
-    <h2>📋 运行日志</h2>
-    <button class="btn-sm btn-muted" onclick="clearLog()">清空</button>
-  </div>
-  <div id="log"></div>
-</div>
-
+<!-- ═══════════ 初始化数据 ═══════════ -->
+<script>
+window.__INIT__ = {
+  platform: "{{ platform }}",
+  platforms: {{ platforms | tojson }},
+  formatDetails: {{ format_details | tojson }},
+  siteConfig: {{ site_config | tojson }},
+  sitePlatform: "{{ platform }}",
+  maxWorkers: {{ max_workers }},
+  group: "{{ group }}",
+  mode: "{{ mode }}",
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
