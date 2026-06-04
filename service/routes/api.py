@@ -32,13 +32,11 @@ router = APIRouter()
 
 @router.get("/search")
 async def search_novels(q: str, platform: str = "fanqie",
-                        page: int = 0, choice: int | None = None):
+                        page: int = 0):
     try:
-        result = search(platform, q, state.engine, page=page, choice=choice)
+        result = search(platform, q, state.engine, page=page)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
-    if choice is not None:
-        return JSONResponse({"url": result})
     if not result:
         return JSONResponse({"results": []})
     data = []
@@ -231,8 +229,146 @@ async def api_export_dirs():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 平台切换
+# 任务管理
 # ═══════════════════════════════════════════════════════════════════
+
+@router.get("/api/tasks")
+async def api_tasks():
+    """返回当前活跃任务列表。"""
+    from ..tasks import get_active_tasks
+    return JSONResponse({"tasks": get_active_tasks()})
+
+
+@router.post("/api/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """取消一个正在运行的任务。"""
+    from ..tasks import set_status
+    set_status(task_id, "cancelled", "已取消")
+    emit(task_id, "log", "任务已取消")
+    finish(task_id, "cancelled")
+    return JSONResponse({"status": "ok"})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 小说管理
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/api/novels/{novel_id}/chapters/count")
+async def novel_chapter_count(novel_id: str):
+    """懒加载：返回小说的总章节数（从章节列表获取，不加载内容）。"""
+    from ..core import get_chapter_count
+    downloaded = get_chapter_count(state.storage, novel_id)
+    meta = state.storage.load_meta(novel_id)
+    total = meta.serial if meta else 0
+    return JSONResponse({"downloaded": downloaded, "total": total})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 导出下载
+# ═══════════════════════════════════════════════════════════════════
+
+@router.post("/api/export/{novel_id}/download")
+async def export_download(novel_id: str, request: Request):
+    """选择格式导出小说到 exports/ 目录（静默，不触发浏览器下载）。"""
+    body = await request.body()
+    params = dict(p.split("=", 1) for p in body.decode().split("&") if "=" in p)
+    fmts_str = params.get("fmts", "")
+    selected_fmts = [f.strip() for f in fmts_str.split(",") if f.strip()]
+    if not selected_fmts:
+        return JSONResponse({"error": "missing fmts"}, status_code=400)
+
+    meta = state.storage.load_meta(novel_id)
+    if meta is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    local = state.storage.load_chapters(novel_id)
+    if local:
+        meta.update_chapter(local)
+
+    # 从 exports 推断分组，fallback 到 state.group
+    from ..core import _infer_group_from_exports
+    grp = _infer_group_from_exports(meta.id, meta.title)
+
+    try:
+        custom_fmts = {}
+        for fmt_name in selected_fmts:
+            fc = dict(state.format_configs.get(fmt_name, {}))
+            fc["enabled"] = True
+            custom_fmts[fmt_name] = fc
+        _do_export(meta, grp, custom_fmts, "")
+        exported_to = str(APP_DATA / "exports" / grp / meta.title)
+        return JSONResponse({"status": "ok", "exported_to": exported_to})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 格式配置
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/api/format-configs")
+async def api_format_configs():
+    """返回当前格式配置。"""
+    return JSONResponse(state.format_configs)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 统一设置保存
+# ═══════════════════════════════════════════════════════════════════
+
+@router.post("/api/settings/save_all")
+async def save_all_settings(request: Request):
+    """统一保存：基本配置 + 站点配置 + 导出配置。"""
+    body = await request.body()
+    data = json.loads(body.decode()) if body else {}
+
+    # ── 基本配置 ──
+    main = data.get("main", {})
+    cfg_path = CONFIG_DIR / "config.yaml"
+    new_cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+    if "mode" in main:
+        new_cfg["mode"] = main["mode"]
+    if "group" in main:
+        new_cfg["group"] = main["group"]
+    if "max_workers" in main:
+        try:
+            mw = int(main["max_workers"])
+        except (ValueError, TypeError):
+            mw = 3
+        if "download" not in new_cfg:
+            new_cfg["download"] = {}
+        new_cfg["download"]["max_workers"] = mw
+    cfg_path.write_text(yaml.safe_dump(new_cfg, allow_unicode=True), encoding="utf-8")
+
+    # ── 站点配置 ──
+    site = data.get("site", {})
+    site_platform = site.get("platform", state.platform) if site else state.platform
+    if site:
+        site_path = CONFIG_DIR / "sites" / f"{site_platform}.yaml"
+        site_data = yaml.safe_load(site_path.read_text(encoding="utf-8")) if site_path.exists() else {}
+        for section in ("browser", "api", "requests"):
+            if section in site:
+                if section not in site_data:
+                    site_data[section] = {}
+                for k, v in site[section].items():
+                    site_data[section][k] = v
+        site_path.write_text(yaml.safe_dump(site_data, allow_unicode=True), encoding="utf-8")
+
+    # ── 导出配置 ──
+    exports = data.get("exports", {})
+    if exports:
+        for fmt_name, fc in exports.items():
+            fmt_path = CONFIG_DIR / "formats" / f"{fmt_name}.yaml"
+            if fmt_path.exists():
+                existing = yaml.safe_load(fmt_path.read_text(encoding="utf-8")) or {}
+                if fmt_name in existing and isinstance(existing[fmt_name], dict):
+                    existing[fmt_name].update(fc)
+                    fmt_path.write_text(yaml.safe_dump(existing, allow_unicode=True), encoding="utf-8")
+
+    # 刷新运行时状态
+    state.reload_engine()
+
+    return JSONResponse({"status": "ok"})
 
 @router.post("/switch_platform")
 async def switch_platform(platform: str):
@@ -244,7 +380,12 @@ async def switch_platform(platform: str):
         state.engine.close()
     state.engine = create_engine(state.options)
     state.dl = NovelDownloader(state.engine, options=state.options)
-    return JSONResponse({"status": "ok", "platform": platform})
+    # 返回站点配置供前端刷新表单
+    return JSONResponse({
+        "status": "ok",
+        "platform": platform,
+        "site_config": site_cfg,
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════
