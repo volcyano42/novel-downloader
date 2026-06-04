@@ -39,8 +39,7 @@ class QidianHTMLParser(BaseParser):
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         _log.debug("parse_search_info: ref=%s page=%s", search_ref[:60], page)
         soup = BeautifulSoup(search_ref, 'lxml')
         script_list = soup.find_all('script')
@@ -63,8 +62,6 @@ class QidianHTMLParser(BaseParser):
                         url=book_url,
                         description=description,
                     ))
-        if choice is not None and results:
-            return results[choice].url
         return tuple(results) if results else None
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
@@ -155,9 +152,7 @@ class QidianHTMLParser(BaseParser):
                               engine,
                               **kwargs) -> Chapters:
         """解析并填充 content, count, is_complete"""
-        chapter = kwargs.get("chapter")
-        if chapter is None:
-            raise ChapterNotFoundError("No chapter object provided via kwargs['chapter']")
+        chapter = kwargs["chapter"]
 
         html = chapter_ref if isinstance(chapter_ref, str) else ""
         soup = BeautifulSoup(html, 'lxml')
@@ -247,8 +242,7 @@ class QidianBrowserParser(QidianHTMLParser):
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
         search_url = f"https://www.qidian.com/so/{search_ref}.html"
         if page >= 1:
@@ -259,14 +253,7 @@ class QidianBrowserParser(QidianHTMLParser):
             html = browser_page.html
         else:
             html = engine.fetch_text(search_url)
-        result = super().parse_search_info(search_ref=html, engine=engine, page=page, choice=choice, **kwargs)
-        if not result:
-            return None
-        if choice is not None:
-            if isinstance(result, tuple):
-                return result[choice].url
-            return result
-        return result
+        return super().parse_search_info(search_ref=html, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         html = engine.fetch_text(url=novel_ref)
@@ -286,7 +273,7 @@ class QidianBrowserParser(QidianHTMLParser):
         url = chapter_ref[0].url
         html = engine.fetch_text(url=url)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
-            raise ChapterNotFoundError()
+            raise ChapterNotFoundError("chapter content not found")
         chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter=chapter_ref[0], **kwargs)
         return Chapters(chapter)
 
@@ -303,8 +290,7 @@ class QidianRequestsParser(QidianHTMLParser):
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         raise FeatureNotSupportedError("search", "起点中文网不支持 Requests 获取搜索结果")
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
@@ -359,10 +345,9 @@ class QidianParser(BaseParser):
                           search_ref: str,
                           engine,
                           page=0,
-                          choice=None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         parser = use_parser(engine=engine)()
-        return parser.parse_search_info(search_ref=search_ref, engine=engine, page=page, choice=choice, **kwargs)
+        return parser.parse_search_info(search_ref=search_ref, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         parser = use_parser(engine=engine)()
