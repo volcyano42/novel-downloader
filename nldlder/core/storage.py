@@ -1,9 +1,9 @@
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Sequence
 
-from .exceptions import StorageError
 from ..models.novel import Novel, Chapter, Chapters
 from ..utils.logger import get_logger
 
@@ -54,9 +54,9 @@ class Storage:
     def get_chapter_path(self, novel_id: str, chapter_id: str) -> Path:
         return self.get_novel_dir(novel_id) / "chapters" / f"{chapter_id}.json"
 
-    def save_meta(self, novel: Novel):
+    def save_meta(self, novel: Novel) -> Path:
+        """保存小说元数据（标题、作者、封面等），返回写入的文件路径。"""
         _log.debug("save_meta: id=%s", novel.id)
-        """保存小说元数据（标题、作者、封面等）。"""
         path = self.get_meta_path(novel.id)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
@@ -75,6 +75,7 @@ class Storage:
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8"
         )
+        return path
 
     def load_meta(self, novel_id: str) -> Novel | None:
         """加载小说元数据，返回Novel或 None。"""
@@ -86,14 +87,12 @@ class Storage:
         return novel
 
     # ---------- 章节操作 ----------
-    def save_chapter(self, novel: Novel, chapters: Sequence[Chapter]):
-        """
-        保存章节的内容（立即写入磁盘）。
+    def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list[Path]:
+        """保存章节内容（立即写入磁盘），返回写入的文件路径列表。"""
+        if isinstance(chapters, Chapter):
+            chapters = [chapters]
 
-        Args:
-            novel: 小说对象（仅用于提取 novel_id 和标题等元信息，未强制存储）
-            chapters: 章节对象
-        """
+        saved = []
         for chapter in chapters:
             path = self.get_chapter_path(novel.id, chapter.id)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,76 +112,80 @@ class Storage:
                 json.dumps(data, indent=2, ensure_ascii=False),
                 encoding="utf-8"
             )
+            saved.append(path)
+        return saved
 
     def load_chapter(self,
                      novel_id: str,
                      chapter_id: str,
-                     index_url: str | None = None,
-                     err_ok: bool = False) -> Chapter | None:
-        """
-        读取单个章节的保存数据。
-        """
+                     index_url: str | None = None) -> Chapter | None:
+        """读取单个章节的保存数据，不存在时返回 None。"""
         if index_url is None:
             novel = self.load_meta(novel_id)
             if novel is None:
-                if err_ok:
-                    raise StorageError(
-                        "Novel metadata not found",
-                        path=str(self.get_meta_path(novel_id)),
-                    )
-            else:
-                index_url = novel.url
+                return None
+            index_url = novel.url
+
         path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
         if not path.exists():
-            if err_ok:
-                raise StorageError(
-                    "Chapter data not found",
-                    path=str(path)
-                )
-            else:
-                return None
+            return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
         json_data["index_url"] = index_url
-        chapter = Chapter.loads(**json_data)
-        return chapter
+        return Chapter.loads(**json_data)
 
     def load_chapters(self, novel_id: str) -> Chapters:
-        """
-        读取所有章节的保存数据
-        """
-        chapters = []
-        path = self.get_chapters_path(novel_id = novel_id)
+        """读取所有章节的保存数据，元数据或 chapters 目录不存在时返回空 Chapters。"""
+        path = self.get_chapters_path(novel_id=novel_id)
         if not path.exists():
             return Chapters()
+
         novel = self.load_meta(novel_id)
         if novel is None:
-            raise StorageError(
-                "Novel metadata not found",
-                path=str(self.get_meta_path(novel_id)),
-            )
-        else:
-            index_url = novel.url
+            return Chapters()
+
+        chapters = []
         for file in path.glob("*.json"):
             try:
-                chapter = self.load_chapter(novel_id = novel_id, chapter_id = file.stem, index_url = index_url, err_ok=False)
-                chapters.append(chapter)
-            finally:
-                pass
+                chapter = self.load_chapter(
+                    novel_id=novel_id, chapter_id=file.stem,
+                    index_url=novel.url,
+                )
+                if chapter is not None:
+                    chapters.append(chapter)
+            except Exception:
+                _log.warning("跳过损坏的章节文件: %s", file)
 
         return Chapters(chapters)
 
 
-    def list_chapter_orders(self, novel_id: str) -> list[int] | None:
-        """
-        获取已保存的所有章节序号并排序。
-        """
-        chapters = self.load_chapters(novel_id = novel_id)
-        if chapters is None:
-            return None
-        orders = [chapter.order for chapter in chapters]
-        return sorted(orders)
-
     def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
-        """delete chapter"""
+        """删除单个章节文件。"""
         path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
-        os.remove(path)
+        if path.exists():
+            os.remove(path)
+
+    def delete_chapters(self, novel_id: str) -> None:
+        """删除某部小说的所有章节（递归删除 chapters 目录）。"""
+        path = self.get_chapters_path(novel_id=novel_id)
+        if path.exists():
+            shutil.rmtree(path)
+
+    def delete_meta(self, novel_id: str) -> None:
+        """删除小说元数据文件。"""
+        path = self.get_meta_path(novel_id=novel_id)
+        if path.exists():
+            os.remove(path)
+
+    def delete_novel_dir(self, novel_id: str) -> None:
+        """删除某部小说的存储目录（含 meta + chapters + 空目录）。"""
+        path = self.get_novel_dir(novel_id=novel_id)
+        if path.exists():
+            shutil.rmtree(path)
+
+    def delete_novel(self, novel_id: str) -> None:
+        """彻底删除某部小说的所有本地数据（元数据 + 章节 + 目录）。
+
+        安全删除：如果 storage 目录下还有其他小说，仅删除该小说的目录。
+        """
+        _log.info("delete_novel: id=%s", novel_id)
+        self.delete_novel_dir(novel_id)
