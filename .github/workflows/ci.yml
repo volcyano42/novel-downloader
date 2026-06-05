@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: 检出代码
@@ -39,20 +39,7 @@ jobs:
         run: python -m compileall -q . -x 'app_data|\.git'
 
       - name: 模块导入检查
-        run: |
-          python -c "
-          import sys
-          sys.path.insert(0, '.')
-          from nldlder import (
-              NovelDownloader, Options, create_engine,
-              get_parsers, get_exporters, get_exporter_options,
-              search, login, split_into_groups,
-          )
-          import nldlder
-          print('✓ nldlder v' + nldlder.__version__ + ' 导入成功')
-          print('  注册的解析器: ' + str(list(get_parsers().keys())))
-          print('  注册的导出器: ' + str(list(get_exporters().keys())))
-          "
+        run: python tests/check_imports.py
 
       - name: 运行测试
         run: |
