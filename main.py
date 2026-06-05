@@ -1,9 +1,5 @@
-"""
-novel-downloader — 交互式 CLI
-功能：登录 / 搜索 / 更新 / 下载
-配置文件：app_data/config/*.yaml
-导出路径：app_data/{group}/{novel.title}/
-"""
+import os
+import sys
 from pathlib import Path
 
 import yaml
@@ -12,9 +8,9 @@ from nldlder import (
     NovelDownloader, Options, create_engine,
     get_exporter_options, get_exporters,
     get_parsers, search, login,
+    Storage, AntiCrawlError,
+    configure_logging, LogOptions,
 )
-from nldlder.core.storage import Storage
-from nldlder.core.exceptions import AntiCrawlError
 from nldlder.utils.logger import get_logger
 
 _log = get_logger("nldlder.main")
@@ -49,7 +45,15 @@ def _select(message: str, choices: list[tuple[str, object]]) -> object | None:
 
 def _text_input(message: str) -> str | None:
     """获取文本输入。"""
-    return input(f"{message} ").strip() or None
+    try:
+        return input(f"{message} ").strip() or None
+    except UnicodeDecodeError:
+        # WSL/部分终端 stdin 编码非 utf-8 导致中文输入崩溃
+        try:
+            sys.stdin.reconfigure(encoding="utf-8")
+            return input(f"{message} ").strip() or None
+        except Exception:
+            return None
 
 
 def _show_platforms() -> dict:
@@ -86,7 +90,7 @@ def load_format_configs() -> dict:
     """加载 app_data/config/formats/*.yaml
 
     返回 {fmt_name: config_dict}，例如:
-        {"txt": {"enabled": true, "output_path": "app_data/export/{group}/{file_name_template}", ...}, ...}
+        {"txt": {"enabled": true, "output_path": "app_data/exports/{group}/{file_name_template}", ...}, ...}
     """
     formats = {}
     formats_dir = CONFIG_DIR / "formats"
@@ -134,9 +138,12 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
         api_section = site_cfg.get("api", {})
         for name, provider in api_section.items():
             if isinstance(provider, dict) and provider.get("enabled", True):
+                # 优先使用环境变量 {PROVIDER}_API_KEY，再回退到 YAML 配置
+                env_key_name = f"{name.upper()}_API_KEY"
+                api_key = os.getenv(env_key_name) or provider.get("key", "")
                 options.set_api_options(
                     name=name,
-                    key=provider.get("key", ""),
+                    key=api_key,
                     timeout=provider.get("timeout", 30),
                     retry_times=provider.get("retry_times", 3),
                     batch_size=provider.get("batch_size", 3),
@@ -229,9 +236,14 @@ def do_login(platform: str):
         login_engine.close()
 
 
-def do_search(engine, dl, platform: str, page: int = 0) -> str | None:
-    """搜索小说，选择后返回小说 URL（或 None 表示取消）。"""
-    query = _text_input("请输入搜索关键词：")
+def do_search(engine, dl, platform: str, page: int = 0, query: str | None = None) -> str | None:
+    """搜索小说，选择后返回小说 URL（或 None 表示取消）。
+
+    Args:
+        query: 搜索关键词。为 None 时交互式输入。
+    """
+    if query is None:
+        query = _text_input("请输入搜索关键词：")
     if not query or not query.strip():
         return None
 
@@ -292,7 +304,8 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
     tags_str = "、".join(novel.tags) if novel.tags else ""
     print(f"  标签：{tags_str}")
     print(f"  字数：{novel.count or '未知'}")
-    storage.save_meta(novel)
+    meta_path = storage.save_meta(novel)
+    print(f"  元数据已保存 → {meta_path}")
 
     # ── 2. 获取章节列表 ──────────────────────────────────────────
     print("正在获取章节列表...")
@@ -312,26 +325,30 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         print("所有章节已下载完毕！")
     else:
         print(f"待下载: {len(target)} 章")
+        saved_count = 0
         def _on_batch(ch):
-            storage.save_chapter(novel, ch)
+            nonlocal saved_count
+            paths = storage.save_chapter(novel, ch)
+            saved_count += len(paths)
             novel.update_chapter(ch)
         try:
             downloaded = dl.download_chapters(target, on_batch_complete=_on_batch)
-            print(f"  下载完成: {len(downloaded)} 章")
+            print(f"  下载完成: {len(downloaded)} 章（写入 {saved_count} 个文件）")
         except AntiCrawlError:
             if dl.progress.remaining:
                 print(f"⚠ 触发反爬，保存已下载部分（剩余 {dl.progress.remaining} 章未下载）...")
             else:
                 print("⚠ 触发反爬，保存已下载部分...")
             if dl.progress.downloaded_chapters:
-                storage.save_chapter(novel, dl.progress.downloaded_chapters)
+                paths = storage.save_chapter(novel, dl.progress.downloaded_chapters)
+                print(f"  已保存 {len(paths)} 章到磁盘")
                 novel.update_chapter(dl.progress.downloaded_chapters)
             raise
 
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
     _do_export(novel, group, format_configs)
-    print(f"  导出完成 → app_data/export/{group}/")
+    print(f"  导出完成 → app_data/exports/{group}/")
 
 
 def _do_export(novel, group: str, format_configs: dict):
@@ -345,9 +362,6 @@ def _do_export(novel, group: str, format_configs: dict):
     export_options_map = get_exporter_options()
 
     for fmt, fmt_cfg in format_configs.items():
-        if not fmt_cfg.get("enabled", True):
-            continue
-
         exporter_cls = registered.get(fmt)
         if exporter_cls is None:
             _log.debug("跳过未知格式: %s", fmt)
@@ -399,11 +413,9 @@ def do_re_export(group: str, format_configs: dict):
 
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
-        local = storage.load_chapters(novel.id)
-        downloaded = len(local) if local else 0
-        print(f"  {i}. {novel.title}  (已下载 {downloaded} 章)")
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
 
-    choices = [(f"{n.title}  — {n.author}", n) for n in novels_info]
+    choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
     choices.append(("▸ 全部导出", "all"))
     choices.append(("返回", None))
 
@@ -421,12 +433,79 @@ def do_re_export(group: str, format_configs: dict):
             if local:
                 novel.update_chapter(local)
             _do_export(novel, group, format_configs)
-            print(f"  导出完成 → app_data/export/{group}/")
+            print(f"  导出完成 → app_data/exports/{group}/")
         except Exception as e:
             print(f"✗ 导出失败: {e}")
             _log.exception("re-export failed: %s", novel.title)
 
     print("\n导出完成！")
+
+
+def do_delete():
+    """扫描 storage 目录，选择小说并彻底删除本地数据。"""
+    storage = Storage(APP_DATA / "storage")
+    storage_dir = APP_DATA / "storage"
+
+    if not storage_dir.exists():
+        print("未找到已下载的小说（storage 目录不存在）")
+        return
+
+    novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
+    if not novel_dirs:
+        print("未找到已下载的小说")
+        return
+
+    novels_info = []
+    for d in novel_dirs:
+        meta = storage.load_meta(d.name)
+        if meta:
+            novels_info.append(meta)
+
+    if not novels_info:
+        print("未找到有效的小说元数据")
+        return
+
+    print(f"\n找到 {len(novels_info)} 本已下载小说：")
+    for i, novel in enumerate(novels_info, 1):
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
+
+    choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
+    choices.append(("▸ 全部删除", "all"))
+    choices.append(("返回", None))
+
+    selection = _select("选择要删除的小说：", choices=choices)
+
+    if selection is None:
+        return
+
+    targets = novels_info if selection == "all" else [selection]
+
+    # 二次确认
+    if selection == "all":
+        confirm = _select(
+            f"⚠ 确定要彻底删除全部 {len(targets)} 本小说的本地数据？此操作不可恢复！",
+            choices=[("取消", False), ("确认删除", True)],
+        )
+    else:
+        confirm = _select(
+            f"⚠ 确定要彻底删除「{targets[0].title}」的本地数据？此操作不可恢复！",
+            choices=[("取消", False), ("确认删除", True)],
+        )
+
+    if not confirm:
+        print("已取消")
+        return
+
+    for novel in targets:
+        print(f"正在删除: {novel.title}...", end=" ")
+        try:
+            storage.delete_novel(novel.id)
+            print("✓")
+        except Exception as e:
+            print(f"✗ 失败: {e}")
+            _log.exception("delete failed: %s", novel.title)
+
+    print(f"\n删除完成！共删除 {len(targets)} 部小说")
 
 
 def do_update(engine, dl, group: str, format_configs: dict):
@@ -455,11 +534,9 @@ def do_update(engine, dl, group: str, format_configs: dict):
 
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
-        local = storage.load_chapters(novel.id)
-        downloaded = len(local) if local else 0
-        print(f"  {i}. {novel.title}  (已下载 {downloaded} 章)")
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
 
-    choices = [(f"{n.title}  — {n.author}", n) for n in novels_info]
+    choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
     choices.append(("▸ 全部更新", "all"))
     choices.append(("返回", None))
 
@@ -495,8 +572,23 @@ def main():
     group = cfg.get("group", "default")
     mode = cfg.get("mode", "browser")
     platform = cfg.get("platform", "fanqie")
+
+    # ── 日志初始化（必须在第一次 get_logger 之前） ──────────────
+    configure_logging(LogOptions(**cfg.get("log", {})))
+
     site_cfg = load_site_config(platform)
     format_configs = load_format_configs()
+
+    # ── 格式快速开关 ──────────────────────────────────────────
+    # config.yaml 中 formats 列表不为空且非 "all" 时，
+    # 只保留列表中声明的导出格式
+    enabled_formats = cfg.get("formats")
+    if enabled_formats and enabled_formats != "all":
+        format_configs = {
+            name: cfg
+            for name, cfg in format_configs.items()
+            if name in enabled_formats
+        }
 
     if not format_configs:
         _log.warning("未找到导出格式配置（app_data/config/formats/ 为空）")
@@ -535,10 +627,10 @@ def main():
                 choices=[
                     ("🌐 切换平台", "switch_platform"),
                     ("🔑 登录", "login"),
-                    ("🔍 搜索 & 下载", "search"),
+                    ("📥 下载（搜索或输入 URL）", "download"),
                     ("🔄 更新已下载", "update"),
                     ("📦 重新导出", "re_export"),
-                    ("📥 直接下载 (输入 URL)", "download"),
+                    ("🗑 删除小说", "delete"),
                     ("退出", "quit"),
                 ],
             )
@@ -563,32 +655,39 @@ def main():
             elif action == "login":
                 do_login(platform)
 
-            elif action == "search":
-                e, d = _get_engine_dl()
-                url = do_search(e, d, platform)
-                if url:
-                    try:
-                        e, d = _get_engine_dl()
-                        do_download(e, d, url, group, format_configs)
-                    except AntiCrawlError:
-                        print("⚠ 触发反爬，下载中断（已保存部分进度）")
-                    except Exception as e:
-                        print(f"✗ 下载失败: {e}")
-                        _log.exception("download failed")
-
             elif action == "download":
-                url = _text_input(
-                    "请输入小说链接（如 https://...）："
-                )
-                if url and url.strip():
+                raw = _text_input("请输入小说链接或搜索关键词：")
+                if not raw or not raw.strip():
+                    continue
+
+                raw = raw.strip()
+                e, d = _get_engine_dl()
+
+                # 检测是否为 URL
+                if raw.startswith("http://") or raw.startswith("https://"):
                     try:
-                        e, d = _get_engine_dl()
-                        do_download(e, d, url.strip(), group, format_configs)
+                        do_download(e, d, raw, group, format_configs)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
                         print(f"✗ 下载失败: {e}")
                         _log.exception("download failed")
+                else:
+                    # 作为搜索关键词
+                    try:
+                        url = do_search(e, d, platform, query=raw)
+                    except Exception as e:
+                        print(f"✗ 搜索失败: {e}")
+                        url = None
+                    if url:
+                        try:
+                            e, d = _get_engine_dl()
+                            do_download(e, d, url, group, format_configs)
+                        except AntiCrawlError:
+                            print("⚠ 触发反爬，下载中断（已保存部分进度）")
+                        except Exception as e:
+                            print(f"✗ 下载失败: {e}")
+                            _log.exception("download failed")
 
             elif action == "re_export":
                 try:
@@ -596,6 +695,13 @@ def main():
                 except Exception as e:
                     print(f"✗ 导出失败: {e}")
                     _log.exception("re_export failed")
+
+            elif action == "delete":
+                try:
+                    do_delete()
+                except Exception as e:
+                    print(f"✗ 删除失败: {e}")
+                    _log.exception("delete failed")
 
             elif action == "update":
                 try:
