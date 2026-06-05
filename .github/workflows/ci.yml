@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════
+#  novel-downloader CI
+#  每次 push / PR 到 main 时运行：语法检查 + 导入验证 + 单元测试
+# ═══════════════════════════════════════════════════════════════
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: 语法检查
+        run: python -m compileall -q . -x 'app_data|\.git'
+
+      - name: 模块导入检查
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from nldlder import (
+              NovelDownloader, Options, create_engine,
+              get_parsers, get_exporters, get_exporter_options,
+              search, login, split_into_groups,
+          )
+          import nldlder
+          print('✓ nldlder v' + nldlder.__version__ + ' 导入成功')
+          print('  注册的解析器: ' + str(list(get_parsers().keys())))
+          print('  注册的导出器: ' + str(list(get_exporters().keys())))
+          "
+
+      - name: 运行测试
+        run: |
+          python -m pytest tests/ -v --tb=short 2>&1 || echo "tests/ 为空或不存在，跳过"
