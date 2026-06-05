@@ -2,25 +2,27 @@ browser:
   browser_type: chromium
   headless: false
   user_data_dir: app_data/browser/Chromium/User Data
-  viewport:
-    height: 720
-    width: 1280
   timeout: 30
   retry_times: 3
   backoff_factor: 2
   delay:
-  - 3.0
-  - 5.0
+    - 3.0
+    - 5.0
+  viewport:
+    width: 1280
+    height: 720
 
 requests:
-  headers:
-    User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
-      like Gecko) Chrome/148.0.0.0 Safari/537.36
-  cookies: {}
-  proxies: {}
   timeout: 30
   retry_times: 3
   backoff_factor: 2
   delay:
-  - 3
-  - 5
+    - 3
+    - 5
+  headers:
+    User-Agent: >-
+      Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+      AppleWebKit/537.36 (KHTML, like Gecko)
+      Chrome/148.0.0.0 Safari/537.36
+  cookies: {}
+  proxies: {}

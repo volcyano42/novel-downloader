@@ -1,25 +1,17 @@
 epub:
-  # 是否启用
-  enabled: true
-  # 输出文件路径模板。{group} 由 main.py 填充，{file_name_template} 替换为下方同名配置项的值
-  output_path: "app_data/exports/{group}/{title}/{file_name_template}"
-  # 文件名模板，可用变量: {title} {author} {novel_id} {total_chapters} {date}
-  file_name_template: "{title}"
-  encoding: "utf-8"
-  extension: ".epub"
-  css_style: "default"
+  # 可用占位符: {group} {title} {author} {novel_id} {total_chapters} {date} {file_name_template}
+  output_path: app_data/exports/{group}/{title}/{file_name_template}
+  # 可用占位符: {title} {author} {date}
+  file_name_template: '{title}'
+  extension: .epub
+  encoding: utf-8
   include_toc: true
-
-  # ── 压缩选项 ──────────────────────────────────────────────────
-  # 压缩算法: deflate（通用）, bzip2（更高压缩率，兼容性稍差）, stored（不压缩）
+  css_style: default
+  # 压缩算法 deflate(标准), bzip2（压缩率更高）, stored(不压缩)
   compression: deflate
-  # deflate 压缩等级 0-9（9 最高）
   compresslevel: 9
-
-  # ── 图片优化选项（需安装 Pillow）──────────────────────────────
-  # 启用图片重压缩（JPEG 重压缩、PNG 优化）
+  # 压缩内嵌图片
   optimize_images: true
-  # JPEG/WebP 质量 1-100（85 肉眼不可感知但体积减半）
   jpeg_quality: 85
-  # 图片最大宽度（0 = 不缩放，800 = 等比缩小到 800px 宽）
+  # 图片最大宽度（0 = 不缩放）
   max_image_width: 0
