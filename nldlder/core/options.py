@@ -52,10 +52,10 @@ class ExportOptions:
 @dataclass
 class Options:
         _mode: str = "api"
-        _requests: RequestsOptions = RequestsOptions()
-        _browser: BrowserOptions = BrowserOptions()
-        _api: APIOptions = APIOptions()
-        _download: DownloadOptions = DownloadOptions()
+        _requests: RequestsOptions = field(default_factory=RequestsOptions)
+        _browser: BrowserOptions = field(default_factory=BrowserOptions)
+        _api: APIOptions = field(default_factory=APIOptions)
+        _download: DownloadOptions = field(default_factory=DownloadOptions)
         _log: LogOptions = field(default_factory=LogOptions)
         _exports: dict[str, Any] = field(default_factory=dict)
 
