@@ -1,5 +1,14 @@
-download:
-  max_workers: 3
-group: default
+platform: fanqie
 mode: api
 version: 1.0.0
+group: default
+log:
+  enabled: true
+  level: DEBUG
+  output_dir: app_data/logs
+formats:
+  - txt
+  - epub
+  - img
+download:
+  max_workers: 3
