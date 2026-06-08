@@ -7,6 +7,7 @@ from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.structures import CaseInsensitiveDict
 from urllib3.util.retry import Retry
 
 from .exceptions import NetworkError
@@ -20,12 +21,12 @@ class Engine(ABC):
     """网络层基类 — 三种实现共享的接口。"""
 
     @abstractmethod
-    def fetch_text(self, url: str, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, no_delay: bool = False, **kwargs) -> str:
         """GET/POST 请求返回纯文本。"""
         ...
 
     @abstractmethod
-    def fetch_json(self, url: str, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str,no_delay: bool = False, **kwargs) -> dict:
         """GET/POST 请求返回解析后的 JSON 对象。"""
         ...
 
@@ -38,11 +39,6 @@ class Engine(ABC):
         """关闭当前线程持有的资源（page / session），线程退出前调用。"""
         _log.debug("%s.close_current: no-op", type(self).__name__)
 
-
-# ═══════════════════════════════════════════════════════════════════
-# APIEngine — 通过 oiapi.net 第三方 API 获取结构化数据
-# ═══════════════════════════════════════════════════════════════════
-
 class APIEngine(Engine):
 
     def __init__(self, options: APIOptions) -> None:
@@ -51,8 +47,6 @@ class APIEngine(Engine):
         self._session_local = threading.local()
         self._session_lock = threading.Lock()
         self._sessions: list[requests.Session] = []
-
-    # ── Session 管理 ─────────────────────────────────────────────
 
     def _create_session(self) -> requests.Session:
         retry_strategy = Retry(
@@ -73,11 +67,8 @@ class APIEngine(Engine):
                 self._session_local.session = session
         return self._session_local.session
 
-    # ── 请求 ─────────────────────────────────────────────────────
-
-    def _request_post(self, url: str, **kwargs: Any) -> requests.Response:
+    def _request_post(self, url: str,post_data = None, no_delay: bool = False, **kwargs) -> requests.Response:
         """执行 POST 请求，统一处理延时、编码和异常。"""
-        post_data = kwargs.get("post_data")
         if post_data is None:
             raise NetworkError(
                 "APIEngine.fetch_* requires post_data kwarg",
@@ -101,21 +92,20 @@ class APIEngine(Engine):
             raise NetworkError(f"POST failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        time.sleep(random.uniform(*self.options.delay))
+        if not no_delay:
+            time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def fetch_text(self, url: str, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, post_data = None, no_delay: bool = False, **kwargs) -> str:
         _log.debug("API fetch_text: url=%s", url[:80])
-        response = self._request_post(url, **kwargs)
+        response = self._request_post(url,post_data = post_data,no_delay = no_delay, **kwargs)
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, post_data = None, no_delay: bool = False, **kwargs: Any) -> Any:
         _log.debug("API fetch_json: url=%s", url[:80])
-        response = self._request_post(url, **kwargs)
+        response = self._request_post(url,post_data = post_data,no_delay = no_delay, **kwargs)
         return response.json()
-
-    # ── 资源释放 ─────────────────────────────────────────────────
 
     def close(self) -> None:
         for session in self._sessions:
@@ -139,7 +129,6 @@ class APIEngine(Engine):
         del self._session_local.session
 
 class BrowserEngine(Engine):
-    from DrissionPage._pages.mix_tab import MixTab
     def __init__(self, options: BrowserOptions) -> None:
         self.name = "browser"
         self.options = options
@@ -169,9 +158,7 @@ class BrowserEngine(Engine):
         )
         _log.debug("BrowserEngine started (pages created lazily per thread)")
 
-    # ── 线程独占 Page ────────────────────────────────────────────
-
-    def get_page(self) -> MixTab:
+    def get_page(self):
         """获取当前线程独占的 ChromiumPage。
 
         每个线程第一次调用时创建新 page 并加入池中；
@@ -183,12 +170,10 @@ class BrowserEngine(Engine):
                 self._page_pool.append(self._thread_local.page)
         return self._thread_local.page
 
-    def new_page(self) -> MixTab:
+    def new_page(self):
         return self._browser.new_tab()
 
-    # ── 请求 ─────────────────────────────────────────────────────
-
-    def fetch_text(self, url: str, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, no_delay: bool = False, **kwargs: Any) -> str:
         _log.debug("fetch_text start: url=%s", url[:80])
         page = self.get_page()
 
@@ -215,11 +200,9 @@ class BrowserEngine(Engine):
             url=url,
         )
 
-    def fetch_json(self, url: str, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, no_delay: bool = False, **kwargs: Any) -> Any:
         text = self.fetch_text(url=url)
         return json.loads(text)
-
-    # ── 资源释放 ─────────────────────────────────────────────────
 
     def close(self) -> None:
         for page in self._page_pool:
@@ -247,11 +230,6 @@ class BrowserEngine(Engine):
         """返回底层 Chromium 浏览器实例，供高级操作使用。"""
         return self._browser
 
-
-# ═══════════════════════════════════════════════════════════════════
-# RequestsEngine — 通过 requests 库发送普通 HTTP GET 请求
-# ═══════════════════════════════════════════════════════════════════
-
 class RequestsEngine(Engine):
 
     def __init__(self, options: RequestsOptions) -> None:
@@ -275,7 +253,7 @@ class RequestsEngine(Engine):
         if self.options.proxies:
             session.proxies = self.options.proxies
         if self.options.headers:
-            session.headers = self.options.headers
+            session.headers = CaseInsensitiveDict(self.options.headers)
         return session
 
     def _get_session(self) -> requests.Session:
@@ -288,7 +266,7 @@ class RequestsEngine(Engine):
 
     # ── 请求 ─────────────────────────────────────────────────────
 
-    def fetch_text(self, url: str, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, no_delay: bool = False, **kwargs: Any) -> str:
         _log.debug("Requests fetch_text: url=%s", url[:80])
         session = self._get_session()
         try:
@@ -305,7 +283,7 @@ class RequestsEngine(Engine):
         _log.debug("Requests fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, no_delay: bool = False, **kwargs: Any) -> Any:
         session = self._get_session()
         try:
             response = session.get(
@@ -319,8 +297,6 @@ class RequestsEngine(Engine):
         response.encoding = 'utf-8'
         time.sleep(random.uniform(*self.options.delay))
         return response.json()
-
-    # ── 资源释放 ─────────────────────────────────────────────────
 
     def close(self) -> None:
         for session in self._sessions:
@@ -343,12 +319,7 @@ class RequestsEngine(Engine):
                 self._sessions.remove(session)
         del self._session_local.session
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 工厂函数
-# ═══════════════════════════════════════════════════════════════════
-
-def create_engine(options: Options) -> APIEngine | RequestsEngine | BrowserEngine:
+def create_engine(options: Options) -> Any:
     """根据 Options.mode 创建对应引擎实例。
 
     Args:
