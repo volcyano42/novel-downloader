@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -22,7 +23,7 @@ CONFIG_DIR = APP_DATA / "config"
 # 交互工具 — questionary 优先，无 TTY 时降级为 input()
 # ═══════════════════════════════════════════════════════════════════
 
-def _select(message: str, choices: list[tuple[str, object]]) -> object | None:
+def _select(message: str, choices: list[tuple[str, Any]]) -> Any:
     """显示选项菜单，返回选中的 value。
 
     choices: [(label, value), ...] 或 [("标签", value), ..., ("返回", None)]
@@ -236,11 +237,184 @@ def do_login(platform: str):
         login_engine.close()
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 配置保存
+# ═══════════════════════════════════════════════════════════════════
+
+def save_main_config(cfg: dict):
+    """保存配置到 app_data/config/config.yaml"""
+    path = CONFIG_DIR / "config.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, allow_unicode=True)
+
+
+def save_site_config(platform: str, site_cfg: dict):
+    """保存站点配置到 app_data/config/sites/{platform}.yaml"""
+    path = CONFIG_DIR / "sites" / f"{platform}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(site_cfg, f, allow_unicode=True)
+
+
+def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
+    """交互式设置菜单，修改配置并保存到 YAML 文件。
+    """
+    platform_labels = _show_platforms()
+    all_formats = list(load_format_configs().keys())  # txt, epub, img...
+    enabled_formats = cfg.get("formats")
+    if not enabled_formats or enabled_formats == "all":
+        enabled_formats = all_formats[:]
+
+    while True:
+        mode = cfg.get("mode", "browser")
+        download_cfg = cfg.get("download", {})
+        max_workers = download_cfg.get("max_workers", 3)
+
+        # 获取当前模式的延迟值
+        if mode == "browser":
+            delay = site_cfg.get("browser", {}).get("delay", [3, 5])
+        elif mode == "api":
+            for prov in site_cfg.get("api", {}).values():
+                if isinstance(prov, dict):
+                    delay = prov.get("delay", [3, 5])
+                    break
+            else:
+                delay = [3, 5]
+        else:
+            delay = site_cfg.get("requests", {}).get("delay", [3, 5])
+
+        # 获取保存路径（从第一个启用的格式配置中取 output_path）
+        first_fmt = enabled_formats[0] if enabled_formats else "txt"
+        fmt_configs = load_format_configs()
+        current_output = ""
+        if first_fmt in fmt_configs:
+            current_output = fmt_configs[first_fmt].get("output_path", "")
+
+        # 显示已启用的格式列表
+        fmt_str = "、".join(enabled_formats) if enabled_formats else "无"
+
+        print("\n===== 设置菜单 =====")
+        print(f" 1. 下载模式     [{mode}]")
+        print(f" 2. 下载延迟     {delay} (秒)")
+        print(f" 3. 保存路径     [{current_output}]")
+        print(f" 4. 下载线程数   [{max_workers}]")
+        print(f" 5. 保存方式     [{fmt_str}]")
+        print(" 0. 返回主菜单")
+        print("====================")
+
+        choice = input("\n请选择编号: ").strip()
+
+        if choice == "0":
+            save_main_config(cfg)
+            save_site_config(platform, site_cfg)
+            print("✓ 配置已保存")
+            break
+
+        elif choice == "1":
+            new_mode = _select(
+                "选择下载模式：",
+                choices=[
+                    ("browser  - 浏览器自动化", "browser"),
+                    ("api      - 调用公开 API", "api"),
+                    ("requests - 模拟 HTTP 请求", "requests"),
+                    ("取消", None),
+                ],
+            )
+            if new_mode:
+                cfg["mode"] = new_mode
+                save_main_config(cfg)
+                print("✓ 下载模式已保存")
+
+        elif choice == "2":
+            try:
+                lo = int(input(f"延迟下限（当前: {delay[0]}s）: ").strip())
+                hi = int(input(f"延迟上限（当前: {delay[1]}s）: ").strip())
+                if 0 <= lo <= hi:
+                    if mode == "browser":
+                        site_cfg.setdefault("browser", {})["delay"] = [lo, hi]
+                    elif mode == "api":
+                        for prov in site_cfg.get("api", {}).values():
+                            if isinstance(prov, dict):
+                                prov["delay"] = [lo, hi]
+                                break
+                    else:
+                        site_cfg.setdefault("requests", {})["delay"] = [lo, hi]
+                    save_site_config(platform, site_cfg)
+                    print("✓ 下载延迟已保存")
+                else:
+                    print("下限应 ≤ 上限")
+            except ValueError:
+                print("输入无效")
+
+        elif choice == "3":
+            path = input("\n请输入保存目录的完整路径\n（直接 Enter 使用默认）: ").strip()
+            if path:
+                for fmt_name in all_formats:
+                    fmt_path = CONFIG_DIR / "formats" / f"{fmt_name}.yaml"
+                    if fmt_path.exists():
+                        with open(fmt_path, encoding="utf-8") as f:
+                            fmt_data = yaml.safe_load(f) or {}
+                        if fmt_name in fmt_data:
+                            old_path = fmt_data[fmt_name].get("output_path", "")
+                            if "/" in old_path:
+                                parts = old_path.rsplit("/", 1)
+                                new_path = path.rstrip("/") + "/" + parts[-1]
+                            else:
+                                new_path = path.rstrip("/") + "/" + old_path
+                            fmt_data[fmt_name]["output_path"] = new_path
+                            with open(fmt_path, "w", encoding="utf-8") as f:
+                                yaml.safe_dump(fmt_data, f, allow_unicode=True)
+                print("✓ 保存路径已保存")
+
+        elif choice == "4":
+            try:
+                n = int(input(f"下载线程数（当前: {max_workers}）: ").strip())
+                if n > 0:
+                    cfg.setdefault("download", {})["max_workers"] = n
+                    save_main_config(cfg)
+                    print("✓ 下载线程数已保存")
+                else:
+                    print("线程数必须大于 0")
+            except ValueError:
+                print("输入无效")
+
+        elif choice == "5":
+            print("\n选择要启用的保存格式（可多选，用逗号分隔）:")
+            toggle_status = {}
+            for i, fmt in enumerate(all_formats, 1):
+                checked = "✓" if fmt in enabled_formats else " "
+                toggle_status[str(i)] = fmt
+                print(f"  [{checked}] {i}. {fmt}")
+
+            raw = input("\n请输入编号（如 1,3 或 1 3，Enter 不更改）: ").strip()
+            if raw:
+                selected = []
+                for token in raw.replace(",", " ").split():
+                    token = token.strip()
+                    if token in toggle_status:
+                        selected.append(toggle_status[token])
+                if selected:
+                    enabled_formats = selected
+                    cfg["formats"] = list(dict.fromkeys(selected))  # 去重保序
+                    save_main_config(cfg)
+                    print(f"✓ 保存方式已保存: {', '.join(enabled_formats)}")
+
+        else:
+            print("无效选项，请重新选择")
+
+    return platform
+
+
 def do_search(engine, dl, platform: str, page: int = 0, query: str | None = None) -> str | None:
     """搜索小说，选择后返回小说 URL（或 None 表示取消）。
 
     Args:
+        engine: 下载引擎实例
         query: 搜索关键词。为 None 时交互式输入。
+        dl: NovelDownloader实例
+        platform: 网站
+        page: 页数
     """
     if query is None:
         query = _text_input("请输入搜索关键词：")
@@ -355,8 +529,6 @@ def _do_export(novel, group: str, format_configs: dict):
     """执行导出。
 
     从配置中读取 output_path 模板，填充 {group} 和 {file_name_template}，
-    然后传给各导出器。TXT/EPUB 的 output_path 是精确文件路径，
-    IMG 的 output_path 是图片输出目录。
     """
     registered = get_exporters()
     export_options_map = get_exporter_options()
@@ -610,7 +782,6 @@ def main():
         return engine, dl
 
     platform_labels = _show_platforms()
-    available = list(platform_labels.keys())
 
     try:
         while True:
@@ -625,12 +796,13 @@ def main():
             action = _select(
                 f"平台: {platform_label}  |  分组: {group}  |  模式: {mode}",
                 choices=[
-                    ("🌐 切换平台", "switch_platform"),
-                    ("🔑 登录", "login"),
-                    ("📥 下载（搜索或输入 URL）", "download"),
-                    ("🔄 更新已下载", "update"),
-                    ("📦 重新导出", "re_export"),
-                    ("🗑 删除小说", "delete"),
+                    ("切换平台", "switch_platform"),
+                    ("登录", "login"),
+                    ("下载（搜索或输入 URL）", "download"),
+                    ("更新已下载", "update"),
+                    ("重新导出", "re_export"),
+                    ("删除小说", "delete"),
+                    ("设置", "settings"),
                     ("退出", "quit"),
                 ],
             )
@@ -654,6 +826,22 @@ def main():
 
             elif action == "login":
                 do_login(platform)
+
+            elif action == "settings":
+                old_platform = platform
+                platform = do_settings(cfg, platform, site_cfg)
+                if platform != old_platform:
+                    site_cfg = load_site_config(platform)
+                    options = build_options(cfg, site_cfg)
+                    if engine is not None:
+                        engine.close()
+                    engine, dl = None, None
+                else:
+                    options = build_options(cfg, site_cfg)
+                    if engine is not None:
+                        engine.close()
+                    engine, dl = None, None
+                print("✓ 设置已应用")
 
             elif action == "download":
                 raw = _text_input("请输入小说链接或搜索关键词：")
