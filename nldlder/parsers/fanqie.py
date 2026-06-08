@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup, Tag
 from yarl import URL
 
 from .base import BaseParser
-from ..core.engine import BrowserEngine
 from ..core.exceptions import AntiCrawlError, ChapterNotFoundError, FeatureNotSupportedError, NovelNotFoundError
 from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
@@ -209,37 +208,30 @@ class FanqieHTMLParser(BaseParser):
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
-        soup = BeautifulSoup(search_ref, 'lxml')
-        items = soup.select('.search-book-item')
-        results = []
+                          **kwargs) -> tuple[SearchResult, ...] | None:
+        results: list[SearchResult] = []
+        offset = page * 10
+        search_url = f"https://api-lf.fanqiesdk.com/api/novel/channel/homepage/search/search/v1/?aid=1967&offset=0&q={search_ref}"
+        try:
+            content = requests.get(search_url).json()
+        except Exception:
+            _log.warning("search API failed")
+            return None
+        if content.get("data") and content["data"].get("ret_data"):
+            for book_info in content["data"]["ret_data"]:
+                book_id = book_info.get("book_id")
+                book_url = f"https://fanqienovel.com/page/{book_id}"
+                book_name = book_info.get("title")
+                author = book_info.get("author")
+                description = book_info.get("abstract")
 
-        for item in items:
-            title_elem = item.select_one('.title')
-            if not title_elem:
-                continue
-            name = title_elem.get_text(strip=True)
-            author_elem = item.select_one('.desc span:first-child')
-            author = ''
-            if author_elem:
-                author_text = author_elem.get_text(strip=True)
-                if author_text.startswith('作者：'):
-                    author = author_text[3:].strip()
-                else:
-                    author = author_text
-
-            abstract_elem = item.select_one('.abstract')
-            description = abstract_elem.get_text(strip=True) if abstract_elem else ''
-
-            # 构造结果对象
-            results.append(SearchResult(
-                title=translate(name, 1),
-                author=translate(author, 1),
-                description=translate(description, 1)
-            ))
-
-        return tuple(results)
+                results.append(SearchResult(
+                    title=book_name,
+                    author=author,
+                    url=book_url,
+                    description=description,
+                ))
+        return tuple(results) if results else None
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         if BeautifulSoup(novel_ref, 'lxml').find("div", class_="no-content"):
@@ -315,7 +307,10 @@ class FanqieHTMLParser(BaseParser):
         chapter: Chapter = kwargs["chapter"]
         # 定位json起始和终点位置
         if BeautifulSoup(chapter_ref, 'lxml').find("div", class_="no-content"):
-            raise ChapterNotFoundError()
+            raise ChapterNotFoundError("Chapter content not found")
+        if "window.__INITIAL_STATE__=" not in chapter_ref:
+            raise AntiCrawlError("Chapter content not found")
+
         json_data = extract_json(chapter_ref)
         count = json_data.get("reader", {}).get("chapterData", {}).get("chapterWordNumber")
         parent_soup = BeautifulSoup(chapter_ref, 'lxml')
@@ -449,7 +444,7 @@ class FanqieBrowserParser(FanqieHTMLParser):
     def can_handle(identifier: str) -> bool:
         pass
 
-    def login(self, engine: BrowserEngine, **credentials) -> AuthCredential:
+    def login(self, engine, **credentials) -> AuthCredential:
         _log.info("login start")
         page = engine.new_page()
 
@@ -481,41 +476,22 @@ class FanqieBrowserParser(FanqieHTMLParser):
 
     def parse_search_info(self,
                           search_ref: str,
-                          engine: BrowserEngine,
+                          engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
-        search_url = f"https://fanqienovel.com/search/{search_ref}"
-        html = engine.fetch_text(search_url)
-        browser_page = engine.get_page()
-        if page >= 1:
-            next_page_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[5]/ul/li[{page + 1}]"
-            browser_page.ele(f"xpath:{next_page_xpath}").click()
-            html = browser_page.html
-        result = super().parse_search_info(search_ref=html, engine=engine, page=page, choice=choice, **kwargs)
-        if not result:
-            return None
-        if choice is not None:
-            button_xpath = f"/html/body/div[1]/div/div[2]/div/div/div[4]/div[{choice + 1}]/div[2]/div[1]/span"
-            browser_page.ele(f"xpath:{button_xpath}").click()
-            tab_id = browser_page.browser.wait.new_tab(timeout=10)
-            new_page = browser_page.browser.get_tab(tab_id)
-            book_url = new_page.url
-            return book_url
-        else:
-            return result
+        return super().parse_search_info(search_ref=search_ref, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
 
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, no_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, no_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 
@@ -526,7 +502,7 @@ class FanqieBrowserParser(FanqieHTMLParser):
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter_ref[0])}"
         html = engine.fetch_text(url=url)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
-            raise ChapterNotFoundError()
+            raise ChapterNotFoundError("chapter content not found")
         chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter = chapter_ref[0], **kwargs)
         return Chapters(chapter)
 
@@ -537,15 +513,14 @@ class FanqieOIAPIParser(BaseParser):
     def can_handle(identifier: str) -> bool:
         pass
 
-    def login(self, engine: BrowserEngine, **kwargs) -> None:
+    def login(self, engine, **kwargs) -> None:
         raise FeatureNotSupportedError("login", f"Not Supported login by the API")
 
     @staticmethod
     def parse_search_info(search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         results: list[SearchResult] = []
         post_data = {
             "page": page,
@@ -570,9 +545,7 @@ class FanqieOIAPIParser(BaseParser):
                     url=book_url,
                     description=description,
                 ))
-        if choice is not None:
-            return results[choice].url
-        return tuple(results)
+        return tuple(results) if results else None
 
     @staticmethod
     def parse_novel_info(novel_ref: str, engine, **kwargs) -> Novel:
@@ -584,7 +557,7 @@ class FanqieOIAPIParser(BaseParser):
             "key": engine.options.key,
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
         data = json_data.get('data')
         if not data:
             raise NovelNotFoundError()
@@ -622,7 +595,7 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapters",
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
         chapter_items_volume = json_data.get('data')
         if not chapter_items_volume:
             raise ChapterNotFoundError("Chapter list not found")
@@ -665,14 +638,14 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapter",
             "type": "json"
         }
-        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
+        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
         data_list = response.get('data')
         if data_list is None:
             message = response.get('message',"")
             if message == "请检测章节选择是否正确":
                 raise ChapterNotFoundError(message=f"Invalid chapter order: {orders}")
             elif message == "实例化失败: Trying to access array offset on value of type bool line 197in api.php":
-                raise AntiCrawlError()
+                raise AntiCrawlError("requests too busy")
             else:
                 raise ChapterNotFoundError(message=f"The API did not return the expected data")
         for idx, data in enumerate(sorted(data_list, key=lambda item: item["chapter"])):
@@ -691,26 +664,26 @@ class FanqieRequestsParser(FanqieHTMLParser):
     def can_handle(identifier: str) -> bool:
         pass
 
-    def login(self, engine: BrowserEngine, **kwargs) -> None:
+    def login(self, engine, **kwargs) -> None:
         raise FeatureNotSupportedError("login", f"Not Supported login by the Requests")
 
     def parse_search_info(self,
                           search_ref: str,
                           engine,
                           page: int = 0,
-                          choice: int | None = None,
-                          **kwargs) -> tuple[SearchResult] | str | None:
-        raise FeatureNotSupportedError("search")
+                          **kwargs) -> tuple[SearchResult, ...] | None:
+        _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
+        return super().parse_search_info(search_ref=search_ref, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, no_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, no_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 
@@ -753,7 +726,7 @@ class FanqieParser(BaseParser):
         finally:pass
         return False
 
-    def login(self, engine: BrowserEngine, **kwargs) -> AuthCredential | None:
+    def login(self, engine, **kwargs) -> AuthCredential | None:
         parser = use_parser(engine=engine)()
         return parser.login(engine=engine, **kwargs)
 
@@ -761,10 +734,9 @@ class FanqieParser(BaseParser):
                           search_ref: str,
                           engine,
                           page=0,
-                          choice=None,
-                          **kwargs) -> tuple[SearchResult, ...] | str | None:
+                          **kwargs) -> tuple[SearchResult, ...] | None:
         parser = use_parser(engine=engine)()
-        return parser.parse_search_info(search_ref=search_ref, engine=engine, page=page, choice=choice, **kwargs)
+        return parser.parse_search_info(search_ref=search_ref, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         parser = use_parser(engine=engine)()
