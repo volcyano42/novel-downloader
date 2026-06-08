@@ -236,7 +236,35 @@ class QidianBrowserParser(QidianHTMLParser):
         pass
 
     def login(self, engine: BrowserEngine, **kwargs) -> AuthCredential:
-        raise FeatureNotSupportedError("login", "起点中文网浏览器模式暂未实现登录")
+        _log.info("login start")
+        page = engine.new_page()
+
+        try:
+            page.get("https://passport.qidian.com/")
+
+            print("请在打开的浏览器窗口中完成登录（扫码/手机号）...")
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                print(page.url)
+                if "www.qidian.com" in page.url:
+                    break
+                time.sleep(0.5)
+
+            time.sleep(2)
+            _log.info("login completed")
+
+            raw_cookies = page.cookies()
+            cookies = {c["name"]: c["value"] for c in raw_cookies}
+
+            headers = {}
+
+            return AuthCredential(
+                cookies=cookies,
+                headers=headers,
+                extra={}
+            )
+        finally:
+            page.close()
 
     def parse_search_info(self,
                           search_ref: str,
@@ -252,17 +280,17 @@ class QidianBrowserParser(QidianHTMLParser):
             browser_page.ele(f"xpath:{next_page_xpath}").click()
             html = browser_page.html
         else:
-            html = engine.fetch_text(search_url)
+            html = engine.fetch_text(search_url, not_delay=True)
         return super().parse_search_info(search_ref=html, engine=engine, page=page, **kwargs)
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
-        html = engine.fetch_text(url=novel_ref)
+        html = engine.fetch_text(url=novel_ref, not_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, url=novel_ref, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref, engine, **kwargs) -> Chapters:
         url = novel_ref.url if isinstance(novel_ref, Novel) else novel_ref
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, not_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, url=url)
         return Chapters(chapter_list)
 
@@ -294,13 +322,13 @@ class QidianRequestsParser(QidianHTMLParser):
         raise FeatureNotSupportedError("search", "起点中文网不支持 Requests 获取搜索结果")
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
-        html = engine.fetch_text(url=novel_ref)
+        html = engine.fetch_text(url=novel_ref, not_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, url=novel_ref, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref, engine, **kwargs) -> Chapters:
         url = novel_ref.url if isinstance(novel_ref, Novel) else novel_ref
-        html = engine.fetch_text(url=url)
+        html = engine.fetch_text(url=url, not_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, url=url)
         return Chapters(chapter_list)
 
@@ -321,7 +349,7 @@ def use_parser(engine) -> type[QidianRequestsParser | QidianBrowserParser]:
     elif engine.name == "requests":
         return QidianRequestsParser
     elif engine.name == "API":
-        raise FeatureNotSupportedError("API", "起点中文网暂不支持 API 模式")
+        raise FeatureNotSupportedError("API", "起点中文网不支持 API 模式")
     else:
         raise ValueError(f"Unknown engine: {engine.name!r}")
 

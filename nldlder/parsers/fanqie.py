@@ -485,13 +485,13 @@ class FanqieBrowserParser(FanqieHTMLParser):
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
 
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, no_delay=True)
+        html = engine.fetch_text(url=url, not_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, no_delay=True)
+        html = engine.fetch_text(url=url, not_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 
@@ -557,7 +557,7 @@ class FanqieOIAPIParser(BaseParser):
             "key": engine.options.key,
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
         data = json_data.get('data')
         if not data:
             raise NovelNotFoundError()
@@ -595,7 +595,7 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapters",
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
         chapter_items_volume = json_data.get('data')
         if not chapter_items_volume:
             raise ChapterNotFoundError("Chapter list not found")
@@ -638,7 +638,7 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapter",
             "type": "json"
         }
-        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, no_delay=True)
+        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
         data_list = response.get('data')
         if data_list is None:
             message = response.get('message',"")
@@ -677,13 +677,13 @@ class FanqieRequestsParser(FanqieHTMLParser):
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, no_delay=True)
+        html = engine.fetch_text(url=url, not_delay=True)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, no_delay=True)
+        html = engine.fetch_text(url=url, not_delay=True)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 

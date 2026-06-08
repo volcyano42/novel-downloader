@@ -21,12 +21,12 @@ class Engine(ABC):
     """网络层基类 — 三种实现共享的接口。"""
 
     @abstractmethod
-    def fetch_text(self, url: str, no_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, not_delay: bool = False, **kwargs) -> str:
         """GET/POST 请求返回纯文本。"""
         ...
 
     @abstractmethod
-    def fetch_json(self, url: str,no_delay: bool = False, **kwargs) -> dict:
+    def fetch_json(self, url: str, not_delay: bool = False, **kwargs) -> dict:
         """GET/POST 请求返回解析后的 JSON 对象。"""
         ...
 
@@ -96,15 +96,15 @@ class APIEngine(Engine):
             time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def fetch_text(self, url: str, post_data = None, no_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, post_data = None, not_delay: bool = False, **kwargs) -> str:
         _log.debug("API fetch_text: url=%s", url[:80])
-        response = self._request_post(url,post_data = post_data,no_delay = no_delay, **kwargs)
+        response = self._request_post(url, post_data = post_data, no_delay = not_delay, **kwargs)
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, post_data = None, no_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, post_data = None, not_delay: bool = False, **kwargs: Any) -> Any:
         _log.debug("API fetch_json: url=%s", url[:80])
-        response = self._request_post(url,post_data = post_data,no_delay = no_delay, **kwargs)
+        response = self._request_post(url, post_data = post_data, no_delay = not_delay, **kwargs)
         return response.json()
 
     def close(self) -> None:
@@ -173,7 +173,7 @@ class BrowserEngine(Engine):
     def new_page(self):
         return self._browser.new_tab()
 
-    def fetch_text(self, url: str, no_delay: bool = False, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, not_delay: bool = False, **kwargs: Any) -> str:
         _log.debug("fetch_text start: url=%s", url[:80])
         page = self.get_page()
 
@@ -200,7 +200,7 @@ class BrowserEngine(Engine):
             url=url,
         )
 
-    def fetch_json(self, url: str, no_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
         text = self.fetch_text(url=url)
         return json.loads(text)
 
@@ -266,7 +266,7 @@ class RequestsEngine(Engine):
 
     # ── 请求 ─────────────────────────────────────────────────────
 
-    def fetch_text(self, url: str, no_delay: bool = False, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, not_delay: bool = False, **kwargs: Any) -> str:
         _log.debug("Requests fetch_text: url=%s", url[:80])
         session = self._get_session()
         try:
@@ -283,7 +283,7 @@ class RequestsEngine(Engine):
         _log.debug("Requests fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, no_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
         session = self._get_session()
         try:
             response = session.get(
