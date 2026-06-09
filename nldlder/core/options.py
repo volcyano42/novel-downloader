@@ -12,7 +12,7 @@ class APIOptions:
     delay: Sequence[float] = (3, 5)
     timeout: float = 30
     retry_times: int = 3
-    batch_size: int = 3
+    batch_size: int = 1
     backoff_factor: float = 2
     key: str | None = None
     params: dict[str, str] | None = None
@@ -59,7 +59,7 @@ class Options:
         _log: LogOptions = field(default_factory=LogOptions)
         _exports: dict[str, Any] = field(default_factory=dict)
 
-        def set_mode(self, mode: Literal["api", "browser", "requests"]) -> "Options":
+        def set_mode(self, mode: Literal["api", "browser", "requests"] | str) -> "Options":
             self._mode = mode
             return self
 
