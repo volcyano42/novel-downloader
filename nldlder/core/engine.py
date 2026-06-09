@@ -67,7 +67,24 @@ class APIEngine(Engine):
                 self._session_local.session = session
         return self._session_local.session
 
-    def _request_post(self, url: str,post_data = None, no_delay: bool = False, **kwargs) -> requests.Response:
+    def _requests_get(self, url: str, not_delay: bool = False, **kwargs) -> requests.Response:
+        """执行 GET 请求，统一处理延时、编码和异常。"""
+        session = self._get_session()
+        try:
+            response = session.get(
+                url=url,
+                params=self.options.params or None,
+                timeout=self.options.timeout,
+            )
+        except requests.RequestException as e:
+            raise NetworkError(f"GET failed: {e}", url=url) from e
+
+        response.encoding = 'utf-8'
+        if not not_delay:
+            time.sleep(random.uniform(*self.options.delay))
+        return response
+
+    def _request_post(self, url: str, post_data = None, not_delay: bool = False, **kwargs) -> requests.Response:
         """执行 POST 请求，统一处理延时、编码和异常。"""
         if post_data is None:
             raise NetworkError(
@@ -92,19 +109,25 @@ class APIEngine(Engine):
             raise NetworkError(f"POST failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        if not no_delay:
+        if not not_delay:
             time.sleep(random.uniform(*self.options.delay))
         return response
 
     def fetch_text(self, url: str, post_data = None, not_delay: bool = False, **kwargs) -> str:
         _log.debug("API fetch_text: url=%s", url[:80])
-        response = self._request_post(url, post_data = post_data, no_delay = not_delay, **kwargs)
+        if post_data is not None:
+            response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
+        else:
+            response = self._requests_get(url, not_delay=not_delay, **kwargs)
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
     def fetch_json(self, url: str, post_data = None, not_delay: bool = False, **kwargs: Any) -> Any:
         _log.debug("API fetch_json: url=%s", url[:80])
-        response = self._request_post(url, post_data = post_data, no_delay = not_delay, **kwargs)
+        if post_data is not None:
+            response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
+        else:
+            response = self._requests_get(url, not_delay=not_delay, **kwargs)
         return response.json()
 
     def close(self) -> None:
