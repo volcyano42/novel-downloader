@@ -1,6 +1,5 @@
 platform: fanqie
 mode: api
-version: 1.0.0
 group: default
 log:
   enabled: true
