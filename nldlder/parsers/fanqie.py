@@ -437,7 +437,6 @@ class FanqieHTMLParser(BaseParser):
         # 赋值
         return chapter
 
-
 class FanqieBrowserParser(FanqieHTMLParser):
 
     @staticmethod
@@ -449,7 +448,7 @@ class FanqieBrowserParser(FanqieHTMLParser):
         page = engine.new_page()
 
         try:
-            page.get("https://fanqienovel.com/main/writer/login")
+            page.get("https://fanqienovel.com/")
 
             print("请在打开的浏览器窗口中完成登录（扫码/手机号）...")
             deadline = time.time() + 120
@@ -485,13 +484,13 @@ class FanqieBrowserParser(FanqieHTMLParser):
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
 
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, not_delay=True)
+        html = engine.fetch_text(url=url)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, not_delay=True)
+        html = engine.fetch_text(url=url)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 
@@ -505,7 +504,6 @@ class FanqieBrowserParser(FanqieHTMLParser):
             raise ChapterNotFoundError("chapter content not found")
         chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter = chapter_ref[0], **kwargs)
         return Chapters(chapter)
-
 
 class FanqieOIAPIParser(BaseParser):
 
@@ -557,7 +555,7 @@ class FanqieOIAPIParser(BaseParser):
             "key": engine.options.key,
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
         data = json_data.get('data')
         if not data:
             raise NovelNotFoundError()
@@ -595,7 +593,7 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapters",
             "type": "json"
         }
-        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
+        json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
         chapter_items_volume = json_data.get('data')
         if not chapter_items_volume:
             raise ChapterNotFoundError("Chapter list not found")
@@ -638,7 +636,7 @@ class FanqieOIAPIParser(BaseParser):
             "method": "chapter",
             "type": "json"
         }
-        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, not_delay=True)
+        response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data)
         data_list = response.get('data')
         if data_list is None:
             message = response.get('message',"")
@@ -657,6 +655,194 @@ class FanqieOIAPIParser(BaseParser):
             chapter.is_complete = True
         return Chapters(chapter_ref)
 
+class FanqieRainParser(BaseParser):
+
+    @staticmethod
+    def can_handle(identifier: str) -> bool:
+        pass
+
+    def login(self, engine, **kwargs) -> None:
+        raise FeatureNotSupportedError("login", f"Not Supported login by the Rain API")
+
+    @staticmethod
+    def _api_url(engine, **params) -> str:
+        key = engine.options.key
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        return f"https://v3.rain.ink/fanqie/?apikey={key}&{qs}"
+
+    @staticmethod
+    def parse_search_info(search_ref: str,
+                          engine,
+                          page: int = 0,
+                          **kwargs) -> tuple[SearchResult, ...] | None:
+        results: list[SearchResult] = []
+        offset = page * 10
+        url = FanqieRainParser._api_url(engine, type=1, keywords=search_ref, page=offset)
+        content = engine.fetch_json(url)
+
+        if content.get("code") != 0 and str(content.get("code")) != "0":
+            return None
+
+        books = None
+        if "search_tabs" in content:
+            for tab in content["search_tabs"]:
+                if tab.get("data") is not None:
+                    books = tab["data"]
+                    break
+        if books is None:
+            books = content.get("data")
+
+        if not books or not isinstance(books, list):
+            return None
+
+        for item in books:
+            if "book_data" in item and isinstance(item["book_data"], list) and len(item["book_data"]) > 0:
+                book = item["book_data"][0]
+            else:
+                book = item
+
+            book_id = book.get("book_id")
+            book_url = f"https://fanqienovel.com/page/{book_id}"
+            book_name = book.get("book_name")
+            author = book.get("author")
+            description = book.get("abstract")
+
+            results.append(SearchResult(
+                title=book_name,
+                author=author,
+                url=book_url,
+                description=description,
+            ))
+        return tuple(results) if results else None
+
+    @staticmethod
+    def parse_novel_info(novel_ref: str, engine, **kwargs) -> Novel:
+
+        novel_id = standardize_id(novel_ref)
+        url = FanqieRainParser._api_url(engine, type=2, bookid=novel_id)
+        json_data = engine.fetch_json(url)
+
+        if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
+            raise NovelNotFoundError()
+
+        data = json_data.get("data")
+        if not data:
+            raise NovelNotFoundError()
+
+        book_url = f"https://fanqienovel.com/page/{data.get('book_id')}"
+        name = data.get("book_name")
+
+        author = ""
+        author_info = data.get("author_info")
+        if author_info and isinstance(author_info, dict):
+            author = author_info.get("user_name", "")
+        if not author:
+            try:
+                original_authors = json.loads(data.get("original_authors", "[]"))
+                if original_authors:
+                    author = original_authors[0].get("AuthorName", "")
+            except (json.JSONDecodeError, IndexError):
+                pass
+
+        serial = int(data.get("serial_count", 0))
+        word_number = int(data.get("word_number", 0))
+
+        cover_url = data.get("book_name_url", "")
+        try:
+            book_cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
+        except Exception:
+            book_cover_data = b""
+        novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
+
+        tags: list[str] = []
+        status = data.get("status", "0")
+        tags.append("连载中" if status == "0" else "已完结")
+        try:
+            category_v2 = json.loads(data.get("category_v2", "[]"))
+            for cat in category_v2:
+                cat_name = cat.get("Name")
+                if cat_name:
+                    tags.append(cat_name)
+        except json.JSONDecodeError:
+            pass
+
+        novel = Novel(url=book_url,
+                      id=novel_id,
+                      title=name,
+                      serial=serial,
+                      author=author,
+                      count=word_number,
+                      description=data.get("abstract", ""),
+                      cover=novel_image,
+                      tags=tuple(tags),
+                      )
+        return novel
+
+    @staticmethod
+    def parse_chapter_list(novel_ref: Novel, engine, **kwargs) -> Chapters:
+
+        novel_id = standardize_id(novel_ref)
+        url = FanqieRainParser._api_url(engine, type=3, bookid=novel_id)
+        json_data = engine.fetch_json(url)
+
+        if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
+            raise ChapterNotFoundError("Chapter list not found")
+
+        item_data_list = json_data.get("data", {}).get("item_data_list")
+        if not item_data_list:
+            raise ChapterNotFoundError("Chapter list not found")
+
+        results: list[Chapter] = []
+        for idx, chapter_item in enumerate(item_data_list):
+            item_id = chapter_item.get("item_id")
+            chapter_url = f"https://fanqienovel.com/reader/{item_id}"
+            title: str = chapter_item.get("title", "")
+            volume_name = chapter_item.get("volume_name", "")
+            first_pass_time: float = chapter_item.get("first_pass_time", 0)
+            chapter = Chapter(
+                title=title,
+                url=chapter_url,
+                id=str(item_id),
+                order=idx,
+                index_url=novel_ref.url,
+                volume=volume_name,
+                time=first_pass_time,
+            )
+            results.append(chapter)
+        return Chapters(results)
+
+    @staticmethod
+    def parse_chapter_content(
+            chapter_ref: Sequence[Chapter],
+            engine,
+            **kwargs
+    ) -> Chapters:
+        """解析并填充content, count, is_complete(True)"""
+        novel_url = chapter_ref[0].index_url
+        chapter_ref = sorted(chapter_ref, key=lambda chapter: chapter.order)
+
+        for idx, chapter in enumerate(chapter_ref):
+            item_id = standardize_id(chapter)
+            url = FanqieRainParser._api_url(engine, type=4, itemid=item_id)
+            response = engine.fetch_json(url)
+
+            if response.get("code") != 0 and str(response.get("code")) != "0":
+                err_msg = response.get("data", {}).get("content", "Unknown error")
+                raise ChapterNotFoundError(message=f"Chapter content error: {err_msg}")
+
+            data = response.get("data", {})
+            title = data.get("title", "")
+            raw_content = data.get("content", "")
+            content = raw_content.strip()
+            content = content.replace("</p>", "\n\n")
+            if content.startswith(title):
+                content = content[len(title):].strip()
+
+            chapter.content = content
+            chapter.count = len(content)
+            chapter.is_complete = True
+
+        return Chapters(chapter_ref)
 
 class FanqieRequestsParser(FanqieHTMLParser):
 
@@ -677,13 +863,13 @@ class FanqieRequestsParser(FanqieHTMLParser):
 
     def parse_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, not_delay=True)
+        html = engine.fetch_text(url=url)
         novel = super().parse_novel_info(novel_ref=html, engine=engine, **kwargs)
         return novel
 
     def parse_chapter_list(self, novel_ref: Novel, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(novel_ref)}"
-        html = engine.fetch_text(url=url, not_delay=True)
+        html = engine.fetch_text(url=url)
         chapter_list = super().parse_chapter_list(novel_ref=html, engine=engine, **kwargs)
         return Chapters(chapter_list)
 
@@ -698,7 +884,7 @@ class FanqieRequestsParser(FanqieHTMLParser):
         chapter = super().parse_chapter_content(chapter_ref=html, engine=engine, chapter = chapter_ref[0], **kwargs)
         return Chapters(chapter)
 
-def use_parser(engine) -> type[FanqieRequestsParser] | type[FanqieBrowserParser] | type[FanqieOIAPIParser]:
+def use_parser(engine) -> type[FanqieRequestsParser] | type[FanqieBrowserParser] | type[FanqieOIAPIParser] | type[FanqieRainParser]:
     if engine.name == "browser":
         return FanqieBrowserParser
     elif engine.name == "requests":
@@ -707,9 +893,11 @@ def use_parser(engine) -> type[FanqieRequestsParser] | type[FanqieBrowserParser]
         api_name = engine.options.name
         if api_name is None or api_name == "oiapi":
             return FanqieOIAPIParser
+        if api_name == "rain":
+            return FanqieRainParser
         raise ValueError(
             f"Unsupported API backend: {api_name!r}. "
-            f"Only 'oiapi' is supported."
+            f"Only 'oiapi' and 'rain' are supported."
         )
     else:
         raise ValueError(f"Unknown engine: {engine.name}")
