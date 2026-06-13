@@ -747,7 +747,7 @@ class FanqieRainParser(BaseParser):
         serial = int(data.get("serial_count", 0))
         word_number = int(data.get("word_number", 0))
 
-        cover_url = data.get("book_name_url", "")
+        cover_url = data.get("thumb_url", "")
         try:
             book_cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
         except Exception:
