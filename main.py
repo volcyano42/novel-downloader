@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -5,19 +6,52 @@ from typing import Any
 
 import yaml
 
+# ═══════════════════════════════════════════════════════════════════
+# 日志初始化 — 必须在 import nldlder 之前，否则子模块的
+# get_logger() 会在 configure_logging() 之前触发，导致日志散落
+# ═══════════════════════════════════════════════════════════════════
+
+APP_DATA = Path(__file__).parent / "app_data"
+CONFIG_DIR = APP_DATA / "config"
+
+
+def load_main_config() -> dict:
+    """加载 app_data/config/config.yaml"""
+    path = CONFIG_DIR / "config.yaml"
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+# 通过 importlib 直接加载 logger 模块，绕过 nldlder/__init__.py
+# （__init__.py 导入子模块时会触发 get_logger，必须在配置之后）
+_logger_path = Path(__file__).parent / "nldlder" / "utils" / "logger.py"
+_spec = importlib.util.spec_from_file_location("nldlder.utils.logger", _logger_path)
+_logger_mod = importlib.util.module_from_spec(_spec)
+sys.modules["nldlder.utils.logger"] = _logger_mod
+_spec.loader.exec_module(_logger_mod)
+
+configure_logging = _logger_mod.configure_logging
+LogOptions = _logger_mod.LogOptions
+
+# 立即按用户配置初始化日志
+cfg = load_main_config()
+configure_logging(LogOptions(**cfg.get("log", {})))
+
+# ═══════════════════════════════════════════════════════════════════
+# 现在安全 import nldlder — 子模块的 get_logger 将使用已配置的 handler
+# ═══════════════════════════════════════════════════════════════════
+
 from nldlder import (
     NovelDownloader, Options, create_engine,
     get_exporter_options, get_exporters,
     get_parsers, search, login,
     Storage, AntiCrawlError,
-    configure_logging, LogOptions,
 )
 from nldlder.utils.logger import get_logger
 
 _log = get_logger("nldlder.main")
-
-APP_DATA = Path(__file__).parent / "app_data"
-CONFIG_DIR = APP_DATA / "config"
 
 # ═══════════════════════════════════════════════════════════════════
 # 交互工具 — questionary 优先，无 TTY 时降级为 input()
@@ -70,14 +104,6 @@ def _show_platforms() -> dict:
 # ═══════════════════════════════════════════════════════════════════
 # 配置加载
 # ═══════════════════════════════════════════════════════════════════
-
-def load_main_config() -> dict:
-    """加载 app_data/config/config.yaml"""
-    path = CONFIG_DIR / "config.yaml"
-    if path.exists():
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    return {}
 
 def load_site_config(platform: str = "fanqie") -> dict:
     """加载 app_data/config/sites/{platform}.yaml"""
@@ -473,6 +499,8 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
     # ── 1. 获取小说信息 ──────────────────────────────────────────
     print("正在获取小说信息...")
     novel = dl.fetch_novel(url)
+    _log.info("小说: %s — %s | %s章 | %s字",
+              novel.title, novel.author, novel.serial, novel.count or '未知')
     print(f"  书名：{novel.title}")
     print(f"  作者：{novel.author}")
     tags_str = "、".join(novel.tags) if novel.tags else ""
@@ -484,12 +512,14 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
     # ── 2. 获取章节列表 ──────────────────────────────────────────
     print("正在获取章节列表...")
     chapters = dl.fetch_chapter_list(novel)
+    _log.info("章节列表: %d章", len(chapters))
     print(f"  共 {len(chapters)} 章")
     novel.update_chapter(chapters)
 
     # ── 3. 合并本地已有进度 ──────────────────────────────────────
     local_chapters = storage.load_chapters(novel.id)
     if local_chapters:
+        _log.info("本地已有 %d章, 合并进度", len(local_chapters))
         novel.update_chapter(local_chapters)
 
     # ── 4. 筛选未下载章节 ────────────────────────────────────────
@@ -504,7 +534,6 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
             nonlocal saved_count
             paths = storage.save_chapter(novel, ch)
             saved_count += len(paths)
-            novel.update_chapter(ch)
         try:
             downloaded = dl.download_chapters(target, on_batch_complete=_on_batch)
             print(f"  下载完成: {len(downloaded)} 章（写入 {saved_count} 个文件）")
@@ -744,9 +773,6 @@ def main():
     group = cfg.get("group", "default")
     mode = cfg.get("mode", "browser")
     platform = cfg.get("platform", "fanqie")
-
-    # ── 日志初始化（必须在第一次 get_logger 之前） ──────────────
-    configure_logging(LogOptions(**cfg.get("log", {})))
 
     site_cfg = load_site_config(platform)
     format_configs = load_format_configs()
