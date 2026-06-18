@@ -1,7 +1,4 @@
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 from .engine import BrowserEngine
 from .exceptions import (
@@ -16,19 +13,6 @@ from ..parsers.base import BaseParser
 from ..utils.logger import get_logger
 
 _log = get_logger("nldlder.core.downloader")
-
-try:
-    from rich.console import Console
-    from rich.progress import (
-        Progress, BarColumn, TextColumn, TimeRemainingColumn,
-        TaskProgressColumn,
-    )
-    _RICH_AVAILABLE = True
-except ImportError:
-    _RICH_AVAILABLE = False
-
-threading_lock = threading.Lock()
-
 
 # ═══════════════════════════════════════════════════════════════════
 # 模块级工具函数（无状态，不依赖 NovelDownloader 实例）
@@ -153,80 +137,23 @@ class NovelDownloader:
     def download_chapters(self,
                           chapters: Sequence[Chapter] | Chapter,
                           *,
-                          parser=None,
-                          on_batch_complete: Callable[[Chapters], None] | None = None) -> Chapters:
-        """并发下载章节正文内容。
-
-        自动管理 DownloadProgress（仅内存更新，不持久化）。
+                          parser=None) -> Chapters:
+        """下载一批章节。
 
         Args:
             chapters: 要下载的章节列表。
             parser:   可选解析器实例。为 None 时自动从首个章节 URL 解析。
-            on_batch_complete: 每批下载完成后的回调。可用于增量持久化。
 
         Returns:
             已下载完成的章节（Chapters 对象）。
         """
         if not chapters:
             return Chapters()
-
         if isinstance(chapters, Chapter):
             chapters = [chapters]
-        # 每次调用重置进度追踪
-        self._progress = DownloadProgress(total_chapters=Chapters(chapters))
-
-        # 解析器
         if parser is None:
             parser = self._resolve_parser(chapters[0].index_url)
-
-        # 分批
-        batch_size = self._options.api.batch_size if self._options.mode == "api" else 1
-        groups = split_into_groups(list(chapters), batch_size)
-
-        # 进度条
-        total = len(chapters)
-        progress_ctx, task = self._create_progress(total)
-
-        all_downloaded: list[Chapter] = []
-
-        with progress_ctx as progress:
-            with ThreadPoolExecutor(max_workers=self._options.download.max_workers) as executor:
-                future_to_group = {
-                    executor.submit(
-                        NovelDownloader._get_chapter_content,
-                        group, parser, self._engine,
-                    ): group
-                    for group in groups
-                }
-                pending_futures = set(future_to_group.keys())
-
-                for future in as_completed(future_to_group):
-                    group = future_to_group[future]
-                    pending_futures.discard(future)
-                    try:
-                        result_chapters: Chapters = future.result()
-                    except ChapterNotFoundError as e:
-                        _log.warning("章节内容获取失败，跳过: %s", e)
-                        self._progress.add_failed(group)
-                        continue
-                    except AntiCrawlError:
-                        _log.error("触发反爬机制，中断下载")
-                        self._progress.add_failed(group)
-                        # 剩余未完成的批次也标记为失败
-                        for pf in pending_futures:
-                            pf.cancel()
-                            self._progress.add_failed(future_to_group[pf])
-                        raise
-
-                    all_downloaded.extend(result_chapters)
-                    self._progress.add_downloaded(result_chapters)
-                    if on_batch_complete:
-                        on_batch_complete(result_chapters)
-
-                    last_title = result_chapters[-1].title if result_chapters else "?"
-                    self._advance_progress(progress, task, len(result_chapters), last_title)
-
-        return Chapters(all_downloaded)
+        return parser.parse_chapter_content(chapter_ref=chapters, engine=self._engine)
 
     # ── 属性 ─────────────────────────────────────────────────────
 
@@ -256,33 +183,3 @@ class NovelDownloader:
                              parser,
                              engine) -> Chapters:
         return parser.parse_chapter_content(chapter_ref=chapters, engine=engine)
-
-    # ── Rich 进度条 ────────────────────────────────────────────
-
-    def _create_progress(self, total: int):
-        if _RICH_AVAILABLE:
-            progress = Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TextColumn("*"),
-                TimeRemainingColumn(),
-                transient=False,
-                console=Console(force_terminal=True),
-            )
-            task = progress.add_task(
-                "[cyan]Downloading...",
-                total=total,
-                completed=0,
-            )
-            return progress, task
-        return nullcontext(), None
-
-    def _advance_progress(self, progress, task, advance: int,
-                          last_title: str):
-        if _RICH_AVAILABLE and task is not None:
-            progress.update(
-                task,
-                advance=advance,
-                description=f"[cyan]Downloading...[/] — {last_title}",
-            )
