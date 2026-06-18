@@ -43,7 +43,7 @@ from .exporters.base import BaseExporter
 
 from .utils.logger import LogOptions, configure_logging
 
-__version__ = "2.1.2"
+__version__ = "2.2.0"
 
 
 __all__ = [
