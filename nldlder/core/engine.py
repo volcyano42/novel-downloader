@@ -74,7 +74,7 @@ class APIEngine(Engine):
             response = session.get(
                 url=url,
                 params=self.options.params or None,
-                timeout=self.options.timeout,
+                timeout=(10, self.options.timeout),
             )
         except requests.RequestException as e:
             raise NetworkError(f"GET failed: {e}", url=url) from e
@@ -103,7 +103,7 @@ class APIEngine(Engine):
             response = session.post(
                 url=url,
                 data=post_data,
-                timeout=self.options.timeout,
+                timeout=(10, self.options.timeout),
             )
         except requests.RequestException as e:
             raise NetworkError(f"POST failed: {e}", url=url) from e
@@ -113,7 +113,8 @@ class APIEngine(Engine):
             time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def fetch_text(self, url: str, post_data = None, not_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, not_delay: bool = False, **kwargs) -> str:
+        post_data = kwargs.get('post_data')
         _log.debug("API fetch_text: url=%s", url[:80])
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
@@ -122,7 +123,8 @@ class APIEngine(Engine):
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, post_data = None, not_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
+        post_data = kwargs.get('post_data')
         _log.debug("API fetch_json: url=%s", url[:80])
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
@@ -295,7 +297,7 @@ class RequestsEngine(Engine):
         try:
             response = session.get(
                 url,
-                timeout=self.options.timeout,
+                timeout=(10, self.options.timeout),
                 cookies=self.options.cookies,
             )
         except requests.RequestException as e:
@@ -311,7 +313,7 @@ class RequestsEngine(Engine):
         try:
             response = session.get(
                 url,
-                timeout=self.options.timeout,
+                timeout=(10, self.options.timeout),
                 cookies=self.options.cookies,
             )
         except requests.RequestException as e:
