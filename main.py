@@ -48,10 +48,27 @@ from nldlder import (
     get_exporter_options, get_exporters,
     get_parsers, search, login,
     Storage, AntiCrawlError,
+    split_into_groups, get_parser_for_url,
 )
+from nldlder.core.exceptions import ChapterNotFoundError
 from nldlder.utils.logger import get_logger
 
 _log = get_logger("nldlder.main")
+
+# Rich 进度条
+try:
+    from rich.console import Console
+    from rich.progress import (
+        Progress, BarColumn, TextColumn, TimeRemainingColumn,
+        TaskProgressColumn,
+    )
+    _RICH_AVAILABLE = True
+except ImportError:
+    _RICH_AVAILABLE = False
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 交互工具 — questionary 优先，无 TTY 时降级为 input()
@@ -482,6 +499,39 @@ def do_search(engine, dl, platform: str, page: int = 0, query: str | None = None
     return results[selected_idx].url
 
 
+# ═══════════════════════════════════════════════════════════════════
+# Rich 进度条
+# ═══════════════════════════════════════════════════════════════════
+
+def _create_progress(total: int):
+    if _RICH_AVAILABLE:
+        progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("*"),
+            TimeRemainingColumn(),
+            transient=False,
+            console=Console(force_terminal=True),
+        )
+        task = progress.add_task(
+            "[cyan]Downloading...",
+            total=total,
+            completed=0,
+        )
+        return progress, task
+    return nullcontext(), None
+
+
+def _advance_progress(progress, task, advance: int, last_title: str):
+    if _RICH_AVAILABLE and task is not None:
+        progress.update(
+            task,
+            advance=advance,
+            description=f"[cyan]Downloading...[/] — {last_title}",
+        )
+
+
 def do_download(engine, dl, url: str, group: str, format_configs: dict):
     """下载单个小说：获取信息 → 章节列表 → 合并本地 → 下载新章 → 导出。
 
@@ -529,24 +579,92 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         print("所有章节已下载完毕！")
     else:
         print(f"待下载: {len(target)} 章")
-        saved_count = 0
-        def _on_batch(ch):
-            nonlocal saved_count
-            paths = storage.save_chapter(novel, ch)
-            saved_count += len(paths)
+
+        # 分批
+        batch_size = dl._options.api.batch_size if dl._options.mode == "api" else 1
+        groups = split_into_groups(target, batch_size)
+        total = len(target)
+
+        _log.info(
+            "开始下载: %d章, %d批次, %d线程, batch_size=%d",
+            total, len(groups), dl._options.download.max_workers, batch_size,
+        )
+
+        # 进度追踪
+        done = 0
+        failed_chapters = 0
+        _done_at_last_log = 0
+        _log_interval = max(total // 10, 1)
+
+        # 进度条
+        progress_ctx, task = _create_progress(total)
+
+        # 解析器（同一解析器实例可复用）
+        parser_cls = get_parser_for_url(target[0].index_url)
+        parser = parser_cls() if parser_cls else None
+
         try:
-            downloaded = dl.download_chapters(target, on_batch_complete=_on_batch)
-            print(f"  下载完成: {len(downloaded)} 章（写入 {saved_count} 个文件）")
+            with progress_ctx as progress:
+                with ThreadPoolExecutor(max_workers=dl._options.download.max_workers) as executor:
+                    future_to_group = {
+                        executor.submit(
+                            dl.download_chapters, group, parser=parser,
+                        ): group
+                        for group in groups
+                    }
+                    pending_futures = set(future_to_group.keys())
+
+                    for future in as_completed(future_to_group):
+                        group = future_to_group[future]
+                        pending_futures.discard(future)
+                        try:
+                            result_chapters = future.result(timeout=120)
+                        except TimeoutError:
+                            _log.error("批次下载超时 (120s)，标记失败: %d章", len(group))
+                            failed_chapters += len(group)
+                            continue
+                        except ChapterNotFoundError as e:
+                            _log.warning("章节内容获取失败，跳过: %s", e)
+                            failed_chapters += len(group)
+                            continue
+                        except AntiCrawlError:
+                            _log.error("触发反爬机制，中断下载")
+                            failed_chapters += len(group)
+                            for pf in pending_futures:
+                                pf.cancel()
+                                failed_chapters += len(future_to_group[pf])
+                            raise
+
+                        # 增量持久化
+                        storage.save_chapter(novel, result_chapters)
+                        novel.update_chapter(result_chapters)
+                        done += len(result_chapters)
+
+                        # 进度栏
+                        last_title = result_chapters[-1].title if result_chapters else "?"
+                        _advance_progress(progress, task, len(result_chapters), last_title)
+
+                        # 周期日志
+                        if done - _done_at_last_log >= _log_interval:
+                            _done_at_last_log = done
+                            _log.info("下载进度: %d/%d章 (%d%%)", done, total, done * 100 // total)
+
         except AntiCrawlError:
-            if dl.progress.remaining:
-                print(f"⚠ 触发反爬，保存已下载部分（剩余 {dl.progress.remaining} 章未下载）...")
+            remaining = total - done - failed_chapters
+            if remaining > 0:
+                print(f"⚠ 触发反爬，保存已下载部分（剩余 {remaining} 章未下载）...")
             else:
                 print("⚠ 触发反爬，保存已下载部分...")
-            if dl.progress.downloaded_chapters:
-                paths = storage.save_chapter(novel, dl.progress.downloaded_chapters)
-                print(f"  已保存 {len(paths)} 章到磁盘")
-                novel.update_chapter(dl.progress.downloaded_chapters)
+            print(f"  已保存 {done} 章到磁盘")
             raise
+
+        # 完成统计
+        if failed_chapters:
+            _log.warning("下载结束: %d/%d章成功, %d章失败", done, total, failed_chapters)
+        else:
+            _log.info("下载完成: %d/%d章", done, total)
+
+        print(f"  下载完成: {done} 章")
 
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
