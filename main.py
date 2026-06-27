@@ -55,18 +55,25 @@ def load_main_config() -> dict:
 
 # 通过 importlib 直接加载 logger 模块，绕过 nldlder/__init__.py
 # （__init__.py 导入子模块时会触发 get_logger，必须在配置之后）
-_logger_path = Path(__file__).parent / "nldlder" / "utils" / "logger.py"
-_spec = importlib.util.spec_from_file_location("nldlder.utils.logger", _logger_path)
-_logger_mod = importlib.util.module_from_spec(_spec)
-sys.modules["nldlder.utils.logger"] = _logger_mod
-_spec.loader.exec_module(_logger_mod)
+# exe 环境下文件路径不可用，回退为 import_module。
+# import_module 会触发 nldlder.__init__ → get_logger → 自动初始化，
+# 后续使用 force=True 覆盖为用户配置。
+if getattr(sys, "frozen", False):
+    _logger_mod = importlib.import_module("nldlder.utils.logger")
+else:
+    _logger_path = Path(__file__).parent / "nldlder" / "utils" / "logger.py"
+    _spec = importlib.util.spec_from_file_location("nldlder.utils.logger", _logger_path)
+    _logger_mod = importlib.util.module_from_spec(_spec)
+    sys.modules["nldlder.utils.logger"] = _logger_mod
+    _spec.loader.exec_module(_logger_mod)
 
 configure_logging = _logger_mod.configure_logging
 LogOptions = _logger_mod.LogOptions
 
 # 立即按用户配置初始化日志
 cfg = load_main_config()
-configure_logging(LogOptions(**cfg.get("log", {})))
+configure_logging(LogOptions(**cfg.get("log", {})),
+                  force=getattr(sys, "frozen", False))
 
 from nldlder import (
     NovelDownloader, Options, create_engine,
