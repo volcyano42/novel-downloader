@@ -94,13 +94,12 @@ class TestParserNotFoundError:
 
 class TestFeatureNotSupportedError:
     def test_default(self):
-        e = FeatureNotSupportedError(feature="login")
-        assert "login" in str(e)
-        assert e.feature == "login"
+        e = FeatureNotSupportedError()
+        assert "Feature not supported" == str(e)
 
     def test_custom_message(self):
-        e = FeatureNotSupportedError(feature="export", message="不支持导出")
-        assert "不支持导出" in str(e)
+        e = FeatureNotSupportedError("不支持导出")
+        assert "不支持导出" == str(e)
 
 
 class TestStorageError:
