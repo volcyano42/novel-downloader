@@ -11,8 +11,37 @@ import yaml
 # get_logger() 会在 configure_logging() 之前触发，导致日志散落
 # ═══════════════════════════════════════════════════════════════════
 
-APP_DATA = Path(__file__).parent / "app_data"
+def _get_app_data_dir() -> Path:
+    """获取应用数据目录。
+
+    优先使用 ``NLD_APP_DATA`` 环境变量，未设置时回退到默认路径。
+    """
+    env_path = os.environ.get("NLD_APP_DATA")
+    if env_path:
+        return Path(env_path).resolve()
+    return Path(__file__).parent / "app_data"
+
+
+APP_DATA = _get_app_data_dir()
 CONFIG_DIR = APP_DATA / "config"
+
+
+def _resolve_paths(value):
+    """递归替换 YAML 中 `app_data/` 开头的路径为实际 APP_DATA 目录。
+
+    设置了 NLD_APP_DATA 环境变量时，`app_data/exports/...` → 实际路径/exports/...
+    未设置时保持原样（app_data 本身就是相对路径，行为不变）。
+    """
+    app_data_str = str(APP_DATA)
+    if isinstance(value, str):
+        if value.startswith("app_data/") or value.startswith("app_data\\"):
+            return value.replace("app_data", app_data_str, 1)
+        return value
+    if isinstance(value, list):
+        return [_resolve_paths(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _resolve_paths(v) for k, v in value.items()}
+    return value
 
 
 def load_main_config() -> dict:
@@ -20,7 +49,7 @@ def load_main_config() -> dict:
     path = CONFIG_DIR / "config.yaml"
     if path.exists():
         with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            return _resolve_paths(yaml.safe_load(f) or {})
     return {}
 
 
@@ -39,40 +68,25 @@ LogOptions = _logger_mod.LogOptions
 cfg = load_main_config()
 configure_logging(LogOptions(**cfg.get("log", {})))
 
-# ═══════════════════════════════════════════════════════════════════
-# 现在安全 import nldlder — 子模块的 get_logger 将使用已配置的 handler
-# ═══════════════════════════════════════════════════════════════════
-
 from nldlder import (
     NovelDownloader, Options, create_engine,
-    get_exporter_options, get_exporters,
-    get_parsers, search, login,
-    Storage, AntiCrawlError,
-    split_into_groups, get_parser_for_url,
+    get_fetchers, search, login,
+    LocalStorage, AntiCrawlError,
+    split_into_groups, get_fetcher_for_url, get_fetcher_for_id, Chapters,
 )
 from nldlder.core.exceptions import ChapterNotFoundError
 from nldlder.utils.logger import get_logger
 
 _log = get_logger("nldlder.main")
 
-# Rich 进度条
-try:
-    from rich.console import Console
-    from rich.progress import (
-        Progress, BarColumn, TextColumn, TimeRemainingColumn,
-        TaskProgressColumn,
-    )
-    _RICH_AVAILABLE = True
-except ImportError:
-    _RICH_AVAILABLE = False
+from rich.console import Console
+from rich.progress import (
+    Progress, BarColumn, TextColumn, TimeRemainingColumn,
+    TaskProgressColumn,
+)
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 交互工具 — questionary 优先，无 TTY 时降级为 input()
-# ═══════════════════════════════════════════════════════════════════
 
 def _select(message: str, choices: list[tuple[str, Any]]) -> Any:
     """显示选项菜单，返回选中的 value。
@@ -104,30 +118,26 @@ def _text_input(message: str) -> str | None:
         try:
             sys.stdin.reconfigure(encoding="utf-8")
             return input(f"{message} ").strip() or None
-        except Exception:
+        except (UnicodeDecodeError, OSError):
             return None
 
 
 def _show_platforms() -> dict:
     """返回 {label: name} 的可用平台字典。"""
-    parsers = get_parsers()
+    fetchers = get_fetchers()
     labels = {
         "fanqie": "番茄小说 (fanqie)",
         "qidian": "起点中文网 (qidian)",
     }
-    return {labels.get(k, k): k for k in parsers}
+    return {labels.get(k, k): k for k in fetchers}
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 配置加载
-# ═══════════════════════════════════════════════════════════════════
 
 def load_site_config(platform: str = "fanqie") -> dict:
     """加载 app_data/config/sites/{platform}.yaml"""
     path = CONFIG_DIR / "sites" / f"{platform}.yaml"
     if path.exists():
         with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            return _resolve_paths(yaml.safe_load(f) or {})
     return {}
 
 def load_format_configs() -> dict:
@@ -143,7 +153,7 @@ def load_format_configs() -> dict:
             with open(f, encoding="utf-8") as fp:
                 data = yaml.safe_load(fp) or {}
                 for name, cfg in data.items():
-                    formats[name] = cfg
+                    formats[name] = _resolve_paths(cfg)
     return formats
 
 def build_options(cfg: dict, site_cfg: dict) -> Options:
@@ -151,12 +161,6 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
     options = Options()
     mode = cfg.get("mode", "browser")
     options.set_mode(mode)
-
-    # 下载选项
-    download_cfg = cfg.get("download", {})
-    options.set_download_options(
-        max_workers=download_cfg.get("max_workers", 3)
-    )
 
     # 模式特定选项
     if mode == "browser":
@@ -190,7 +194,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
                     key=api_key,
                     timeout=provider.get("timeout", 30),
                     retry_times=provider.get("retry_times", 3),
-                    batch_size=provider.get("batch_size", 3),
+                    batch_size=provider.get("batch_size", 1),
                     backoff_factor=provider.get("backoff_factor", 2),
                     delay=tuple(provider.get("delay", [3, 5])),
                     params=provider.get("params", {}),
@@ -221,11 +225,9 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             delay=tuple(req_cfg.get("delay", [3, 5])),
         )
 
-    return options
+    options.set_storage_options(base_dir=APP_DATA / "storage")
 
-# ═══════════════════════════════════════════════════════════════════
-# 核心功能
-# ═══════════════════════════════════════════════════════════════════
+    return options
 
 def do_login(platform: str):
     """打开浏览器让用户登录指定平台。
@@ -279,11 +281,6 @@ def do_login(platform: str):
     finally:
         login_engine.close()
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 配置保存
-# ═══════════════════════════════════════════════════════════════════
-
 def save_main_config(cfg: dict):
     """保存配置到 app_data/config/config.yaml"""
     path = CONFIG_DIR / "config.yaml"
@@ -291,14 +288,12 @@ def save_main_config(cfg: dict):
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, allow_unicode=True)
 
-
 def save_site_config(platform: str, site_cfg: dict):
     """保存站点配置到 app_data/config/sites/{platform}.yaml"""
     path = CONFIG_DIR / "sites" / f"{platform}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(site_cfg, f, allow_unicode=True)
-
 
 def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
     """交互式设置菜单，修改配置并保存到 YAML 文件。
@@ -448,8 +443,7 @@ def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
 
     return platform
 
-
-def do_search(engine, dl, platform: str, page: int = 0, query: str | None = None) -> str | None:
+def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None) -> str | None:
     """搜索小说，选择后返回小说 URL（或 None 表示取消）。
 
     Args:
@@ -498,41 +492,83 @@ def do_search(engine, dl, platform: str, page: int = 0, query: str | None = None
 
     return results[selected_idx].url
 
-
-# ═══════════════════════════════════════════════════════════════════
-# Rich 进度条
-# ═══════════════════════════════════════════════════════════════════
-
 def _create_progress(total: int):
-    if _RICH_AVAILABLE:
-        progress = Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("*"),
-            TimeRemainingColumn(),
-            transient=False,
-            console=Console(force_terminal=True),
-        )
-        task = progress.add_task(
-            "[cyan]Downloading...",
-            total=total,
-            completed=0,
-        )
-        return progress, task
-    return nullcontext(), None
-
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("*"),
+        TimeRemainingColumn(),
+        transient=False,
+        console=Console(force_terminal=True),
+    )
+    task = progress.add_task(
+        "[cyan]Downloading...",
+        total=total,
+        completed=0,
+    )
+    return progress, task
 
 def _advance_progress(progress, task, advance: int, last_title: str):
-    if _RICH_AVAILABLE and task is not None:
-        progress.update(
-            task,
-            advance=advance,
-            description=f"[cyan]Downloading...[/] — {last_title}",
-        )
+    progress.update(
+        task,
+        advance=advance,
+        description=f"[cyan]Downloading...[/] — {last_title}",
+    )
 
 
-def do_download(engine, dl, url: str, group: str, format_configs: dict):
+def parse_order_string(s: str, total: int) -> set[int]:
+    """解析章节序号选择字符串，返回 1-indexed 的 order 集合。
+
+    格式:
+        5            → {5}
+        1-100        → {1,2,...,100}
+        50-          → {50,51,...,total}
+        -50          → {1,2,...,50}
+        1-10,20,30-40 → 并集
+        all          → 全部
+
+    Args:
+        s:     用户输入的序号字符串。
+        total: 章节总数，用于展开 "50-" 这种格式。
+    """
+    s = s.strip()
+    if not s or s == "all":
+        return set()
+
+    result: set[int] = set()
+    for part in s.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            left, right = part.split("-", 1)
+            left = left.strip()
+            right = right.strip()
+            start = int(left) if left else 1
+            end = int(right) if right else total
+            result.update(range(start, end + 1))
+        else:
+            result.add(int(part))
+
+    return result
+
+
+def _build_url_from_id(novel_id: str) -> str:
+    """根据 novel_id 匹配 Fetcher，构造小说页面 URL。"""
+    fc = get_fetcher_for_id(novel_id)
+    if fc is None:
+        raise ValueError(f"无法识别 novel_id: {novel_id}")
+    from nldlder.fetchers.fanqie import FanqieFetcher
+    from nldlder.fetchers.qidian import QidianFetcher
+    if fc is FanqieFetcher:
+        return f"https://fanqienovel.com/page/{novel_id}"
+    if fc is QidianFetcher:
+        return f"https://www.qidian.com/book/{novel_id}/"
+    raise ValueError(f"Fetcher {fc.__name__} 未配置 URL 模板")
+
+
+def do_download(engine, dl, url: str, group: str, format_configs: dict, max_workers: int = 3):
     """下载单个小说：获取信息 → 章节列表 → 合并本地 → 下载新章 → 导出。
 
     Args:
@@ -544,11 +580,11 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
     """
     _log.info("===== 开始下载: %s =====", url)
 
-    storage = Storage(APP_DATA / "storage")
+    storage = dl.storage
 
     # ── 1. 获取小说信息 ──────────────────────────────────────────
     print("正在获取小说信息...")
-    novel = dl.fetch_novel(url)
+    novel = dl.fetch_meta(url, skip_delay = True)
     _log.info("小说: %s — %s | %s章 | %s字",
               novel.title, novel.author, novel.serial, novel.count or '未知')
     print(f"  书名：{novel.title}")
@@ -561,7 +597,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
 
     # ── 2. 获取章节列表 ──────────────────────────────────────────
     print("正在获取章节列表...")
-    chapters = dl.fetch_chapter_list(novel)
+    chapters = dl.fetch_chapter_list(novel.url, skip_delay = True)
     _log.info("章节列表: %d章", len(chapters))
     print(f"  共 {len(chapters)} 章")
     novel.update_chapter(chapters)
@@ -572,8 +608,22 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         _log.info("本地已有 %d章, 合并进度", len(local_chapters))
         novel.update_chapter(local_chapters)
 
-    # ── 4. 筛选未下载章节 ────────────────────────────────────────
-    incomplete = novel.chapters.get_incompleted_chapters()
+    # ── 3.5 选择下载范围 ────────────────────────────────────────
+    total_chapters = len(novel.chapters)
+    print(f"\n共 {total_chapters} 章，请输入下载范围：")
+    print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
+    raw = _text_input("章节范围 (留空=全部/继续下载): ")
+    if raw and raw.strip() and raw.strip().lower() != "all":
+        selected_orders = parse_order_string(raw, total_chapters)
+        if selected_orders:
+            filtered = Chapters(
+                ch for ch in novel.chapters
+                if ch.order in selected_orders
+            )
+            print(f"  已选择 {len(filtered)} 章")
+            novel.update_chapter(filtered)
+
+    incomplete = novel.chapters.incompleted_chapters
     target = list(incomplete) if incomplete else []
     if not target:
         print("所有章节已下载完毕！")
@@ -587,7 +637,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
 
         _log.info(
             "开始下载: %d章, %d批次, %d线程, batch_size=%d",
-            total, len(groups), dl._options.download.max_workers, batch_size,
+            total, len(groups), max_workers, batch_size,
         )
 
         # 进度追踪
@@ -599,37 +649,37 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         # 进度条
         progress_ctx, task = _create_progress(total)
 
-        # 解析器（同一解析器实例可复用）
-        parser_cls = get_parser_for_url(target[0].index_url)
-        parser = parser_cls() if parser_cls else None
+        # 抓取器（同一实例可复用）
+        fetcher_cls = get_fetcher_for_url(target[0].index_url)
+        fetcher = fetcher_cls() if fetcher_cls else None
 
         try:
             with progress_ctx as progress:
-                with ThreadPoolExecutor(max_workers=dl._options.download.max_workers) as executor:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_group = {
                         executor.submit(
-                            dl.download_chapters, group, parser=parser,
-                        ): group
-                        for group in groups
+                            dl.resolve_chapters, batch, fetcher=fetcher,
+                        ): batch
+                        for batch in groups
                     }
                     pending_futures = set(future_to_group.keys())
 
                     for future in as_completed(future_to_group):
-                        group = future_to_group[future]
+                        batch = future_to_group[future]
                         pending_futures.discard(future)
                         try:
                             result_chapters = future.result(timeout=120)
                         except TimeoutError:
-                            _log.error("批次下载超时 (120s)，标记失败: %d章", len(group))
-                            failed_chapters += len(group)
+                            _log.error("批次下载超时 (120s)，标记失败: %d章", len(batch))
+                            failed_chapters += len(batch)
                             continue
                         except ChapterNotFoundError as e:
                             _log.warning("章节内容获取失败，跳过: %s", e)
-                            failed_chapters += len(group)
+                            failed_chapters += len(batch)
                             continue
                         except AntiCrawlError:
                             _log.error("触发反爬机制，中断下载")
-                            failed_chapters += len(group)
+                            failed_chapters += len(batch)
                             for pf in pending_futures:
                                 pf.cancel()
                                 failed_chapters += len(future_to_group[pf])
@@ -664,51 +714,39 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict):
         else:
             _log.info("下载完成: %d/%d章", done, total)
 
-        print(f"  下载完成: {done} 章")
+        # ── 统计输出 ──────────────────────────────────────────
+        incomplete = novel.chapters.incompleted_chapters
+        incomplete_count = len(incomplete) if incomplete else 0
+        success = done - failed_chapters
+
+        print(f"\n{'='*40}")
+        print(f"  下载总结")
+        print(f"{'='*40}")
+        print(f"  总计: {total} 章  |  成功: {success} 章  |  失败: {failed_chapters} 章")
+        if incomplete_count:
+            print(f"  不完整: {incomplete_count} 章 (待下次更新)")
+            print(f"  {'─'*36}")
+            for ch in incomplete:
+                short = ch.title[:6] + ("…" if len(ch.title) > 6 else "")
+                print(f"    [{ch.order:>4}] {short}")
+        else:
+            print(f"  全部章节下载完成 ✓")
+        print(f"{'='*40}")
 
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
-    _do_export(novel, group, format_configs)
+    _do_export(novel, dl)
     print(f"  导出完成 → app_data/exports/{group}/")
 
 
-def _do_export(novel, group: str, format_configs: dict):
-    """执行导出。
-
-    从配置中读取 output_path 模板，填充 {group} 和 {file_name_template}，
-    """
-    registered = get_exporters()
-    export_options_map = get_exporter_options()
-
-    for fmt, fmt_cfg in format_configs.items():
-        exporter_cls = registered.get(fmt)
-        if exporter_cls is None:
-            _log.debug("跳过未知格式: %s", fmt)
-            continue
-
-        opt_cls = export_options_map.get(fmt)
-        if opt_cls is None:
-            _log.debug("跳过无选项类的格式: %s", fmt)
-            continue
-
-        raw_path = fmt_cfg.get("output_path", "")
-        raw_path = raw_path.replace("{group}", group)
-
-        extra = {}
-        for k in ("encoding", "file_name_template", "extension",
-                   "css_style", "include_toc"):
-            if k in fmt_cfg:
-                extra[k] = fmt_cfg[k]
-
-        export_opts = opt_cls(output_path=raw_path, **extra)
-        exporter = exporter_cls(options=export_opts, novel=novel)
-        exporter.export(novel.chapters)
-        _log.info("Exported: %s → %s", fmt, raw_path)
+def _do_export(novel, dl):
+    """执行导出（通过 NovelDownloader.export）。"""
+    dl.export(novel)
 
 
-def do_re_export(group: str, format_configs: dict):
+def do_re_export(group: str, format_configs: dict, dl):
     """重新导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
-    storage = Storage(APP_DATA / "storage")
+    storage = dl.storage
     storage_dir = APP_DATA / "storage"
 
     if not storage_dir.exists():
@@ -745,13 +783,14 @@ def do_re_export(group: str, format_configs: dict):
 
     targets = novels_info if selection == "all" else [selection]
 
-    for novel in targets:
-        print(f"\n── 正在导出: {novel.title} ──")
+    total = len(targets)
+    for i, novel in enumerate(targets, 1):
+        print(f"\n── [{i}/{total}] 正在导出: {novel.title} ──")
         try:
             local = storage.load_chapters(novel.id)
             if local:
                 novel.update_chapter(local)
-            _do_export(novel, group, format_configs)
+            _do_export(novel, dl)
             print(f"  导出完成 → app_data/exports/{group}/")
         except Exception as e:
             print(f"✗ 导出失败: {e}")
@@ -762,7 +801,7 @@ def do_re_export(group: str, format_configs: dict):
 
 def do_delete():
     """扫描 storage 目录，选择小说并彻底删除本地数据。"""
-    storage = Storage(APP_DATA / "storage")
+    storage = LocalStorage(APP_DATA / "storage")
     storage_dir = APP_DATA / "storage"
 
     if not storage_dir.exists():
@@ -815,8 +854,9 @@ def do_delete():
         print("已取消")
         return
 
-    for novel in targets:
-        print(f"正在删除: {novel.title}...", end=" ")
+    total = len(targets)
+    for i, novel in enumerate(targets, 1):
+        print(f"[{i}/{total}] 正在删除: {novel.title}...", end=" ")
         try:
             storage.delete_novel(novel.id)
             print("✓")
@@ -827,9 +867,9 @@ def do_delete():
     print(f"\n删除完成！共删除 {len(targets)} 部小说")
 
 
-def do_update(engine, dl, group: str, format_configs: dict):
+def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3):
     """扫描 storage 目录下所有已下载小说，支持单选/全选更新。"""
-    storage = Storage(APP_DATA / "storage")
+    storage = dl.storage
     storage_dir = APP_DATA / "storage"
 
     if not storage_dir.exists():
@@ -866,10 +906,12 @@ def do_update(engine, dl, group: str, format_configs: dict):
 
     targets = novels_info if selection == "all" else [selection]
 
-    for novel in targets:
-        print(f"\n── 正在更新: {novel.title} ──")
+    total = len(targets)
+    for i, novel in enumerate(targets, 1):
+        print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
         try:
-            do_download(engine, dl, novel.url, group, format_configs)
+            mw = cfg.get("download", {}).get("max_workers", 3)
+            do_download(engine, dl, novel.url, group, format_configs, max_workers=mw)
         except AntiCrawlError:
             print("⚠ 触发反爬，更新中断（已保存部分进度）")
         except Exception as e:
@@ -895,21 +937,31 @@ def main():
     site_cfg = load_site_config(platform)
     format_configs = load_format_configs()
 
-    # ── 格式快速开关 ──────────────────────────────────────────
-    # config.yaml 中 formats 列表不为空且非 "all" 时，
-    # 只保留列表中声明的导出格式
-    enabled_formats = cfg.get("formats")
-    if enabled_formats and enabled_formats != "all":
-        format_configs = {
-            name: cfg
-            for name, cfg in format_configs.items()
-            if name in enabled_formats
-        }
-
     if not format_configs:
         _log.warning("未找到导出格式配置（app_data/config/formats/ 为空）")
 
     options = build_options(cfg, site_cfg)
+
+    # 注册导出格式到 options，由 cfg.formats 控制 enabled
+    enabled_formats = cfg.get("formats")
+    from nldlder.utils.registry import register_export_options
+    _opt_cls_map = register_export_options()
+    for fmt, fmt_cfg in format_configs.items():
+        opt_cls = _opt_cls_map.get(fmt)
+        if opt_cls is None:
+            continue
+        raw_path = fmt_cfg.get("output_path", "").replace("{group}", group)
+        extra = {k: fmt_cfg[k] for k in (
+            "encoding", "file_name_template",
+            "css_style", "include_toc",
+        ) if k in fmt_cfg}
+        opt = opt_cls(output_path=raw_path, **extra)
+        options.set_export_options(opt)
+
+    # cfg.formats 控制哪些格式启用（None/"all" = 全部启用）
+    if enabled_formats and enabled_formats != "all":
+        for fmt in format_configs:
+            options.enable_format(fmt, enabled=(fmt in enabled_formats))
 
     # 延迟初始化引擎和下载器（首次使用时创建）
     print(f"平台: {platform}  |  模式: {mode}  |  分组: {group}")
@@ -988,17 +1040,26 @@ def main():
                 print("✓ 设置已应用")
 
             elif action == "download":
-                raw = _text_input("请输入小说链接或搜索关键词：")
+                raw = _text_input("请输入小说链接、novel_id 或搜索关键词：")
                 if not raw or not raw.strip():
                     continue
 
                 raw = raw.strip()
-                e, d = _get_engine_dl()
 
-                # 检测是否为 URL
+                # URL 或 novel_id → 直接下载
                 if raw.startswith("http://") or raw.startswith("https://"):
+                    url = raw
+                elif get_fetcher_for_id(raw):
+                    print(f"  识别为 novel_id，平台: {get_fetcher_for_id(raw).__name__}")
+                    url = _build_url_from_id(raw)
+                else:
+                    url = None
+
+                if url:
                     try:
-                        do_download(e, d, raw, group, format_configs)
+                        e, d = _get_engine_dl()
+                        mw = cfg.get("download", {}).get("max_workers", 3)
+                        do_download(e, d, url, group, format_configs, max_workers=mw)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
@@ -1007,6 +1068,7 @@ def main():
                 else:
                     # 作为搜索关键词
                     try:
+                        e, d = _get_engine_dl()
                         url = do_search(e, d, platform, query=raw)
                     except Exception as e:
                         print(f"✗ 搜索失败: {e}")
@@ -1014,7 +1076,8 @@ def main():
                     if url:
                         try:
                             e, d = _get_engine_dl()
-                            do_download(e, d, url, group, format_configs)
+                            mw = cfg.get("download", {}).get("max_workers", 3)
+                            do_download(e, d, url, group, format_configs, max_workers=mw)
                         except AntiCrawlError:
                             print("⚠ 触发反爬，下载中断（已保存部分进度）")
                         except Exception as e:
@@ -1023,7 +1086,8 @@ def main():
 
             elif action == "re_export":
                 try:
-                    do_re_export(group, format_configs)
+                    e, d = _get_engine_dl()
+                    do_re_export(group, format_configs, d)
                 except Exception as e:
                     print(f"✗ 导出失败: {e}")
                     _log.exception("re_export failed")
@@ -1038,7 +1102,8 @@ def main():
             elif action == "update":
                 try:
                     e, d = _get_engine_dl()
-                    do_update(e, d, group, format_configs)
+                    mw = cfg.get("download", {}).get("max_workers", 3)
+                    do_update(e, d, group, format_configs, max_workers=mw)
                 except Exception as e:
                     print(f"✗ 更新失败: {e}")
                     _log.exception("update failed")
