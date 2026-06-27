@@ -13,7 +13,7 @@ from nldlder import (
     search,
     login,
     split_into_groups,
-    Storage,
+    LocalStorage,
     AntiCrawlError,
     Novel,
     Chapter,
