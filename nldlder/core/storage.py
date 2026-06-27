@@ -4,15 +4,16 @@ import shutil
 from pathlib import Path
 from typing import Sequence
 
+from .options import StorageOptions
 from ..models.novel import Novel, Chapter, Chapters
 from ..utils.logger import get_logger
 
 _log = get_logger("nldlder.core.storage")
 
 
-class Storage:
+class LocalStorage:
     """
-    小说数据存储管理器。
+    本地小说数据存储管理器。
 
     维护以下目录结构：
         base_dir/
@@ -38,8 +39,11 @@ class Storage:
         }
     """
 
-    def __init__(self, base_dir: Path | str):
-        self.base_dir = Path(base_dir)
+    def __init__(self, config: StorageOptions | Path | str):
+        if isinstance(config, StorageOptions):
+            self.base_dir = Path(config.base_dir)
+        else:
+            self.base_dir = Path(config)
 
     def get_novel_dir(self, novel_id: str) -> Path:
         """返回某部小说的存储目录。"""
@@ -68,7 +72,6 @@ class Storage:
             "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
-            "rating": novel.rating,
             "cover": novel.cover.to_json() if novel.cover else None,
         }
         path.write_text(
@@ -152,7 +155,7 @@ class Storage:
                 )
                 if chapter is not None:
                     chapters.append(chapter)
-            except Exception:
+            except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的章节文件: %s", file)
 
         return Chapters(chapters)
