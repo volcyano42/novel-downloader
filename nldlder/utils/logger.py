@@ -18,16 +18,17 @@ _initialized: bool = False
 _log_file: Path | None = None
 
 
-def configure_logging(opts: LogOptions) -> None:
+def configure_logging(opts: LogOptions, force: bool = False) -> None:
     """设置全局日志配置。
 
     线程安全，多次调用只有第一次生效。
+    ``force=True`` 可强制覆盖已初始化配置（exe 环境需要）。
     推荐在任何 get_logger / import nldlder 子模块之前调用。
     """
     global _initialized, _log_file
 
     with _init_lock:
-        if _initialized:
+        if _initialized and not force:
             return
         _initialized = True
 
