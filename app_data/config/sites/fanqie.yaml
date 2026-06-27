@@ -1,11 +1,11 @@
 api:
   oiapi:
-    backoff_factor: 2
-    batch_size: 3
+    backoff_factor: 2     # 重试退避系数
+    batch_size: 3          # 每批请求的章节数，不适合设太高的值
     delay:
     - 3
-    - 5
-    enabled: true
+    - 5                   # 请求间隔（秒），随机取 [min, max]
+    enabled: true         # 是否启用
     key: ''
     params: {}
     retry_times: 3
@@ -13,35 +13,37 @@ api:
   rain:
     backoff_factor: 2
     delay:
-    - 1
-    - 2
+    - 0
+    - 0.5                   # rain API 延迟较短，适合高并发
     enabled: false
-    key: ''
+    key: ""
     params: {}
     retry_times: 3
     timeout: 30
+
 browser:
   backoff_factor: 2
   browser_type: chromium
   delay:
   - 3
-  - 5
-  headless: false
+  - 5                   # 操作间隔（秒）
+  headless: false        # 是否无头模式（false = 可见浏览器窗口）
   retry_times: 3
   timeout: 30
   user_data_dir: app_data/browser/Chromium/User Data
   viewport:
     height: 720
     width: 1280
+
 requests:
   backoff_factor: 2
-  cookies: {}
+  cookies: {}           # 可以从浏览器登录后自动填充
   delay:
   - 3
   - 5
   headers:
     User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
       like Gecko) Chrome/148.0.0.0 Safari/537.36
-  proxies: {}
+  proxies: {}           # 代理设置
   retry_times: 3
   timeout: 30
