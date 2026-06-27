@@ -3,24 +3,19 @@ import io as _io
 import re
 import uuid
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Literal
 
-from .base import BaseExporter
+from .base import BASEExporter
 from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel, Illustration
 from ..utils.logger import get_logger
 
 _log = get_logger("nldlder.exporters.epub")
 
-# 尝试导入 Pillow（可选）
-try:
-    from PIL import Image
-    _HAS_PILLOW = True
-except ImportError:
-    _HAS_PILLOW = False
+from PIL import Image
 
 # 压缩算法常量
 _COMPRESSION_MAP: dict[str, int] = {
@@ -44,20 +39,17 @@ class EPUBExportOptions(ExportOptions):
     css_style: str = "default"
     file_name_template: str = "{name}"
     include_toc: bool = True
-    extension: str = ".epub"
     encoding: str = "utf-8"
 
-    # ── 压缩选项 ────────────────────────────────────────────────
     compression: Literal["deflate", "bzip2", "stored"] = "deflate"
     compresslevel: int = 9
 
-    # ── 图片优化选项 ────────────────────────────────────────────
     optimize_images: bool = True
     jpeg_quality: int = 85
-    max_image_width: int = 0  # 0 = 不缩放
+    max_image_width: int = 0
 
 
-class EPUBExporter(BaseExporter):
+class EPUBExporter(BASEExporter):
     """EPUB 导出器：生成带插图和目录的 .epub 电子书。
 
     用法与 TXT 导出器一致——初始化时传入小说和选项，
@@ -66,14 +58,11 @@ class EPUBExporter(BaseExporter):
     嵌入正文；``insert`` 为 ``None`` 时插图追加到章末。
     """
 
-    # ── 文件头魔数 → 扩展名 ────────────────────────────────────────
-    _MAGIC_EXT: list[tuple[bytes, str]] = [
-        (b'\xff\xd8\xff', '.jpg'),
-        (b'\x89PNG\r\n\x1a\n', '.png'),
-        (b'GIF8', '.gif'),
-        (b'RIFF', '.webp'),       # 额外校验 WEBP 在 12 字节内
-        (b'<?xml', '.svg'),
-    ]
+    # ── 格式名 → 扩展名 ────────────────────────────────────────────
+    _FORMAT_EXT: dict[str, str] = {
+        "jpeg": ".jpg", "png": ".png", "gif": ".gif",
+        "webp": ".webp", "heic": ".heic", "tiff": ".tiff",
+    }
 
     # ── 扩展名 → MIME 类型 ─────────────────────────────────────────
     _MIME_MAP: dict[str, str] = {
@@ -82,6 +71,9 @@ class EPUBExporter(BaseExporter):
         '.png':  'image/png',
         '.gif':  'image/gif',
         '.webp': 'image/webp',
+        '.bmp':  'image/bmp',
+        '.tiff': 'image/tiff',
+        '.heic': 'image/heic',
         '.svg':  'image/svg+xml',
     }
 
@@ -137,19 +129,8 @@ img {
 }
 """
 
-    # ═══════════════════════════════════════════════════════════════
-    # 初始化
-    # ═══════════════════════════════════════════════════════════════
-
-    def __init__(self, options: EPUBExportOptions, novel: Novel):
-        encoding = getattr(options, "encoding", "utf-8")
-        extension = getattr(options, "extension", ".epub")
-        file_name_template = getattr(options, "file_name_template", "{title}")
-
-        self.novel = novel
+    def __init__(self, options: EPUBExportOptions):
         self.options = options
-        self.extension = extension
-        self.encoding = encoding
 
         # 章节累积（按 order 排序，支持多次 export 调用）
         self._ordered_chapter_dict: dict[int, Chapter] = {}
@@ -160,27 +141,15 @@ img {
         self._img_name_seen: set[str] = set()
         self._img_counter: int = 0
 
-        # output_path 此时只替换了 {group}，还需替换 {file_name_template} + 扩展名
-        raw = str(getattr(options, "output_path", "."))
-        raw = raw.replace("{file_name_template}", file_name_template)
-        ext = extension if extension != "default" else ".epub"
-        raw = raw + ext
-        # 再用 novel 变量格式化
-        variables = {
-            "name": novel.title if novel else "",
-            "title": novel.title if novel else "",
-            "author": novel.author if novel else "",
-            "novel_id": novel.id if novel else "",
-            "total_chapters": novel.serial if novel else 0,
-            "date": datetime.now().strftime("%Y%m%d"),
-        }
-        self.file_path = Path(raw.format(**variables))
+        # 文件路径在首次 export() 时从 novel 构建
+        self._file_path: Path | None = None
+        self._export_meta: Novel | None = None
 
     # ═══════════════════════════════════════════════════════════════
     # 公开 API
     # ═══════════════════════════════════════════════════════════════
 
-    def export(self, chapters: Chapter | Iterable[Chapter], **kwargs):
+    def export(self, chapters: Chapter | Iterable[Chapter], meta: Novel, **kwargs):
         """导出章节（首次调用创建 EPUB，后续调用全量重建）。
 
         参数 *chapters* 可以是单个 ``Chapter`` 或可迭代对象。
@@ -201,16 +170,41 @@ img {
         if not ordered:
             return
 
-        # 全量重建 EPUB
-        self._build_epub(ordered)
+        # 设置本次 export 的 novel 临时引用，_build_epub 链使用
+        self._export_meta = meta
+        try:
+            if self._file_path is None:
+                self._file_path = self._build_file_path(meta)
+            # 全量重建 EPUB
+            self._build_epub(ordered)
+        finally:
+            self._export_meta = None
 
     # ═══════════════════════════════════════════════════════════════
     # EPUB 构建
     # ═══════════════════════════════════════════════════════════════
 
+    def _build_file_path(self, novel: Novel) -> Path:
+        """从 options + novel 构建输出文件路径。"""
+        encoding = getattr(self.options, "encoding", "utf-8")
+        file_name_template = getattr(self.options, "file_name_template", "{title}")
+
+        raw = str(getattr(self.options, "output_path", "."))
+        raw = raw.replace("{file_name_template}", file_name_template)
+        raw = raw + ".epub"
+        variables = {
+            "name": novel.title if novel else "",
+            "title": novel.title if novel else "",
+            "author": novel.author if novel else "",
+            "novel_id": novel.id if novel else "",
+            "total_chapters": novel.serial if novel else 0,
+            "date": datetime.now().strftime("%Y%m%d"),
+        }
+        return Path(raw.format(**variables))
+
     def _build_epub(self, chapters: list[Chapter]):
         """从头构建完整 EPUB ZIP 文件。"""
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 重置图片注册表
         self._img_list.clear()
@@ -222,8 +216,8 @@ img {
 
         # 预注册封面图片（如果存在）
         cover_img_name: str | None = None
-        if self.novel and self.novel.cover:
-            cover_img_name = self._register_image(self.novel.cover)
+        if self._export_meta and self._export_meta.cover:
+            cover_img_name = self._register_image(self._export_meta.cover)
 
         # 生成所有章节 XHTML（内部会注册内联图片）
         chapter_xhtml: list[tuple[Chapter, int, str]] = []
@@ -242,7 +236,7 @@ img {
         )
 
         # 写入 ZIP
-        with zipfile.ZipFile(self.file_path, "w", comp_algo, **comp_kw) as zf:
+        with zipfile.ZipFile(self._file_path, "w", comp_algo, **comp_kw) as zf:
             # ① mimetype — 必须首文件、不压缩
             info = zipfile.ZipInfo("mimetype")
             info.compress_type = zipfile.ZIP_STORED
@@ -291,7 +285,17 @@ img {
         """注册图片并返回其在 EPUB 内的文件名（自动去重）。
 
         基于 ``raw_data`` 的 hash 去重：相同字节的图片只存一份。
+        HEIC/HEIF 自动转为 JPEG。
         """
+        # HEIC 图片 EPUB 不兼容，自动转为 JPEG
+        if img.image_format in ("heic", "heif"):
+            img = img.convert("jpeg")
+            if img.image_format in ("heic", "heif"):
+                _log.warning(
+                    "HEIC 转 JPEG 失败（pillow-heif 未安装？），"
+                    "封面将保留为 HEIC 格式"
+                )
+
         h = hash(img.raw_data)
         if h in self._img_hash_seen:
             for registered_img, fname in self._img_list:
@@ -305,7 +309,8 @@ img {
         else:
             base = f"img_{self._img_counter:04d}"
 
-        ext = self._guess_ext(img.raw_data)
+        fmt = img.image_format or "jpeg"
+        ext = self._FORMAT_EXT.get(fmt, ".jpg")
         filename = f"{base}{ext}"
 
         suffix = 1
@@ -325,16 +330,7 @@ img {
                 return fname
         return None
 
-    def _guess_ext(self, data: bytes) -> str:
-        for magic, ext in self._MAGIC_EXT:
-            if data.startswith(magic):
-                if magic == b'RIFF' and b'WEBP' not in data[:12]:
-                    continue
-                return ext
-        return '.jpg'
-
-    @staticmethod
-    def _mime_type(filename: str) -> str:
+    def _mime_type(self, filename: str) -> str:
         _, dot, ext = filename.rpartition('.')
         return EPUBExporter._MIME_MAP.get(f".{ext.lower()}", "image/jpeg")
 
@@ -343,13 +339,16 @@ img {
     # ═══════════════════════════════════════════════════════════════
 
     def _optimize_image(self, data: bytes) -> bytes:
-        """使用 Pillow 优化图片（JPEG 重压缩、PNG 优化、缩放）。
-
-        当 Pillow 不可用或出错时返回原始数据。
-        """
-        if not _HAS_PILLOW:
+        """使用 Pillow 优化图片（JPEG 重压缩、PNG 优化、缩放）。"""
+        if self.options.jpeg_quality == 0:
             return data
         try:
+            # HEIC/HEIF 支持
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass
             img = Image.open(_io.BytesIO(data))
             fmt = img.format or "JPEG"
 
@@ -404,7 +403,7 @@ img {
         )
 
     def _render_cover_xhtml(self, cover_img_name: str) -> str:
-        title = html_lib.escape(self.novel.title) if self.novel else ""
+        title = html_lib.escape(self._export_meta.title) if self._export_meta else ""
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE html>\n'
@@ -446,7 +445,7 @@ img {
                 update_time = _time.strftime(
                     "%Y-%m-%d %H:%M", _time.localtime(chapter.time)
                 )
-            except Exception:
+            except (OSError, ValueError, OverflowError):
                 update_time = str(chapter.time)
         word_count = chapter.count or 0
 
@@ -584,7 +583,7 @@ img {
         cover_img_name: str | None,
         novel_uuid: str,
     ) -> str:
-        novel = self.novel
+        novel = self._export_meta
         title = html_lib.escape(novel.title) if novel else "Unknown"
         author = html_lib.escape(novel.author) if novel else "Unknown"
         desc = html_lib.escape(novel.description or "") if novel else ""
@@ -662,14 +661,14 @@ img {
         self,
         chapter_xhtml: list[tuple[Chapter, int, str]],
     ) -> str:
-        novel = self.novel
+        novel = self._export_meta
         title = html_lib.escape(novel.title) if novel else "Unknown"
 
         items: list[str] = []
         has_cover = bool(
-            self.novel
-            and self.novel.cover
-            and self._img_filename(self.novel.cover)
+            self._export_meta
+            and self._export_meta.cover
+            and self._img_filename(self._export_meta.cover)
         )
 
         if has_cover:
