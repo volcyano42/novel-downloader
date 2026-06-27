@@ -223,7 +223,7 @@ class TestChapters:
         assert chapters.total == 3
 
     def test_chapters_property_returns_tuple(self, chapters: Chapters):
-        assert isinstance(chapters.chapters, tuple)
+        assert isinstance(chapters._chapters, tuple)
 
 
 # ═══════════════════════════════════════════════════════════════

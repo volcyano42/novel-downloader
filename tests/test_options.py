@@ -77,15 +77,13 @@ class TestExportOptions:
         assert str(o.output_path) == "/tmp/out"
         assert o.enabled is True
         assert o.file_name_template == "{name}"
-        assert o.extension == "default"
 
     def test_custom(self):
         o = ExportOptions(
             output_path="/tmp/{title}.txt", enabled=False,
-            file_name_template="{title}", extension=".txt",
+            file_name_template="{title}",
         )
         assert o.enabled is False
-        assert o.extension == ".txt"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -139,11 +137,10 @@ class TestOptions:
         assert isinstance(o.log, LogOptions)
 
     def test_set_export_options(self):
-        opt = ExportOptions(output_path="/tmp/out", extension=".txt")
+        opt = ExportOptions(output_path="/tmp/out")
         opt.format = "txt"  # set_export_options 需要 format 属性
         o = Options().set_export_options(opt)
         assert "txt" in o.exports
-        assert o.exports["txt"].extension == ".txt"
 
     def test_enable_format(self):
         opt = ExportOptions(output_path="/tmp/out")

@@ -63,6 +63,6 @@ def novel(chapters: Chapters, illustration: Illustration) -> Novel:
         title="测试小说", url="https://example.com/novel",
         id="novel123", serial=3, author="测试作者",
         description="这是一本测试小说。",
-        tags=["奇幻", "测试"], count=100000, rating=4.5,
+        tags=["奇幻", "测试"], count=100000,
         cover=illustration, chapters=chapters,
     )

@@ -8,7 +8,7 @@ from nldlder.core.exceptions import (
     NovelNotFoundError,
     ChapterNotFoundError,
     ParseError,
-    ParserNotFoundError,
+    FetcherNotFoundError,
     FeatureNotSupportedError,
     StorageError,
     AntiCrawlError,
@@ -82,13 +82,13 @@ class TestParseError:
         assert e.detail == "HTML 结构异常"
 
 
-class TestParserNotFoundError:
+class TestFetcherNotFoundError:
     def test_default(self):
-        e = ParserNotFoundError()
-        assert str(e) == "Parser not found"
+        e = FetcherNotFoundError()
+        assert str(e) == "Fetcher not found"
 
     def test_custom(self):
-        e = ParserNotFoundError("未找到解析器")
+        e = FetcherNotFoundError("未找到解析器")
         assert "未找到解析器" in str(e)
 
 
