@@ -4,7 +4,7 @@
 - 网络层: ``NetworkError``
 - 认证层: ``AuthenticationError``
 - 资源层: ``NovelNotFoundError``, ``ChapterNotFoundError``
-- 解析层: ``ParseError``, ``ParserNotFoundError``
+- 解析层: ``ParseError``, ``FetcherNotFoundError``
 - 功能层: ``FeatureNotSupportedError``
 - 存储层: ``StorageError``
 - 反爬层: ``AntiCrawlError``
@@ -63,19 +63,18 @@ class ParseError(NovelDownloaderError):
         super().__init__(msg)
 
 
-class ParserNotFoundError(NovelDownloaderError):
-    """未找到解析器。"""
+class FetcherNotFoundError(NovelDownloaderError):
+    """未找到抓取器。"""
 
-    def __init__(self, message: str = "Parser not found"):
+    def __init__(self, message: str = "Fetcher not found"):
         super().__init__(message)
 
 
 class FeatureNotSupportedError(NovelDownloaderError):
     """请求的功能在当前模式下不被支持。"""
 
-    def __init__(self, feature: str, message: str = "Feature not supported"):
-        self.feature = feature
-        super().__init__(f"{message}: {feature}")
+    def __init__(self, message: str = "Feature not supported"):
+        super().__init__(message)
 
 
 class StorageError(NovelDownloaderError):
@@ -90,7 +89,7 @@ class StorageError(NovelDownloaderError):
 class AntiCrawlError(NovelDownloaderError):
     """触发了目标网站的反爬虫策略。
 
-    包括：请求频率过高被限流、IP 被封、需要验证码/人机验证等场景。
+    包括：请求频率过高被限流、IP 被封、需要验证码/人机验证才能继续等场景。
     收到此异常时应考虑增大延迟、切换 IP 或等待冷却。
     """
 
