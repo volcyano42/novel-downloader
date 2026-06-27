@@ -242,7 +242,7 @@ class TestNovel:
         n = Novel.loads(
             title="加载测试", url="http://x.com/n", id="n1", serial=2,
             author="作者", description="简介",
-            tags=["tag1"], count=500, rating=3.5,
+            tags=["tag1"], count=500,
         )
         assert n.title == "加载测试"
         assert n.tags == ["tag1"]
@@ -253,7 +253,7 @@ class TestNovel:
         n = Novel.loads(
             title="有封面", url="u", id="n2", serial=1,
             author="a", description="d",
-            tags=[], count=0, rating=0,
+            tags=[], count=0,
             cover={"raw_data": b64, "alt": "封面图"},
         )
         assert n.cover is not None
@@ -263,7 +263,7 @@ class TestNovel:
         n = Novel.loads(
             title="有章节", url="u", id="n3", serial=2,
             author="a", description="d",
-            tags=[], count=0, rating=0,
+            tags=[], count=0,
             chapters=[
                 {"id": "c1", "url": "u1", "index_url": "u", "title": "章1", "order": 1},
                 {"id": "c2", "url": "u2", "index_url": "u", "title": "章2", "order": 2},
@@ -275,7 +275,7 @@ class TestNovel:
         n = Novel.loads(
             title="无封面", url="u", id="n4", serial=1,
             author="a", description="d",
-            tags=[], count=0, rating=0, cover=None,
+            tags=[], count=0, cover=None,
         )
         assert n.cover is None
 

@@ -7,7 +7,7 @@ from nldlder import (
     NovelDownloader,
     Options,
     create_engine,
-    get_parsers,
+    get_fetchers,
     get_exporters,
     get_exporter_options,
     search,
@@ -25,5 +25,5 @@ from nldlder import (
 import nldlder
 
 print("✓ nldlder v" + nldlder.__version__ + " 导入成功")
-print("  注册的解析器: " + str(list(get_parsers().keys())))
+print("  注册的 Fetcher: " + str(list(get_fetchers().keys())))
 print("  注册的导出器: " + str(list(get_exporters().keys())))

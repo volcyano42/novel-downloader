@@ -142,6 +142,11 @@ class Chapters(Sequence):
     def __repr__(self) -> str:
         return f"Chapters({len(self)} items)"
 
+    @property
+    def chapters(self) -> tuple[Chapter, ...]:
+        """返回内部章节元组（兼容旧代码）。"""
+        return self._chapters
+
     def __iter__(self) -> Iterator[Chapter]:
         return iter(self._chapters)
 
