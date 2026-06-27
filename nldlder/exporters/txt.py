@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from .base import BaseExporter
+from .base import BASEExporter
 from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel
 
@@ -13,42 +13,26 @@ from ..models.novel import Chapter, Novel
 class TXTExportOptions(ExportOptions):
     format = "txt"
     encoding: str = "utf-8"
-    extension = ".txt"
 
 
-class TXTExporter(BaseExporter):
-    """TXT 导出器：初始化时传入小说和选项，可多次调用 export 追加章节"""
+class TXTExporter(BASEExporter):
+    """TXT 导出器：初始化时传入选项，可多次调用 export 追加章节"""
 
-    def __init__(self, options: TXTExportOptions, novel: Novel):
-        encoding = getattr(options, "encoding", "utf-8")
-        extension = getattr(options, "extension", ".txt")
-        file_name_template = getattr(options, "file_name_template", "{title}")
-
-        self.novel = novel
+    def __init__(self, options: TXTExportOptions):
         self.options = options
-        self.extension = extension
-        self.encoding = encoding
+        self.encoding = getattr(options, "encoding", "utf-8")
+        self._file_name_template = getattr(options, "file_name_template", "{title}")
 
-        self._ordered_chapter_dict = {}
-
-        # output_path 此时只替换了 {group}，还需替换 {file_name_template} + 扩展名
-        raw = str(getattr(options, "output_path"))
-        raw = raw.replace("{file_name_template}", file_name_template)
-        ext = extension if extension != "default" else ".txt"
-        raw = raw + ext
-        # 再用 novel 变量格式化
-        variables = {
-            "title": novel.title if novel else "",
-            "author": novel.author if novel else "",
-            "novel_id": novel.id if novel else "",
-            "total_chapters": novel.serial if novel else 0,
-            "date": datetime.now().strftime("%Y%m%d"),
-        }
-        self.file_path = Path(raw.format(**variables))
+        self._ordered_chapter_dict: dict[int, Chapter] = {}
         self._header_written = False
+        self._file_path: Path | None = None
 
-    def export(self, chapters: Chapter | Iterable[Chapter], **kwargs):
+    def export(self, chapters: Chapter | Iterable[Chapter], meta: Novel, **kwargs):
         """导出章节（首次调用自动写入信息头）"""
+
+        # 首次调用时从 meta 构建文件路径
+        if self._file_path is None:
+            self._file_path = self._build_file_path(meta)
 
         # 标准化章节列表
         if isinstance(chapters, Chapter):
@@ -61,24 +45,41 @@ class TXTExporter(BaseExporter):
         chapters.sort(key=lambda x: x.order)
         chapters = [x for x in chapters if x.content is not None]
 
-        self._write_header()
+        self._write_header(meta)
         # 写入章节内容
-        with open(self.file_path, "a", encoding=self.encoding) as f:
+        with open(self._file_path, "a", encoding=self.encoding) as f:
             text = ""
             for chapter in chapters:
                 text += self._format_chapter(chapter)
             f.write(text)
 
-    def _write_header(self):
-        """生成小说信息头部并创建/覆盖文件"""
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.file_path, "w", encoding=self.encoding) as f:
-            f.write(self._generate_info_text())
+    def _build_file_path(self, novel: Novel) -> Path:
+        """从 options + novel 构建输出文件路径。"""
+        raw = str(getattr(self.options, "output_path", ""))
+        raw = raw.replace("{file_name_template}", self._file_name_template)
+        ext = ".txt"
+        raw = raw + ext
+        variables = {
+            "title": novel.title if novel else "",
+            "author": novel.author if novel else "",
+            "novel_id": novel.id if novel else "",
+            "total_chapters": novel.serial if novel else 0,
+            "date": datetime.now().strftime("%Y%m%d"),
+        }
+        return Path(raw.format(**variables))
 
-    def _generate_info_text(self) -> str:
-        if not self.novel:
+    def _write_header(self, novel: Novel):
+        """生成小说信息头部并创建/覆盖文件"""
+        if self._header_written:
+            return
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._file_path, "w", encoding=self.encoding) as f:
+            f.write(self._generate_info_text(novel))
+        self._header_written = True
+
+    def _generate_info_text(self, novel: Novel) -> str:
+        if not novel:
             return ""
-        novel = self.novel
         return (
             f"小说名：{novel.title}\n"
             f"作者：{novel.author}\n"
@@ -98,6 +99,6 @@ class TXTExporter(BaseExporter):
         return (
             f"{chapter.title}\n\n"
             f"更新字数：{chapter.count}\n"
-            f"更新时间：{time.strftime('%Y-%m-%d %H:%M', time.localtime(chapter.time))}\n\n"
+            f"更新时间：{time.strftime('%Y-%m-%d %H:%M', time.localtime(chapter.time)) if chapter.time else '未知'}\n\n"
             f"{content}\n\n"
         )
