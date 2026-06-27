@@ -1,28 +1,15 @@
 from .core.downloader import (
     NovelDownloader,
-    DownloadProgress,
-    get_parser_for_url,
-    get_parsers,
+    get_fetcher_for_url,
+    get_fetcher_for_id,
+    get_fetchers,
     get_exporters,
     get_exporter_options,
     split_into_groups,
     search,
     login,
 )
-
 from .core.engine import create_engine
-
-from .core.options import (
-    Options,
-    APIOptions,
-    BrowserOptions,
-    RequestsOptions,
-    DownloadOptions,
-    ExportOptions,
-)
-
-from .core.storage import Storage
-
 from .core.exceptions import (
     NovelDownloaderError,
     NetworkError,
@@ -30,28 +17,34 @@ from .core.exceptions import (
     NovelNotFoundError,
     ChapterNotFoundError,
     ParseError,
-    ParserNotFoundError,
+    FetcherNotFoundError,
     FeatureNotSupportedError,
     StorageError,
     AntiCrawlError,
 )
-
+from .core.options import (
+    Options,
+    APIOptions,
+    BrowserOptions,
+    RequestsOptions,
+    StorageOptions,
+    ExportOptions,
+)
+from .core.storage import LocalStorage
+from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
-
-from .parsers.base import BaseParser
-from .exporters.base import BaseExporter
-
+from .fetchers.base import BaseFetcher
 from .utils.logger import LogOptions, configure_logging
 
-__version__ = "2.2.0"
+__version__ = "3.0.0"
 
 
 __all__ = [
     "NovelDownloader",
-    "DownloadProgress",
     "create_engine",
-    "get_parser_for_url",
-    "get_parsers",
+    "get_fetcher_for_url",
+    "get_fetcher_for_id",
+    "get_fetchers",
     "get_exporters",
     "get_exporter_options",
     "split_into_groups",
@@ -61,16 +54,16 @@ __all__ = [
     "APIOptions",
     "BrowserOptions",
     "RequestsOptions",
-    "DownloadOptions",
+    "StorageOptions",
     "ExportOptions",
-    "Storage",
+    "LocalStorage",
     "NovelDownloaderError",
     "NetworkError",
     "AuthenticationError",
     "NovelNotFoundError",
     "ChapterNotFoundError",
     "ParseError",
-    "ParserNotFoundError",
+    "FetcherNotFoundError",
     "FeatureNotSupportedError",
     "StorageError",
     "AntiCrawlError",
@@ -79,8 +72,8 @@ __all__ = [
     "Chapters",
     "Illustration",
     "SearchResult",
-    "BaseParser",
-    "BaseExporter",
+    "BaseFetcher",
+    "BASEExporter",
     "LogOptions",
     "configure_logging",
 ]
