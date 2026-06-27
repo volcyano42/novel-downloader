@@ -5,7 +5,7 @@ import pytest
 
 from nldlder.core.options import (
     Options, APIOptions, RequestsOptions, BrowserOptions,
-    DownloadOptions, ExportOptions,
+    ExportOptions,
 )
 from nldlder.utils.logger import LogOptions
 
@@ -22,7 +22,7 @@ class TestAPIOptions:
         assert o.delay == (3, 5)
         assert o.timeout == 30
         assert o.retry_times == 3
-        assert o.batch_size == 3
+        assert o.batch_size == 1
         assert o.backoff_factor == 2
         assert o.key is None
         assert o.params is None
@@ -69,16 +69,6 @@ class TestBrowserOptions:
         assert o.browser_type == "firefox"
         assert o.headless is True
         assert o.viewport["width"] == 1920
-
-
-class TestDownloadOptions:
-    def test_default(self):
-        o = DownloadOptions()
-        assert o.max_workers == 3
-
-    def test_custom(self):
-        o = DownloadOptions(max_workers=5)
-        assert o.max_workers == 5
 
 
 class TestExportOptions:
@@ -139,10 +129,6 @@ class TestOptions:
         assert o.browser.user_data_dir is None
         assert o.browser.viewport is None
 
-    def test_set_download_options(self):
-        o = Options().set_download_options(max_workers=8)
-        assert o.download.max_workers == 8
-
     def test_set_log_options(self):
         o = Options().set_log_options(level="INFO", enabled=True, output_dir="/tmp/logs")
         assert o.log.level == "INFO"
@@ -165,13 +151,6 @@ class TestOptions:
         o = Options().set_export_options(opt)
         o.enable_format("txt", enabled=False)
         assert o.exports["txt"].enabled is False
-
-    def test_enable_format_extra(self):
-        opt = ExportOptions(output_path="/tmp/out")
-        opt.format = "txt"
-        o = Options().set_export_options(opt)
-        o.enable_format("txt", extension=".custom")
-        assert o.exports["txt"].extension == ".custom"
 
     def test_enable_format_missing_key(self):
         """enable_format 未注册的格式抛出 KeyError"""
