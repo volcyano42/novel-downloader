@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import random
 import threading
@@ -20,20 +21,38 @@ _log = get_logger("nldlder.core.engine")
 class Engine(ABC):
     """网络层基类 — 三种实现共享的接口。"""
 
+    _instances: dict[str, Engine] = {}
+    _registry_keys: list[str] = []
+
+    def __init__(self) -> None:
+        mode = getattr(self, "name", type(self).__name__)
+        idx = sum(1 for k in Engine._registry_keys if k.startswith(f"{mode}_")) + 1
+        key = f"{mode}_{idx}"
+        Engine._instances[key] = self
+        Engine._registry_keys.append(key)
+        self._registry_key = key
+
+    @classmethod
+    def get_engine(cls, engine_id: str) -> Engine | None:
+        return cls._instances.get(engine_id, None)
+
     @abstractmethod
-    def fetch_text(self, url: str, not_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         """GET/POST 请求返回纯文本。"""
         ...
 
     @abstractmethod
-    def fetch_json(self, url: str, not_delay: bool = False, **kwargs) -> dict:
+    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict:
         """GET/POST 请求返回解析后的 JSON 对象。"""
         ...
 
-    @abstractmethod
     def close(self) -> None:
         """释放所有资源（进程退出前调用）。"""
-        ...
+        Engine._instances.pop(self._registry_key, None)
+        try:
+            Engine._registry_keys.remove(self._registry_key)
+        except ValueError:
+            pass
 
     def close_current(self) -> None:
         """关闭当前线程持有的资源（page / session），线程退出前调用。"""
@@ -42,6 +61,7 @@ class Engine(ABC):
 class APIEngine(Engine):
 
     def __init__(self, options: APIOptions) -> None:
+        super().__init__()
         self.name = "API"
         self.options = options
         self._session_local = threading.local()
@@ -67,7 +87,7 @@ class APIEngine(Engine):
                 self._session_local.session = session
         return self._session_local.session
 
-    def _requests_get(self, url: str, not_delay: bool = False, **kwargs) -> requests.Response:
+    def _requests_get(self, url: str, skip_delay: bool = False, **kwargs) -> requests.Response:
         """执行 GET 请求，统一处理延时、编码和异常。"""
         session = self._get_session()
         try:
@@ -80,11 +100,11 @@ class APIEngine(Engine):
             raise NetworkError(f"GET failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        if not not_delay:
+        if not skip_delay:
             time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def _request_post(self, url: str, post_data = None, not_delay: bool = False, **kwargs) -> requests.Response:
+    def _request_post(self, url: str, post_data: dict[str, Any] | None = None, skip_delay: bool = False, **kwargs) -> requests.Response:
         """执行 POST 请求，统一处理延时、编码和异常。"""
         if post_data is None:
             raise NetworkError(
@@ -109,34 +129,35 @@ class APIEngine(Engine):
             raise NetworkError(f"POST failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        if not not_delay:
+        if not skip_delay:
             time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def fetch_text(self, url: str, not_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         post_data = kwargs.get('post_data')
         _log.debug("API fetch_text: url=%s", url[:80])
         if post_data is not None:
-            response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
+            response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
         else:
-            response = self._requests_get(url, not_delay=not_delay, **kwargs)
+            response = self._requests_get(url, skip_delay=skip_delay, **kwargs)
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
         post_data = kwargs.get('post_data')
         _log.debug("API fetch_json: url=%s", url[:80])
         if post_data is not None:
-            response = self._request_post(url, post_data=post_data, not_delay=not_delay, **kwargs)
+            response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
         else:
-            response = self._requests_get(url, not_delay=not_delay, **kwargs)
+            response = self._requests_get(url, skip_delay=skip_delay, **kwargs)
         return response.json()
 
     def close(self) -> None:
+        super().close()
         for session in self._sessions:
             try:
                 session.close()
-            except Exception:
+            except (OSError, AttributeError):
                 pass
 
     def close_current(self) -> None:
@@ -146,7 +167,7 @@ class APIEngine(Engine):
         _log.debug("APIEngine.close_current: closing session")
         try:
             session.close()
-        except Exception:
+        except (OSError, AttributeError):
             pass
         with self._session_lock:
             if session in self._sessions:
@@ -155,6 +176,7 @@ class APIEngine(Engine):
 
 class BrowserEngine(Engine):
     def __init__(self, options: BrowserOptions) -> None:
+        super().__init__()
         self.name = "browser"
         self.options = options
         self._thread_local = threading.local()
@@ -198,7 +220,7 @@ class BrowserEngine(Engine):
     def new_page(self):
         return self._browser.new_tab()
 
-    def fetch_text(self, url: str, not_delay: bool = False, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         _log.debug("fetch_text start: url=%s", url[:80])
         page = self.get_page()
 
@@ -210,7 +232,8 @@ class BrowserEngine(Engine):
                 )
             try:
                 page.get(url, timeout=self.options.timeout)
-                time.sleep(random.uniform(*self.options.delay))
+                if not skip_delay:
+                    time.sleep(random.uniform(*self.options.delay))
                 _log.debug("fetch_text ok: len=%s url=%s", len(page.html), url[:80])
                 return page.html
             except Exception as e:
@@ -225,15 +248,16 @@ class BrowserEngine(Engine):
             url=url,
         )
 
-    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
-        text = self.fetch_text(url=url)
+    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
+        text = self.fetch_text(url=url, skip_delay=skip_delay, **kwargs)
         return json.loads(text)
 
     def close(self) -> None:
+        super().close()
         for page in self._page_pool:
             try:
                 page.close()
-            except Exception:
+            except (OSError, AttributeError):
                 pass
 
     def close_current(self) -> None:
@@ -243,7 +267,7 @@ class BrowserEngine(Engine):
         _log.debug("BrowserEngine.close_current: closing page")
         try:
             page.close()
-        except Exception:
+        except (OSError, AttributeError):
             pass
         with self._page_lock:
             if page in self._page_pool:
@@ -258,6 +282,7 @@ class BrowserEngine(Engine):
 class RequestsEngine(Engine):
 
     def __init__(self, options: RequestsOptions) -> None:
+        super().__init__()
         self.name = "requests"
         self.options = options
         self._session_local = threading.local()
@@ -291,7 +316,7 @@ class RequestsEngine(Engine):
 
     # ── 请求 ─────────────────────────────────────────────────────
 
-    def fetch_text(self, url: str, not_delay: bool = False, **kwargs: Any) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         _log.debug("Requests fetch_text: url=%s", url[:80])
         session = self._get_session()
         try:
@@ -304,11 +329,12 @@ class RequestsEngine(Engine):
             raise NetworkError(f"GET failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        time.sleep(random.uniform(*self.options.delay))
+        if not skip_delay:
+            time.sleep(random.uniform(*self.options.delay))
         _log.debug("Requests fetch_text ok: len=%s", len(response.text))
         return response.text
 
-    def fetch_json(self, url: str, not_delay: bool = False, **kwargs: Any) -> Any:
+    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
         session = self._get_session()
         try:
             response = session.get(
@@ -320,10 +346,12 @@ class RequestsEngine(Engine):
             raise NetworkError(f"GET failed: {e}", url=url) from e
 
         response.encoding = 'utf-8'
-        time.sleep(random.uniform(*self.options.delay))
+        if not skip_delay:
+            time.sleep(random.uniform(*self.options.delay))
         return response.json()
 
     def close(self) -> None:
+        super().close()
         for session in self._sessions:
             try:
                 session.close()
