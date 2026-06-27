@@ -141,10 +141,13 @@ class IMGExporter(BASEExporter):
 
     @staticmethod
     def _convert_format(raw_data: bytes, target_fmt: str) -> bytes:
-        """将图片 bytes 转为目标格式（jpeg / png / webp / tiff）。"""
+        """将图片 bytes 转为目标格式（jpeg / png / webp / tiff / heic）。"""
         try:
             from io import BytesIO
             from PIL import Image
+
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
 
             src = Image.open(BytesIO(raw_data))
             buf = BytesIO()
