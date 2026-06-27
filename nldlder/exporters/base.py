@@ -1,18 +1,17 @@
 from abc import ABC, abstractmethod
 from typing import Iterable
 
+from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel
 
 
-class BaseExporter(ABC):
+class BASEExporter(ABC):
 
-    @abstractmethod
-    def __init__(self,options, novel: Novel):
+    def __init__(self, options: ExportOptions):
         self.options = options
-        self.novel = novel
 
     @abstractmethod
-    def export(self, chapters: Chapter | Iterable[Chapter], **kwargs):
+    def export(self, chapters: Chapter | Iterable[Chapter], meta: Novel, **kwargs):
         """导出"""
         pass
 
