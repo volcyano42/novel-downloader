@@ -191,14 +191,14 @@ class TestChapters:
         assert chapters.get_chapter_by_order(999) is None
 
     def test_get_incompleted_chapters(self, chapters: Chapters):
-        inc = chapters.get_incompleted_chapters()
+        inc = chapters.incompleted_chapters
         assert inc is not None
         assert len(inc) == 1
         assert inc[0].id == "ch3"
 
     def test_get_incompleted_chapters_all_complete(self, chapter_1, chapter_2):
         c = Chapters([chapter_1, chapter_2])
-        assert c.get_incompleted_chapters() is None
+        assert c.incompleted_chapters is None
 
     def test_merge_with_chapter(self, chapters: Chapters):
         new_ch = Chapter(id="ch4", url="u4", index_url="i", title="第四章", order=4)
