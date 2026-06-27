@@ -128,20 +128,20 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML
 
 ## 插件
 
-此项目预留了两个接口：parser、exporters，它们将会被 `registry.py`发现并自动注册，让您轻松满足您的需求。
+此项目预留了两个接口：fetchers(抓取器)、exporters(导出器)，它们将会被 `registry.py`发现并自动注册，让您轻松满足您的需求。
 
 ### 新解析器
 
-1. 在 `nldlder/parsers/` 下新建文件 `{name}.py`
-2. 继承 `BaseParser`，实现抽象方法
-3. 必须有`{Name}Parser`
+1. 在 `nldlder/fetchers/` 下新建文件 `{name}.py`
+2. 继承 `BaseFetcher`，实现抽象方法
+3. 必须有`{Name}Fetcher`
 4. 在 `app_data/config/sites/` 下添加对应的 `{name}.yaml`,模板可以复制其他的
 
 ### 新导出器
 
 1. 在 `nldlder/exporters/` 下新建文件
 2. 继承 `ExportOptions`，设置 `format` 字段，定义 `{Name}ExportOptions` 数据类
-3. 定义 `{Name}Exporter` 类（继承 `BaseExporter`，实现 `export()`）
+3. 定义 `{Name}Exporter` 类（继承 `BASEExporter`，实现 `export()`）
 4. 在 `app_data/config/formats/` 下添加对应的 `{name}.yaml`，模板可以使用
 
 ### 新引擎
