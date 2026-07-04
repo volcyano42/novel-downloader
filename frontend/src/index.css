@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 20% 99%;
+    --foreground: 217 33% 17%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 14% 46%;
+    --muted: 215 14% 92%;
+    --muted-foreground: 215 14% 46%;
+    --border: 0 0% 100% / 0.2;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 20% 85%;
+    --primary: 243 75% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 10% 50%;
+    --muted: 215 10% 20%;
+    --muted-foreground: 215 10% 55%;
+    --border: 0 0% 100% / 0.1;
+    --ring: 243 75% 65%;
+  }
+
+  * { @apply border-slate-200 dark:border-white/10; }
+  body {
+    @apply bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-200;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-200 dark:bg-slate-700 rounded-full; }
+}
