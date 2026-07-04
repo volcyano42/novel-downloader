@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from .options import StorageOptions
 from ..models.novel import Novel, Chapter, Chapters
@@ -89,6 +89,26 @@ class LocalStorage:
         novel = Novel.loads(**json_data)
         return novel
 
+    def iter_metas(self) -> Iterator[Novel]:
+        """遍历所有小说的元数据，一次 yield 一个 Novel。
+
+        ponytail: load_chapters 全量加载 N 章 → N 个对象同时驻留。
+        此方法逐个 yield，O(1) 内存。
+        """
+        if not self.base_dir.exists():
+            return
+        for entry in sorted(self.base_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            meta_path = entry / "meta.json"
+            if not meta_path.exists():
+                continue
+            try:
+                json_data = json.loads(meta_path.read_text(encoding="utf-8"))
+                yield Novel.loads(**json_data)
+            except (json.JSONDecodeError, KeyError, TypeError):
+                _log.warning("跳过损坏的 meta 文件: %s", meta_path)
+
     # ---------- 章节操作 ----------
     def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list[Path]:
         """保存章节内容（立即写入磁盘），返回写入的文件路径列表。"""
@@ -138,27 +158,32 @@ class LocalStorage:
 
     def load_chapters(self, novel_id: str) -> Chapters:
         """读取所有章节的保存数据，元数据或 chapters 目录不存在时返回空 Chapters。"""
+        return Chapters(self.iter_chapters(novel_id))
+
+    def iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+        """逐章 yield，O(1) 内存。
+
+        meta 只加载一次取 index_url。损坏的章节文件跳过并 warning。
+        """
         path = self.get_chapters_path(novel_id=novel_id)
         if not path.exists():
-            return Chapters()
+            return
 
         novel = self.load_meta(novel_id)
         if novel is None:
-            return Chapters()
+            return
 
-        chapters = []
+        index_url = novel.url
         for file in path.glob("*.json"):
             try:
                 chapter = self.load_chapter(
                     novel_id=novel_id, chapter_id=file.stem,
-                    index_url=novel.url,
+                    index_url=index_url,
                 )
                 if chapter is not None:
-                    chapters.append(chapter)
+                    yield chapter
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的章节文件: %s", file)
-
-        return Chapters(chapters)
 
 
     def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
