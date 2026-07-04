@@ -303,49 +303,25 @@ def save_site_config(platform: str, site_cfg: dict):
         yaml.safe_dump(site_cfg, f, allow_unicode=True)
 
 def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
-    """交互式设置菜单，修改配置并保存到 YAML 文件。
-    """
+    """交互式设置菜单 — 层级结构，覆盖所有配置项。"""
     platform_labels = _show_platforms()
-    all_formats = list(load_format_configs().keys())  # txt, epub, img...
-    enabled_formats = cfg.get("formats")
-    if not enabled_formats or enabled_formats == "all":
+    all_formats = list(load_format_configs().keys())
+    enabled_formats: list[str] = cfg.get("formats") or all_formats
+    if enabled_formats == "all":
         enabled_formats = all_formats[:]
 
     while True:
         mode = cfg.get("mode", "browser")
-        download_cfg = cfg.get("download", {})
-        max_workers = download_cfg.get("max_workers", 3)
-
-        # 获取当前模式的延迟值
-        if mode == "browser":
-            delay = site_cfg.get("browser", {}).get("delay", [3, 5])
-        elif mode == "api":
-            for prov in site_cfg.get("api", {}).values():
-                if isinstance(prov, dict):
-                    delay = prov.get("delay", [3, 5])
-                    break
-            else:
-                delay = [3, 5]
-        else:
-            delay = site_cfg.get("requests", {}).get("delay", [3, 5])
-
-        # 获取保存路径（从第一个启用的格式配置中取 output_path）
-        first_fmt = enabled_formats[0] if enabled_formats else "txt"
-        fmt_configs = load_format_configs()
-        current_output = ""
-        if first_fmt in fmt_configs:
-            current_output = fmt_configs[first_fmt].get("output_path", "")
-
-        # 显示已启用的格式列表
-        fmt_str = "、".join(enabled_formats) if enabled_formats else "无"
+        pname = cfg.get("platform", platform)
+        plabel = _platform_label(platform_labels, pname)
+        fmt_str = "、".join(enabled_formats)
 
         print("\n===== 设置菜单 =====")
-        print(f" 1. 下载模式     [{mode}]")
-        print(f" 2. 下载延迟     {delay} (秒)")
-        print(f" 3. 保存路径     [{current_output}]")
-        print(f" 4. 下载线程数   [{max_workers}]")
-        print(f" 5. 保存方式     [{fmt_str}]")
-        print(" 0. 返回主菜单")
+        print(f" 1. 下载设置  （模式: {mode} | 平台: {plabel}）")
+        print(f" 2. 站点设置  （{mode} 模式专属选项）")
+        print(f" 3. 格式设置  （{fmt_str}）")
+        print(f" 4. 日志设置")
+        print(" 0. 返回主菜单（自动保存）")
         print("====================")
 
         choice = input("\n请选择编号: ").strip()
@@ -355,7 +331,115 @@ def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
             save_site_config(platform, site_cfg)
             print("✓ 配置已保存")
             break
+        elif choice == "1":
+            platform = _settings_download(cfg, platform, site_cfg, platform_labels)
+        elif choice == "2":
+            _settings_site(cfg, platform, site_cfg)
+        elif choice == "3":
+            _settings_format(cfg, all_formats, enabled_formats)
+        elif choice == "4":
+            _settings_log(cfg)
+        else:
+            print("无效选项，请重新选择")
 
+    return platform
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 设置子菜单 — 辅助函数
+# ═══════════════════════════════════════════════════════════════════
+
+def _platform_label(platform_labels: dict, name: str) -> str:
+    for label, n in platform_labels.items():
+        if n == name:
+            return label
+    return name
+
+
+def _input_int(prompt: str, default: int | None = None) -> int | None:
+    try:
+        val = input(prompt).strip()
+        return int(val) if val else default
+    except ValueError:
+        return None
+
+
+def _input_float(prompt: str, default: float | None = None) -> float | None:
+    try:
+        val = input(prompt).strip()
+        return float(val) if val else default
+    except ValueError:
+        return None
+
+
+def _get_delay(site_cfg: dict, mode: str) -> list:
+    if mode == "browser":
+        return site_cfg.get("browser", {}).get("delay", [3, 5])
+    elif mode == "api":
+        for prov in site_cfg.get("api", {}).values():
+            if isinstance(prov, dict) and prov.get("enabled", True):
+                return prov.get("delay", [3, 5])
+    return site_cfg.get("requests", {}).get("delay", [3, 5])
+
+
+def _set_delay(site_cfg: dict, mode: str, lo: int, hi: int):
+    if mode == "browser":
+        site_cfg.setdefault("browser", {})["delay"] = [lo, hi]
+    elif mode == "api":
+        for prov in site_cfg.get("api", {}).values():
+            if isinstance(prov, dict) and prov.get("enabled", True):
+                prov["delay"] = [lo, hi]
+                return
+        # fallback: write to first api provider
+        apis = site_cfg.setdefault("api", {})
+        for prov in apis.values():
+            if isinstance(prov, dict):
+                prov["delay"] = [lo, hi]
+                return
+        apis["default"] = {"delay": [lo, hi]}
+    else:
+        site_cfg.setdefault("requests", {})["delay"] = [lo, hi]
+
+
+def _save_fmt_config(fmt_name: str, data: dict):
+    path = CONFIG_DIR / "formats" / f"{fmt_name}.yaml"
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, allow_unicode=True)
+
+
+def _load_fmt_config(fmt_name: str) -> dict:
+    path = CONFIG_DIR / "formats" / f"{fmt_name}.yaml"
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+# ── 下载设置子菜单 ──────────────────────────────────────────────
+
+def _settings_download(cfg: dict, platform: str, site_cfg: dict,
+                       platform_labels: dict) -> str:
+    while True:
+        mode = cfg.get("mode", "browser")
+        pname = cfg.get("platform", platform)
+        download_cfg = cfg.get("download", {})
+        max_workers = download_cfg.get("max_workers", 3)
+        group = cfg.get("group", "default")
+        delay = _get_delay(site_cfg, mode)
+        plabel = _platform_label(platform_labels, pname)
+
+        print(f"\n--- 下载设置 ---")
+        print(f" 1. 下载模式     [{mode}]")
+        print(f" 2. 目标平台     [{plabel}]")
+        print(f" 3. 下载延迟     {delay} 秒")
+        print(f" 4. 下载线程数   [{max_workers}]")
+        print(f" 5. 分组名称     [{group}]")
+        print(" 0. 返回")
+
+        choice = input("\n请选择编号: ").strip()
+
+        if choice == "0":
+            break
         elif choice == "1":
             new_mode = _select(
                 "选择下载模式：",
@@ -369,86 +453,507 @@ def do_settings(cfg: dict, platform: str, site_cfg: dict) -> str:
             if new_mode:
                 cfg["mode"] = new_mode
                 save_main_config(cfg)
-                print("✓ 下载模式已保存")
-
+                print(f"✓ 下载模式 → {new_mode}")
         elif choice == "2":
-            try:
-                lo = int(input(f"延迟下限（当前: {delay[0]}s）: ").strip())
-                hi = int(input(f"延迟上限（当前: {delay[1]}s）: ").strip())
-                if 0 <= lo <= hi:
-                    if mode == "browser":
-                        site_cfg.setdefault("browser", {})["delay"] = [lo, hi]
-                    elif mode == "api":
-                        for prov in site_cfg.get("api", {}).values():
-                            if isinstance(prov, dict):
-                                prov["delay"] = [lo, hi]
-                                break
-                    else:
-                        site_cfg.setdefault("requests", {})["delay"] = [lo, hi]
-                    save_site_config(platform, site_cfg)
-                    print("✓ 下载延迟已保存")
-                else:
-                    print("下限应 ≤ 上限")
-            except ValueError:
-                print("输入无效")
-
+            new_plat = _select(
+                "选择目标平台：",
+                choices=[(label, name) for label, name in platform_labels.items()]
+                       + [("取消", None)],
+            )
+            if new_plat and new_plat != pname:
+                cfg["platform"] = new_plat
+                save_main_config(cfg)
+                # 重新加载站点配置
+                site_cfg.clear()
+                site_cfg.update(load_site_config(new_plat))
+                platform = new_plat
+                print(f"✓ 目标平台 → {_platform_label(platform_labels, new_plat)}")
         elif choice == "3":
-            path = input("\n请输入保存目录的完整路径\n（直接 Enter 使用默认）: ").strip()
-            if path:
-                for fmt_name in all_formats:
-                    fmt_path = CONFIG_DIR / "formats" / f"{fmt_name}.yaml"
-                    if fmt_path.exists():
-                        with open(fmt_path, encoding="utf-8") as f:
-                            fmt_data = yaml.safe_load(f) or {}
-                        if fmt_name in fmt_data:
-                            old_path = fmt_data[fmt_name].get("output_path", "")
-                            if "/" in old_path:
-                                parts = old_path.rsplit("/", 1)
-                                new_path = path.rstrip("/") + "/" + parts[-1]
-                            else:
-                                new_path = path.rstrip("/") + "/" + old_path
-                            fmt_data[fmt_name]["output_path"] = new_path
-                            with open(fmt_path, "w", encoding="utf-8") as f:
-                                yaml.safe_dump(fmt_data, f, allow_unicode=True)
-                print("✓ 保存路径已保存")
-
+            lo = _input_float(f"延迟下限（当前: {delay[0]}s）: ")
+            hi = _input_float(f"延迟上限（当前: {delay[1]}s）: ")
+            if lo is not None and hi is not None and 0 <= lo <= hi:
+                _set_delay(site_cfg, mode, lo, hi)
+                save_site_config(platform, site_cfg)
+                print(f"✓ 延迟 → [{lo}, {hi}] 秒")
+            elif lo is not None or hi is not None:
+                print("下限应 ≤ 上限且 ≥ 0")
         elif choice == "4":
-            try:
-                n = int(input(f"下载线程数（当前: {max_workers}）: ").strip())
-                if n > 0:
-                    cfg.setdefault("download", {})["max_workers"] = n
-                    save_main_config(cfg)
-                    print("✓ 下载线程数已保存")
-                else:
-                    print("线程数必须大于 0")
-            except ValueError:
-                print("输入无效")
-
+            n = _input_int(f"下载线程数（当前: {max_workers}）: ")
+            if n is not None and n > 0:
+                cfg.setdefault("download", {})["max_workers"] = n
+                save_main_config(cfg)
+                print(f"✓ 线程数 → {n}")
+            elif n is not None:
+                print("线程数必须 > 0")
         elif choice == "5":
-            print("\n选择要启用的保存格式（可多选，用逗号分隔）:")
-            toggle_status = {}
-            for i, fmt in enumerate(all_formats, 1):
-                checked = "✓" if fmt in enabled_formats else " "
-                toggle_status[str(i)] = fmt
-                print(f"  [{checked}] {i}. {fmt}")
-
-            raw = input("\n请输入编号（如 1,3 或 1 3，Enter 不更改）: ").strip()
-            if raw:
-                selected = []
-                for token in raw.replace(",", " ").split():
-                    token = token.strip()
-                    if token in toggle_status:
-                        selected.append(toggle_status[token])
-                if selected:
-                    enabled_formats = selected
-                    cfg["formats"] = list(dict.fromkeys(selected))  # 去重保序
-                    save_main_config(cfg)
-                    print(f"✓ 保存方式已保存: {', '.join(enabled_formats)}")
-
+            g = input(f"分组名称（当前: {group}）: ").strip()
+            if g:
+                cfg["group"] = g
+                save_main_config(cfg)
+                print(f"✓ 分组 → {g}")
         else:
-            print("无效选项，请重新选择")
+            print("无效选项")
 
     return platform
+
+
+# ── 站点设置子菜单 ──────────────────────────────────────────────
+
+def _settings_site(cfg: dict, platform: str, site_cfg: dict):
+    while True:
+        mode = cfg.get("mode", "browser")
+
+        if mode == "browser":
+            b = site_cfg.get("browser", {})
+            vp = b.get("viewport", {})
+            vp_str = f"{vp.get('width', 1280)}x{vp.get('height', 720)}" if vp else "默认"
+            ud = b.get("user_data_dir", "")
+            ud_short = ud.split("/")[-1] if ud else "默认"
+
+            print(f"\n--- 站点设置 (browser) ---")
+            print(f" 1. 无头模式       [{b.get('headless', False)}]")
+            print(f" 2. 用户数据目录   [{ud_short}]")
+            print(f" 3. 视口大小       [{vp_str}]")
+            print(f" 4. 超时时间       [{b.get('timeout', 30)}s]")
+            print(f" 5. 重试次数       [{b.get('retry_times', 3)}]")
+            print(f" 6. 操作延迟       {b.get('delay', [3, 5])}s")
+            print(" 0. 返回")
+
+            choice = input("\n请选择编号: ").strip()
+            if choice == "0":
+                break
+            elif choice == "1":
+                site_cfg.setdefault("browser", {})["headless"] = not b.get("headless", False)
+                save_site_config(platform, site_cfg)
+                print(f"✓ 无头模式 → {site_cfg['browser']['headless']}")
+            elif choice == "2":
+                path = input(f"用户数据目录路径（当前: {ud or '默认'}）\nEnter 使用默认: ").strip()
+                if path:
+                    site_cfg.setdefault("browser", {})["user_data_dir"] = path
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 用户数据目录 → {path}")
+            elif choice == "3":
+                w = _input_int(f"视口宽度（当前: {vp.get('width', 1280)}）: ")
+                h = _input_int(f"视口高度（当前: {vp.get('height', 720)}）: ")
+                if w and h:
+                    site_cfg.setdefault("browser", {})["viewport"] = {"width": w, "height": h}
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 视口 → {w}x{h}")
+            elif choice == "4":
+                t = _input_float(f"超时时间（当前: {b.get('timeout', 30)}s）: ")
+                if t is not None and t > 0:
+                    site_cfg.setdefault("browser", {})["timeout"] = t
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 超时 → {t}s")
+            elif choice == "5":
+                n = _input_int(f"重试次数（当前: {b.get('retry_times', 3)}）: ")
+                if n is not None and n >= 0:
+                    site_cfg.setdefault("browser", {})["retry_times"] = n
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 重试次数 → {n}")
+            elif choice == "6":
+                lo = _input_float(f"延迟下限（当前: {b.get('delay', [3,5])[0]}s）: ")
+                hi = _input_float(f"延迟上限（当前: {b.get('delay', [3,5])[1]}s）: ")
+                if lo is not None and hi is not None and 0 <= lo <= hi:
+                    site_cfg.setdefault("browser", {})["delay"] = [lo, hi]
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 延迟 → [{lo}, {hi}]s")
+            else:
+                print("无效选项")
+
+        elif mode == "api":
+            apis = site_cfg.get("api", {})
+            # 找到当前启用的 provider
+            active_prov = None
+            active_cfg = {}
+            for name, prov in apis.items():
+                if isinstance(prov, dict) and prov.get("enabled", True):
+                    active_prov = name
+                    active_cfg = prov
+                    break
+            if not active_prov:
+                active_prov = "无"
+                active_cfg = {}
+
+            providers = [n for n, p in apis.items() if isinstance(p, dict)]
+            prov_list = "、".join(providers) if providers else "无"
+            key_masked = active_cfg.get("key", "")[:4] + "****" if active_cfg.get("key") else "（未设置）"
+
+            print(f"\n--- 站点设置 (api) ---")
+            print(f" 1. API Provider  [{active_prov}]  可用: {prov_list}")
+            print(f" 2. API Key       [{key_masked}]")
+            print(f" 3. 批量大小      [{active_cfg.get('batch_size', 3)}]")
+            print(f" 4. 超时时间      [{active_cfg.get('timeout', 30)}s]")
+            print(f" 5. 重试次数      [{active_cfg.get('retry_times', 3)}]")
+            print(f" 6. 请求延迟      {active_cfg.get('delay', [3, 5])}s")
+            print(" 0. 返回")
+
+            choice = input("\n请选择编号: ").strip()
+            if choice == "0":
+                break
+            elif choice == "1":
+                if not providers:
+                    print("没有可用的 API Provider")
+                    continue
+                # toggle: enable selected, disable others
+                sel = _select("选择 API Provider：",
+                              choices=[(p, p) for p in providers] + [("取消", None)])
+                if sel:
+                    for name in apis:
+                        if isinstance(apis[name], dict):
+                            apis[name]["enabled"] = (name == sel)
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ API Provider → {sel}")
+            elif choice == "2":
+                key = input(f"API Key（当前: {key_masked}，Enter 不更改）: ").strip()
+                if key:
+                    site_cfg.setdefault("api", {})
+                    if active_prov and active_prov in site_cfg["api"]:
+                        site_cfg["api"][active_prov]["key"] = key
+                    save_site_config(platform, site_cfg)
+                    print("✓ API Key 已保存")
+            elif choice == "3":
+                n = _input_int(f"批量大小（当前: {active_cfg.get('batch_size', 3)}）: ")
+                if n is not None and n > 0:
+                    if active_prov:
+                        site_cfg["api"][active_prov]["batch_size"] = n
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 批量大小 → {n}")
+            elif choice == "4":
+                t = _input_float(f"超时时间（当前: {active_cfg.get('timeout', 30)}s）: ")
+                if t is not None and t > 0:
+                    if active_prov:
+                        site_cfg["api"][active_prov]["timeout"] = t
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 超时 → {t}s")
+            elif choice == "5":
+                n = _input_int(f"重试次数（当前: {active_cfg.get('retry_times', 3)}）: ")
+                if n is not None and n >= 0:
+                    if active_prov:
+                        site_cfg["api"][active_prov]["retry_times"] = n
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 重试次数 → {n}")
+            elif choice == "6":
+                d = active_cfg.get("delay", [3, 5])
+                lo = _input_float(f"延迟下限（当前: {d[0]}s）: ")
+                hi = _input_float(f"延迟上限（当前: {d[1]}s）: ")
+                if lo is not None and hi is not None and 0 <= lo <= hi:
+                    if active_prov:
+                        site_cfg["api"][active_prov]["delay"] = [lo, hi]
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 延迟 → [{lo}, {hi}]s")
+            else:
+                print("无效选项")
+
+        else:  # requests
+            r = site_cfg.get("requests", {})
+            cookies = r.get("cookies", {})
+            cookie_count = len(cookies) if isinstance(cookies, dict) else 0
+            ua = (r.get("headers", {}) or {}).get("User-Agent", "")
+            ua_short = ua[:50] + "..." if len(ua) > 50 else ua
+            proxies = r.get("proxies", {}) or {}
+            proxy_str = ", ".join(f"{k}={v}" for k, v in proxies.items()) if proxies else "无"
+
+            print(f"\n--- 站点设置 (requests) ---")
+            print(f" 1. Cookies        [{cookie_count} 条]")
+            print(f" 2. User-Agent     [{ua_short}]")
+            print(f" 3. 代理           [{proxy_str}]")
+            print(f" 4. 超时时间       [{r.get('timeout', 30)}s]")
+            print(f" 5. 重试次数       [{r.get('retry_times', 3)}]")
+            print(f" 6. 请求延迟       {r.get('delay', [3, 5])}s")
+            print(" 0. 返回")
+
+            choice = input("\n请选择编号: ").strip()
+            if choice == "0":
+                break
+            elif choice == "1":
+                print(f"当前 {cookie_count} 条 cookies。")
+                print("提示：使用主菜单的「登录」功能可自动获取 cookies。")
+                raw = input("手动输入 cookie 字符串（Enter 不更改）: ").strip()
+                if raw:
+                    cd = {}
+                    for item in raw.split(";"):
+                        item = item.strip()
+                        if "=" in item:
+                            k, v = item.split("=", 1)
+                            cd[k.strip()] = v.strip()
+                    site_cfg.setdefault("requests", {})["cookies"] = cd
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ Cookies → {len(cd)} 条")
+            elif choice == "2":
+                ua_new = input(f"User-Agent（Enter 不更改）: ").strip()
+                if ua_new:
+                    site_cfg.setdefault("requests", {}).setdefault("headers", {})["User-Agent"] = ua_new
+                    save_site_config(platform, site_cfg)
+                    print("✓ User-Agent 已保存")
+            elif choice == "3":
+                print("格式: http=http://host:port 或 https=http://host:port")
+                raw = input("代理地址（Enter 清除代理）: ").strip()
+                site_cfg.setdefault("requests", {})["proxies"] = {}
+                if raw:
+                    for part in raw.replace(",", " ").split():
+                        if "=" in part:
+                            k, v = part.split("=", 1)
+                            site_cfg["requests"]["proxies"][k.strip()] = v.strip()
+                save_site_config(platform, site_cfg)
+                print(f"✓ 代理已{'设置' if raw else '清除'}")
+            elif choice == "4":
+                t = _input_float(f"超时时间（当前: {r.get('timeout', 30)}s）: ")
+                if t is not None and t > 0:
+                    site_cfg.setdefault("requests", {})["timeout"] = t
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 超时 → {t}s")
+            elif choice == "5":
+                n = _input_int(f"重试次数（当前: {r.get('retry_times', 3)}）: ")
+                if n is not None and n >= 0:
+                    site_cfg.setdefault("requests", {})["retry_times"] = n
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 重试次数 → {n}")
+            elif choice == "6":
+                d = r.get("delay", [3, 5])
+                lo = _input_float(f"延迟下限（当前: {d[0]}s）: ")
+                hi = _input_float(f"延迟上限（当前: {d[1]}s）: ")
+                if lo is not None and hi is not None and 0 <= lo <= hi:
+                    site_cfg.setdefault("requests", {})["delay"] = [lo, hi]
+                    save_site_config(platform, site_cfg)
+                    print(f"✓ 延迟 → [{lo}, {hi}]s")
+            else:
+                print("无效选项")
+
+
+# ── 格式设置子菜单 ──────────────────────────────────────────────
+
+def _settings_format(cfg: dict, all_formats: list, enabled_formats: list):
+    while True:
+        fmt_str = "、".join(enabled_formats)
+        print(f"\n--- 格式设置 ---")
+        print(f" 已启用: {fmt_str}")
+        for i, fmt in enumerate(all_formats, 1):
+            print(f" {i}. {fmt.upper()} 设置")
+        print(f" {len(all_formats) + 1}. 启用/禁用格式")
+        print(" 0. 返回")
+
+        choice = input("\n请选择编号: ").strip()
+        if choice == "0":
+            break
+        elif choice == str(len(all_formats) + 1):
+            _settings_format_toggle(cfg, all_formats, enabled_formats)
+        else:
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(all_formats):
+                    fmt = all_formats[idx]
+                    if fmt == "txt":
+                        _settings_fmt_txt()
+                    elif fmt == "epub":
+                        _settings_fmt_epub()
+                    elif fmt == "img":
+                        _settings_fmt_img()
+            except ValueError:
+                print("无效选项")
+
+
+def _settings_format_toggle(cfg: dict, all_formats: list, enabled_formats: list):
+    print("\n选择要启用的格式（可多选，逗号分隔）:")
+    toggle = {}
+    for i, fmt in enumerate(all_formats, 1):
+        checked = "✓" if fmt in enabled_formats else " "
+        toggle[str(i)] = fmt
+        print(f"  [{checked}] {i}. {fmt}")
+
+    raw = input("\n请输入编号（如 1,3，Enter 不更改）: ").strip()
+    if raw:
+        selected = []
+        for token in raw.replace(",", " ").split():
+            token = token.strip()
+            if token in toggle:
+                selected.append(toggle[token])
+        if selected:
+            enabled_formats.clear()
+            enabled_formats.extend(dict.fromkeys(selected))
+            cfg["formats"] = list(enabled_formats)
+            save_main_config(cfg)
+            print(f"✓ 已启用: {', '.join(enabled_formats)}")
+
+
+def _settings_fmt_txt():
+    data = _load_fmt_config("txt")
+    txt = data.get("txt", {})
+    print(f"\n--- TXT 设置 ---")
+    print(f" 1. 编码         [{txt.get('encoding', 'utf-8')}]")
+    print(f" 2. 输出路径     [{txt.get('output_path', '')}]")
+    print(f" 3. 文件名模板   [{txt.get('file_name_template', '{title}')}]")
+    print(" 0. 返回")
+
+    choice = input("\n请选择编号: ").strip()
+    if choice == "1":
+        enc = input(f"编码（当前: {txt.get('encoding', 'utf-8')}，如 utf-8/gbk）: ").strip()
+        if enc:
+            data.setdefault("txt", {})["encoding"] = enc
+            _save_fmt_config("txt", data)
+            print(f"✓ 编码 → {enc}")
+    elif choice == "2":
+        p = input(f"输出路径（当前: {txt.get('output_path', '')}）\n可用占位符: {{group}} {{title}} {{author}} {{novel_id}} {{date}} {{file_name_template}}\n: ").strip()
+        if p:
+            data.setdefault("txt", {})["output_path"] = p
+            _save_fmt_config("txt", data)
+            print("✓ 输出路径已保存")
+    elif choice == "3":
+        t = input(f"文件名模板（当前: {txt.get('file_name_template', '{title}')}）: ").strip()
+        if t:
+            data.setdefault("txt", {})["file_name_template"] = t
+            _save_fmt_config("txt", data)
+            print(f"✓ 文件名模板 → {t}")
+
+
+def _settings_fmt_epub():
+    data = _load_fmt_config("epub")
+    ep = data.get("epub", {})
+    print(f"\n--- EPUB 设置 ---")
+    print(f" 1. 编码           [{ep.get('encoding', 'utf-8')}]")
+    print(f" 2. 输出路径       [{ep.get('output_path', '')}]")
+    print(f" 3. 文件名模板     [{ep.get('file_name_template', '{title}')}]")
+    print(f" 4. 包含目录       [{ep.get('include_toc', True)}]")
+    print(f" 5. 压缩算法       [{ep.get('compression', 'deflate')}]  deflate/bzip2/stored")
+    print(f" 6. 压缩级别       [{ep.get('compresslevel', 9)}]  1-9")
+    print(f" 7. 优化图片       [{ep.get('optimize_images', True)}]")
+    print(f" 8. JPEG 质量      [{ep.get('jpeg_quality', 85)}]  1-100")
+    print(f" 9. 图片最大宽度   [{ep.get('max_image_width', 0)}]  0=不缩放")
+    print(" 0. 返回")
+
+    choice = input("\n请选择编号: ").strip()
+    epub = data.setdefault("epub", {})
+    if choice == "1":
+        enc = input(f"编码（当前: {ep.get('encoding', 'utf-8')}）: ").strip()
+        if enc:
+            epub["encoding"] = enc
+            _save_fmt_config("epub", data)
+            print(f"✓ 编码 → {enc}")
+    elif choice == "2":
+        p = input(f"输出路径（当前: {ep.get('output_path', '')}）: ").strip()
+        if p:
+            epub["output_path"] = p
+            _save_fmt_config("epub", data)
+            print("✓ 输出路径已保存")
+    elif choice == "3":
+        t = input(f"文件名模板（当前: {ep.get('file_name_template', '{title}')}）: ").strip()
+        if t:
+            epub["file_name_template"] = t
+            _save_fmt_config("epub", data)
+            print(f"✓ 文件名模板 → {t}")
+    elif choice == "4":
+        epub["include_toc"] = not ep.get("include_toc", True)
+        _save_fmt_config("epub", data)
+        print(f"✓ 包含目录 → {epub['include_toc']}")
+    elif choice == "5":
+        alg = _select("选择压缩算法：",
+                      choices=[("deflate (标准)", "deflate"),
+                               ("bzip2 (高压缩)", "bzip2"),
+                               ("stored (不压缩)", "stored"),
+                               ("取消", None)])
+        if alg:
+            epub["compression"] = alg
+            _save_fmt_config("epub", data)
+            print(f"✓ 压缩 → {alg}")
+    elif choice == "6":
+        n = _input_int(f"压缩级别（当前: {ep.get('compresslevel', 9)}，1-9）: ")
+        if n is not None and 1 <= n <= 9:
+            epub["compresslevel"] = n
+            _save_fmt_config("epub", data)
+            print(f"✓ 压缩级别 → {n}")
+    elif choice == "7":
+        epub["optimize_images"] = not ep.get("optimize_images", True)
+        _save_fmt_config("epub", data)
+        print(f"✓ 优化图片 → {epub['optimize_images']}")
+    elif choice == "8":
+        n = _input_int(f"JPEG 质量（当前: {ep.get('jpeg_quality', 85)}，1-100）: ")
+        if n is not None and 1 <= n <= 100:
+            epub["jpeg_quality"] = n
+            _save_fmt_config("epub", data)
+            print(f"✓ JPEG 质量 → {n}")
+    elif choice == "9":
+        n = _input_int(f"图片最大宽度（当前: {ep.get('max_image_width', 0)}，0=不缩放）: ")
+        if n is not None and n >= 0:
+            epub["max_image_width"] = n
+            _save_fmt_config("epub", data)
+            print(f"✓ 图片最大宽度 → {n}")
+
+
+def _settings_fmt_img():
+    data = _load_fmt_config("img")
+    im = data.get("img", {})
+    print(f"\n--- IMG 设置 ---")
+    print(f" 1. 输出格式   [{im.get('output_format', 'original')}]  original/jpeg/png/webp")
+    print(f" 2. 输出路径   [{im.get('output_path', '')}]")
+    print(f" 3. 文件名模板 [{im.get('file_name_template', '{n}')}]")
+    print(" 0. 返回")
+
+    choice = input("\n请选择编号: ").strip()
+    img_cfg = data.setdefault("img", {})
+    if choice == "1":
+        fmt = _select("选择输出格式：",
+                      choices=[("original (原格式)", "original"),
+                               ("jpeg", "jpeg"),
+                               ("png", "png"),
+                               ("webp", "webp"),
+                               ("取消", None)])
+        if fmt:
+            img_cfg["output_format"] = fmt
+            _save_fmt_config("img", data)
+            print(f"✓ 输出格式 → {fmt}")
+    elif choice == "2":
+        p = input(f"输出路径（当前: {im.get('output_path', '')}）\n可用占位符: {{group}} {{title}} {{author}} {{novel_id}} {{date}}\n: ").strip()
+        if p:
+            img_cfg["output_path"] = p
+            _save_fmt_config("img", data)
+            print("✓ 输出路径已保存")
+    elif choice == "3":
+        t = input(f"文件名模板（当前: {im.get('file_name_template', '{n}')}，{{n}}=图片序号）: ").strip()
+        if t:
+            img_cfg["file_name_template"] = t
+            _save_fmt_config("img", data)
+            print(f"✓ 文件名模板 → {t}")
+
+
+# ── 日志设置子菜单 ──────────────────────────────────────────────
+
+def _settings_log(cfg: dict):
+    while True:
+        log_cfg = cfg.get("log", {})
+        enabled = log_cfg.get("enabled", True)
+        level = log_cfg.get("level", "INFO")
+        out_dir = log_cfg.get("output_dir", "app_data/logs")
+
+        print(f"\n--- 日志设置 ---")
+        print(f" 1. 启用日志   [{enabled}]")
+        print(f" 2. 日志级别   [{level}]  DEBUG/INFO/WARNING/ERROR")
+        print(f" 3. 输出目录   [{out_dir}]")
+        print(" 0. 返回")
+
+        choice = input("\n请选择编号: ").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            cfg.setdefault("log", {})["enabled"] = not enabled
+            save_main_config(cfg)
+            print(f"✓ 日志 → {'开启' if cfg['log']['enabled'] else '关闭'}")
+        elif choice == "2":
+            new_level = _select("选择日志级别：",
+                                choices=[("DEBUG", "DEBUG"), ("INFO", "INFO"),
+                                         ("WARNING", "WARNING"), ("ERROR", "ERROR"),
+                                         ("取消", None)])
+            if new_level:
+                cfg.setdefault("log", {})["level"] = new_level
+                save_main_config(cfg)
+                print(f"✓ 级别 → {new_level}")
+        elif choice == "3":
+            d = input(f"输出目录（当前: {out_dir}）: ").strip()
+            if d:
+                cfg.setdefault("log", {})["output_dir"] = d
+                save_main_config(cfg)
+                print(f"✓ 输出目录 → {d}")
+        else:
+            print("无效选项")
 
 def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None) -> str | None:
     """搜索小说，选择后返回小说 URL（或 None 表示取消）。
@@ -628,7 +1133,9 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                 if ch.order in selected_orders
             )
             print(f"  已选择 {len(filtered)} 章")
-            novel.update_chapter(filtered)
+            # ponytail: merge() 只覆盖匹配 id 不删除未匹配的，
+            # 直接设 chapters 才是真正的范围过滤。
+            novel.chapters = filtered
 
     incomplete = novel.chapters.incompleted_chapters
     target = list(incomplete) if incomplete else []
