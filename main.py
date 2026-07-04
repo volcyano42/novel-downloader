@@ -15,10 +15,13 @@ def _get_app_data_dir() -> Path:
     """获取应用数据目录。
 
     优先使用 ``NLD_APP_DATA`` 环境变量，未设置时回退到默认路径。
+    PyInstaller 打包后 ``__file__`` 指向临时目录，改用 ``sys.executable`` 定位。
     """
     env_path = os.environ.get("NLD_APP_DATA")
     if env_path:
         return Path(env_path).resolve()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "app_data"
     return Path(__file__).parent / "app_data"
 
 
@@ -86,13 +89,8 @@ from nldlder.utils.logger import get_logger
 
 _log = get_logger("nldlder.main")
 
-from rich.console import Console
-from rich.progress import (
-    Progress, BarColumn, TextColumn, TimeRemainingColumn,
-    TaskProgressColumn,
-)
-
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# rich 和 concurrent.futures 延迟导入（减少 PyInstaller 启动时的模块加载量）
+# 使用处: _create_progress(), do_download(), do_update()
 
 
 def _select(message: str, choices: list[tuple[str, Any]]) -> Any:
@@ -972,7 +970,7 @@ def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None
 
     print(f"\n正在搜索「{query}」...")
     try:
-        results = search(platform, query, engine, page=page)
+        results = search(platform, query, engine, page=page,skip_dalay = True)
     except Exception as e:
         print(f"✗ 搜索失败: {e}")
         return None
@@ -1005,6 +1003,11 @@ def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None
     return results[selected_idx].url
 
 def _create_progress(total: int):
+    from rich.console import Console
+    from rich.progress import (
+        Progress, BarColumn, TextColumn, TimeRemainingColumn,
+        TaskProgressColumn,
+    )
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
@@ -1168,6 +1171,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
         fetcher = fetcher_cls() if fetcher_cls else None
 
         try:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
             with progress_ctx as progress:
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_group = {
