@@ -63,7 +63,8 @@ def split_into_groups(target: Sequence[_T], group: int) -> tuple[Sequence[_T], .
 def search(platform: str,
            query: str,
            engine,
-           page: int = 1) -> tuple[SearchResult, ...]:
+           page: int = 1,
+           **kwargs) -> tuple[SearchResult, ...]:
     """搜索小说。
 
     Args:
@@ -76,7 +77,7 @@ def search(platform: str,
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found: {platform}")
     fetcher = fetcher_cls()
-    return fetcher.fetch_search_result(search_ref=query, engine=engine, page=page)
+    return fetcher.fetch_search_result(search_ref=query, engine=engine, page=page, **kwargs)
 
 
 def login(platform: str, engine: BrowserEngine) -> AuthCredential:
