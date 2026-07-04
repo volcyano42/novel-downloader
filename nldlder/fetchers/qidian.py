@@ -84,8 +84,6 @@ class QidianHTMLParser:
                 author = soup.find('a', class_='writer-name').get_text()
                 attribute_str = soup.find('p', class_='book-attribute').text
                 attribute = attribute_str.split('·')
-                label = [i.get_text() for i in soup.find('p', class_='all-label').find_all('a')]
-                attribute.extend(label)
                 all_label = attribute
                 intro = soup.find('p', class_='intro').get_text()
             else:
