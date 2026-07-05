@@ -1497,6 +1497,10 @@ def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3
 
     total = len(targets)
     for i, novel in enumerate(targets, 1):
+        # 旧数据归类：如果当前分组非默认且小说尚未分组，自动加入
+        if group != "default" and not get_novel_group(novel.id):
+            add_novel_to_group(novel.id, group)
+
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
         try:
             mw = cfg.get("download", {}).get("max_workers", 3)
