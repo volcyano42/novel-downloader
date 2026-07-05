@@ -78,6 +78,12 @@ def get_novel_group(novel_id: str, groups: dict | None = None) -> str | None:
     return None
 
 
+def ensure_novel_in_group(novel_id: str):
+    """如果小说未被任何分组归类，自动加入 default。"""
+    if not get_novel_group(novel_id):
+        add_novel_to_group(novel_id, "default")
+
+
 def add_novel_to_group(novel_id: str, group: str):
     """将小说 ID 添加到分组（自动去重并保存 groups.yaml）。
 
@@ -1344,6 +1350,9 @@ def do_re_export(group: str, format_configs: dict, dl):
         return
 
     groups = load_groups()
+    # 旧数据自动归类到 default
+    for n in novels_info:
+        ensure_novel_in_group(n.id)
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
         g = get_novel_group(novel.id, groups)
@@ -1402,11 +1411,10 @@ def do_delete():
         print("未找到有效的小说元数据")
         return
 
-    print(f"\n找到 {len(novels_info)} 本已下载小说：")
-    for i, novel in enumerate(novels_info, 1):
-        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
-
     groups = load_groups()
+    for n in novels_info:
+        ensure_novel_in_group(n.id)
+
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
         g = get_novel_group(novel.id, groups)
@@ -1478,6 +1486,9 @@ def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3
         return
 
     groups = load_groups()
+    for n in novels_info:
+        ensure_novel_in_group(n.id)
+
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
         g = get_novel_group(novel.id, groups)
