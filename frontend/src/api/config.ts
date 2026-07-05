@@ -4,6 +4,7 @@ export interface AppConfig {
   mode: string;
   formats: string[];
   max_workers: number;
+  groups: Record<string, Record<string, object>>;
 }
 
 const BASE = "http://localhost:8000";

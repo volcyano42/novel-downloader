@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppShell } from "@/layout/AppShell";
+import { ChevronDown } from "lucide-react";
 import { BookCard, BookCardSkeleton } from "./BookCard";
 import { SearchBar } from "./SearchBar";
 import { SearchResultCard } from "./SearchResultCard";
@@ -26,11 +27,13 @@ export default function BookshelfPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [downloadTasks, setDownloadTasks] = useState<{ id: string; title: string; status: "downloading" | "completed" | "failed"; progress: number; error?: string }[]>([]);
   const [appName, setAppName] = useState("Novel下载器");
+  const [groups, setGroups] = useState<Record<string, Record<string, object>>>({});
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => { storageApi.listNovels().then(setNovels).catch(() => {}).finally(() => setLoadingNovels(false)); }, []);
-  useEffect(() => { configApi.get().then(c => setAppName(c.name)).catch(() => {}); }, []);
+  useEffect(() => { configApi.get().then(c => { setAppName(c.name); setGroups(c.groups); }).catch(() => {}); }, []);
 
   // --- cross-tab sync ---
   const broadcast = useCrossTab((type, payload) => {
@@ -100,9 +103,41 @@ export default function BookshelfPage() {
             if (filtered.length === 0) {
               return <div className="flex flex-col items-center justify-center py-20 text-slate-400"><p className="text-lg">{searchQuery ? "无匹配结果" : "书架空空"}</p></div>;
             }
+            // build novelId → group reverse map
+            const groupMap = new Map<string, string>();
+            for (const [group, ids] of Object.entries(groups)) {
+              for (const id of Object.keys(ids)) groupMap.set(id, group);
+            }
+            // group novels
+            const grouped = new Map<string, NovelMeta[]>();
+            const ungrouped: NovelMeta[] = [];
+            for (const n of filtered) {
+              const g = groupMap.get(n.id);
+              if (g) { if (!grouped.has(g)) grouped.set(g, []); grouped.get(g)!.push(n); }
+              else ungrouped.push(n);
+            }
+            const entries = [...grouped.entries(), ...(ungrouped.length ? [["未分类", ungrouped] as const] : [])];
+            const toggleGroup = (tag: string) => setCollapsed(prev => {
+              const next = new Set(prev);
+              if (next.has(tag)) next.delete(tag); else next.add(tag);
+              return next;
+            });
             return (
-            <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-              {filtered.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} cover={coverToUrl(novel.cover) ?? undefined} onRead={() => navigate(`/novel/${novel.id}`)} />)}
+            <div className="space-y-6">
+              {entries.map(([tag, items]) => (
+                <div key={tag}>
+                  <button onClick={() => toggleGroup(tag)} className="flex items-center gap-2 mb-3 group">
+                    <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${collapsed.has(tag) ? "-rotate-90" : ""}`} strokeWidth={1.5} />
+                    <span className="text-sm font-medium text-slate-600">{tag}</span>
+                    <span className="text-xs text-slate-400">({items.length})</span>
+                  </button>
+                  {!collapsed.has(tag) && (
+                    <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} cover={coverToUrl(novel.cover) ?? undefined} onRead={() => navigate(`/novel/${novel.id}`)} />)}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
             );
           })()}

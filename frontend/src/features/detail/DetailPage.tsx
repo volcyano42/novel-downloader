@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw } from "lucide-react";
 import { storageApi, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/storage";
 import { downloadApi } from "@/api/download";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface MergedChapter {
   remote: ChapterBrief;
@@ -192,6 +193,7 @@ export default function DetailPage() {
                 const localOk = mc.local?.is_complete;
                 const statusIcon = localOk === true ? "✓" : localOk === false ? "⚠" : "✗";
                 const statusColor = localOk === true ? "text-emerald-500" : localOk === false ? "text-amber-500" : "text-red-400";
+                const statusTip = localOk === true ? "已下载" : localOk === false ? "不完整，需更新" : "未下载";
                 return (
                   <div key={mc.remote.id} className="flex items-center gap-2">
                     <label className="shrink-0 flex items-center cursor-pointer">
@@ -200,7 +202,7 @@ export default function DetailPage() {
                         {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
                       </div>
                     </label>
-                    <span className={`shrink-0 text-xs w-5 text-right ${statusColor}`}>{statusIcon}</span>
+                    <TooltipProvider><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipProvider>
                     <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <span className="truncate text-slate-700 flex-1">{mc.remote.title}</span>
                     </button>
