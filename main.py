@@ -56,6 +56,55 @@ def load_main_config() -> dict:
     return {}
 
 
+def load_groups() -> dict[str, dict[str, Any]]:
+    """加载 app_data/config/groups.yaml
+
+    返回 {group_name: {novel_id: {...}, ...}, ...}
+    """
+    path = CONFIG_DIR / "groups.yaml"
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def get_novel_group(novel_id: str, groups: dict | None = None) -> str | None:
+    """查找 novel_id 所属的分组名。"""
+    if groups is None:
+        groups = load_groups()
+    for group_name, ids in groups.items():
+        if isinstance(ids, dict) and novel_id in ids:
+            return group_name
+    return None
+
+
+def add_novel_to_group(novel_id: str, group: str):
+    """将小说 ID 添加到分组（自动去重并保存 groups.yaml）。
+
+    如果 ID 已在其他组中，先移除再添加到新组。
+    """
+    path = CONFIG_DIR / "groups.yaml"
+    groups = load_groups()
+
+    # 先从其他组中移除
+    for g_name, ids in groups.items():
+        if isinstance(ids, dict) and novel_id in ids and g_name != group:
+            del ids[novel_id]
+
+    # 添加到目标组
+    if group not in groups:
+        groups[group] = {}
+    if not isinstance(groups[group], dict):
+        groups[group] = {}
+    if novel_id not in groups[group]:
+        groups[group][novel_id] = {}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(groups, f, allow_unicode=True, default_flow_style=False)
+        return True
+    return False
+
+
 # 通过 importlib 直接加载 logger 模块，绕过 nldlder/__init__.py
 # （__init__.py 导入子模块时会触发 get_logger，必须在配置之后）
 # exe 环境下文件路径不可用，回退为 import_module。
@@ -1110,6 +1159,10 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
     meta_path = storage.save_meta(novel)
     print(f"  元数据已保存 → {meta_path}")
 
+    # 自动记录分组（下载时使用的 group）
+    if group != "default" and add_novel_to_group(novel.id, group):
+        print(f"  已加入分组: {group}")
+
     # ── 2. 获取章节列表 ──────────────────────────────────────────
     print("正在获取章节列表...")
     chapters = dl.fetch_chapter_list(novel.url, skip_delay = True)
@@ -1254,7 +1307,8 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
     _do_export(novel, dl)
-    print(f"  导出完成 → app_data/exports/{group}/")
+    export_group = get_novel_group(novel.id) or group
+    print(f"  导出完成 → app_data/exports/{export_group}/")
 
 
 def _do_export(novel, dl):
@@ -1286,9 +1340,12 @@ def do_re_export(group: str, format_configs: dict, dl):
         print("未找到有效的小说元数据")
         return
 
+    groups = load_groups()
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
-        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
+        g = get_novel_group(novel.id, groups)
+        tag = f" [{g}]" if g else ""
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]{tag}")
 
     choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
     choices.append(("▸ 全部导出", "all"))
@@ -1303,13 +1360,14 @@ def do_re_export(group: str, format_configs: dict, dl):
 
     total = len(targets)
     for i, novel in enumerate(targets, 1):
+        export_group = get_novel_group(novel.id) or group
         print(f"\n── [{i}/{total}] 正在导出: {novel.title} ──")
         try:
             local = storage.load_chapters(novel.id)
             if local:
                 novel.update_chapter(local)
             _do_export(novel, dl)
-            print(f"  导出完成 → app_data/exports/{group}/")
+            print(f"  导出完成 → app_data/exports/{export_group}/")
         except Exception as e:
             print(f"✗ 导出失败: {e}")
             _log.exception("re-export failed: %s", novel.title)
@@ -1344,6 +1402,13 @@ def do_delete():
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
         print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
+
+    groups = load_groups()
+    print(f"\n找到 {len(novels_info)} 本已下载小说：")
+    for i, novel in enumerate(novels_info, 1):
+        g = get_novel_group(novel.id, groups)
+        tag = f" [{g}]" if g else ""
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]{tag}")
 
     choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
     choices.append(("▸ 全部删除", "all"))
@@ -1409,9 +1474,12 @@ def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3
         print("未找到有效的小说元数据")
         return
 
+    groups = load_groups()
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
     for i, novel in enumerate(novels_info, 1):
-        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]")
+        g = get_novel_group(novel.id, groups)
+        tag = f" [{g}]" if g else ""
+        print(f"  {i}. {novel.title}  — {novel.author}  [{novel.id}]{tag}")
 
     choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in novels_info]
     choices.append(("▸ 全部更新", "all"))
@@ -1451,6 +1519,7 @@ def main():
     group = cfg.get("group", "default")
     mode = cfg.get("mode", "browser")
     platform = cfg.get("platform", "fanqie")
+    groups = load_groups()
 
     site_cfg = load_site_config(platform)
     format_configs = load_format_configs()
@@ -1482,7 +1551,9 @@ def main():
             options.enable_format(fmt, enabled=(fmt in enabled_formats))
 
     # 延迟初始化引擎和下载器（首次使用时创建）
-    print(f"平台: {platform}  |  模式: {mode}  |  分组: {group}")
+    grouped_novels = sum(len(ids) for ids in groups.values() if isinstance(ids, dict))
+    group_info = f"分组: {group} ({grouped_novels} 本已分组)" if grouped_novels else f"分组: {group}"
+    print(f"平台: {platform}  |  模式: {mode}  |  {group_info}")
     engine = None
     dl = None
 
