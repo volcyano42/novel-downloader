@@ -134,7 +134,7 @@ class APIEngine(Engine):
         return response
 
     def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
-        post_data = kwargs.get('post_data')
+        post_data = kwargs.pop('post_data', None)
         _log.debug("API fetch_text: url=%s", url[:80])
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
@@ -144,7 +144,7 @@ class APIEngine(Engine):
         return response.text
 
     def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
-        post_data = kwargs.get('post_data')
+        post_data = kwargs.pop('post_data', None)
         _log.debug("API fetch_json: url=%s", url[:80])
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
