@@ -1184,7 +1184,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
     if not target:
         print("所有章节已下载完毕！")
     else:
-        print(f"\n共 {total_chapters} 章，待下载: {len(target)} 章")
+        print(f"\n共 {total_chapters} 章，待下载: {len(target)} 章（线程数: {max_workers}）")
         print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
         raw = _text_input("章节范围 (留空=继续下载): ")
         if raw and raw.strip() and raw.strip().lower() != "all":
