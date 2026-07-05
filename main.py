@@ -1178,27 +1178,30 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
 
     # ── 3.5 选择下载范围 ────────────────────────────────────────
     total_chapters = len(novel.chapters)
-    print(f"\n共 {total_chapters} 章，请输入下载范围：")
-    print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
-    raw = _text_input("章节范围 (留空=全部/继续下载): ")
-    if raw and raw.strip() and raw.strip().lower() != "all":
-        selected_orders = parse_order_string(raw, total_chapters)
-        if selected_orders:
-            filtered = Chapters(
-                ch for ch in novel.chapters
-                if ch.order in selected_orders
-            )
-            print(f"  已选择 {len(filtered)} 章")
-            # ponytail: merge() 只覆盖匹配 id 不删除未匹配的，
-            # 直接设 chapters 才是真正的范围过滤。
-            novel.chapters = filtered
-
     incomplete = novel.chapters.incompleted_chapters
     target = list(incomplete) if incomplete else []
+
     if not target:
         print("所有章节已下载完毕！")
     else:
-        print(f"待下载: {len(target)} 章")
+        print(f"\n共 {total_chapters} 章，待下载: {len(target)} 章")
+        print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
+        raw = _text_input("章节范围 (留空=继续下载): ")
+        if raw and raw.strip() and raw.strip().lower() != "all":
+            selected_orders = parse_order_string(raw, total_chapters)
+            if selected_orders:
+                filtered = Chapters(
+                    ch for ch in novel.chapters
+                    if ch.order in selected_orders
+                )
+                print(f"  已选择 {len(filtered)} 章（含已完成）")
+                novel.chapters = filtered
+                incomplete = novel.chapters.incompleted_chapters
+                target = list(incomplete) if incomplete else []
+                print(f"  实际待下载: {len(target)} 章")
+
+    if target:
+        print(f"开始下载: {len(target)} 章")
 
         # 分批
         batch_size = dl._options.api.batch_size if dl._options.mode == "api" else 1
