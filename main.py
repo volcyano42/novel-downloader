@@ -477,7 +477,7 @@ def _settings_download(cfg: dict, platform: str, site_cfg: dict,
         pname = cfg.get("platform", platform)
         download_cfg = cfg.get("download", {})
         max_workers = download_cfg.get("max_workers", 3)
-        group = cfg.get("group", "default")
+        group = cfg.get("group") or "default"
         delay = _get_delay(site_cfg, mode)
         plabel = _platform_label(platform_labels, pname)
 
@@ -1534,7 +1534,7 @@ def main():
 
     # 加载配置
     cfg = load_main_config()
-    group = cfg.get("group", "default")
+    group = cfg.get("group") or "default"
     mode = cfg.get("mode", "browser")
     platform = cfg.get("platform", "fanqie")
     groups = load_groups()
