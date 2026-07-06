@@ -1,9 +1,23 @@
+"""小说数据持久化 — 支持 local（JSON 文件）和 sqlite 两种后端。
+
+用法::
+
+    from nldlder.core.storage import create_storage
+    from nldlder.core.options import StorageOptions
+
+    opts = StorageOptions(backend="local", base_dir="app_data/storage")
+    store = create_storage(opts)
+
+    opts2 = StorageOptions(backend="sqlite", db_path="app_data/storage/novels.db")
+    store2 = create_storage(opts2)
+"""
+
 import json
-import os
 import shutil
+import sqlite3
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterator, Sequence
-
 from .options import StorageOptions
 from ..models.novel import Novel, Chapter, Chapters
 from ..utils.logger import get_logger
@@ -11,57 +25,123 @@ from ..utils.logger import get_logger
 _log = get_logger("nldlder.core.storage")
 
 
-class LocalStorage:
-    """
-    本地小说数据存储管理器。
+# ═══════════════════════════════════════════════════════════════════
+# 工厂
+# ═══════════════════════════════════════════════════════════════════
 
-    维护以下目录结构：
+def _parse_sqlite_url(database_url: str) -> Path:
+    """解析 SQLite 连接字符串，返回本地文件路径。
+
+    支持格式:
+        sqlite:///relative/path/to/db    → 相对路径
+        sqlite:////absolute/path/to/db   → 绝对路径
+        sqlite://host:port/path          → 远程（暂不支持，抛异常）
+    """
+    url = database_url.strip()
+    if url.startswith("sqlite:///"):
+        path = url[len("sqlite:///"):]
+        if path.startswith("/"):
+            return Path(path)       # sqlite:////absolute → /absolute
+        return Path(path)           # sqlite:///relative → relative
+    if url.startswith("sqlite://"):
+        # sqlite://host/path → 远程，暂不支持
+        raise ValueError(
+            f"远程 SQLite 暂不支持: {url!r}。"
+            f"请使用 postgresql 后端或本地 sqlite:///path。"
+        )
+    # 裸路径，直接返回
+    return Path(url)
+
+
+def create_storage(config: StorageOptions) -> "BaseStorage":
+    """根据配置创建对应的 Storage 实例。"""
+    if config.backend == "sqlite":
+        return SQLiteStorage(config)
+    if config.backend == "postgresql":
+        return PostgreSQLStorage(config)
+    return LocalStorage(config)
+
+
+class BaseStorage(ABC):
+    """小说数据存储抽象基类。"""
+
+    @abstractmethod
+    def save_meta(self, novel: Novel) -> object:
+        """保存小说元数据，返回写入标识。"""
+        ...
+
+    @abstractmethod
+    def load_meta(self, novel_id: str) -> Novel | None:
+        """加载小说元数据，不存在时返回 None。"""
+        ...
+
+    @abstractmethod
+    def iter_metas(self) -> Iterator[Novel]:
+        """逐条遍历所有小说元数据。"""
+        ...
+
+    @abstractmethod
+    def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list:
+        """保存章节内容，返回写入标识列表。"""
+        ...
+
+    @abstractmethod
+    def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
+        """读取单个章节。
+        
+        novel_id 用于定位小说并推导 novel_url。
+        """
+        ...
+
+    @abstractmethod
+    def load_chapters(self, novel_id: str) -> Chapters:
+        """读取某部小说的全部章节。"""
+        ...
+
+    @abstractmethod
+    def delete_novel(self, novel_id: str) -> None:
+        """彻底删除某部小说的所有数据。"""
+        ...
+
+
+class LocalStorage(BaseStorage):
+    """本地 JSON 文件存储。
+
+    目录结构::
+
         base_dir/
             {novel_id}/
-                meta.json          # 小说元数据
+                meta.json
                 chapters/
-                    id1.json     # 每章独立文件
-                    id2.json
-                    ...
-
-    每个章节文件内容格式：
-        {
-            "id": "章节ID",
-            "url": "章节URL",
-            "title": "章节标题",
-            "order": 1(章节序号),
-            "volume": "章节所属卷名",
-            "content": "清洗后的正文文本",
-            "time": 1234567890.123(更新时间),
-            "count": "章节字数",
-            "is_complete": True(章节是否完整),
-            "images": [](章节插图)
-        }
+                    {chapter_id}.json
     """
 
-    def __init__(self, config: StorageOptions | Path | str):
+    def __init__(self, config: "StorageOptions | Path | str"):
+        from .options import StorageOptions
         if isinstance(config, StorageOptions):
             self.base_dir = Path(config.base_dir)
         else:
             self.base_dir = Path(config)
 
-    def get_novel_dir(self, novel_id: str) -> Path:
-        """返回某部小说的存储目录。"""
+    # ── 路径工具 ──
+
+    def _novel_dir(self, novel_id: str) -> Path:
         return self.base_dir / novel_id
 
-    def get_meta_path(self, novel_id: str) -> Path:
-        return self.get_novel_dir(novel_id) / "meta.json"
+    def _meta_path(self, novel_id: str) -> Path:
+        return self._novel_dir(novel_id) / "meta.json"
 
-    def get_chapters_path(self, novel_id: str) -> Path:
-        return self.get_novel_dir(novel_id) / "chapters"
+    def _chapters_dir(self, novel_id: str) -> Path:
+        return self._novel_dir(novel_id) / "chapters"
 
-    def get_chapter_path(self, novel_id: str, chapter_id: str) -> Path:
-        return self.get_novel_dir(novel_id) / "chapters" / f"{chapter_id}.json"
+    def _chapter_path(self, novel_id: str, chapter_id: str) -> Path:
+        return self._chapters_dir(novel_id) / f"{chapter_id}.json"
+
+    # ── 元数据 ──
 
     def save_meta(self, novel: Novel) -> Path:
-        """保存小说元数据（标题、作者、封面等），返回写入的文件路径。"""
         _log.debug("save_meta: id=%s", novel.id)
-        path = self.get_meta_path(novel.id)
+        path = self._meta_path(novel.id)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "title": novel.title,
@@ -74,27 +154,17 @@ class LocalStorage:
             "count": novel.count,
             "cover": novel.cover.to_json() if novel.cover else None,
         }
-        path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         return path
 
     def load_meta(self, novel_id: str) -> Novel | None:
-        """加载小说元数据，返回Novel或 None。"""
-        path = self.get_meta_path(novel_id)
+        path = self._meta_path(novel_id)
         if not path.exists():
             return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
-        novel = Novel.loads(**json_data)
-        return novel
+        return Novel.loads(**json_data)
 
     def iter_metas(self) -> Iterator[Novel]:
-        """遍历所有小说的元数据，一次 yield 一个 Novel。
-
-        ponytail: load_chapters 全量加载 N 章 → N 个对象同时驻留。
-        此方法逐个 yield，O(1) 内存。
-        """
         if not self.base_dir.exists():
             return
         for entry in sorted(self.base_dir.iterdir()):
@@ -109,111 +179,446 @@ class LocalStorage:
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的 meta 文件: %s", meta_path)
 
-    # ---------- 章节操作 ----------
+    # ── 章节 ──
+
     def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list[Path]:
-        """保存章节内容（立即写入磁盘），返回写入的文件路径列表。"""
         if isinstance(chapters, Chapter):
             chapters = [chapters]
-
         saved = []
         for chapter in chapters:
-            path = self.get_chapter_path(novel.id, chapter.id)
+            path = self._chapter_path(novel.id, chapter.id)
             path.parent.mkdir(parents=True, exist_ok=True)
             data = {
-                "id": chapter.id,
-                "url": chapter.url,
-                "title": chapter.title,
-                "order": chapter.order,
-                "volume": chapter.volume,
-                "content": chapter.content,
-                "time": chapter.time,
-                "count": chapter.count,
-                "is_complete": chapter.is_complete,
-                "images": [image.to_json() for image in chapter.images],
+                "id": chapter.id, "url": chapter.url, "title": chapter.title,
+                "order": chapter.order, "volume": chapter.volume,
+                "content": chapter.content, "time": chapter.time,
+                "count": chapter.count, "is_complete": chapter.is_complete,
+                "images": [img.to_json() for img in chapter.images],
             }
-            path.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False),
-                encoding="utf-8"
-            )
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
             saved.append(path)
         return saved
 
-    def load_chapter(self,
-                     novel_id: str,
-                     chapter_id: str,
-                     index_url: str | None = None) -> Chapter | None:
-        """读取单个章节的保存数据，不存在时返回 None。"""
-        if index_url is None:
-            novel = self.load_meta(novel_id)
-            if novel is None:
-                return None
-            index_url = novel.url
-
-        path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
+    def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
+        novel = self.load_meta(novel_id)
+        if novel is None:
+            return None
+        path = self._chapter_path(novel_id, chapter_id)
         if not path.exists():
             return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
-        json_data["index_url"] = index_url
+        json_data["novel_id"] = novel.id
         return Chapter.loads(**json_data)
 
     def load_chapters(self, novel_id: str) -> Chapters:
-        """读取所有章节的保存数据，元数据或 chapters 目录不存在时返回空 Chapters。"""
-        return Chapters(self.iter_chapters(novel_id))
+        return Chapters(self._iter_chapters(novel_id))
 
-    def iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
-        """逐章 yield，O(1) 内存。
-
-        meta 只加载一次取 index_url。损坏的章节文件跳过并 warning。
-        """
-        path = self.get_chapters_path(novel_id=novel_id)
-        if not path.exists():
+    def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+        chapters_dir = self._chapters_dir(novel_id)
+        if not chapters_dir.exists():
             return
-
-        novel = self.load_meta(novel_id)
-        if novel is None:
+        if self.load_meta(novel_id) is None:
             return
-
-        index_url = novel.url
-        for file in path.glob("*.json"):
+        for file in chapters_dir.glob("*.json"):
             try:
-                chapter = self.load_chapter(
-                    novel_id=novel_id, chapter_id=file.stem,
-                    index_url=index_url,
-                )
-                if chapter is not None:
-                    yield chapter
+                ch = self.load_chapter(novel_id, file.stem)
+                if ch is not None:
+                    yield ch
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的章节文件: %s", file)
 
-
-    def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
-        """删除单个章节文件。"""
-        path = self.get_chapter_path(novel_id=novel_id, chapter_id=chapter_id)
-        if path.exists():
-            os.remove(path)
-
-    def delete_chapters(self, novel_id: str) -> None:
-        """删除某部小说的所有章节（递归删除 chapters 目录）。"""
-        path = self.get_chapters_path(novel_id=novel_id)
-        if path.exists():
-            shutil.rmtree(path)
-
-    def delete_meta(self, novel_id: str) -> None:
-        """删除小说元数据文件。"""
-        path = self.get_meta_path(novel_id=novel_id)
-        if path.exists():
-            os.remove(path)
-
-    def delete_novel_dir(self, novel_id: str) -> None:
-        """删除某部小说的存储目录（含 meta + chapters + 空目录）。"""
-        path = self.get_novel_dir(novel_id=novel_id)
-        if path.exists():
-            shutil.rmtree(path)
+    # ── 删除 ──
 
     def delete_novel(self, novel_id: str) -> None:
-        """彻底删除某部小说的所有本地数据（元数据 + 章节 + 目录）。
-
-        安全删除：如果 storage 目录下还有其他小说，仅删除该小说的目录。
-        """
         _log.info("delete_novel: id=%s", novel_id)
-        self.delete_novel_dir(novel_id)
+        path = self._novel_dir(novel_id)
+        if path.exists():
+            shutil.rmtree(path)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SQLiteStorage — SQLite 数据库存储
+# ═══════════════════════════════════════════════════════════════════
+
+class SQLiteStorage(BaseStorage):
+    """SQLite 数据库存储。
+
+    表结构::
+
+        novels (id TEXT PK, title, url, author, serial, description,
+                tags, count, cover_json, created_at)
+        chapters (id TEXT PK, novel_id TEXT FK, url, title, "order",
+                  volume, content, time, count, is_complete, images_json)
+    """
+
+    def __init__(self, config: StorageOptions):
+        url = config.database_url
+        if url:
+            db_path = _parse_sqlite_url(url)
+        else:
+            db_path = Path(config.base_dir) / "novels.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = str(db_path)
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+    def _init_db(self):
+        with self._connect() as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS novels (
+                    id          TEXT PRIMARY KEY,
+                    title       TEXT NOT NULL,
+                    url         TEXT NOT NULL,
+                    author      TEXT NOT NULL DEFAULT '',
+                    serial      INTEGER NOT NULL DEFAULT 0,
+                    description TEXT NOT NULL DEFAULT '',
+                    tags        TEXT NOT NULL DEFAULT '[]',
+                    count       INTEGER,
+                    cover_json  TEXT,
+                    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+                CREATE TABLE IF NOT EXISTS chapters (
+                    id          TEXT NOT NULL,
+                    novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                    url         TEXT NOT NULL,
+                    title       TEXT NOT NULL,
+                    "order"     INTEGER NOT NULL DEFAULT 0,
+                    volume      TEXT,
+                    content     TEXT,
+                    time        REAL,
+                    count       INTEGER,
+                    is_complete INTEGER NOT NULL DEFAULT 0,
+                    images_json TEXT NOT NULL DEFAULT '[]',
+                    PRIMARY KEY (novel_id, id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_chapters_novel
+                    ON chapters(novel_id, "order");
+            """)
+
+    # ── 元数据 ──
+
+    def save_meta(self, novel: Novel) -> str:
+        _log.debug("save_meta sqlite: id=%s", novel.id)
+        tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
+        cover_json = json.dumps(novel.cover.to_json(), ensure_ascii=False) if novel.cover else None
+        with self._connect() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO novels (id, title, url, author, serial,
+                    description, tags, count, cover_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
+                  novel.description, tags_json, novel.count, cover_json))
+        return novel.id
+
+    def load_meta(self, novel_id: str) -> Novel | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, title, url, author, serial, description, tags, count, cover_json "
+                "FROM novels WHERE id = ?", (novel_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_novel(row)
+
+    def iter_metas(self) -> Iterator[Novel]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, title, url, author, serial, description, tags, count, cover_json "
+                "FROM novels ORDER BY title"
+            ).fetchall()
+        for row in rows:
+            yield self._row_to_novel(row)
+
+    @staticmethod
+    def _row_to_novel(row: tuple) -> Novel:
+        tags = json.loads(row[6]) if row[6] else []
+        cover = None
+        if row[8]:
+            from ..models.novel import Illustration
+            cover_data = json.loads(row[8])
+            cover = Illustration.loads(**cover_data)
+        return Novel(
+            id=row[0], title=row[1], url=row[2], author=row[3],
+            serial=row[4], description=row[5], tags=tuple(tags),
+            count=row[7], cover=cover,
+        )
+
+    # ── 章节 ──
+
+    def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list[str]:
+        if isinstance(chapters, Chapter):
+            chapters = [chapters]
+        saved = []
+        with self._connect() as conn:
+            for ch in chapters:
+                images_json = json.dumps([img.to_json() for img in ch.images], ensure_ascii=False)
+                conn.execute("""
+                    INSERT OR REPLACE INTO chapters
+                        (id, novel_id, url, title, "order", volume,
+                         content, time, count, is_complete, images_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
+                      ch.content, ch.time, ch.count, int(ch.is_complete), images_json))
+                saved.append(ch.id)
+        return saved
+
+    def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
+        novel = self.load_meta(novel_id)
+        if novel is None:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, url, title, \"order\", volume, content, time, count, "
+                "is_complete, images_json FROM chapters WHERE novel_id = ? AND id = ?",
+                (novel_id, chapter_id)
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_chapter(row, novel.id)
+
+    def load_chapters(self, novel_id: str) -> Chapters:
+        return Chapters(self._iter_chapters(novel_id))
+
+    def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+        novel = self.load_meta(novel_id)
+        if novel is None:
+            return
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, url, title, \"order\", volume, content, time, count, "
+                "is_complete, images_json FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
+                (novel_id,)
+            ).fetchall()
+        for row in rows:
+            yield self._row_to_chapter(row, novel.id)
+
+    @staticmethod
+    def _row_to_chapter(row: tuple, novel_id: str) -> Chapter:
+        images = []
+        if row[9]:
+            from ..models.novel import Illustration
+            for img_data in json.loads(row[9]):
+                images.append(Illustration.loads(**img_data))
+        return Chapter(
+            id=row[0], url=row[1], title=row[2], order=row[3],
+            volume=row[4], content=row[5], time=row[6], count=row[7],
+            is_complete=bool(row[8]), images=tuple(images),
+            novel_id=novel_id,
+        )
+
+    # ── 删除 ──
+
+    def delete_novel(self, novel_id: str) -> None:
+        _log.info("delete_novel sqlite: id=%s", novel_id)
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chapters WHERE novel_id = ?", (novel_id,))
+            conn.execute("DELETE FROM novels WHERE id = ?", (novel_id,))
+
+
+class PostgreSQLStorage(BaseStorage):
+    """PostgreSQL 数据库存储（远程/本地均可）。
+
+    连接字符串格式::
+
+        postgresql://user:password@host:5432/dbname
+        postgresql://user:password@localhost:5432/novels
+
+    依赖: ``pip install psycopg2-binary``
+    """
+
+    def __init__(self, config: StorageOptions):
+        self.database_url = config.database_url
+        if not self.database_url:
+            raise ValueError("PostgreSQL 需要配置 database_url，"
+                             "如 postgresql://user:pass@host:5432/dbname")
+        self._ensure_psycopg2()
+        self._init_db()
+
+    @staticmethod
+    def _ensure_psycopg2():
+        try:
+            import psycopg2  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "PostgreSQL 后端需要 psycopg2。安装: pip install psycopg2-binary"
+            )
+
+    def _connect(self):
+        import psycopg2
+        return psycopg2.connect(self.database_url)
+
+    def _init_db(self):
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS novels (
+                        id          TEXT PRIMARY KEY,
+                        title       TEXT NOT NULL,
+                        url         TEXT NOT NULL,
+                        author      TEXT NOT NULL DEFAULT '',
+                        serial      INTEGER NOT NULL DEFAULT 0,
+                        description TEXT NOT NULL DEFAULT '',
+                        tags        JSONB NOT NULL DEFAULT '[]',
+                        count       INTEGER,
+                        cover_json  JSONB,
+                        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                    CREATE TABLE IF NOT EXISTS chapters (
+                        id          TEXT NOT NULL,
+                        novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                        url         TEXT NOT NULL,
+                        title       TEXT NOT NULL,
+                        "order"     INTEGER NOT NULL DEFAULT 0,
+                        volume      TEXT,
+                        content     TEXT,
+                        time        DOUBLE PRECISION,
+                        count       INTEGER,
+                        is_complete BOOLEAN NOT NULL DEFAULT FALSE,
+                        images_json JSONB NOT NULL DEFAULT '[]',
+                        PRIMARY KEY (novel_id, id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_chapters_novel
+                        ON chapters(novel_id, "order");
+                """)
+
+    # ── 元数据 ──
+
+    def save_meta(self, novel: Novel) -> str:
+        _log.debug("save_meta pg: id=%s", novel.id)
+        tags_json = json.dumps(list(novel.tags) if novel.tags else [])
+        cover = json.dumps(novel.cover.to_json()) if novel.cover else None
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO novels (id, title, url, author, serial,
+                        description, tags, count, cover_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        title=EXCLUDED.title, url=EXCLUDED.url,
+                        author=EXCLUDED.author, serial=EXCLUDED.serial,
+                        description=EXCLUDED.description, tags=EXCLUDED.tags,
+                        count=EXCLUDED.count, cover_json=EXCLUDED.cover_json
+                """, (novel.id, novel.title, novel.url, novel.author,
+                      novel.serial, novel.description, tags_json,
+                      novel.count, cover))
+        return novel.id
+
+    def load_meta(self, novel_id: str) -> Novel | None:
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, title, url, author, serial, description, "
+                    "tags, count, cover_json FROM novels WHERE id = %s",
+                    (novel_id,)
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return self._row_to_novel(row)
+
+    def iter_metas(self) -> Iterator[Novel]:
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, title, url, author, serial, description, "
+                    "tags, count, cover_json FROM novels ORDER BY title"
+                )
+                rows = cur.fetchall()
+        for row in rows:
+            yield self._row_to_novel(row)
+
+    @staticmethod
+    def _row_to_novel(row: tuple) -> Novel:
+        tags = row[6] if isinstance(row[6], list) else json.loads(row[6] or "[]")
+        cover = None
+        if row[8]:
+            from ..models.novel import Illustration
+            cover_data = row[8] if isinstance(row[8], dict) else json.loads(row[8])
+            cover = Illustration.loads(**cover_data)
+        return Novel(
+            id=row[0], title=row[1], url=row[2], author=row[3],
+            serial=row[4], description=row[5], tags=tuple(tags),
+            count=row[7], cover=cover,
+        )
+
+    # ── 章节 ──
+
+    def save_chapter(self, novel: Novel, chapters: Sequence[Chapter] | Chapter) -> list[str]:
+        if isinstance(chapters, Chapter):
+            chapters = [chapters]
+        saved = []
+        with self._connect() as conn, conn.cursor() as cur:
+                for ch in chapters:
+                    images_json = json.dumps([img.to_json() for img in ch.images])
+                    cur.execute("""
+                        INSERT INTO chapters (id, novel_id, url, title, "order",
+                            volume, content, time, count, is_complete, images_json)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (novel_id, id) DO UPDATE SET
+                            url=EXCLUDED.url, title=EXCLUDED.title,
+                            "order"=EXCLUDED."order", volume=EXCLUDED.volume,
+                            content=EXCLUDED.content, time=EXCLUDED.time,
+                            count=EXCLUDED.count, is_complete=EXCLUDED.is_complete,
+                            images_json=EXCLUDED.images_json
+                    """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
+                          ch.content, ch.time, ch.count, ch.is_complete, images_json))
+                    saved.append(ch.id)
+        return saved
+
+    def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
+        novel = self.load_meta(novel_id)
+        if novel is None:
+            return None
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, url, title, \"order\", volume, content, "
+                    "time, count, is_complete, images_json "
+                    "FROM chapters WHERE novel_id = %s AND id = %s",
+                    (novel_id, chapter_id)
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        return self._row_to_chapter(row, novel.id)
+
+    def load_chapters(self, novel_id: str) -> Chapters:
+        return Chapters(self._iter_chapters(novel_id))
+
+    def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+        novel = self.load_meta(novel_id)
+        if novel is None:
+            return
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, url, title, \"order\", volume, content, "
+                    "time, count, is_complete, images_json "
+                    "FROM chapters WHERE novel_id = %s ORDER BY \"order\"",
+                    (novel_id,)
+                )
+                rows = cur.fetchall()
+        for row in rows:
+            yield self._row_to_chapter(row, novel.id)
+
+    @staticmethod
+    def _row_to_chapter(row: tuple, novel_id: str) -> Chapter:
+        images = []
+        images_raw = row[9]
+        if isinstance(images_raw, str):
+            images_raw = json.loads(images_raw)
+        if images_raw:
+            from ..models.novel import Illustration
+            for img_data in images_raw:
+                images.append(Illustration.loads(**img_data))
+        return Chapter(
+            id=row[0], url=row[1], title=row[2], order=row[3],
+            volume=row[4], content=row[5], time=row[6], count=row[7],
+            is_complete=bool(row[8]), images=tuple(images),
+            novel_id=novel_id,
+        )
+
+    def delete_novel(self, novel_id: str) -> None:
+        _log.info("delete_novel pg: id=%s", novel_id)
+        with self._connect() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM chapters WHERE novel_id = %s", (novel_id,))
+                cur.execute("DELETE FROM novels WHERE id = %s", (novel_id,))
