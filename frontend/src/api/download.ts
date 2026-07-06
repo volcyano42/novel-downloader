@@ -5,10 +5,11 @@ export interface SearchResult { title: string; author: string; url: string; desc
 export interface Platform { id: string; label: string; }
 
 export const downloadApi = {
-  search: (params: { platform: string; query: string; page?: number; engine_id?: string }) => {
+  search: (params: { platform: string; query: string; page?: number; mode?: string; engine_id?: string }) => {
     const qs = new URLSearchParams(); qs.set("query", params.query);
     qs.set("platform", params.platform);
     if (params.page) qs.set("page", String(params.page));
+    if (params.mode) qs.set("mode", params.mode);
     qs.set("engine_id", params.engine_id ?? "default");
     return apiGet<SearchResult[]>(`/download/search?${qs}`);
   },

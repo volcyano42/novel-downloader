@@ -26,6 +26,7 @@ export default function BookshelfPage() {
   const [loadingNovels, setLoadingNovels] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [downloadTasks, setDownloadTasks] = useState<{ id: string; title: string; status: "downloading" | "completed" | "failed"; progress: number; error?: string }[]>([]);
   const [appName, setAppName] = useState("Novel下载器");
   const [searchPlatform, setSearchPlatform] = useState("fanqie");
@@ -82,10 +83,12 @@ export default function BookshelfPage() {
 
   const handleSearch = useCallback((query: string) => { setSearchQuery(query.trim()); }, []);
 
-  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string }) => {
+  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string }) => {
     if (!query.trim()) { setSearchResults([]); return; }
+    setSearching(true);
     const platform = filters?.platform || searchPlatform;
-    try { const r = await downloadApi.search({ platform, query }); setSearchResults(r); } catch { setSearchResults([]); }
+    try { const r = await downloadApi.search({ platform, query, mode: filters?.mode }); setSearchResults(r); } catch { setSearchResults([]); }
+    finally { setSearching(false); }
   }, [searchPlatform]);
 
   const handleSettingsUpdate = useCallback((path: string, value: unknown) => {
@@ -188,7 +191,7 @@ export default function BookshelfPage() {
       )}
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 md:px-8">
-          <SearchBar onSearch={handleOnlineSearch} platforms={searchPlatforms} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={searchPlatforms} engineModes={["browser", "requests", "api"]} apiProviders={settings?.api_providers} loading={searching} />
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (

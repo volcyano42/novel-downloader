@@ -44,6 +44,7 @@ export interface AppConfig {
   txt: TxtOptions;
   epub: EpubOptions;
   img: ImgOptions;
+  api_providers: Record<string, string[]>;
   groups: Record<string, Record<string, object>>;
 }
 

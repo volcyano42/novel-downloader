@@ -17,7 +17,7 @@ const desktopItems: { id: NavItem; label: string; icon: typeof BookOpen }[] = [
   { id: "downloads", label: "下载管理", icon: Download },
   { id: "settings", label: "设置", icon: Settings },
 ];
-const mobileItems = [...desktopItems, { id: "settings" as NavItem, label: "我的", icon: User }];
+const mobileItems = [...desktopItems.filter(i => i.id !== "settings"), { id: "settings" as NavItem, label: "我的", icon: User }];
 
 export function AppShell({ children, activeNav, onNavigate, searchQuery = "", onSearch, appName = "Novel下载器", userName = "读者", userAvatar, className }: AppShellProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
