@@ -216,7 +216,7 @@ class FanqieHTMLParser:
                 volume_name = chapter_item.get("volume_name")
                 chapter = Chapter(title=title,
                                   url=chapter_url,
-                                  index_url=book_url,
+                                  novel_id=standardize_id(book_url),
                                   id = standardize_id(chapter_url),
                                   volume=volume_name,
                                   order=order,
@@ -533,7 +533,7 @@ class FanqieOIAPIFetcher(BaseFetcher):
                     url=chapter_url,
                     id = str(chapter_id),
                     order=order,
-                    index_url=url,
+                    novel_id=standardize_id(url),
                     volume=volume_name,
                     time=timestamp
                 )
@@ -543,7 +543,7 @@ class FanqieOIAPIFetcher(BaseFetcher):
 
     def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
         """解析并填充content, count, is_complete(True)"""
-        novel_id = standardize_id(chapter.index_url)
+        novel_id = standardize_id(chapter.novel_id)
         post_data = {
             "id": novel_id,
             "chapter": str(chapter.order),
@@ -714,7 +714,7 @@ class FanqieRainFetcher(BaseFetcher):
                 url=chapter_url,
                 id=str(item_id),
                 order=idx,
-                index_url=url,
+                novel_id=novel_id,
                 volume=volume_name,
                 time=first_pass_time,
             )
