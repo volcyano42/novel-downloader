@@ -7,8 +7,8 @@ export interface NovelMeta {
 }
 
 export interface ChapterBrief {
-  id: string; url: string; index_url: string; title: string; order: number;
-  volume: string | null; count: number | null; is_complete: boolean;
+  id: string; url: string; novel_id: string; title: string; order: number;
+  volume: string | null; count: number | null; downloaded: boolean;
 }
 
 export interface ChapterData extends ChapterBrief {

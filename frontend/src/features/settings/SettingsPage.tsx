@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Folder, Monitor, Globe, Zap } from "lucide-react";
+import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Folder, Monitor, Globe, Zap, Bell } from "lucide-react";
 import type { AppConfig } from "@/api/config";
 
 // ── tiny helpers ──
@@ -216,6 +216,20 @@ export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsV
         <Row label="日志级别">
           <Select value={cfg.log_level} onChange={v => onUpdate("log_level", v)}
             options={[{ value: "DEBUG", label: "DEBUG" }, { value: "INFO", label: "INFO" }, { value: "WARNING", label: "WARNING" }, { value: "ERROR", label: "ERROR" }]} />
+        </Row>
+      </Section>
+
+      {/* ── 通知 ── */}
+      <Section icon={Bell} title="通知">
+        <Row label="下载完成时" desc="全部章节下载成功时触发">
+          <Toggle checked={cfg.notify?.on_complete ?? true} onChange={v => onUpdate("notify.on_complete", v)} />
+        </Row>
+        <Row label="有不完整章节时" desc="部分章节失败或缺失时触发">
+          <Toggle checked={cfg.notify?.on_incomplete ?? true} onChange={v => onUpdate("notify.on_incomplete", v)} />
+        </Row>
+        <Row label="提示音" desc="bell=终端响铃, system=系统通知, none=静默">
+          <Select value={cfg.notify?.sound ?? "bell"} onChange={v => onUpdate("notify.sound", v)}
+            options={[{ value: "bell", label: "🔔 响铃" }, { value: "system", label: "💻 系统通知" }, { value: "none", label: "🔇 静默" }]} />
         </Row>
       </Section>
 

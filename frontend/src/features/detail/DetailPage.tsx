@@ -53,22 +53,23 @@ export default function DetailPage() {
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
         const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
         setMerged(m);
-        // pre-select incomplete local chapters
+        // pre-select not-yet-downloaded chapters
         const preSelected = new Set<string>();
         for (const mc of m) {
-          if (!mc.local || !mc.local.is_complete) preSelected.add(mc.remote.id);
+          if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
         }
         setSelectedIds(preSelected);
       }).catch(() => {}).finally(() => setLoading(false));
     } else {
-      storageApi.listChapters(novelId, { size: 500 })
-        .then(all => { setChapters(all); }).catch(() => {}).finally(() => setLoading(false));
+      // 本地模式：server-side 分页，每页只加载 pageSize 条
+      storageApi.listChapters(novelId, { page, size: pageSize })
+        .then(paged => { setChapters(paged); }).catch(() => {}).finally(() => setLoading(false));
     }
   }, [novelId, page, remoteUrl]);
 
   const showCompare = isRemote || compareMode;
-  const totalPages = Math.max(1, Math.ceil((showCompare ? novel?.serial ?? 0 : chapters.length) / pageSize));
-  const pagedChapters = showCompare ? chapters : chapters.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil((novel?.serial ?? 0) / pageSize));
+  const pagedChapters = chapters; // 本地模式已由服务端分页，远程模式使用 merged
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
 
@@ -106,21 +107,22 @@ export default function DetailPage() {
     setChecking(true);
     try {
       const remote = await downloadApi.fetchChapterList(novelId, remoteUrl ?? novel?.url ?? "");
-      const localMap = new Map(chapters.map((c: ChapterBrief) => [c.id, c]));
+      const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
+      const localMap = new Map(localAll.map((c: ChapterBrief) => [c.id, c]));
       const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
-      const needsUpdate = m.some(mc => !mc.local || !mc.local.is_complete);
+      const needsUpdate = m.some(mc => !mc.local || !mc.local.downloaded);
       if (needsUpdate) {
         setMerged(m);
         const preSelected = new Set<string>();
         for (const mc of m) {
-          if (!mc.local || !mc.local.is_complete) preSelected.add(mc.remote.id);
+          if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
         }
         setSelectedIds(preSelected);
         setCompareMode(true);
       }
     } catch { /* ignore */ }
     finally { setChecking(false); }
-  }, [novelId, chapters]);
+  }, [novelId, novel?.url]);
 
   if (!novel && !loading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
 
@@ -190,10 +192,10 @@ export default function DetailPage() {
             <div className="space-y-1">
               {merged.map(mc => {
                 const checked = selectedIds.has(mc.remote.id);
-                const localOk = mc.local?.is_complete;
-                const statusIcon = localOk === true ? "✓" : localOk === false ? "⚠" : "✗";
-                const statusColor = localOk === true ? "text-emerald-500" : localOk === false ? "text-amber-500" : "text-red-400";
-                const statusTip = localOk === true ? "已下载" : localOk === false ? "不完整，需更新" : "未下载";
+                const localOk = mc.local?.downloaded;
+                const statusIcon = localOk ? "✓" : "✗";
+                const statusColor = localOk ? "text-emerald-500" : "text-red-400";
+                const statusTip = localOk ? "已下载" : "未下载";
                 return (
                   <div key={mc.remote.id} className="flex items-center gap-2">
                     <label className="shrink-0 flex items-center cursor-pointer">
@@ -217,7 +219,7 @@ export default function DetailPage() {
             <div className="space-y-1">
               {pagedChapters.map(ch => (
                 <div key={ch.id} className="flex items-center gap-2">
-                  <span className={`shrink-0 text-xs w-10 text-right ${ch.is_complete ? "text-emerald-500" : "text-red-400"}`}>{ch.is_complete ? "✓" : "✗"}</span>
+                  <span className={`shrink-0 text-xs w-10 text-right ${ch.downloaded ? "text-emerald-500" : "text-red-400"}`}>{ch.downloaded ? "✓" : "✗"}</span>
                   <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <span className="truncate text-slate-700 flex-1">{ch.title}</span>
                   </button>
@@ -261,3 +263,4 @@ export default function DetailPage() {
     </div>
   );
 }
+

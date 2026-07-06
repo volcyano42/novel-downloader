@@ -31,6 +31,12 @@ export interface ImgOptions extends FormatOptions {
   output_format: string;
 }
 
+export interface NotifyConfig {
+  on_complete: boolean;
+  on_incomplete: boolean;
+  sound: "bell" | "system" | "none";
+}
+
 export interface AppConfig {
   name: string;
   mode: string;
@@ -44,6 +50,7 @@ export interface AppConfig {
   txt: TxtOptions;
   epub: EpubOptions;
   img: ImgOptions;
+  notify: NotifyConfig;
   api_providers: Record<string, string[]>;
   groups: Record<string, Record<string, object>>;
 }
