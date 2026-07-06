@@ -56,8 +56,8 @@ def fix_schema(db_path: str, dry_run=False):
         print("[DRY RUN] 将会移除 chapters.is_complete 列")
         return
 
-    # No comment.
-    conn.execute("""
+    # 重建 chapters 表，移除 is_complete 和 images_json 列
+    conn.executescript("""
         CREATE TABLE chapters_new (
             id          TEXT NOT NULL,
             novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
@@ -70,13 +70,35 @@ def fix_schema(db_path: str, dry_run=False):
             count       INTEGER,
             PRIMARY KEY (novel_id, id)
         );
-        INSERT INTO chapters_new SELECT
-            id, novel_id, url, title, "order", volume, content, time, count
-        FROM chapters;
+        INSERT INTO chapters_new
+            SELECT id, novel_id, url, title, "order", volume, content, time, count
+            FROM chapters;
         DROP TABLE chapters;
         ALTER TABLE chapters_new RENAME TO chapters;
         CREATE INDEX IF NOT EXISTS idx_chapters_novel ON chapters(novel_id, "order");
     """)
+    # 同样清理 novels 表的 cover_json 列（图片已迁移到 illustrations）
+    cur = conn.execute("PRAGMA table_info(novels)")
+    novel_cols = [r[1] for r in cur.fetchall()]
+    if "cover_json" in novel_cols:
+        conn.executescript("""
+            CREATE TABLE novels_new (
+                id          TEXT PRIMARY KEY,
+                title       TEXT NOT NULL,
+                url         TEXT NOT NULL,
+                author      TEXT NOT NULL DEFAULT '',
+                serial      INTEGER NOT NULL DEFAULT 0,
+                description TEXT NOT NULL DEFAULT '',
+                tags        TEXT NOT NULL DEFAULT '[]',
+                count       INTEGER,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO novels_new SELECT
+                id, title, url, author, serial, description, tags, count, created_at
+            FROM novels;
+            DROP TABLE novels;
+            ALTER TABLE novels_new RENAME TO novels;
+        """)
     conn.commit()
     print("Schema 已更新：移除 is_complete ✓")
 
@@ -171,16 +193,17 @@ def main():
 
     db = str(_PROJECT_ROOT / args.db) if not args.db.startswith("/") else args.db
 
-    if args.list:
-        list_incomplete(db)
-    elif args.fix_schema and args.restore:
+    did_something = False
+
+    if args.fix_schema:
         fix_schema(db, dry_run=args.dry_run)
+        did_something = True
+
+    if args.restore:
         restore_incomplete(db)
-    elif args.fix_schema:
-        fix_schema(db, dry_run=args.dry_run)
-    elif args.restore:
-        restore_incomplete(db)
-    else:
+        did_something = True
+
+    if args.list or not did_something:
         list_incomplete(db)
 
 
