@@ -1,6 +1,8 @@
-"""Download 路由 — 6 条，对接 search + NovelDownloader。"""
+"""Download 路由 — 8 条，对接 search + NovelDownloader + 后台下载任务管理。"""
 import hashlib
 import json
+import threading
+import uuid
 from base64 import b64encode
 from pathlib import Path
 
@@ -12,6 +14,77 @@ from nldlder import NovelDownloader, Options, create_engine, get_fetchers, searc
 router = APIRouter(prefix="/api/v1/download", tags=["download"])
 
 _engines: dict[str, tuple[object, str]] = {}
+
+# ── 下载任务管理器 ──────────────────────────────────────────
+
+_tasks: dict[str, dict] = {}
+_tasks_lock = threading.Lock()
+
+def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | None = None):
+    """后台线程：逐章下载，支持暂停/恢复。"""
+    from nldlder.models.novel import Chapter, Chapters, Novel
+    from nldlder.core.storage import SQLiteStorage
+    from nldlder.core.options import StorageOptions
+    from nldlder.core.downloader import get_fetcher_for_id
+
+    # API 模式自动发现 provider（如果前端没指定）
+    platform = None
+    if mode == "api" and not provider:
+        fetcher_cls = get_fetcher_for_id(task["novel_id"])
+        if fetcher_cls:
+            platform = fetcher_cls.host[0].split(".")[0] if fetcher_cls.host else None
+            site = _load_site_cfg(platform) if platform else {}
+            api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
+            for name, prov in api_section.items():
+                if isinstance(prov, dict) and prov.get("enabled", True):
+                    provider = name
+                    break
+
+    try:
+        engine = _get_engine(engine_id, mode, provider=provider, platform=platform)
+        dl = NovelDownloader(engine)
+        store = SQLiteStorage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
+
+        # 先保存小说元数据
+        novel_url = task.get("novel_url", "")
+        if novel_url:
+            try:
+                meta = dl.fetch_meta(novel_url)
+                store.save_meta(meta)
+            except Exception:
+                pass
+        novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"], serial=0, author="", description="")
+
+        for ch_data in task["chapters"]:
+            if task["_pause"].is_set():
+                task["status"] = "paused"
+                task["_pause"].wait()
+                task["status"] = "downloading"
+
+            ch = Chapter(id=ch_data["id"], url=ch_data["url"], novel_id=task["novel_id"],
+                         title=ch_data["title"], order=ch_data["order"], volume=ch_data.get("volume"))
+            task["current_title"] = ch.title
+            try:
+                downloaded = dl.resolve_chapter(ch)
+                if downloaded is not None:
+                    store.save_chapter(novel, Chapters(chapters=[downloaded]))
+                else:
+                    msg = f"章节不可获取: {ch.title}"
+                    with _tasks_lock:
+                        task["errors"].append(msg)
+                        task["detail"] = msg
+            except Exception as e:
+                msg = f"{ch.title}: {e}"
+                with _tasks_lock:
+                    task["errors"].append(msg)
+                    task["detail"] = msg
+            task["progress"] += 1
+        task["status"] = "completed"
+        if task["errors"]:
+            task["error"] = "; ".join(task["errors"][:3])
+    except Exception as e:
+        task["status"] = "failed"
+        task["error"] = str(e)
 
 def _mode_fingerprint(mode_cfg: dict) -> str:
     """对模式配置做哈希，用于检测选项变更。"""
@@ -146,15 +219,39 @@ def _get_engine(engine_id: str, mode: str | None = None, provider: str | None = 
     return engine
 
 @router.get("/search")
-async def search_novels(platform: str = Query(...), query: str = Query(...), page: int = Query(1), mode: str | None = Query(None), engine_id: str = Query("default")):
-    engine = _get_engine(engine_id, mode, platform=platform)
+async def search_novels(platform: str = Query(...), query: str = Query(...), page: int = Query(1), mode: str | None = Query(None), provider: str | None = Query(None), engine_id: str = Query("default")):
+    from nldlder.core.downloader import get_fetcher_for_url, get_fetcher_for_id
+
+    engine = _get_engine(engine_id, mode, provider=provider, platform=platform)
+
+    # ── URL / ID 直搜：跳过关键词，直接 fetch_meta ──
+    if query.startswith("http://") or query.startswith("https://"):
+        fetcher_cls = get_fetcher_for_url(query)
+        if fetcher_cls:
+            dl = NovelDownloader(engine)
+            try:
+                novel = dl.fetch_meta(query)
+                return [SearchResultData(title=novel.title, author=novel.author, url=novel.url, description=novel.description)]
+            except Exception as e:
+                raise HTTPException(500, str(e))
+
+    if query.isdigit():
+        fetcher_cls = get_fetcher_for_id(query)
+        if fetcher_cls:
+            try:
+                novel = fetcher_cls().fetch_novel_info(url=query, engine=engine)
+                return [SearchResultData(title=novel.title, author=novel.author, url=novel.url, description=novel.description)]
+            except Exception as e:
+                raise HTTPException(500, str(e))
+
+    # ── 关键词搜索 ──
     try: results = search(platform, query, engine, page=page)
     except Exception as e: raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url, description=r.description) for r in results]
 
 @router.post("/novel")
-async def fetch_meta(body: FetchMetaRequest, mode: str | None = Query(None)):
-    engine = _get_engine(body.engine_id, mode); dl = NovelDownloader(engine)
+async def fetch_meta(body: FetchMetaRequest, mode: str | None = Query(None), provider: str | None = Query(None)):
+    engine = _get_engine(body.engine_id, mode, provider=provider); dl = NovelDownloader(engine)
     try: novel = dl.fetch_meta(body.url)
     except Exception as e: raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -163,8 +260,8 @@ async def fetch_meta(body: FetchMetaRequest, mode: str | None = Query(None)):
             "cover": _encode_cover(novel.cover)}
 
 @router.get("/novel/{novel_id}")
-async def get_remote_novel(novel_id: str, url: str = Query(...), engine_id: str = Query("default"), mode: str | None = Query(None)):
-    engine = _get_engine(engine_id, mode); dl = NovelDownloader(engine)
+async def get_remote_novel(novel_id: str, url: str = Query(...), engine_id: str = Query("default"), mode: str | None = Query(None), provider: str | None = Query(None)):
+    engine = _get_engine(engine_id, mode, provider=provider); dl = NovelDownloader(engine)
     try: novel = dl.fetch_meta(url)
     except Exception as e: raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -172,32 +269,63 @@ async def get_remote_novel(novel_id: str, url: str = Query(...), engine_id: str 
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count}
 
 @router.get("/novel/{novel_id}/chapters")
-async def fetch_chapter_list(novel_id: str, url: str = Query(...), engine_id: str = Query("default"), mode: str | None = Query(None)):
-    engine = _get_engine(engine_id, mode); dl = NovelDownloader(engine)
+async def fetch_chapter_list(novel_id: str, url: str = Query(...), engine_id: str = Query("default"), mode: str | None = Query(None), provider: str | None = Query(None)):
+    engine = _get_engine(engine_id, mode, provider=provider); dl = NovelDownloader(engine)
     try: chapters = dl.fetch_chapter_list(url)
     except Exception as e: raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                          order=ch.order, volume=ch.volume, count=ch.count) for ch in chapters]
 
 @router.post("/novel/{novel_id}/chapter")
-async def download_chapters(novel_id: str, body: list[DownloadChapterRequest], engine_id: str = Query("default"), mode: str | None = Query(None)):
-    from nldlder.models.novel import Chapter, Chapters, Novel
-    from nldlder.core.storage import SQLiteStorage
-    from nldlder.core.options import StorageOptions
-    engine = _get_engine(engine_id, mode); dl = NovelDownloader(engine)
-    chapters = [Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order, volume=ch.volume) for ch in body]
-    try:
-        results = []
-        for ch in chapters:
-            downloaded = dl.resolve_chapter(ch)
-            if downloaded is not None:
-                results.append(downloaded)
-        result = Chapters(chapters=results)
-    except Exception as e: raise HTTPException(500, str(e))
-    store = SQLiteStorage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
-    novel = Novel(title="", url="", id=novel_id, serial=0, author="", description="")
-    store.save_chapter(novel, result)
-    return {"downloaded": len(result), "chapters": [{"id": ch.id, "title": ch.title, "order": ch.order, "downloaded": ch.content is not None} for ch in result]}
+async def download_chapters(novel_id: str, body: list[DownloadChapterRequest],
+                            title: str = Query(""), engine_id: str = Query("default"),
+                            mode: str | None = Query(None), provider: str | None = Query(None),
+                            novel_url: str = Query("")):
+    task_id = uuid.uuid4().hex[:12]
+    chapters_data = [{"id": ch.id, "url": ch.url, "title": ch.title,
+                       "order": ch.order, "volume": ch.volume} for ch in body]
+    task = {
+        "task_id": task_id, "novel_id": novel_id, "title": title,
+        "total": len(chapters_data), "progress": 0, "status": "downloading",
+        "error": None, "errors": [], "current_title": "", "detail": "",
+        "chapters": chapters_data, "novel_url": novel_url,
+        "_pause": threading.Event(),
+    }
+    with _tasks_lock:
+        _tasks[task_id] = task
+    threading.Thread(target=_run_download, args=(task, engine_id, mode, provider), daemon=True).start()
+    return {"task_id": task_id, "total": task["total"]}
+
+@router.get("/tasks")
+async def list_tasks():
+    with _tasks_lock:
+        return [{k: v for k, v in t.items() if not k.startswith("_") and k not in ("chapters",)}
+                for t in _tasks.values()]
+
+@router.post("/task/{task_id}/pause")
+async def pause_task(task_id: str):
+    with _tasks_lock:
+        t = _tasks.get(task_id)
+        if not t: raise HTTPException(404, "任务不存在")
+        if t["status"] == "downloading":
+            t["_pause"].set()
+    return {"status": "ok"}
+
+@router.post("/task/{task_id}/resume")
+async def resume_task(task_id: str):
+    with _tasks_lock:
+        t = _tasks.get(task_id)
+        if not t: raise HTTPException(404, "任务不存在")
+        if t["status"] == "paused":
+            t["_pause"].clear()
+    return {"status": "ok"}
+
+@router.delete("/task/{task_id}")
+async def delete_task(task_id: str):
+    with _tasks_lock:
+        t = _tasks.pop(task_id, None)
+        if not t: raise HTTPException(404, "任务不存在")
+    return {"status": "ok"}
 
 @router.get("/platform")
 async def list_platforms():
