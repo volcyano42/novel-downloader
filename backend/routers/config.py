@@ -60,6 +60,11 @@ _DEFAULTS = {
         "output_path": "app_data/exports/{name}",
         "file_name_template": "{n}",
     },
+    "notify": {
+        "on_complete": True,
+        "on_incomplete": True,
+        "sound": "bell",
+    },
 }
 
 
@@ -132,6 +137,7 @@ async def get_config():
         "img": _fmt("img"),
         "api_providers": _api_providers(),
         "groups": _load_yaml("groups.yaml"),
+        "notify": _deep_merge(_DEFAULTS["notify"], dl.get("notify", {})),
     }
 
 
@@ -170,6 +176,10 @@ async def save_config(body: dict):
         out["path"] = body["output_path"]
     if "file_template" in body:
         out["file_template"] = body["file_template"]
+
+    # notify 块
+    if "notify" in body and isinstance(body["notify"], dict):
+        dl["notify"] = _deep_merge(dl.get("notify", {}), body["notify"])
 
     with open(_config_dir / "config.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(raw, f, allow_unicode=True, default_flow_style=False)
