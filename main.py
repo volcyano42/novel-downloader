@@ -1311,6 +1311,12 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
             print(f"  全部章节下载完成 ✓")
         print(f"{'='*40}")
 
+        # ── 通知 ──────────────────────────────────────────────
+        notify_cfg = cfg.get("download", {}).get("notify", {})
+        if notify_cfg:
+            from nldlder.utils.notify import notify
+            notify(notify_cfg, complete=success, incomplete=incomplete_count)
+
     # ── 5. 导出 ──────────────────────────────────────────────────
     print("正在导出...")
     _do_export(novel, dl)

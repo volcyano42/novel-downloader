@@ -17,6 +17,10 @@ download:
     timeout: 30
     user_data_dir: app_data/browser/Chromium/User Data
   max_workers: 3
+  notify:
+    on_complete: true
+    on_incomplete: true
+    sound: bell                    # bell | system | none
   requests:
     backoff_factor: 2
     delay:
