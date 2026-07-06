@@ -4,6 +4,26 @@ from base64 import b64encode, b64decode
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Sequence, Iterator
+from urllib.parse import urlparse, urlunparse
+
+
+def normalize_url(url: str) -> str:
+    """规范化 URL：去掉末尾斜杠、统一小写 scheme 和 host。
+
+    不改变路径大小写（部分站点路径区分大小写）。
+    """
+    if not url:
+        return url
+    parsed = urlparse(url)
+    # 去掉末尾 /
+    path = parsed.path.rstrip("/") or "/"
+    # 统一 scheme 和 host 为小写
+    normalized = parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        path=path,
+    )
+    return urlunparse(normalized)
 
 
 _IMAGE_SIGNATURES: list[tuple[bytes, str]] = [
@@ -28,6 +48,7 @@ class Illustration:
     alt: str | None = None
     insert: int | None = None
     url: str | None = None
+    owner_id: str | None = None   # novel_id 或 chapter_id，用于数据库索引
 
     def __hash__(self):
         return hash(self.raw_data)
@@ -250,7 +271,7 @@ class Chapters(Sequence):
 class Chapter:
     id: str
     url: str
-    index_url: str
+    novel_id: str
     title: str
     order: int
     volume: str | None = None
@@ -263,7 +284,7 @@ class Chapter:
     @staticmethod
     def loads(id: str,
               url: str,
-              index_url: str,
+              novel_id: str,
               title: str,
               order: int,
               volume: str | None = None,
@@ -276,7 +297,7 @@ class Chapter:
               ) -> Chapter:
 
         images = [Illustration.loads(**image) for image in images]
-        chapter =  Chapter(id=id, url=url, index_url=index_url, title=title, order=order,
+        chapter =  Chapter(id=id, url=url, novel_id=novel_id, title=title, order=order,
                            volume=volume, content=content, time=time, count=count, is_complete=is_complete,
                            images=tuple(images))
         for k, v in kwargs.items():
