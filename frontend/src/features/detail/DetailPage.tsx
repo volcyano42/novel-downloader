@@ -47,7 +47,7 @@ export default function DetailPage() {
     if (isRemote) {
       // fetch remote full list + local for comparison
       Promise.all([
-        downloadApi.fetchChapterList(novelId),
+        downloadApi.fetchChapterList(novelId, remoteUrl!),
         storageApi.listChapters(novelId).catch(() => [] as ChapterBrief[]),
       ]).then(([remote, local]) => {
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
@@ -105,7 +105,7 @@ export default function DetailPage() {
   const handleCheckUpdate = useCallback(async () => {
     setChecking(true);
     try {
-      const remote = await downloadApi.fetchChapterList(novelId);
+      const remote = await downloadApi.fetchChapterList(novelId, remoteUrl ?? novel?.url ?? "");
       const localMap = new Map(chapters.map((c: ChapterBrief) => [c.id, c]));
       const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
       const needsUpdate = m.some(mc => !mc.local || !mc.local.is_complete);
