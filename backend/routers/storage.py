@@ -50,12 +50,12 @@ def _novel_to_meta(novel) -> NovelMeta:
 
 def _chapter_to_brief(ch) -> ChapterBrief:
     return ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
-                        order=ch.order, volume=ch.volume, count=ch.count, is_complete=ch.is_complete)
+                        order=ch.order, volume=ch.volume, count=ch.count)
 
 def _chapter_to_data(ch) -> ChapterData:
     return ChapterData(
         id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order,
-        volume=ch.volume, content=ch.content, time=ch.time, count=ch.count, is_complete=ch.is_complete,
+        volume=ch.volume, content=ch.content, time=ch.time, count=ch.count,
         images=[{"raw_data": b64encode(img.raw_data).decode() if img.raw_data else None,
                   "alt": img.alt, "insert": img.insert, "url": img.url} for img in ch.images],
     )
@@ -103,8 +103,8 @@ async def list_chapters(novel_id: str, order: str | None = Query(None), volume: 
         hi = int(parts[1]) if len(parts) > 1 and parts[1] else len(result)
         result = [r for r in result if lo <= r.order <= hi]
     if volume: result = [r for r in result if r.volume == volume]
-    if status == "complete": result = [r for r in result if r.is_complete]
-    elif status == "incomplete": result = [r for r in result if not r.is_complete]
+    # is_complete 字段已移除，status 过滤暂时不做
+    if status: pass
     start = (page - 1) * size; return result[start:start + size]
 
 @router.put("/novel/{novel_id}/chapters")

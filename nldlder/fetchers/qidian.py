@@ -159,7 +159,7 @@ class QidianHTMLParser:
 
     @staticmethod
     def parse_chapter_content(html: str, chapter: Chapter) -> Chapter:
-        """解析并填充 content, count, time, is_complete"""
+        """解析并填充 content, count, time, """
         parent_soup = BeautifulSoup(html, 'lxml')
 
         if not QidianHTMLParser.content_is_exist(html):
@@ -174,17 +174,15 @@ class QidianHTMLParser:
             update_time_stamp = chapter_info.get("updateTimestamp", 0)
             novel_content_soup = parent_soup.find('main')
             if parent_soup.find(name='input', attrs = {"type": "checkbox"}):
-                is_complete = False
+                # 章节不完整，但内容仍在页面中
                 novel_content = '\n\n'.join(i.get_text().strip() for i in novel_content_soup) if novel_content_soup else ""
             else:
-                is_complete = True
                 spans = novel_content_soup.find_all("span", class_="content-text") if novel_content_soup else []
                 novel_content = '\n\n'.join(i.get_text().strip() for i in spans)
 
             chapter.content = novel_content
             chapter.count = word_count
             chapter.time = update_time_stamp
-            chapter.is_complete = is_complete
             return chapter
 
         title_tag = parent_soup.find('h1', class_='title')
@@ -210,10 +208,9 @@ class QidianHTMLParser:
 
         novel_content_soup = parent_soup.find('main')
         if parent_soup.find(name='input', attrs = {"type": "checkbox"}):
-            is_complete = False
+            # 章节不完整，但内容仍在页面中
             novel_content = '\n\n'.join(i.get_text().strip() for i in novel_content_soup) if novel_content_soup else ""
         else:
-            is_complete = True
             spans = novel_content_soup.find_all("span", class_="content-text") if novel_content_soup else []
             novel_content = '\n\n'.join(i.get_text().strip() for i in spans)
 
@@ -221,7 +218,6 @@ class QidianHTMLParser:
         chapter.title = title
         chapter.count = count_word
         chapter.time = update_time
-        chapter.is_complete = is_complete
         return chapter
 
 
@@ -295,7 +291,7 @@ class QidianBrowserFetcher(BaseFetcher):
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
             raise ChapterNotFoundError("Qidian chapter page shows no-content div")
         result = QidianHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 
 class QidianRequestsFetcher(BaseFetcher):
@@ -325,7 +321,7 @@ class QidianRequestsFetcher(BaseFetcher):
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
             raise ChapterNotFoundError(f"Qidian chapter page shows no-content div: {chapter.url}")
         result = QidianHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 
 def use_fetcher(engine) -> type[QidianRequestsFetcher | QidianBrowserFetcher]:

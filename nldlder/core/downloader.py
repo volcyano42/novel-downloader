@@ -138,7 +138,7 @@ class NovelDownloader:
 
     def resolve_chapter(self,
                          chapter: Chapter,
-                         fetcher=None, **kwargs) -> Chapters:
+                         fetcher=None, **kwargs) -> Chapter | None:
         """下载单个章节。
 
         Args:
@@ -146,7 +146,7 @@ class NovelDownloader:
             fetcher: 可选抓取器实例。为 None 时自动从章节 URL 解析。
 
         Returns:
-            已下载完成的章节（Chapters 对象）。
+            已填充的 Chapter，章节不可获取时返回 None。
         """
         if fetcher is None:
             fetcher = get_fetcher_for_id(chapter.novel_id)()

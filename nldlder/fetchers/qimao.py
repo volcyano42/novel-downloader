@@ -264,18 +264,12 @@ class QimaoHTMLParser:
             chapter.title = chapter_title
 
         # 检测章节不完整（VIP/需登录/APP 专享）
-        is_complete = True
         if soup.select_one(".reader-login-code") or soup.select_one(".show-part"):
-            is_complete = False
+            return None
 
         # 提取正文
         article_div = soup.select_one(".chapter-detail-article .article")
         if not article_div:
-            if not is_complete:
-                chapter.is_complete = False
-                chapter.content = ""
-                chapter.count = word_count
-                return chapter
             raise ParseError("七猫章节页缺少正文容器 .article")
 
         paragraphs: list[str] = []
@@ -291,7 +285,6 @@ class QimaoHTMLParser:
 
         chapter.content = content
         chapter.count = word_count or len(content)
-        chapter.is_complete = is_complete
 
         return chapter
 
@@ -352,7 +345,7 @@ class QimaoBrowserFetcher(BaseFetcher):
                               **kwargs) -> Chapters:
         html = engine.fetch_text(url=chapter.url, **kwargs)
         result = QimaoHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 class QimaoRainFetcher(BaseFetcher):
 
@@ -505,7 +498,7 @@ class QimaoRainFetcher(BaseFetcher):
         return Chapters(results)
 
     def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
-        """解析并填充content, count, is_complete(True)"""
+        """解析并填充content, count, (True)"""
         item_id = standardize_id(chapter)
         url = QimaoRainFetcher._api_url(engine, type=4, itemid=item_id)
         response = engine.fetch_json(url, **kwargs)
@@ -524,9 +517,9 @@ class QimaoRainFetcher(BaseFetcher):
 
         chapter.content = content
         chapter.count = len(content)
-        chapter.is_complete = True
+        pass #  removed
 
-        return Chapters(chapter)
+        return chapter
 
 class QimaoRequestsFetcher(BaseFetcher):
     """HTTP Requests 引擎获取器。
@@ -569,7 +562,7 @@ class QimaoRequestsFetcher(BaseFetcher):
                               **kwargs) -> Chapters:
         html = engine.fetch_text(url=chapter.url, **kwargs)
         result = QimaoHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 
 def use_fetcher(engine) -> type[QimaoRequestsFetcher | QimaoBrowserFetcher | QimaoRainFetcher]:

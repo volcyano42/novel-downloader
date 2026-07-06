@@ -227,7 +227,7 @@ class FanqieHTMLParser:
 
     @staticmethod
     def parse_chapter_content(html: str, chapter: Chapter) -> Chapter:
-        """解析并填充content, count, images, is_complete"""
+        """解析并填充content, count, images, """
 
         if BeautifulSoup(html, 'lxml').find("div", class_="no-content"):
             raise ChapterNotFoundError("Chapter page shows no-content div")
@@ -240,9 +240,7 @@ class FanqieHTMLParser:
         count = json_data.get("reader", {}).get("chapterData", {}).get("chapterWordNumber")
         parent_soup = BeautifulSoup(html, 'lxml')
         if parent_soup.find('div', class_='muye-to-fanqie'):
-            is_complete = False
-        else:
-            is_complete = True
+            return None
 
         html_content = str(parent_soup.find('div', class_='muye-reader-content noselect'))
         soup = BeautifulSoup(translate(html_content), 'lxml')
@@ -354,7 +352,6 @@ class FanqieHTMLParser:
         chapter.count = count
         chapter.content = novel_content
         chapter.images = tuple(img_items)
-        chapter.is_complete = is_complete
         return chapter
 
 class FanqieBrowserFetcher(BaseFetcher):
@@ -429,7 +426,7 @@ class FanqieBrowserFetcher(BaseFetcher):
             raise ChapterNotFoundError("Chapter page shows no-content div")
 
         result = FanqieHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 class FanqieOIAPIFetcher(BaseFetcher):
 
@@ -542,7 +539,7 @@ class FanqieOIAPIFetcher(BaseFetcher):
         return Chapters(results)
 
     def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
-        """解析并填充content, count, is_complete(True)"""
+        """解析并填充content, count, (True)"""
         novel_id = standardize_id(chapter.novel_id)
         post_data = {
             "id": novel_id,
@@ -566,10 +563,10 @@ class FanqieOIAPIFetcher(BaseFetcher):
         for data in data_list.values() if isinstance(data_list, dict) else []:
             chapter.content = data.get('content', '').replace(f"{data.get('chapter_title', '')}\n\n", "")
             chapter.count = data.get('word_number', 0)
-            chapter.is_complete = True
+            pass #  removed
             break
 
-        return Chapters(chapter)
+        return chapter
 
 class FanqieRainFetcher(BaseFetcher):
 
@@ -722,7 +719,7 @@ class FanqieRainFetcher(BaseFetcher):
         return Chapters(results)
 
     def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
-        """解析并填充content, count, is_complete(True)"""
+        """解析并填充content, count, (True)"""
         item_id = standardize_id(chapter)
         url = FanqieRainFetcher._api_url(engine, type=4, itemid=item_id)
         response = engine.fetch_json(url, **kwargs)
@@ -741,9 +738,9 @@ class FanqieRainFetcher(BaseFetcher):
 
         chapter.content = content
         chapter.count = len(content)
-        chapter.is_complete = True
+        pass #  removed
 
-        return Chapters(chapter)
+        return chapter
 
 class FanqieRequestsFetcher(BaseFetcher):
 
@@ -785,7 +782,7 @@ class FanqieRequestsFetcher(BaseFetcher):
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
             raise ChapterNotFoundError("Chapter page shows no-content div")
         result = FanqieHTMLParser.parse_chapter_content(html, chapter)
-        return Chapters(result)
+        return result
 
 def use_fetcher(engine) -> type[FanqieRequestsFetcher] | type[FanqieBrowserFetcher] | type[FanqieOIAPIFetcher] | type[FanqieRainFetcher]:
     if engine.name == "browser":

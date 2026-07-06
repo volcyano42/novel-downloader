@@ -5,7 +5,6 @@ import pytest
 
 from nldlder.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
 
-
 # ═══════════════════════════════════════════════════════════════
 # Illustration
 # ═══════════════════════════════════════════════════════════════
@@ -53,7 +52,6 @@ class TestIllustration:
         img = Illustration.loads(raw_data=img_bytes, extra_field="hello")
         assert img.extra_field == "hello"  # noqa
 
-
 # ═══════════════════════════════════════════════════════════════
 # Chapter
 # ═══════════════════════════════════════════════════════════════
@@ -63,8 +61,7 @@ class TestChapter:
         assert chapter_1.id == "ch1"
         assert chapter_1.title == "第一章 开端"
         assert chapter_1.order == 1
-        assert chapter_1.is_complete is True
-        assert chapter_1.content == "这是第一章的内容。"
+                assert chapter_1.content == "这是第一章的内容。"
 
     def test_eq_by_id_only(self):
         a = Chapter(id="x", url="a", novel_id="i", title="t", order=1, content="aaa")
@@ -90,7 +87,7 @@ class TestChapter:
             id="ch99", url="http://x.com/99", novel_id="http://x.com",
             title="第99章", order=99, volume="终卷",
             content="终章内容", time=999.0, count=5000,
-            is_complete=True, images=[],
+             images=[],
         )
         assert ch.id == "ch99"
         assert ch.volume == "终卷"
@@ -110,14 +107,9 @@ class TestChapter:
         ch = Chapter.loads(id="x", url="u", novel_id="i", title="t", order=1, custom="val")
         assert ch.custom == "val"  # noqa
 
-    def test_default_is_complete_false(self):
-        ch = Chapter(id="x", url="u", novel_id="i", title="t", order=1)
-        assert ch.is_complete is False
-
     def test_images_default_empty_tuple(self):
         ch = Chapter(id="x", url="u", novel_id="i", title="t", order=1)
         assert ch.images == ()
-
 
 # ═══════════════════════════════════════════════════════════════
 # Chapters (Sequence[Chapter])
@@ -225,7 +217,6 @@ class TestChapters:
     def test_chapters_property_returns_tuple(self, chapters: Chapters):
         assert isinstance(chapters._chapters, tuple)
 
-
 # ═══════════════════════════════════════════════════════════════
 # Novel
 # ═══════════════════════════════════════════════════════════════
@@ -298,7 +289,6 @@ class TestNovel:
         ]
         novel.update_chapter(batch)
         assert len(novel.chapters) == 5
-
 
 # ═══════════════════════════════════════════════════════════════
 # SearchResult

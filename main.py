@@ -1182,8 +1182,9 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
 
     # ── 3.5 选择下载范围 ────────────────────────────────────────
     total_chapters = len(novel.chapters)
-    incomplete = novel.chapters.incompleted_chapters
-    target = list(incomplete) if incomplete else []
+    # 未完成 = content 为 None 的章节（未下载或下载失败）
+    incomplete = [ch for ch in novel.chapters if ch.content is None]
+    target = incomplete
 
     if not target:
         print("所有章节已下载完毕！")
@@ -1200,8 +1201,8 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                 )
                 print(f"  已选择 {len(filtered)} 章（含已完成）")
                 novel.chapters = filtered
-                incomplete = novel.chapters.incompleted_chapters
-                target = list(incomplete) if incomplete else []
+                incomplete = [ch for ch in novel.chapters if ch.content is None]
+                target = incomplete
                 print(f"  实际待下载: {len(target)} 章")
 
     if target:
@@ -1292,8 +1293,8 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
             _log.info("下载完成: %d/%d章", done, total)
 
         # ── 统计输出 ──────────────────────────────────────────
-        incomplete = novel.chapters.incompleted_chapters
-        incomplete_count = len(incomplete) if incomplete else 0
+        incomplete = [ch for ch in novel.chapters if ch.content is None]
+        incomplete_count = len(incomplete)
         success = done - failed_chapters
 
         print(f"\n{'='*40}")

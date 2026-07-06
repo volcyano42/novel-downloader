@@ -1,17 +1,14 @@
 """Pydantic 模型 — 与 api-routes.md 请求/响应体一一对应。"""
 from pydantic import BaseModel
 
-
 class BackendSwitch(BaseModel):
     backend: str
-
 
 class CoverData(BaseModel):
     raw_data: str | None = None
     alt: str | None = None
     url: str | None = None
     format: str | None = None
-
 
 class NovelMeta(BaseModel):
     title: str
@@ -24,13 +21,11 @@ class NovelMeta(BaseModel):
     count: int | None = None
     cover: CoverData | None = None
 
-
 class ImageData(BaseModel):
     raw_data: str | None = None
     alt: str | None = None
     insert: int | None = None
     url: str | None = None
-
 
 class ChapterData(BaseModel):
     id: str
@@ -42,9 +37,7 @@ class ChapterData(BaseModel):
     content: str | None = None
     time: float | None = None
     count: int | None = None
-    is_complete: bool = False
-    images: list[ImageData] = []
-
+        images: list[ImageData] = []
 
 class ChapterBrief(BaseModel):
     id: str
@@ -54,8 +47,6 @@ class ChapterBrief(BaseModel):
     order: int
     volume: str | None = None
     count: int | None = None
-    is_complete: bool = False
-
 
 class SearchResultData(BaseModel):
     title: str
@@ -63,11 +54,9 @@ class SearchResultData(BaseModel):
     url: str
     description: str | None = None
 
-
 class FetchMetaRequest(BaseModel):
     url: str
     engine_id: str
-
 
 class DownloadChapterRequest(BaseModel):
     id: str
@@ -76,14 +65,13 @@ class DownloadChapterRequest(BaseModel):
     title: str
     order: int
     volume: str | None = None
-
+    volume: str | None = None
 
 class TXTExportOptions(BaseModel):
     enabled: bool = True
     output_path: str = "app_data/exports/{name}"
     file_name_template: str = "{name}"
     encoding: str = "utf-8"
-
 
 class EPUBExportOptions(BaseModel):
     enabled: bool = True
@@ -98,13 +86,11 @@ class EPUBExportOptions(BaseModel):
     jpeg_quality: int = 85
     max_image_width: int = 0
 
-
 class IMGExportOptions(BaseModel):
     enabled: bool = True
     output_path: str = "app_data/exports/{name}"
     file_name_template: str = "{n}"
     output_format: str = "original"
-
 
 class ExportRequest(BaseModel):
     novel_id: str
@@ -113,12 +99,10 @@ class ExportRequest(BaseModel):
     epub: EPUBExportOptions | None = None
     img: IMGExportOptions | None = None
 
-
 class ExportTaskStatus(BaseModel):
     task_id: str
     status: str
     progress: float = 0.0
-
 
 class APIOptionsData(BaseModel):
     name: str
@@ -130,7 +114,6 @@ class APIOptionsData(BaseModel):
     key: str | None = None
     params: dict[str, str] | None = None
 
-
 class RequestsOptionsData(BaseModel):
     headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 ..."}
     delay: tuple[float, float] = (3.0, 5.0)
@@ -139,7 +122,6 @@ class RequestsOptionsData(BaseModel):
     backoff_factor: float = 2
     cookies: dict[str, str] | None = None
     proxies: dict[str, str] | None = None
-
 
 class BrowserOptionsData(BaseModel):
     browser_type: str = "chromium"
@@ -150,7 +132,6 @@ class BrowserOptionsData(BaseModel):
     headless: bool = False
     user_data_dir: str | None = None
     viewport: dict[str, int] | None = None
-
 
 class CreateEngineRequest(BaseModel):
     mode: str = "api"

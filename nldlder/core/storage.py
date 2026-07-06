@@ -291,8 +291,7 @@ class SQLiteStorage(BaseStorage):
                     content     TEXT,
                     time        REAL,
                     count       INTEGER,
-                    is_complete INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (novel_id, id)
+                                        PRIMARY KEY (novel_id, id)
                 );
                 CREATE TABLE IF NOT EXISTS illustrations (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -420,7 +419,7 @@ class SQLiteStorage(BaseStorage):
                 conn.execute("""
                     INSERT OR REPLACE INTO chapters
                         (id, novel_id, url, title, "order", volume,
-                         content, time, count, is_complete)
+                         content, time, count)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
                       ch.content, ch.time, ch.count, int(ch.is_complete)))
@@ -467,7 +466,7 @@ class SQLiteStorage(BaseStorage):
         return Chapter(
             id=row[0], url=row[1], title=row[2], order=row[3],
             volume=row[4], content=row[5], time=row[6], count=row[7],
-            is_complete=bool(row[8]), images=images,
+            images=images,
             novel_id=novel_id,
         )
 
@@ -540,8 +539,7 @@ class PostgreSQLStorage(BaseStorage):
                     content     TEXT,
                     time        DOUBLE PRECISION,
                     count       INTEGER,
-                    is_complete BOOLEAN NOT NULL DEFAULT FALSE,
-                    PRIMARY KEY (novel_id, id)
+                                        PRIMARY KEY (novel_id, id)
                 );
                 CREATE TABLE IF NOT EXISTS illustrations (
                     id          SERIAL PRIMARY KEY,
@@ -674,7 +672,7 @@ class PostgreSQLStorage(BaseStorage):
             for ch in chapters:
                 cur.execute("""
                     INSERT INTO chapters (id, novel_id, url, title, "order",
-                        volume, content, time, count, is_complete)
+                        volume, content, time, count)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (novel_id, id) DO UPDATE SET
                         url=EXCLUDED.url, title=EXCLUDED.title,
@@ -695,7 +693,7 @@ class PostgreSQLStorage(BaseStorage):
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id, url, title, \"order\", volume, content, "
-                "time, count, is_complete "
+                "time, count "
                 "FROM chapters WHERE novel_id = %s AND id = %s",
                 (novel_id, chapter_id)
             )
@@ -715,7 +713,7 @@ class PostgreSQLStorage(BaseStorage):
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id, url, title, \"order\", volume, content, "
-                "time, count, is_complete "
+                "time, count "
                 "FROM chapters WHERE novel_id = %s ORDER BY \"order\"",
                 (novel_id,)
             )
@@ -730,7 +728,7 @@ class PostgreSQLStorage(BaseStorage):
         return Chapter(
             id=row[0], url=row[1], title=row[2], order=row[3],
             volume=row[4], content=row[5], time=row[6], count=row[7],
-            is_complete=bool(row[8]), images=images,
+            images=images,
             novel_id=novel_id,
         )
 

@@ -25,7 +25,6 @@ def _encode_cover(cover) -> dict | None:
 
     return {"raw_data": b64encode(cover.raw_data).decode(), "alt": cover.alt, "url": cover.url, "format": fmt}
 
-
 def _get_engine(engine_id: str, mode: str | None = None):
     if mode is None:
         cfg = load_config()
@@ -70,7 +69,7 @@ async def fetch_chapter_list(novel_id: str, url: str = Query(...), engine_id: st
     try: chapters = dl.fetch_chapter_list(url)
     except Exception as e: raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
-                         order=ch.order, volume=ch.volume, count=ch.count, is_complete=ch.is_complete) for ch in chapters]
+                         order=ch.order, volume=ch.volume, count=ch.count) for ch in chapters]
 
 @router.post("/novel/{novel_id}/chapter")
 async def download_chapters(novel_id: str, body: list[DownloadChapterRequest], engine_id: str = Query("default")):
@@ -78,8 +77,13 @@ async def download_chapters(novel_id: str, body: list[DownloadChapterRequest], e
     from nldlder import LocalStorage
     from nldlder.core.options import StorageOptions
     engine = _get_engine(engine_id); dl = NovelDownloader(engine)
-    chapters = Chapters([Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order, volume=ch.volume) for ch in body])
-    try: result = dl.resolve_chapters(chapters)
+    chapters = [Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order, volume=ch.volume) for ch in body]
+    try:
+        results = []
+        for ch in chapters:
+            result = dl.resolve_chapter(ch)
+            results.extend(result)
+        result = Chapters(results)
     except Exception as e: raise HTTPException(500, str(e))
     base_dir = Path(__file__).parent.parent.parent / "app_data" / "storage"
     store = LocalStorage(StorageOptions(base_dir=base_dir))

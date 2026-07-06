@@ -227,24 +227,6 @@ class Chapters(Sequence):
             if ch.volume == name
         )
     @property
-    def completed_chapters(self) -> Chapters | None:
-        """获取完整的章节"""
-        target_chapters = [chapter for chapter in self._chapters if chapter.is_complete]
-        if not target_chapters:
-            return None
-        else:
-            return Chapters(target_chapters)
-
-    @property
-    def incompleted_chapters(self) -> Chapters | None:
-        """获取不完整的章节"""
-        target_chapters = [chapter for chapter in self._chapters if not chapter.is_complete]
-        if not target_chapters:
-            return None
-        else:
-            return Chapters(target_chapters)
-
-    @property
     def volumes(self) -> dict[None | str, Chapters]:
         """按卷分组。
 
@@ -278,7 +260,6 @@ class Chapter:
     content: str | None = None
     time: float | None = None
     count: int | None = None
-    is_complete: bool = False
     images: Sequence[Illustration] = field(default_factory=tuple)
 
     @staticmethod
@@ -291,14 +272,13 @@ class Chapter:
               content: str | None = None,
               time: float| None = None,
               count: int | None = None,
-              is_complete: bool = False,
               images: Sequence[dict] = tuple(),
               **kwargs
               ) -> Chapter:
 
         images = [Illustration.loads(**image) for image in images]
         chapter =  Chapter(id=id, url=url, novel_id=novel_id, title=title, order=order,
-                           volume=volume, content=content, time=time, count=count, is_complete=is_complete,
+                           volume=volume, content=content, time=time, count=count,
                            images=tuple(images))
         for k, v in kwargs.items():
             setattr(chapter, k, v)

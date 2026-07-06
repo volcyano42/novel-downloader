@@ -74,7 +74,7 @@ class BaseFetcher(ABC):
     def fetch_chapter_content(self,
                               chapter: Chapter,
                               engine,
-                              **kwargs: Any) -> Chapters:
+                              **kwargs: Any) -> Chapter | None:
         """解析并填充单个章节的正文内容。
 
         Args:
@@ -82,6 +82,6 @@ class BaseFetcher(ABC):
             engine:  下载引擎实例。
 
         Returns:
-            已填充 content / is_complete / images 的 Chapters。
+            已填充 content / images 的 Chapter，章节不可获取时返回 None。
         """
         ...
