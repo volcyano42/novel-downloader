@@ -136,9 +136,11 @@ configure_logging(LogOptions(**cfg.get("log", {})),
 from nldlder import (
     NovelDownloader, Options, create_engine,
     get_fetchers, search, login,
-    LocalStorage, AntiCrawlError,
+    AntiCrawlError,
     split_into_groups, get_fetcher_for_url, get_fetcher_for_id, Chapters,
 )
+from nldlder.core.storage import create_storage
+from nldlder.core.options import StorageOptions
 from nldlder.core.exceptions import ChapterNotFoundError
 from nldlder.utils.logger import get_logger
 
@@ -254,7 +256,6 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
                     key=api_key,
                     timeout=provider.get("timeout", 30),
                     retry_times=provider.get("retry_times", 3),
-                    batch_size=provider.get("batch_size", 1),
                     backoff_factor=provider.get("backoff_factor", 2),
                     delay=tuple(provider.get("delay", [3, 5])),
                     params=provider.get("params", {}),
@@ -285,7 +286,12 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             delay=tuple(req_cfg.get("delay", [3, 5])),
         )
 
-    options.set_storage_options(base_dir=APP_DATA / "storage")
+    # Storage 配置：支持 local（JSON 文件）和 sqlite 两种后端
+    storage_cfg = cfg.get("storage", {})
+    backend = storage_cfg.get("backend", "local")
+    base_dir = storage_cfg.get("base_dir", APP_DATA / "storage")
+    database_url = storage_cfg.get("database_url", "")
+    options.set_storage_options(backend=backend, base_dir=base_dir, database_url=database_url)
 
     return options
 
@@ -635,10 +641,9 @@ def _settings_site(cfg: dict, platform: str, site_cfg: dict):
             print(f"\n--- 站点设置 (api) ---")
             print(f" 1. API Provider  [{active_prov}]  可用: {prov_list}")
             print(f" 2. API Key       [{key_masked}]")
-            print(f" 3. 批量大小      [{active_cfg.get('batch_size', 3)}]")
-            print(f" 4. 超时时间      [{active_cfg.get('timeout', 30)}s]")
-            print(f" 5. 重试次数      [{active_cfg.get('retry_times', 3)}]")
-            print(f" 6. 请求延迟      {active_cfg.get('delay', [3, 5])}s")
+            print(f" 3. 超时时间      [{active_cfg.get('timeout', 30)}s]")
+            print(f" 4. 重试次数      [{active_cfg.get('retry_times', 3)}]")
+            print(f" 5. 请求延迟      {active_cfg.get('delay', [3, 5])}s")
             print(" 0. 返回")
 
             choice = input("\n请选择编号: ").strip()
@@ -666,13 +671,6 @@ def _settings_site(cfg: dict, platform: str, site_cfg: dict):
                     save_site_config(platform, site_cfg)
                     print("✓ API Key 已保存")
             elif choice == "3":
-                n = _input_int(f"批量大小（当前: {active_cfg.get('batch_size', 3)}）: ")
-                if n is not None and n > 0:
-                    if active_prov:
-                        site_cfg["api"][active_prov]["batch_size"] = n
-                    save_site_config(platform, site_cfg)
-                    print(f"✓ 批量大小 → {n}")
-            elif choice == "4":
                 t = _input_float(f"超时时间（当前: {active_cfg.get('timeout', 30)}s）: ")
                 if t is not None and t > 0:
                     if active_prov:
@@ -1209,14 +1207,13 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
     if target:
         print(f"开始下载: {len(target)} 章")
 
-        # 分批
-        batch_size = dl._options.api.batch_size if dl._options.mode == "api" else 1
-        groups = split_into_groups(target, batch_size)
+        # 分批（API 模式每次 1 章，由 fetcher 内部处理）
+        groups = split_into_groups(target, 1)
         total = len(target)
 
         _log.info(
-            "开始下载: %d章, %d批次, %d线程, batch_size=%d",
-            total, len(groups), max_workers, batch_size,
+            "开始下载: %d章, %d批次, %d线程",
+            total, len(groups), max_workers,
         )
 
         # 进度追踪
@@ -1229,7 +1226,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
         progress_ctx, task = _create_progress(total)
 
         # 抓取器（同一实例可复用）
-        fetcher_cls = get_fetcher_for_url(target[0].index_url)
+        fetcher_cls = get_fetcher_for_id(target[0].novel_id)
         fetcher = fetcher_cls() if fetcher_cls else None
 
         try:
@@ -1238,7 +1235,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_group = {
                         executor.submit(
-                            dl.resolve_chapters, batch, fetcher=fetcher,
+                            dl.resolve_chapter, batch[0], fetcher=fetcher,
                         ): batch
                         for batch in groups
                     }
@@ -1389,7 +1386,7 @@ def do_re_export(group: str, format_configs: dict, dl):
 
 def do_delete():
     """扫描 storage 目录，选择小说并彻底删除本地数据。"""
-    storage = LocalStorage(APP_DATA / "storage")
+    storage = create_storage(StorageOptions(backend="local", base_dir=APP_DATA / "storage"))
     storage_dir = APP_DATA / "storage"
 
     if not storage_dir.exists():
@@ -1536,7 +1533,7 @@ def main():
     cfg = load_main_config()
     group = cfg.get("group") or "default"
     mode = cfg.get("mode", "browser")
-    platform = cfg.get("platform", "fanqie")
+    platform = "fanqie"  # 默认平台，搜索时显式选择
     groups = load_groups()
 
     site_cfg = load_site_config(platform)
@@ -1673,10 +1670,16 @@ def main():
                         print(f"✗ 下载失败: {e}")
                         _log.exception("download failed")
                 else:
-                    # 作为搜索关键词
+                    # 作为搜索关键词 — 显式选择平台
+                    search_platform = _select(
+                        "选择搜索平台：",
+                        choices=[(label, name) for label, name in platform_labels.items()] + [("取消", None)],
+                    )
+                    if search_platform is None:
+                        continue
                     try:
                         e, d = _get_engine_dl()
-                        url = do_search(e, d, platform, query=raw)
+                        url = do_search(e, d, search_platform, query=raw)
                     except Exception as e:
                         print(f"✗ 搜索失败: {e}")
                         url = None
