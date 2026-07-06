@@ -4,7 +4,7 @@ api:
     delay:
     - 3
     - 5                   # 请求间隔（秒），随机取 [min, max]
-    enabled: true         # 是否启用
+    enabled: false         # 是否启用
     key: ''
     params: {}
     retry_times: 3
@@ -14,8 +14,8 @@ api:
     delay:
     - 0
     - 0.5                   # rain API 延迟较短，适合高并发
-    enabled: false
-    key: ""
+    enabled: true
+    key: "***REDACTED***"
     params: {}
     retry_times: 3
     timeout: 30
