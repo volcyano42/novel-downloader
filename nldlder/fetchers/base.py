@@ -1,6 +1,6 @@
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Any
 
 from nldlder.core.exceptions import FeatureNotSupportedError
 from nldlder.models.auth import AuthCredential
@@ -22,16 +22,14 @@ class BaseFetcher(ABC):
 
     @abstractmethod
     def fetch_search_result(self,
-                            search_ref: str,
+                            query: str,
                             engine,
-                            page: int = 1,
                             **kwargs: Any) -> tuple[SearchResult, ...]:
         """搜索小说，返回搜索结果列表。
 
         Args:
-            search_ref: 搜索关键词（书名或作者名）。
-            engine:     下载引擎实例（用于发起 HTTP 请求）。
-            page:       页码，从 1 开始。
+            query:  搜索关键词（书名或作者名）。
+            engine: 下载引擎实例（用于发起 HTTP 请求）。
 
         Returns:
             搜索结果元组，每项含 ``title``／``author``／``url``／
@@ -40,12 +38,15 @@ class BaseFetcher(ABC):
         ...
 
     @abstractmethod
-    def fetch_novel_info(self, novel_ref: str, engine, **kwargs: Any) -> Novel:
+    def fetch_novel_info(self,
+                         url: str,
+                         engine,
+                         **kwargs: Any) -> Novel:
         """解析小说详情页，返回 Novel 对象。
 
         Args:
-            novel_ref: 小说页面 URL 或 HTML。
-            engine:    下载引擎实例。
+            url:    小说页面 URL 或裸 novel_id。
+            engine: 下载引擎实例。
 
         Returns:
             Novel 对象。
@@ -53,12 +54,15 @@ class BaseFetcher(ABC):
         ...
 
     @abstractmethod
-    def fetch_chapter_list(self, novel_ref: str, engine, **kwargs: Any) -> Chapters:
+    def fetch_chapter_list(self,
+                           url: str,
+                           engine,
+                           **kwargs: Any) -> Chapters:
         """解析章节目录，返回待填充的 Chapters 列表。
 
         Args:
-            novel_ref: 小说页面 URL 或 HTML。
-            engine:    下载引擎实例。
+            url:    小说页面 URL 或裸 novel_id。
+            engine: 下载引擎实例。
 
         Returns:
             Chapters 对象，每章应填充 id / url / title / order / volume。
@@ -68,15 +72,14 @@ class BaseFetcher(ABC):
 
     @abstractmethod
     def fetch_chapter_content(self,
-                              chapter_ref: Sequence[Chapter],
+                              chapter: Chapter,
                               engine,
                               **kwargs: Any) -> Chapters:
-        """解析并填充章节正文内容。
+        """解析并填充单个章节的正文内容。
 
         Args:
-            chapter_ref: 待填充的 Chapter 列表（API/Browser parser）
-                         或章节 HTML 字符串（HTML parser 内部调用）。
-            engine:      下载引擎实例。
+            chapter: 待填充的 Chapter 对象。
+            engine:  下载引擎实例。
 
         Returns:
             已填充 content / is_complete / images 的 Chapters。
