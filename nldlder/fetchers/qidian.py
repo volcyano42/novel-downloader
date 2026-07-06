@@ -1,7 +1,6 @@
 import json
 import re
 import time
-from typing import Sequence
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -16,22 +15,22 @@ from .. import AntiCrawlError
 
 _log = get_logger("nldlder.fetchers.qidian")
 
-def standardize_id(identifier: str) -> str:
-    if identifier.startswith("https"):
-        m = re.search(r'/book/(\d+)', identifier)
+def standardize_id(url: str) -> str:
+    if url.startswith("https"):
+        m = re.search(r'/book/(\d+)', url)
         if m:
             return m.group(1)
-        m = re.search(r'/chapter/[^/]+/([^/]+)', identifier)
+        m = re.search(r'/chapter/[^/]+/([^/]+)', url)
         if m:
             return m.group(1)
-    raise ValueError(f"ref {identifier} Non conformance")
+    raise ValueError(f"ref {url} Non conformance")
 
 
 class QidianHTMLParser:
 
     @staticmethod
-    def parse_search_result(search_ref: str) -> tuple[SearchResult, ...]:
-        soup = BeautifulSoup(search_ref, 'lxml')
+    def parse_search_result(html: str) -> tuple[SearchResult, ...]:
+        soup = BeautifulSoup(html, 'lxml')
         script_list = soup.find_all('script')
         results: list[SearchResult] = []
         for script in script_list:
@@ -69,10 +68,10 @@ class QidianHTMLParser:
         return True
 
     @staticmethod
-    def parse_novel_info(novel_ref: str, url) -> Novel:
-        soup = BeautifulSoup(novel_ref, 'lxml')
+    def parse_novel_info(html: str, url) -> Novel:
+        soup = BeautifulSoup(html, 'lxml')
 
-        if not QidianHTMLParser.content_is_exist(novel_ref):
+        if not QidianHTMLParser.content_is_exist(html):
             raise NovelNotFoundError()
 
         try:
@@ -80,13 +79,13 @@ class QidianHTMLParser:
 
             name = soup.find('h1', id='bookName').get_text()
 
+            intro = None
             if soup.find('div', class_='author-information'):
                 author = soup.find('a', class_='writer-name').get_text()
                 attribute_str = soup.find('p', class_='book-attribute').text
                 attribute = attribute_str.split('·')
                 all_label = attribute
             else:
-                intro = None
                 all_label = []
                 author = soup.find('span', class_='author').get_text()
 
@@ -123,12 +122,12 @@ class QidianHTMLParser:
         )
 
     @staticmethod
-    def parse_chapter_list(novel_ref: str, *, url: str = "") -> Chapters:
+    def parse_chapter_list(html: str, *, url: str = "") -> Chapters:
 
-        html = novel_ref
+        html = html
         soup = BeautifulSoup(html, 'lxml')
 
-        if not QidianHTMLParser.content_is_exist(novel_ref):
+        if not QidianHTMLParser.content_is_exist(html):
             raise ChapterNotFoundError("Qidian chapter list page blocked or unavailable")
 
         chapters_div = soup.find('div', class_='catalog-all')
@@ -152,18 +151,18 @@ class QidianHTMLParser:
                     url=chapter_url,
                     id=chapter_id,
                     order=order,
-                    index_url=url,
+                    novel_id=standardize_id(url),
                     volume=volume,
                 ))
                 order += 1
         return Chapters(results)
 
     @staticmethod
-    def parse_chapter_content(chapter_ref: str, chapter: Chapter) -> Chapter:
+    def parse_chapter_content(html: str, chapter: Chapter) -> Chapter:
         """解析并填充 content, count, time, is_complete"""
-        parent_soup = BeautifulSoup(chapter_ref, 'lxml')
+        parent_soup = BeautifulSoup(html, 'lxml')
 
-        if not QidianHTMLParser.content_is_exist(chapter_ref):
+        if not QidianHTMLParser.content_is_exist(html):
             raise ChapterNotFoundError("Qidian chapter page blocked or unavailable")
 
         json_data = parent_soup.find("script", id = "vite-plugin-ssr_pageContext")
@@ -259,12 +258,12 @@ class QidianBrowserFetcher(BaseFetcher):
             page.close()
 
     def fetch_search_result(self,
-                            search_ref: str,
+                            query: str,
                             engine,
-                            page: int = 1,
                             **kwargs) -> tuple[SearchResult, ...]:
-        _log.debug("parse_search_info: ref=%s page=%s", search_ref, page)
-        search_url = f"https://www.qidian.com/so/{search_ref}.html"
+        page = kwargs.pop("page", 1)
+        _log.debug("parse_search_info: ref=%s page=%s", query, page)
+        search_url = f"https://www.qidian.com/so/{query}.html"
 
         if page > 1:
             browser_page = engine.new_page()
@@ -277,57 +276,56 @@ class QidianBrowserFetcher(BaseFetcher):
 
         return QidianHTMLParser.parse_search_result(html)
 
-    def fetch_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
-        html = engine.fetch_text(url=novel_ref, **kwargs)
-        return QidianHTMLParser.parse_novel_info(html, url=novel_ref)
+    def fetch_novel_info(self, url: str, engine, **kwargs) -> Novel:
+        html = engine.fetch_text(url=url, **kwargs)
+        return QidianHTMLParser.parse_novel_info(html, url=url)
 
-    def fetch_chapter_list(self, novel_ref, engine, **kwargs) -> Chapters:
-        url = novel_ref.url if isinstance(novel_ref, Novel) else novel_ref
+    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
+        url = url.url if isinstance(url, Novel) else url
         html = engine.fetch_text(url=url, **kwargs)
         return QidianHTMLParser.parse_chapter_list(html, url=url)
 
     def fetch_chapter_content(
             self,
-            chapter_ref: Sequence[Chapter],
+            chapter: Chapter,
             engine,
             **kwargs) -> Chapters:
-        url = chapter_ref[0].url
+        url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
             raise ChapterNotFoundError("Qidian chapter page shows no-content div")
-        chapter = QidianHTMLParser.parse_chapter_content(html, chapter=chapter_ref[0])
-        return Chapters(chapter)
+        result = QidianHTMLParser.parse_chapter_content(html, chapter)
+        return Chapters(result)
 
 
 class QidianRequestsFetcher(BaseFetcher):
 
     def fetch_search_result(self,
-                            search_ref: str,
+                            query: str,
                             engine,
-                            page: int = 1,
                             **kwargs) -> tuple[SearchResult, ...]:
         raise FeatureNotSupportedError("起点中文网不支持 Requests 获取搜索结果")
 
-    def fetch_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
-        html = engine.fetch_text(url=novel_ref, **kwargs)
-        return QidianHTMLParser.parse_novel_info(html, url=novel_ref)
+    def fetch_novel_info(self, url: str, engine, **kwargs) -> Novel:
+        html = engine.fetch_text(url=url, **kwargs)
+        return QidianHTMLParser.parse_novel_info(html, url=url)
 
-    def fetch_chapter_list(self, novel_ref, engine, **kwargs) -> Chapters:
-        url = novel_ref.url if isinstance(novel_ref, Novel) else novel_ref
+    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
+        url = url.url if isinstance(url, Novel) else url
         html = engine.fetch_text(url=url, **kwargs)
         return QidianHTMLParser.parse_chapter_list(html, url=url)
 
     def fetch_chapter_content(
             self,
-            chapter_ref: Sequence[Chapter],
+            chapter: Chapter,
             engine,
             **kwargs) -> Chapters:
-        url = chapter_ref[0].url
+        url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
-            raise ChapterNotFoundError(f"Qidian chapter page shows no-content div: {chapter_ref[0].url}")
-        chapter = QidianHTMLParser.parse_chapter_content(html, chapter=chapter_ref[0])
-        return Chapters(chapter)
+            raise ChapterNotFoundError(f"Qidian chapter page shows no-content div: {chapter.url}")
+        result = QidianHTMLParser.parse_chapter_content(html, chapter)
+        return Chapters(result)
 
 
 def use_fetcher(engine) -> type[QidianRequestsFetcher | QidianBrowserFetcher]:
@@ -343,33 +341,31 @@ def use_fetcher(engine) -> type[QidianRequestsFetcher | QidianBrowserFetcher]:
 
 class QidianFetcher(BaseFetcher):
     host = ("www.qidian.com",)
-    id_pattern = re.compile(r"^(\d+)$")
+    id_pattern = re.compile(r"^(?:/book/?)?(\d{10})$")
 
     def login(self, engine: BrowserEngine, **kwargs) -> AuthCredential:
         fetcher = use_fetcher(engine=engine)()
         return fetcher.login(engine=engine, **kwargs)
 
     def fetch_search_result(self,
-                            search_ref: str,
+                            query: str,
                             engine,
-                            page: int = 1,
                             **kwargs) -> tuple[SearchResult, ...]:
         fetcher = use_fetcher(engine=engine)()
-        return fetcher.fetch_search_result(search_ref=search_ref, engine=engine, page=page, **kwargs)
+        return fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
 
-    def fetch_novel_info(self, novel_ref: str, engine, **kwargs) -> Novel:
+    def fetch_novel_info(self, url: str, engine, **kwargs) -> Novel:
         fetcher = use_fetcher(engine=engine)()
-        return fetcher.fetch_novel_info(novel_ref=novel_ref, engine=engine, **kwargs)
+        return fetcher.fetch_novel_info(url=url, engine=engine, **kwargs)
 
-    def fetch_chapter_list(self, novel_ref, engine, **kwargs) -> Chapters:
+    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
         fetcher = use_fetcher(engine=engine)()
-        return fetcher.fetch_chapter_list(novel_ref=novel_ref, engine=engine, **kwargs)
+        return fetcher.fetch_chapter_list(url=url, engine=engine, **kwargs)
 
     def fetch_chapter_content(
             self,
-            chapter_ref: Sequence[Chapter],
+            chapter: Chapter,
             engine,
             **kwargs) -> Chapters:
         fetcher = use_fetcher(engine=engine)()
-        chapters = fetcher.fetch_chapter_content(chapter_ref=chapter_ref, engine=engine, **kwargs)
-        return chapters
+        return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)
