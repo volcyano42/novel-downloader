@@ -69,7 +69,7 @@ async def fetch_chapter_list(novel_id: str, url: str = Query(...), engine_id: st
     engine = _get_engine(engine_id); dl = NovelDownloader(engine)
     try: chapters = dl.fetch_chapter_list(url)
     except Exception as e: raise HTTPException(500, str(e))
-    return [ChapterBrief(id=ch.id, url=ch.url, index_url=ch.index_url, title=ch.title,
+    return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                          order=ch.order, volume=ch.volume, count=ch.count, is_complete=ch.is_complete) for ch in chapters]
 
 @router.post("/novel/{novel_id}/chapter")
@@ -78,7 +78,7 @@ async def download_chapters(novel_id: str, body: list[DownloadChapterRequest], e
     from nldlder import LocalStorage
     from nldlder.core.options import StorageOptions
     engine = _get_engine(engine_id); dl = NovelDownloader(engine)
-    chapters = Chapters([Chapter(id=ch.id, url=ch.url, index_url=ch.index_url, title=ch.title, order=ch.order, volume=ch.volume) for ch in body])
+    chapters = Chapters([Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order, volume=ch.volume) for ch in body])
     try: result = dl.resolve_chapters(chapters)
     except Exception as e: raise HTTPException(500, str(e))
     base_dir = Path(__file__).parent.parent.parent / "app_data" / "storage"

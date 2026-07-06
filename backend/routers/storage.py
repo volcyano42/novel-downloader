@@ -49,12 +49,12 @@ def _novel_to_meta(novel) -> NovelMeta:
     )
 
 def _chapter_to_brief(ch) -> ChapterBrief:
-    return ChapterBrief(id=ch.id, url=ch.url, index_url=ch.index_url, title=ch.title,
+    return ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                         order=ch.order, volume=ch.volume, count=ch.count, is_complete=ch.is_complete)
 
 def _chapter_to_data(ch) -> ChapterData:
     return ChapterData(
-        id=ch.id, url=ch.url, index_url=ch.index_url, title=ch.title, order=ch.order,
+        id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order,
         volume=ch.volume, content=ch.content, time=ch.time, count=ch.count, is_complete=ch.is_complete,
         images=[{"raw_data": b64encode(img.raw_data).decode() if img.raw_data else None,
                   "alt": img.alt, "insert": img.insert, "url": img.url} for img in ch.images],

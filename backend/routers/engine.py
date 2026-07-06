@@ -12,7 +12,7 @@ def _build_options(body: CreateEngineRequest) -> Options:
     if body.mode == "api" and body.api:
         a = body.api
         opts.set_api_options(name=a.name, enabled=a.enabled, delay=a.delay, timeout=a.timeout,
-                             retry_times=a.retry_times, batch_size=a.batch_size,
+                             retry_times=a.retry_times,
                              backoff_factor=a.backoff_factor, key=a.key, params=a.params)
     elif body.mode == "requests" and body.requests:
         r = body.requests

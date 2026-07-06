@@ -35,7 +35,7 @@ class ImageData(BaseModel):
 class ChapterData(BaseModel):
     id: str
     url: str
-    index_url: str
+    novel_id: str
     title: str
     order: int
     volume: str | None = None
@@ -49,7 +49,7 @@ class ChapterData(BaseModel):
 class ChapterBrief(BaseModel):
     id: str
     url: str
-    index_url: str
+    novel_id: str
     title: str
     order: int
     volume: str | None = None
@@ -72,7 +72,7 @@ class FetchMetaRequest(BaseModel):
 class DownloadChapterRequest(BaseModel):
     id: str
     url: str
-    index_url: str
+    novel_id: str
     title: str
     order: int
     volume: str | None = None
@@ -126,7 +126,6 @@ class APIOptionsData(BaseModel):
     delay: tuple[float, float] = (3.0, 5.0)
     timeout: float = 30
     retry_times: int = 3
-    batch_size: int = 1
     backoff_factor: float = 2
     key: str | None = None
     params: dict[str, str] | None = None
