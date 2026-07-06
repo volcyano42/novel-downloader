@@ -3,7 +3,7 @@ from typing import Iterable, Sequence, TypeVar
 from .engine import BrowserEngine, APIEngine, RequestsEngine
 from .exceptions import FetcherNotFoundError
 from .options import Options, ExportOptions
-from .storage import LocalStorage
+from .storage import BaseStorage, create_storage
 from ..exporters.base import BASEExporter
 from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
@@ -77,7 +77,8 @@ def search(platform: str,
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found: {platform}")
     fetcher = fetcher_cls()
-    return fetcher.fetch_search_result(search_ref=query, engine=engine, page=page, **kwargs)
+    kwargs["page"] = page
+    return fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
 
 
 def login(platform: str, engine: BrowserEngine) -> AuthCredential:
@@ -109,7 +110,7 @@ class NovelDownloader:
         """
         self._engine = engine
         self._options = options or Options()
-        self._storage_instance: LocalStorage | None = None
+        self._storage_instance: BaseStorage | None = None
 
     def fetch_meta(self, url: str, **kwargs) -> Novel:
         """获取小说元数据。
@@ -121,7 +122,7 @@ class NovelDownloader:
             包含书名、作者、简介、封面等信息的 Novel 对象。
         """
         fetcher = self._resolve_fetcher(url)
-        return fetcher.fetch_novel_info(novel_ref=url, engine=self._engine, **kwargs)
+        return fetcher.fetch_novel_info(url=url, engine=self._engine, **kwargs)
 
     def fetch_chapter_list(self, url: str, **kwargs) -> Chapters:
         """获取章节列表。
@@ -133,27 +134,25 @@ class NovelDownloader:
             按 order 排序的章节列表。
         """
         fetcher = self._resolve_fetcher(url)
-        return fetcher.fetch_chapter_list(novel_ref=url, engine=self._engine, **kwargs)
+        return fetcher.fetch_chapter_list(url=url, engine=self._engine, **kwargs)
 
-    def resolve_chapters(self,
-                        chapters: Sequence[Chapter] | Chapter,
-                        fetcher=None, **kwargs) -> Chapters:
-        """下载一批章节。
+    def resolve_chapter(self,
+                         chapter: Chapter,
+                         fetcher=None, **kwargs) -> Chapters:
+        """下载单个章节。
 
         Args:
-            chapters: 要下载的章节列表。
-            fetcher:   可选抓取器实例。为 None 时自动从首个章节 URL 解析。
+            chapter: 要下载的章节。
+            fetcher: 可选抓取器实例。为 None 时自动从章节 URL 解析。
 
         Returns:
             已下载完成的章节（Chapters 对象）。
         """
-        if not chapters:
-            return Chapters()
-        if isinstance(chapters, Chapter):
-            chapters = [chapters]
         if fetcher is None:
-            fetcher = self._resolve_fetcher(chapters[0].index_url)
-        return fetcher.fetch_chapter_content(chapter_ref=chapters, engine=self._engine, **kwargs)
+            fetcher = get_fetcher_for_id(chapter.novel_id)()
+            if fetcher is None:
+                raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
+        return fetcher.fetch_chapter_content(chapter=chapter, engine=self._engine, **kwargs)
 
     def export(self, novel: Novel, format: Iterable[str] | None = None, **kwargs):
 
@@ -188,16 +187,16 @@ class NovelDownloader:
         return self._engine
 
     @property
-    def storage(self) -> LocalStorage:
+    def storage(self) -> BaseStorage:
         """获取当前配置的 Storage 实例（惰性初始化）。"""
         if self._storage_instance is None:
             storage_opts = self._options.storage
             if storage_opts is None:
                 raise RuntimeError(
                     "StorageOptions not configured. "
-                    "Call options.set_storage_options(base_dir=...) first."
+                    "Call options.set_storage_options(...) first."
                 )
-            self._storage_instance = LocalStorage(storage_opts)
+            self._storage_instance = create_storage(storage_opts)
         return self._storage_instance
 
     @staticmethod
