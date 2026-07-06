@@ -12,7 +12,6 @@ class APIOptions:
     delay: tuple[float, ...] = field(default_factory=lambda: (3.0, 5.0))
     timeout: float = 30
     retry_times: int = 3
-    batch_size: int = 1
     backoff_factor: float = 2
     key: str | None = None
     params: dict[str, str] | None = None
@@ -40,7 +39,11 @@ class BrowserOptions:
 
 @dataclass
 class StorageOptions:
-    base_dir: Path | str
+    backend: str = "local"           # local | sqlite | postgresql
+    base_dir: Path | str = ""        # local 模式：JSON 文件根目录
+    database_url: str = ""           # 数据库连接字符串
+                                     #   sqlite:///path/to/novels.db
+                                     #   postgresql://user:pass@host:5432/dbname
 
 @dataclass
 class ExportOptions:
@@ -68,12 +71,11 @@ class Options:
                             delay: Sequence[float] = (3, 5),
                             timeout: float = 30,
                             retry_times: int = 3,
-                            batch_size: int = 1,
                             backoff_factor: float = 2,
                             key: str | None = None,
                             params: dict[str, str] | None = None) -> "Options":
             self._api = APIOptions(enabled=enabled, name=name, delay=tuple(delay), timeout=timeout,
-                                   retry_times=retry_times, batch_size=batch_size,
+                                   retry_times=retry_times,
                                    backoff_factor=backoff_factor, key=key, params=params)
             return self
 
@@ -107,8 +109,11 @@ class Options:
             return self
 
 
-        def set_storage_options(self, base_dir: Path | str) -> "Options":
-            self._storage = StorageOptions(base_dir=base_dir)
+        def set_storage_options(self, backend: str = "local",
+                                base_dir: Path | str = "",
+                                database_url: str = "") -> "Options":
+            self._storage = StorageOptions(backend=backend, base_dir=base_dir,
+                                           database_url=database_url)
             return self
 
         def set_log_options(self,
