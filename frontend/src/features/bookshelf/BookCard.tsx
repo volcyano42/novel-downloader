@@ -1,5 +1,6 @@
 import { BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface BookCardProps {
   title: string; author: string; novelId?: string; cover?: string; progress?: number;
@@ -16,7 +17,16 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
       </div>
       <div className="flex flex-1 flex-col gap-1 px-4 py-3">
         {novelId && <p className="truncate text-[11px] text-slate-400 font-mono">{novelId}</p>}
-        <h3 className="truncate text-base font-semibold text-slate-800">{title}</h3>
+        <TooltipProvider delayDuration={500}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <h3 className="truncate text-base font-semibold text-slate-800">{title}</h3>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[280px] text-xs font-semibold">
+              {title}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <p className="text-sm text-slate-500">{author}</p>
         {progress > 0 && <div className="mt-auto pt-2"><div className="h-1.5 rounded-full bg-slate-200"><div className="h-full rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></div>}
       </div>
