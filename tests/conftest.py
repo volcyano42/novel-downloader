@@ -21,7 +21,7 @@ def illustration(img_bytes: bytes) -> Illustration:
 def chapter_1() -> Chapter:
     return Chapter(
         id="ch1", url="https://example.com/novel/ch1",
-        index_url="https://example.com/novel",
+        novel_id="https://example.com/novel",
         title="第一章 开端", order=1, volume="第一卷",
         content="这是第一章的内容。", time=1000.0, count=1200,
         is_complete=True,
@@ -32,7 +32,7 @@ def chapter_1() -> Chapter:
 def chapter_2() -> Chapter:
     return Chapter(
         id="ch2", url="https://example.com/novel/ch2",
-        index_url="https://example.com/novel",
+        novel_id="https://example.com/novel",
         title="第二章 发展", order=2, volume="第一卷",
         content="这是第二章的内容。", time=2000.0, count=1500,
         is_complete=True,
@@ -43,7 +43,7 @@ def chapter_2() -> Chapter:
 def chapter_3_incomplete() -> Chapter:
     return Chapter(
         id="ch3", url="https://example.com/novel/ch3",
-        index_url="https://example.com/novel",
+        novel_id="https://example.com/novel",
         title="第三章 未完", order=3, volume="第二卷",
         content=None, time=None, count=None,
         is_complete=False,

@@ -22,16 +22,14 @@ class TestAPIOptions:
         assert o.delay == (3, 5)
         assert o.timeout == 30
         assert o.retry_times == 3
-        assert o.batch_size == 1
         assert o.backoff_factor == 2
         assert o.key is None
         assert o.params is None
 
     def test_custom(self):
-        o = APIOptions(name="myapi", key="sk-xxx", batch_size=5, params={"site": "fanqie"})
+        o = APIOptions(name="myapi", key="sk-xxx", params={"site": "fanqie"})
         assert o.name == "myapi"
         assert o.key == "sk-xxx"
-        assert o.batch_size == 5
         assert o.params == {"site": "fanqie"}
 
 
@@ -107,10 +105,9 @@ class TestOptions:
         assert o.mode == "invalid"
 
     def test_set_api_options(self):
-        o = Options().set_api_options(name="test", key="sk-xxx", batch_size=10)
+        o = Options().set_api_options(name="test", key="sk-xxx")
         assert o.api.name == "test"
         assert o.api.key == "sk-xxx"
-        assert o.api.batch_size == 10
 
     def test_set_requests_options(self):
         o = Options().set_requests_options(timeout=60, cookies={"a": "b"})

@@ -49,6 +49,11 @@ log:
   level: INFO
 mode: browser
 name: Novel下载器
+storage:
+  backend: local                          # local | sqlite | postgresql
+  base_dir: app_data/storage
+  # database_url: sqlite:///app_data/storage/novels.db    # sqlite 示例
+  # database_url: postgresql://user:pass@host:5432/dbname # postgresql 示例
 output:
   file_template: '{title}'
   path: app_data/exports/{group}/{title}
