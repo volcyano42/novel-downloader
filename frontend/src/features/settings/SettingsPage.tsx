@@ -211,28 +211,11 @@ export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsV
         </Section>
       )}
 
-      {/* ── 路径与日志 ── */}
-      <Section icon={Folder} title="路径与日志">
-        <Row label="输出路径">
-          <input type="text" value={cfg.output_path} onChange={e => onUpdate("output_path", e.target.value)}
-            className="w-52 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2.5 py-1.5 text-xs text-slate-700 outline-none font-mono dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
-        </Row>
-        <Row label="文件名模板">
-          <input type="text" value={cfg.file_template} onChange={e => onUpdate("file_template", e.target.value)}
-            className="w-32 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2.5 py-1.5 text-xs text-slate-700 outline-none font-mono dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
-        </Row>
+      {/* ── 日志 ── */}
+      <Section icon={Folder} title="日志">
         <Row label="日志级别">
           <Select value={cfg.log_level} onChange={v => onUpdate("log_level", v)}
             options={[{ value: "DEBUG", label: "DEBUG" }, { value: "INFO", label: "INFO" }, { value: "WARNING", label: "WARNING" }, { value: "ERROR", label: "ERROR" }]} />
-        </Row>
-        <Row label="占位符" desc="{group} {title} {author} {novel_id} {date} {total_chapters}"><span /></Row>
-      </Section>
-
-      {/* ── 应用名称 ── */}
-      <Section icon={Settings} title="基本">
-        <Row label="应用名称">
-          <input type="text" value={cfg.name} onChange={e => onUpdate("name", e.target.value)}
-            className="w-32 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2.5 py-1.5 text-xs text-slate-700 outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
         </Row>
       </Section>
 
