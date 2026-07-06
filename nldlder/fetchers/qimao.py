@@ -263,9 +263,19 @@ class QimaoHTMLParser:
         if chapter_title:
             chapter.title = chapter_title
 
+        # 检测章节不完整（VIP/需登录/APP 专享）
+        is_complete = True
+        if soup.select_one(".reader-login-code") or soup.select_one(".show-part"):
+            is_complete = False
+
         # 提取正文
         article_div = soup.select_one(".chapter-detail-article .article")
         if not article_div:
+            if not is_complete:
+                chapter.is_complete = False
+                chapter.content = ""
+                chapter.count = word_count
+                return chapter
             raise ParseError("七猫章节页缺少正文容器 .article")
 
         paragraphs: list[str] = []
@@ -281,7 +291,7 @@ class QimaoHTMLParser:
 
         chapter.content = content
         chapter.count = word_count or len(content)
-        chapter.is_complete = True
+        chapter.is_complete = is_complete
 
         return chapter
 
