@@ -1,7 +1,6 @@
 api:
   oiapi:
     backoff_factor: 2     # 重试退避系数
-    batch_size: 3          # 每批请求的章节数，不适合设太高的值
     delay:
     - 3
     - 5                   # 请求间隔（秒），随机取 [min, max]

@@ -279,7 +279,6 @@ class SQLiteStorage(BaseStorage):
                     description TEXT NOT NULL DEFAULT '',
                     tags        TEXT NOT NULL DEFAULT '[]',
                     count       INTEGER,
-                    cover_json  TEXT,
                     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
                 );
                 CREATE TABLE IF NOT EXISTS chapters (
@@ -293,11 +292,23 @@ class SQLiteStorage(BaseStorage):
                     time        REAL,
                     count       INTEGER,
                     is_complete INTEGER NOT NULL DEFAULT 0,
-                    images_json TEXT NOT NULL DEFAULT '[]',
                     PRIMARY KEY (novel_id, id)
+                );
+                CREATE TABLE IF NOT EXISTS illustrations (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_type  TEXT NOT NULL CHECK(owner_type IN ('novel','chapter')),
+                    owner_id    TEXT NOT NULL,
+                    alt         TEXT,
+                    url         TEXT NOT NULL,
+                    insert_pos  INTEGER,
+                    raw_data    BLOB,
+                    format      TEXT,
+                    UNIQUE(owner_type, owner_id, insert_pos)
                 );
                 CREATE INDEX IF NOT EXISTS idx_chapters_novel
                     ON chapters(novel_id, "order");
+                CREATE INDEX IF NOT EXISTS idx_illustrations_owner
+                    ON illustrations(owner_type, owner_id);
             """)
 
     # ── 元数据 ──
@@ -305,47 +316,97 @@ class SQLiteStorage(BaseStorage):
     def save_meta(self, novel: Novel) -> str:
         _log.debug("save_meta sqlite: id=%s", novel.id)
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
-        cover_json = json.dumps(novel.cover.to_json(), ensure_ascii=False) if novel.cover else None
         with self._connect() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO novels (id, title, url, author, serial,
-                    description, tags, count, cover_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    description, tags, count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
-                  novel.description, tags_json, novel.count, cover_json))
+                  novel.description, tags_json, novel.count))
+            self._save_illustration(conn, 'novel', novel.id, novel.cover)
         return novel.id
 
     def load_meta(self, novel_id: str) -> Novel | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, title, url, author, serial, description, tags, count, cover_json "
+                "SELECT id, title, url, author, serial, description, tags, count "
                 "FROM novels WHERE id = ?", (novel_id,)
             ).fetchone()
         if row is None:
             return None
-        return self._row_to_novel(row)
+        cover = self._load_illustration(novel_id, 'novel', novel_id)
+        return self._row_to_novel(row, cover)
 
     def iter_metas(self) -> Iterator[Novel]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, title, url, author, serial, description, tags, count, cover_json "
+                "SELECT id, title, url, author, serial, description, tags, count "
                 "FROM novels ORDER BY title"
             ).fetchall()
         for row in rows:
-            yield self._row_to_novel(row)
+            cover = self._load_illustration(row[0], 'novel', row[0])
+            yield self._row_to_novel(row, cover)
 
     @staticmethod
-    def _row_to_novel(row: tuple) -> Novel:
+    def _row_to_novel(row: tuple, cover=None) -> Novel:
         tags = json.loads(row[6]) if row[6] else []
-        cover = None
-        if row[8]:
-            from ..models.novel import Illustration
-            cover_data = json.loads(row[8])
-            cover = Illustration.loads(**cover_data)
         return Novel(
             id=row[0], title=row[1], url=row[2], author=row[3],
             serial=row[4], description=row[5], tags=tuple(tags),
             count=row[7], cover=cover,
+        )
+
+    # ── 插图（内部辅助） ──
+
+    @staticmethod
+    def _save_illustration(conn, owner_type: str, owner_id: str,
+                           img: "Illustration | None"):
+        if img is None or not img.raw_data:
+            return
+        # 先删旧，再插入（避免 COALESCE 在 UNIQUE 中不兼容）
+        conn.execute(
+            "DELETE FROM illustrations WHERE owner_type = ? AND owner_id = ? "
+            "AND insert_pos IS ?",
+            (owner_type, owner_id, img.insert)
+        )
+        conn.execute("""
+            INSERT INTO illustrations
+                (owner_type, owner_id, alt, url, insert_pos, raw_data, format)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (owner_type, owner_id, img.alt, img.url or '',
+              img.insert, img.raw_data, img.image_format))
+
+    def _load_illustration(self, conn_or_id, owner_type: str,
+                           owner_id: str) -> "Illustration | None":
+        """加载单张插图（封面）。conn 可以是 connection 或 novel_id。"""
+        if isinstance(conn_or_id, str):
+            with self._connect() as conn:
+                return self._load_illustration(conn, owner_type, conn_or_id)
+        row = conn_or_id.execute(
+            "SELECT alt, url, insert_pos, raw_data, format "
+            "FROM illustrations WHERE owner_type = ? AND owner_id = ? "
+            "ORDER BY insert_pos LIMIT 1",
+            (owner_type, owner_id)
+        ).fetchone()
+        if row is None:
+            return None
+        from ..models.novel import Illustration
+        return Illustration(raw_data=row[3], alt=row[0], insert=row[2], url=row[1])
+
+    def _load_illustrations(self, owner_type: str,
+                            owner_id: str) -> tuple["Illustration", ...]:
+        """加载所有插图（章节）。"""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT alt, url, insert_pos, raw_data, format "
+                "FROM illustrations WHERE owner_type = ? AND owner_id = ? "
+                "ORDER BY insert_pos",
+                (owner_type, owner_id)
+            ).fetchall()
+        from ..models.novel import Illustration
+        return tuple(
+            Illustration(raw_data=r[3], alt=r[0], insert=r[2], url=r[1])
+            for r in rows
         )
 
     # ── 章节 ──
@@ -356,14 +417,15 @@ class SQLiteStorage(BaseStorage):
         saved = []
         with self._connect() as conn:
             for ch in chapters:
-                images_json = json.dumps([img.to_json() for img in ch.images], ensure_ascii=False)
                 conn.execute("""
                     INSERT OR REPLACE INTO chapters
                         (id, novel_id, url, title, "order", volume,
-                         content, time, count, is_complete, images_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         content, time, count, is_complete)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
-                      ch.content, ch.time, ch.count, int(ch.is_complete), images_json))
+                      ch.content, ch.time, ch.count, int(ch.is_complete)))
+                for img in ch.images:
+                    self._save_illustration(conn, 'chapter', ch.id, img)
                 saved.append(ch.id)
         return saved
 
@@ -374,12 +436,13 @@ class SQLiteStorage(BaseStorage):
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count, "
-                "is_complete, images_json FROM chapters WHERE novel_id = ? AND id = ?",
+                "is_complete FROM chapters WHERE novel_id = ? AND id = ?",
                 (novel_id, chapter_id)
             ).fetchone()
         if row is None:
             return None
-        return self._row_to_chapter(row, novel.id)
+        images = self._load_illustrations('chapter', chapter_id)
+        return self._row_to_chapter(row, novel.id, images)
 
     def load_chapters(self, novel_id: str) -> Chapters:
         return Chapters(self._iter_chapters(novel_id))
@@ -391,23 +454,20 @@ class SQLiteStorage(BaseStorage):
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count, "
-                "is_complete, images_json FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
+                "is_complete FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
                 (novel_id,)
             ).fetchall()
         for row in rows:
-            yield self._row_to_chapter(row, novel.id)
+            images = self._load_illustrations('chapter', row[0])
+            yield self._row_to_chapter(row, novel.id, images)
 
     @staticmethod
-    def _row_to_chapter(row: tuple, novel_id: str) -> Chapter:
-        images = []
-        if row[9]:
-            from ..models.novel import Illustration
-            for img_data in json.loads(row[9]):
-                images.append(Illustration.loads(**img_data))
+    def _row_to_chapter(row: tuple, novel_id: str,
+                        images: tuple = ()) -> Chapter:
         return Chapter(
             id=row[0], url=row[1], title=row[2], order=row[3],
             volume=row[4], content=row[5], time=row[6], count=row[7],
-            is_complete=bool(row[8]), images=tuple(images),
+            is_complete=bool(row[8]), images=images,
             novel_id=novel_id,
         )
 
@@ -416,6 +476,10 @@ class SQLiteStorage(BaseStorage):
     def delete_novel(self, novel_id: str) -> None:
         _log.info("delete_novel sqlite: id=%s", novel_id)
         with self._connect() as conn:
+            conn.execute("DELETE FROM illustrations WHERE owner_id IN "
+                         "(SELECT id FROM chapters WHERE novel_id = ?)", (novel_id,))
+            conn.execute("DELETE FROM illustrations WHERE owner_type = 'novel' "
+                         "AND owner_id = ?", (novel_id,))
             conn.execute("DELETE FROM chapters WHERE novel_id = ?", (novel_id,))
             conn.execute("DELETE FROM novels WHERE id = ?", (novel_id,))
 
@@ -454,88 +518,146 @@ class PostgreSQLStorage(BaseStorage):
 
     def _init_db(self):
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS novels (
-                        id          TEXT PRIMARY KEY,
-                        title       TEXT NOT NULL,
-                        url         TEXT NOT NULL,
-                        author      TEXT NOT NULL DEFAULT '',
-                        serial      INTEGER NOT NULL DEFAULT 0,
-                        description TEXT NOT NULL DEFAULT '',
-                        tags        JSONB NOT NULL DEFAULT '[]',
-                        count       INTEGER,
-                        cover_json  JSONB,
-                        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
-                    );
-                    CREATE TABLE IF NOT EXISTS chapters (
-                        id          TEXT NOT NULL,
-                        novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
-                        url         TEXT NOT NULL,
-                        title       TEXT NOT NULL,
-                        "order"     INTEGER NOT NULL DEFAULT 0,
-                        volume      TEXT,
-                        content     TEXT,
-                        time        DOUBLE PRECISION,
-                        count       INTEGER,
-                        is_complete BOOLEAN NOT NULL DEFAULT FALSE,
-                        images_json JSONB NOT NULL DEFAULT '[]',
-                        PRIMARY KEY (novel_id, id)
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_chapters_novel
-                        ON chapters(novel_id, "order");
-                """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS novels (
+                    id          TEXT PRIMARY KEY,
+                    title       TEXT NOT NULL,
+                    url         TEXT NOT NULL,
+                    author      TEXT NOT NULL DEFAULT '',
+                    serial      INTEGER NOT NULL DEFAULT 0,
+                    description TEXT NOT NULL DEFAULT '',
+                    tags        JSONB NOT NULL DEFAULT '[]',
+                    count       INTEGER,
+                    created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS chapters (
+                    id          TEXT NOT NULL,
+                    novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                    url         TEXT NOT NULL,
+                    title       TEXT NOT NULL,
+                    "order"     INTEGER NOT NULL DEFAULT 0,
+                    volume      TEXT,
+                    content     TEXT,
+                    time        DOUBLE PRECISION,
+                    count       INTEGER,
+                    is_complete BOOLEAN NOT NULL DEFAULT FALSE,
+                    PRIMARY KEY (novel_id, id)
+                );
+                CREATE TABLE IF NOT EXISTS illustrations (
+                    id          SERIAL PRIMARY KEY,
+                    owner_type  TEXT NOT NULL CHECK(owner_type IN ('novel','chapter')),
+                    owner_id    TEXT NOT NULL,
+                    alt         TEXT,
+                    url         TEXT NOT NULL,
+                    insert_pos  INTEGER,
+                    raw_data    BYTEA,
+                    format      TEXT,
+                    UNIQUE(owner_type, owner_id, COALESCE(insert_pos, -1))
+                );
+                CREATE INDEX IF NOT EXISTS idx_chapters_novel
+                    ON chapters(novel_id, "order");
+                CREATE INDEX IF NOT EXISTS idx_illustrations_owner
+                    ON illustrations(owner_type, owner_id);
+            """)
+
+    # ── 插图（内部辅助） ──
+
+    @staticmethod
+    def _save_illustration(cur, owner_type: str, owner_id: str,
+                           img: "Illustration | None"):
+        if img is None or not img.raw_data:
+            return
+        from psycopg2 import Binary
+        cur.execute("""
+            INSERT INTO illustrations
+                (owner_type, owner_id, alt, url, insert_pos, raw_data, format)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (owner_type, owner_id, COALESCE(insert_pos, -1)) DO UPDATE SET
+                alt=EXCLUDED.alt, url=EXCLUDED.url,
+                raw_data=EXCLUDED.raw_data, format=EXCLUDED.format
+        """, (owner_type, owner_id, img.alt, img.url or '',
+              img.insert, Binary(img.raw_data), img.image_format))
+
+    def _load_illustration(self, owner_type: str,
+                           owner_id: str) -> "Illustration | None":
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT alt, url, insert_pos, raw_data, format "
+                "FROM illustrations WHERE owner_type = %s AND owner_id = %s "
+                "ORDER BY insert_pos LIMIT 1",
+                (owner_type, owner_id)
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        from ..models.novel import Illustration
+        raw = bytes(row[3]) if row[3] else b""
+        return Illustration(raw_data=raw, alt=row[0], insert=row[2], url=row[1])
+
+    def _load_illustrations(self, owner_type: str,
+                            owner_id: str) -> tuple["Illustration", ...]:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT alt, url, insert_pos, raw_data, format "
+                "FROM illustrations WHERE owner_type = %s AND owner_id = %s "
+                "ORDER BY insert_pos",
+                (owner_type, owner_id)
+            )
+            rows = cur.fetchall()
+        from ..models.novel import Illustration
+        return tuple(
+            Illustration(raw_data=bytes(r[3]) if r[3] else b"",
+                         alt=r[0], insert=r[2], url=r[1])
+            for r in rows
+        )
 
     # ── 元数据 ──
 
     def save_meta(self, novel: Novel) -> str:
         _log.debug("save_meta pg: id=%s", novel.id)
         tags_json = json.dumps(list(novel.tags) if novel.tags else [])
-        cover = json.dumps(novel.cover.to_json()) if novel.cover else None
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO novels (id, title, url, author, serial,
-                        description, tags, count, cover_json)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        title=EXCLUDED.title, url=EXCLUDED.url,
-                        author=EXCLUDED.author, serial=EXCLUDED.serial,
-                        description=EXCLUDED.description, tags=EXCLUDED.tags,
-                        count=EXCLUDED.count, cover_json=EXCLUDED.cover_json
-                """, (novel.id, novel.title, novel.url, novel.author,
-                      novel.serial, novel.description, tags_json,
-                      novel.count, cover))
+            cur.execute("""
+                INSERT INTO novels (id, title, url, author, serial,
+                    description, tags, count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    title=EXCLUDED.title, url=EXCLUDED.url,
+                    author=EXCLUDED.author, serial=EXCLUDED.serial,
+                    description=EXCLUDED.description, tags=EXCLUDED.tags,
+                    count=EXCLUDED.count
+            """, (novel.id, novel.title, novel.url, novel.author,
+                  novel.serial, novel.description, tags_json, novel.count))
+            self._save_illustration(cur, 'novel', novel.id, novel.cover)
         return novel.id
 
     def load_meta(self, novel_id: str) -> Novel | None:
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, title, url, author, serial, description, "
-                    "tags, count, cover_json FROM novels WHERE id = %s",
-                    (novel_id,)
-                )
-                row = cur.fetchone()
+            cur.execute(
+                "SELECT id, title, url, author, serial, description, "
+                "tags, count FROM novels WHERE id = %s",
+                (novel_id,)
+            )
+            row = cur.fetchone()
         if row is None:
             return None
-        return self._row_to_novel(row)
+        cover = self._load_illustration('novel', novel_id)
+        return self._row_to_novel(row, cover)
 
     def iter_metas(self) -> Iterator[Novel]:
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, title, url, author, serial, description, "
-                    "tags, count, cover_json FROM novels ORDER BY title"
-                )
-                rows = cur.fetchall()
+            cur.execute(
+                "SELECT id, title, url, author, serial, description, "
+                "tags, count FROM novels ORDER BY title"
+            )
+            rows = cur.fetchall()
         for row in rows:
-            yield self._row_to_novel(row)
+            cover = self._load_illustration('novel', row[0])
+            yield self._row_to_novel(row, cover)
 
     @staticmethod
-    def _row_to_novel(row: tuple) -> Novel:
+    def _row_to_novel(row: tuple, cover=None) -> Novel:
         tags = row[6] if isinstance(row[6], list) else json.loads(row[6] or "[]")
-        cover = None
-        if row[8]:
-            from ..models.novel import Illustration
-            cover_data = row[8] if isinstance(row[8], dict) else json.loads(row[8])
-            cover = Illustration.loads(**cover_data)
         return Novel(
             id=row[0], title=row[1], url=row[2], author=row[3],
             serial=row[4], description=row[5], tags=tuple(tags),
@@ -549,21 +671,21 @@ class PostgreSQLStorage(BaseStorage):
             chapters = [chapters]
         saved = []
         with self._connect() as conn, conn.cursor() as cur:
-                for ch in chapters:
-                    images_json = json.dumps([img.to_json() for img in ch.images])
-                    cur.execute("""
-                        INSERT INTO chapters (id, novel_id, url, title, "order",
-                            volume, content, time, count, is_complete, images_json)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (novel_id, id) DO UPDATE SET
-                            url=EXCLUDED.url, title=EXCLUDED.title,
-                            "order"=EXCLUDED."order", volume=EXCLUDED.volume,
-                            content=EXCLUDED.content, time=EXCLUDED.time,
-                            count=EXCLUDED.count, is_complete=EXCLUDED.is_complete,
-                            images_json=EXCLUDED.images_json
-                    """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
-                          ch.content, ch.time, ch.count, ch.is_complete, images_json))
-                    saved.append(ch.id)
+            for ch in chapters:
+                cur.execute("""
+                    INSERT INTO chapters (id, novel_id, url, title, "order",
+                        volume, content, time, count, is_complete)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (novel_id, id) DO UPDATE SET
+                        url=EXCLUDED.url, title=EXCLUDED.title,
+                        "order"=EXCLUDED."order", volume=EXCLUDED.volume,
+                        content=EXCLUDED.content, time=EXCLUDED.time,
+                        count=EXCLUDED.count, is_complete=EXCLUDED.is_complete
+                """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
+                      ch.content, ch.time, ch.count, ch.is_complete))
+                for img in ch.images:
+                    self._save_illustration(cur, 'chapter', ch.id, img)
+                saved.append(ch.id)
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
@@ -571,16 +693,17 @@ class PostgreSQLStorage(BaseStorage):
         if novel is None:
             return None
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, url, title, \"order\", volume, content, "
-                    "time, count, is_complete, images_json "
-                    "FROM chapters WHERE novel_id = %s AND id = %s",
-                    (novel_id, chapter_id)
-                )
-                row = cur.fetchone()
+            cur.execute(
+                "SELECT id, url, title, \"order\", volume, content, "
+                "time, count, is_complete "
+                "FROM chapters WHERE novel_id = %s AND id = %s",
+                (novel_id, chapter_id)
+            )
+            row = cur.fetchone()
         if row is None:
             return None
-        return self._row_to_chapter(row, novel.id)
+        images = self._load_illustrations('chapter', chapter_id)
+        return self._row_to_chapter(row, novel.id, images)
 
     def load_chapters(self, novel_id: str) -> Chapters:
         return Chapters(self._iter_chapters(novel_id))
@@ -590,35 +713,33 @@ class PostgreSQLStorage(BaseStorage):
         if novel is None:
             return
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, url, title, \"order\", volume, content, "
-                    "time, count, is_complete, images_json "
-                    "FROM chapters WHERE novel_id = %s ORDER BY \"order\"",
-                    (novel_id,)
-                )
-                rows = cur.fetchall()
+            cur.execute(
+                "SELECT id, url, title, \"order\", volume, content, "
+                "time, count, is_complete "
+                "FROM chapters WHERE novel_id = %s ORDER BY \"order\"",
+                (novel_id,)
+            )
+            rows = cur.fetchall()
         for row in rows:
-            yield self._row_to_chapter(row, novel.id)
+            images = self._load_illustrations('chapter', row[0])
+            yield self._row_to_chapter(row, novel.id, images)
 
     @staticmethod
-    def _row_to_chapter(row: tuple, novel_id: str) -> Chapter:
-        images = []
-        images_raw = row[9]
-        if isinstance(images_raw, str):
-            images_raw = json.loads(images_raw)
-        if images_raw:
-            from ..models.novel import Illustration
-            for img_data in images_raw:
-                images.append(Illustration.loads(**img_data))
+    def _row_to_chapter(row: tuple, novel_id: str,
+                        images: tuple = ()) -> Chapter:
         return Chapter(
             id=row[0], url=row[1], title=row[2], order=row[3],
             volume=row[4], content=row[5], time=row[6], count=row[7],
-            is_complete=bool(row[8]), images=tuple(images),
+            is_complete=bool(row[8]), images=images,
             novel_id=novel_id,
         )
 
     def delete_novel(self, novel_id: str) -> None:
         _log.info("delete_novel pg: id=%s", novel_id)
         with self._connect() as conn, conn.cursor() as cur:
-                cur.execute("DELETE FROM chapters WHERE novel_id = %s", (novel_id,))
-                cur.execute("DELETE FROM novels WHERE id = %s", (novel_id,))
+            cur.execute("DELETE FROM illustrations WHERE owner_id IN "
+                        "(SELECT id FROM chapters WHERE novel_id = %s)", (novel_id,))
+            cur.execute("DELETE FROM illustrations WHERE owner_type = 'novel' "
+                        "AND owner_id = %s", (novel_id,))
+            cur.execute("DELETE FROM chapters WHERE novel_id = %s", (novel_id,))
+            cur.execute("DELETE FROM novels WHERE id = %s", (novel_id,))
