@@ -8,7 +8,8 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { storageApi, coverToUrl, type NovelMeta } from "@/api/storage";
 import { downloadApi, type SearchResult } from "@/api/download";
-import { configApi } from "@/api/config";
+import { configApi, type AppConfig } from "@/api/config";
+import { SettingsView } from "@/features/settings/SettingsPage";
 import { useCrossTab, SyncEvent } from "@/lib/sync";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
@@ -27,13 +28,19 @@ export default function BookshelfPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [downloadTasks, setDownloadTasks] = useState<{ id: string; title: string; status: "downloading" | "completed" | "failed"; progress: number; error?: string }[]>([]);
   const [appName, setAppName] = useState("Novel下载器");
+  const [searchPlatform, setSearchPlatform] = useState("fanqie");
+  const [searchPlatforms, setSearchPlatforms] = useState<{ id: string; label: string }[]>([]);
   const [groups, setGroups] = useState<Record<string, Record<string, object>>>({});
+  const [settings, setSettings] = useState<AppConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => { storageApi.listNovels().then(setNovels).catch(() => {}).finally(() => setLoadingNovels(false)); }, []);
-  useEffect(() => { configApi.get().then(c => { setAppName(c.name); setGroups(c.groups); }).catch(() => {}); }, []);
+  useEffect(() => { configApi.get().then(c => { setSettings(c); setAppName(c.name); setGroups(c.groups); }).catch(() => {}); }, []);
+  useEffect(() => { downloadApi.platforms().then(p => { setSearchPlatforms(p); if (p.length) setSearchPlatform(p[0].id); }).catch(() => {}); }, []);
 
   // --- cross-tab sync ---
   const broadcast = useCrossTab((type, payload) => {
@@ -75,10 +82,40 @@ export default function BookshelfPage() {
 
   const handleSearch = useCallback((query: string) => { setSearchQuery(query.trim()); }, []);
 
-  const handleOnlineSearch = useCallback(async (query: string) => {
+  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string }) => {
     if (!query.trim()) { setSearchResults([]); return; }
-    try { const r = await downloadApi.search({ query }); setSearchResults(r); } catch { setSearchResults([]); }
+    const platform = filters?.platform || searchPlatform;
+    try { const r = await downloadApi.search({ platform, query }); setSearchResults(r); } catch { setSearchResults([]); }
+  }, [searchPlatform]);
+
+  const handleSettingsUpdate = useCallback((path: string, value: unknown) => {
+    setSettings(prev => {
+      if (!prev) return prev;
+      const keys = path.split(".");
+      if (keys.length === 1) {
+        const updated = { ...prev, [keys[0]]: value };
+        if (keys[0] === "name") setAppName(value as string);
+        return updated;
+      }
+      const result = { ...prev } as Record<string, unknown>;
+      let target: Record<string, unknown> = result;
+      for (let i = 0; i < keys.length - 1; i++) {
+        target[keys[i]] = { ...(target[keys[i]] as Record<string, unknown>) };
+        target = target[keys[i]] as Record<string, unknown>;
+      }
+      target[keys[keys.length - 1]] = value;
+      return result as unknown as AppConfig;
+    });
+    setSaved(false);
   }, []);
+
+  const handleSaveSettings = useCallback(async () => {
+    if (!settings) return;
+    setSaving(true);
+    try { await configApi.save(settings); setSaved(true); setTimeout(() => setSaved(false), 2500); }
+    catch { /* ignore */ }
+    finally { setSaving(false); }
+  }, [settings]);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     setNavigatingId(result.url);
@@ -151,7 +188,7 @@ export default function BookshelfPage() {
       )}
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 md:px-8">
-          <SearchBar onSearch={handleOnlineSearch} groups={["全部"]} formats={["TXT", "EPUB"]} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={searchPlatforms} />
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (
@@ -161,7 +198,7 @@ export default function BookshelfPage() {
           )}
         </div>
       )}
-      {activeNav === "settings" && <div className="px-4 py-6 md:px-8"><p className="text-center text-sm text-slate-400 py-20">设置页面 — 开发中</p></div>}
+      {activeNav === "settings" && settings && <div className="px-4 py-6 md:px-8"><SettingsView cfg={settings} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} /></div>}
     </AppShell>
   );
 }
