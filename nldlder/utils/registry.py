@@ -70,7 +70,8 @@ def _hardcoded_fetchers() -> dict[str, type[BaseFetcher]]:
     """exe 环境下 _scan_plugins 可能找不到模块，硬编码兜底。"""
     from ..fetchers.fanqie import FanqieFetcher
     from ..fetchers.qidian import QidianFetcher
-    return {"fanqie": FanqieFetcher, "qidian": QidianFetcher}
+    from ..fetchers.qimao import QimaoFetcher
+    return {"fanqie": FanqieFetcher, "qidian": QidianFetcher, "qimao": QimaoFetcher}
 
 
 def register_fetcher() -> dict[str, type[BaseFetcher]]:
