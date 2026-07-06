@@ -37,7 +37,7 @@ class ChapterData(BaseModel):
     content: str | None = None
     time: float | None = None
     count: int | None = None
-        images: list[ImageData] = []
+    images: list[ImageData] = []
 
 class ChapterBrief(BaseModel):
     id: str
@@ -47,6 +47,7 @@ class ChapterBrief(BaseModel):
     order: int
     volume: str | None = None
     count: int | None = None
+    downloaded: bool = False
 
 class SearchResultData(BaseModel):
     title: str
@@ -64,7 +65,6 @@ class DownloadChapterRequest(BaseModel):
     novel_id: str
     title: str
     order: int
-    volume: str | None = None
     volume: str | None = None
 
 class TXTExportOptions(BaseModel):

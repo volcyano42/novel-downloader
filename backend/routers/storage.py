@@ -1,21 +1,22 @@
-"""Storage 路由 — 10 条，对接 LocalStorage。"""
+"""Storage 路由 — 10 条，对接 SQLiteStorage。"""
 from base64 import b64encode
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
-from nldlder import LocalStorage
+from nldlder.core.storage import SQLiteStorage
 from nldlder.core.options import StorageOptions
 
 router = APIRouter(prefix="/api/v1/storage", tags=["storage"])
 
-_storage: LocalStorage | None = None
+_storage: SQLiteStorage | None = None
 _base_dir = Path(__file__).parent.parent.parent / "app_data" / "storage"
+_db_url = "sqlite:///app_data/storage/novels.db"
 
-def _get_storage() -> LocalStorage:
+def _get_storage() -> SQLiteStorage:
     global _storage
     if _storage is None:
-        _storage = LocalStorage(StorageOptions(base_dir=_base_dir))
+        _storage = SQLiteStorage(StorageOptions(backend="sqlite", database_url=_db_url))
     return _storage
 
 def _cover_to_response(cover) -> dict | None:
@@ -50,7 +51,8 @@ def _novel_to_meta(novel) -> NovelMeta:
 
 def _chapter_to_brief(ch) -> ChapterBrief:
     return ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
-                        order=ch.order, volume=ch.volume, count=ch.count)
+                        order=ch.order, volume=ch.volume, count=ch.count,
+                        downloaded=ch.content is not None)
 
 def _chapter_to_data(ch) -> ChapterData:
     return ChapterData(
@@ -61,21 +63,15 @@ def _chapter_to_data(ch) -> ChapterData:
     )
 
 @router.get("/backend")
-async def list_backends(): return {"backends": ["local"], "current": "local"}
+async def list_backends(): return {"backends": ["local", "sqlite"], "current": "sqlite"}
 
 @router.put("/backend")
 async def switch_backend(body: BackendSwitch): return {"backend": body.backend, "status": "switched"}
 
 @router.get("/novel")
 async def list_novels():
-    store = _get_storage(); novels = []
-    base = Path(store.base_dir)
-    if base.exists():
-        for d in base.iterdir():
-            if d.is_dir():
-                meta = store.load_meta(d.name)
-                if meta: novels.append(_novel_to_meta(meta))
-    return novels
+    store = _get_storage()
+    return [_novel_to_meta(novel) for novel in store.iter_metas()]
 
 @router.get("/novel/{novel_id}/meta")
 async def get_meta(novel_id: str):
@@ -95,7 +91,7 @@ async def delete_novel(novel_id: str):
 
 @router.get("/novel/{novel_id}/chapters")
 async def list_chapters(novel_id: str, order: str | None = Query(None), volume: str | None = Query(None),
-                        status: str | None = Query(None), page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=500)):
+                        status: str | None = Query(None), page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
     store = _get_storage(); chapters = store.load_chapters(novel_id)
     result = [_chapter_to_brief(ch) for ch in chapters]
     if order:

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """SQLite 数据库维护脚本：
 
-1. 移除旧 schema 中的 is_complete 列
+1. 移除旧 schema 中的 is_complete / images_json 列
 2. 列出/恢复不完整章节（content 为 NULL 的章节）
 
 用法:
     python scripts/db_maintain.py --list         # 列出不完整章节
-    python scripts/db_maintain.py --fix-schema   # 移除 is_complete 列
+    python scripts/db_maintain.py --fix-schema   # 移除旧列（is_complete, images_json, cover_json）
     python scripts/db_maintain.py --fix-schema --restore  # 修复 schema 并尝试恢复
 """
 
@@ -43,12 +43,12 @@ def list_incomplete(db_path: str):
 
 
 def fix_schema(db_path: str, dry_run=False):
-    """移除 is_complete 列并清理旧字段。"""
+    """移除 is_complete / images_json / cover_json 等旧列。"""
     conn = connect(db_path)
     cur = conn.execute("PRAGMA table_info(chapters)")
     cols = [r[1] for r in cur.fetchall()]
 
-    if "is_complete" not in cols:
+    if "is_complete" not in cols and "images_json" not in cols:
         print("Schema 已是最新，无需修改 ✓")
         return
 
@@ -100,7 +100,7 @@ def fix_schema(db_path: str, dry_run=False):
             ALTER TABLE novels_new RENAME TO novels;
         """)
     conn.commit()
-    print("Schema 已更新：移除 is_complete ✓")
+    print("Schema 已更新：移除 is_complete / images_json ✓")
 
 
 def restore_incomplete(db_path: str):
@@ -186,7 +186,7 @@ def main():
     p = argparse.ArgumentParser(description="SQLite 数据库维护")
     p.add_argument("--db", default="app_data/storage/novels.db", help="数据库路径")
     p.add_argument("--list", action="store_true", help="列出不完整章节")
-    p.add_argument("--fix-schema", action="store_true", help="移除旧 is_complete 列")
+    p.add_argument("--fix-schema", action="store_true", help="移除旧 is_complete / images_json 列")
     p.add_argument("--restore", action="store_true", help="重新下载不完整章节")
     p.add_argument("--dry-run", action="store_true", help="仅预览")
     args = p.parse_args()

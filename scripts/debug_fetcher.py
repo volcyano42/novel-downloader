@@ -32,7 +32,6 @@ from nldlder.fetchers.base import BaseFetcher
 from nldlder.models.novel import Chapter
 from nldlder.utils.registry import register_fetcher
 
-
 def _get_fetcher_class(platform: str) -> type[BaseFetcher]:
     fetchers = register_fetcher()
     cls = fetchers.get(platform)
@@ -41,7 +40,6 @@ def _get_fetcher_class(platform: str) -> type[BaseFetcher]:
         print(f"  可用: {list(fetchers.keys())}")
         sys.exit(1)
     return cls
-
 
 def _get_parser_class(platform: str):
     """尝试导入 {Platform}HTMLParser。"""
@@ -54,7 +52,6 @@ def _get_parser_class(platform: str):
         print(f"✗ 无法加载 {class_name}: {e}")
         sys.exit(1)
 
-
 def _get_standardize_id(platform: str):
     """尝试导入 standardize_id 函数。"""
     module_name = f"nldlder.fetchers.{platform}"
@@ -63,7 +60,6 @@ def _get_standardize_id(platform: str):
         return getattr(mod, "standardize_id", None)
     except ImportError:
         return None
-
 
 def cmd_search_html(parser_cls, html_path: str):
     html = Path(html_path).read_text(encoding="utf-8")
@@ -76,7 +72,6 @@ def cmd_search_html(parser_cls, html_path: str):
         print(f"      URL:  {r.url}")
         print(f"      简介: {desc}")
         print()
-
 
 def cmd_novel_html(parser_cls, html_path: str, url: str = ""):
     html = Path(html_path).read_text(encoding="utf-8")
@@ -94,7 +89,6 @@ def cmd_novel_html(parser_cls, html_path: str, url: str = ""):
         print(f"  封面: {novel.cover.image_format or '未知'} "
               f"({len(novel.cover.raw_data)} bytes)")
 
-
 def cmd_chapters_html(parser_cls, html_path: str, novel_id: str = ""):
     html = Path(html_path).read_text(encoding="utf-8")
     chapters = parser_cls.parse_chapter_list(html, novel_id=novel_id)
@@ -110,7 +104,6 @@ def cmd_chapters_html(parser_cls, html_path: str, novel_id: str = ""):
         for ch in list(chapters)[-3:]:
             print(f"  [{ch.order:4d}] {ch.title}")
 
-
 def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
                      chapter_title: str = "", chapter_url: str = ""):
     html = Path(html_path).read_text(encoding="utf-8")
@@ -125,7 +118,7 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
     print(f"\n章节正文:")
     print(f"  标题: {result.title}")
     print(f"  字数: {result.count}")
-    print(f"  完整: {result.is_complete}")
+    # is_complete removed
     content = result.content or ""
     if len(content) > 300:
         print(f"  正文预览 (前 300 字):")
@@ -133,7 +126,6 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
     else:
         print(f"  正文:")
         print(f"  {content}")
-
 
 # ═══════════════════════════════════════════════════════════════════
 # 实时请求
@@ -148,7 +140,6 @@ def _build_engine(platform: str, engine_mode: str):
     site_cfg = load_site_config(platform)
     options = build_options(cfg, site_cfg)
     return create_engine(options)
-
 
 def cmd_live_search(platform: str, engine_mode: str, query: str):
     engine = _build_engine(platform, engine_mode)
@@ -169,7 +160,6 @@ def cmd_live_search(platform: str, engine_mode: str, query: str):
             print()
     finally:
         engine.close()
-
 
 def cmd_live_novel(platform: str, engine_mode: str, novel_id: str):
     s_id = _get_standardize_id(platform)
@@ -196,7 +186,6 @@ def cmd_live_novel(platform: str, engine_mode: str, novel_id: str):
     finally:
         engine.close()
 
-
 def cmd_live_chapters(platform: str, engine_mode: str, novel_id: str):
     s_id = _get_standardize_id(platform)
     if s_id:
@@ -218,7 +207,6 @@ def cmd_live_chapters(platform: str, engine_mode: str, novel_id: str):
                 print(f"  [{ch.order:4d}] {ch.title}")
     finally:
         engine.close()
-
 
 def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
     s_id = _get_standardize_id(platform)
@@ -244,7 +232,7 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
         print(f"\n章节正文:")
         print(f"  标题: {ch.title}")
         print(f"  字数: {ch.count}")
-        print(f"  完整: {ch.is_complete}")
+        # is_complete removed
         content = ch.content or ""
         if len(content) > 300:
             print(f"  正文预览 (前 300 字):")
@@ -254,7 +242,6 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
             print(f"  {content}")
     finally:
         engine.close()
-
 
 # ═══════════════════════════════════════════════════════════════════
 
@@ -305,7 +292,6 @@ def main():
 
     else:
         print("请指定 --html 或 --live")
-
 
 if __name__ == "__main__":
     main()

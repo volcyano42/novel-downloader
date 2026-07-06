@@ -192,7 +192,7 @@ class LocalStorage(BaseStorage):
                 "id": chapter.id, "url": chapter.url, "title": chapter.title,
                 "order": chapter.order, "volume": chapter.volume,
                 "content": chapter.content, "time": chapter.time,
-                "count": chapter.count, "is_complete": chapter.is_complete,
+                "count": chapter.count,
                 "images": [img.to_json() for img in chapter.images],
             }
             path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -248,7 +248,7 @@ class SQLiteStorage(BaseStorage):
         novels (id TEXT PK, title, url, author, serial, description,
                 tags, count, cover_json, created_at)
         chapters (id TEXT PK, novel_id TEXT FK, url, title, "order",
-                  volume, content, time, count, is_complete, images_json)
+                  volume, content, time, count)
     """
 
     def __init__(self, config: StorageOptions):
@@ -263,7 +263,12 @@ class SQLiteStorage(BaseStorage):
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            # WSL / 网络文件系统不支持 WAL，降级为 DELETE
+            _log.warning("WAL 模式不可用，降级为 DELETE journal")
+            conn.execute("PRAGMA journal_mode=DELETE")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
@@ -420,9 +425,9 @@ class SQLiteStorage(BaseStorage):
                     INSERT OR REPLACE INTO chapters
                         (id, novel_id, url, title, "order", volume,
                          content, time, count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
-                      ch.content, ch.time, ch.count, int(ch.is_complete)))
+                      ch.content, ch.time, ch.count))
                 for img in ch.images:
                     self._save_illustration(conn, 'chapter', ch.id, img)
                 saved.append(ch.id)
@@ -434,8 +439,8 @@ class SQLiteStorage(BaseStorage):
             return None
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, url, title, \"order\", volume, content, time, count, "
-                "is_complete FROM chapters WHERE novel_id = ? AND id = ?",
+                "SELECT id, url, title, \"order\", volume, content, time, count "
+                "FROM chapters WHERE novel_id = ? AND id = ?",
                 (novel_id, chapter_id)
             ).fetchone()
         if row is None:
@@ -452,8 +457,8 @@ class SQLiteStorage(BaseStorage):
             return
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, url, title, \"order\", volume, content, time, count, "
-                "is_complete FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
+                "SELECT id, url, title, \"order\", volume, content, time, count "
+                "FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
                 (novel_id,)
             ).fetchall()
         for row in rows:
@@ -673,14 +678,14 @@ class PostgreSQLStorage(BaseStorage):
                 cur.execute("""
                     INSERT INTO chapters (id, novel_id, url, title, "order",
                         volume, content, time, count)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (novel_id, id) DO UPDATE SET
                         url=EXCLUDED.url, title=EXCLUDED.title,
                         "order"=EXCLUDED."order", volume=EXCLUDED.volume,
                         content=EXCLUDED.content, time=EXCLUDED.time,
-                        count=EXCLUDED.count, is_complete=EXCLUDED.is_complete
+                        count=EXCLUDED.count
                 """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
-                      ch.content, ch.time, ch.count, ch.is_complete))
+                      ch.content, ch.time, ch.count))
                 for img in ch.images:
                     self._save_illustration(cur, 'chapter', ch.id, img)
                 saved.append(ch.id)

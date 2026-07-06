@@ -66,7 +66,7 @@ class BaseFetcher(ABC):
 
         Returns:
             Chapters 对象，每章应填充 id / url / title / order / volume。
-            content / is_complete 等字段留空。
+            content 等字段留空。
         """
         ...
 
