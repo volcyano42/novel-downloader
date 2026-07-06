@@ -1,24 +1,54 @@
-# ── 下载设置 ──
 download:
-  max_workers: 5       # 下载章节的并发线程数
-
-# ── 启用导出的格式 ──
+  api:
+    backoff_factor: 2
+    delay:
+    - 3
+    - 5
+    retry_times: 3
+    timeout: 30
+  browser:
+    backoff_factor: 2
+    browser_type: chromium
+    delay:
+    - 3
+    - 5
+    headless: true
+    retry_times: 3
+    timeout: 30
+    user_data_dir: app_data/browser/Chromium/User Data
+  max_workers: 3
+  requests:
+    backoff_factor: 2
+    delay:
+    - 3
+    - 5
+    retry_times: 3
+    timeout: 30
 formats:
-- txt
-- epub
-- img
-
-# ── 分组名称（用于导出路径中的 {group} 占位符） ──
-group: default
-
-# ── 日志设置 ──
+  epub:
+    compression: deflate
+    compresslevel: 9
+    enabled: true
+    file_name_template: '{name}'
+    include_toc: true
+    jpeg_quality: 85
+    max_image_width: 0
+    optimize_images: true
+    output_path: app_data/exports/{name}
+  img:
+    enabled: true
+    file_name_template: '{n}'
+    output_format: original
+    output_path: app_data/exports/{name}
+  txt:
+    enabled: true
+    encoding: utf-8
+    file_name_template: '{name}'
+    output_path: app_data/exports/{name}
 log:
-  enabled: true         # 是否启用日志
-  level: INFO           # 日志级别 DEBUG/INFO/WARNING/ERROR
-  output_dir: app_data/logs
-
-# ── 下载模式 browser / api / requests ──
-mode: api
-
-# ── 目标平台 ──
-platform: fanqie
+  level: INFO
+mode: browser
+name: Novel下载器
+output:
+  file_template: '{title}'
+  path: app_data/exports/{group}/{title}
