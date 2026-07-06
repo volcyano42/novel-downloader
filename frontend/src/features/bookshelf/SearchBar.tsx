@@ -1,15 +1,15 @@
 import { Search, Filter, X } from "lucide-react";
-import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 
 interface SearchBarProps {
   onSearch: (query: string, filters: SearchFilters) => void;
-  groups?: string[]; formats?: string[]; className?: string;
+  groups?: string[]; formats?: string[]; platforms?: { id: string; label: string }[]; className?: string;
 }
 
-export interface SearchFilters { group?: string; format?: string; }
+export interface SearchFilters { group?: string; format?: string; platform?: string; }
 
-export function SearchBar({ onSearch, groups = [], formats = [], className }: SearchBarProps) {
+export function SearchBar({ onSearch, groups = [], formats = [], platforms = [], className }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>({});
   const [showFilters, setShowFilters] = useState(false);
@@ -27,6 +27,15 @@ export function SearchBar({ onSearch, groups = [], formats = [], className }: Se
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center gap-2">
+        {platforms.length > 0 && (
+          <select
+            value={filters.platform ?? platforms[0].id}
+            onChange={e => { const v = e.target.value; handleFilterChange("platform", v); }}
+            className="rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl px-3 py-2.5 text-sm text-slate-700 outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30 appearance-none"
+          >
+            {platforms.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        )}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />
           <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} placeholder="搜索书名、作者..." className="w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30" />
