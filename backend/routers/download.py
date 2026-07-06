@@ -25,16 +25,22 @@ def _encode_cover(cover) -> dict | None:
 
     return {"raw_data": b64encode(cover.raw_data).decode(), "alt": cover.alt, "url": cover.url, "format": fmt}
 
-def _get_engine(engine_id: str):
-    if engine_id not in _engines:
-        _engines[engine_id] = create_engine(Options().set_mode("browser").set_browser_options(headless=True))
-    return _engines[engine_id]
+
+def _get_engine(engine_id: str, mode: str | None = None):
+    if mode is None:
+        cfg = load_config()
+        mode = cfg.get("mode", "browser")
+    cache_key = f"{engine_id}:{mode}"
+    if cache_key not in _engines:
+        opts = Options().set_mode(mode)
+        if mode == "browser":
+            opts = opts.set_browser_options(headless=True)
+        _engines[cache_key] = create_engine(opts)
+    return _engines[cache_key]
 
 @router.get("/search")
-async def search_novels(platform: str | None = Query(None), query: str = Query(...), page: int = Query(1), engine_id: str = Query("default")):
-    if not platform:
-        platform = load_config().get("platform", "fanqie")
-    engine = _get_engine(engine_id)
+async def search_novels(platform: str = Query(...), query: str = Query(...), page: int = Query(1), mode: str | None = Query(None), engine_id: str = Query("default")):
+    engine = _get_engine(engine_id, mode)
     try: results = search(platform, query, engine, page=page)
     except Exception as e: raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url, description=r.description) for r in results]
@@ -50,23 +56,19 @@ async def fetch_meta(body: FetchMetaRequest):
             "cover": _encode_cover(novel.cover)}
 
 @router.get("/novel/{novel_id}")
-async def get_remote_novel(novel_id: str, engine_id: str = Query("default")):
-    from nldlder import get_fetcher_for_id
-    fc = get_fetcher_for_id(novel_id)
-    if fc is None: raise HTTPException(400, f"无法识别 novel_id: {novel_id}")
-    url = f"https://fanqienovel.com/page/{novel_id}" if fc.__name__ == "FanqieFetcher" else f"https://www.qidian.com/book/{novel_id}/"
-    engine = _get_engine(engine_id); dl = NovelDownloader(engine); novel = dl.fetch_meta(url)
+async def get_remote_novel(novel_id: str, url: str = Query(...), engine_id: str = Query("default")):
+    engine = _get_engine(engine_id); dl = NovelDownloader(engine)
+    try: novel = dl.fetch_meta(url)
+    except Exception as e: raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
             "author": novel.author, "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count}
 
 @router.get("/novel/{novel_id}/chapters")
-async def fetch_chapter_list(novel_id: str, engine_id: str = Query("default")):
-    from nldlder import get_fetcher_for_id
-    fc = get_fetcher_for_id(novel_id)
-    if fc is None: raise HTTPException(400, f"无法识别 novel_id: {novel_id}")
-    url = f"https://fanqienovel.com/page/{novel_id}" if fc.__name__ == "FanqieFetcher" else f"https://www.qidian.com/book/{novel_id}/"
-    engine = _get_engine(engine_id); dl = NovelDownloader(engine); chapters = dl.fetch_chapter_list(url)
+async def fetch_chapter_list(novel_id: str, url: str = Query(...), engine_id: str = Query("default")):
+    engine = _get_engine(engine_id); dl = NovelDownloader(engine)
+    try: chapters = dl.fetch_chapter_list(url)
+    except Exception as e: raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, index_url=ch.index_url, title=ch.title,
                          order=ch.order, volume=ch.volume, count=ch.count, is_complete=ch.is_complete) for ch in chapters]
 
@@ -88,5 +90,3 @@ async def download_chapters(novel_id: str, body: list[DownloadChapterRequest], e
 @router.get("/platform")
 async def list_platforms():
     return [{"id": name, "label": cls.__name__ if hasattr(cls, "__name__") else name} for name, cls in get_fetchers().items()]
-
-
