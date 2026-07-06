@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppShell } from "@/layout/AppShell";
 import { ChevronDown } from "lucide-react";
@@ -7,10 +7,10 @@ import { SearchBar } from "./SearchBar";
 import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { storageApi, coverToUrl, type NovelMeta } from "@/api/storage";
-import { downloadApi, type SearchResult } from "@/api/download";
+import { downloadApi, type SearchResult, type TaskInfo } from "@/api/download";
 import { configApi, type AppConfig } from "@/api/config";
 import { SettingsView } from "@/features/settings/SettingsPage";
-import { useCrossTab, SyncEvent } from "@/lib/sync";
+
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -27,7 +27,7 @@ export default function BookshelfPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [downloadTasks, setDownloadTasks] = useState<{ id: string; title: string; status: "downloading" | "completed" | "failed"; progress: number; error?: string }[]>([]);
+  const [downloadTasks, setDownloadTasks] = useState<TaskInfo[]>([]);
   const [appName, setAppName] = useState("Novel下载器");
   const [searchPlatform, setSearchPlatform] = useState("fanqie");
   const [searchPlatforms, setSearchPlatforms] = useState<{ id: string; label: string }[]>([]);
@@ -37,38 +37,21 @@ export default function BookshelfPage() {
   const [saved, setSaved] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
+  const searchModeRef = useRef("requests");
+  const searchProviderRef = useRef<string | undefined>(undefined);
   const navigate = useNavigate();
 
   useEffect(() => { storageApi.listNovels().then(setNovels).catch(() => {}).finally(() => setLoadingNovels(false)); }, []);
   useEffect(() => { configApi.get().then(c => { setSettings(c); setAppName(c.name); setGroups(c.groups); }).catch(() => {}); }, []);
   useEffect(() => { downloadApi.platforms().then(p => { setSearchPlatforms(p); if (p.length) setSearchPlatform(p[0].id); }).catch(() => {}); }, []);
 
-  // --- cross-tab sync ---
-  const broadcast = useCrossTab((type, payload) => {
-    switch (type) {
-      case SyncEvent.DOWNLOAD_STARTED: {
-        const p = payload as { id: string; title: string };
-        setDownloadTasks(prev => {
-          if (prev.some(t => t.id === p.id)) return prev;
-          return [...prev, { id: p.id, title: p.title, status: "downloading" as const, progress: 0 }];
-        });
-        break;
-      }
-      case SyncEvent.DOWNLOAD_COMPLETED: {
-        const p = payload as { id: string };
-        setDownloadTasks(prev => prev.map(t => t.id === p.id ? { ...t, status: "completed" as const, progress: 100 } : t));
-        break;
-      }
-      case SyncEvent.DOWNLOAD_FAILED: {
-        const p = payload as { id: string; error: string };
-        setDownloadTasks(prev => prev.map(t => t.id === p.id ? { ...t, status: "failed" as const, error: p.error } : t));
-        break;
-      }
-      case SyncEvent.NOVELS_CHANGED:
-        storageApi.listNovels().then(setNovels).catch(() => {});
-        break;
-    }
-  });
+  // --- 下载任务轮询（仅在下载管理 Tab 时） ---
+  useEffect(() => {
+    if (activeNav !== "downloads") return;
+    downloadApi.listTasks().then(setDownloadTasks).catch(() => {});
+    const id = setInterval(() => { downloadApi.listTasks().then(setDownloadTasks).catch(() => {}); }, 1000);
+    return () => clearInterval(id);
+  }, [activeNav]);
 
   // --- refresh when tab becomes visible ---
   useEffect(() => {
@@ -83,13 +66,34 @@ export default function BookshelfPage() {
 
   const handleSearch = useCallback((query: string) => { setSearchQuery(query.trim()); }, []);
 
-  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string }) => {
+  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; provider?: string }) => {
     if (!query.trim()) { setSearchResults([]); return; }
     setSearching(true);
     const platform = filters?.platform || searchPlatform;
-    try { const r = await downloadApi.search({ platform, query, mode: filters?.mode }); setSearchResults(r); } catch { setSearchResults([]); }
+    const mode = filters?.mode ?? "requests";
+    const provider = filters?.provider;
+    searchModeRef.current = mode;
+    searchProviderRef.current = provider;
+    try {
+      const r = await downloadApi.search({ platform, query, mode, provider });
+      // URL/ID 搜索 → 直接跳转详情
+      const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
+      if (isUrlOrId && r.length === 1) {
+        try {
+          const meta = await downloadApi.fetchMeta(r[0].url, "default", mode, provider);
+          navigate(`/search/${meta.id}`, { state: { remoteUrl: r[0].url, searchMode: mode, searchProvider: provider } });
+        } catch { alert("获取小说信息失败"); }
+        return;
+      }
+      if (isUrlOrId && r.length === 0) {
+        alert("未找到该小说，请检查 URL 或 ID 是否正确");
+        setSearchResults([]);
+        return;
+      }
+      setSearchResults(r);
+    } catch { setSearchResults([]); }
     finally { setSearching(false); }
-  }, [searchPlatform]);
+  }, [searchPlatform, navigate]);
 
   const handleSettingsUpdate = useCallback((path: string, value: unknown) => {
     setSettings(prev => {
@@ -123,8 +127,8 @@ export default function BookshelfPage() {
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     setNavigatingId(result.url);
     try {
-      const meta = await downloadApi.fetchMeta(result.url);
-      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url } });
+      const meta = await downloadApi.fetchMeta(result.url, "default", searchModeRef.current, searchProviderRef.current);
+      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current } });
     } catch { setNavigatingId(null); }
   }, [navigate]);
 
@@ -184,9 +188,21 @@ export default function BookshelfPage() {
         </div>
       )}
       {activeNav === "downloads" && (
-        <div className="space-y-2 px-4 py-6 md:px-8">
+        <div className="mx-auto max-w-[720px] space-y-2 px-4 py-6 md:px-8">
           {downloadTasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
-          : downloadTasks.map(task => <DownloadTask key={task.id} title={task.title} status={task.status} progress={task.progress} errorMessage={task.error} onCancel={() => setDownloadTasks(prev => prev.filter(t => t.id !== task.id))} onRetry={() => {}} />)}
+          : downloadTasks.map(task => {
+            const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
+            const status = task.status as "downloading" | "paused" | "completed" | "failed";
+            return (
+              <DownloadTask key={task.task_id} title={task.title}
+                status={status} progress={pct} errorMessage={task.error ?? undefined}
+                currentTitle={task.current_title}
+                onPause={() => downloadApi.pauseTask(task.task_id)}
+                onResume={() => downloadApi.resumeTask(task.task_id)}
+                onCancel={() => { downloadApi.deleteTask(task.task_id); setDownloadTasks(prev => prev.filter(t => t.task_id !== task.task_id)); }}
+                onRetry={() => {}} />
+            );
+          })}
         </div>
       )}
       {activeNav === "search" && (

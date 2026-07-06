@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw } from "lucide-react";
 import { storageApi, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/storage";
 import { downloadApi } from "@/api/download";
+import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface MergedChapter {
@@ -14,7 +15,10 @@ export default function DetailPage() {
   const { novelId } = useParams<{ novelId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const remoteUrl = (location.state as { remoteUrl?: string } | null)?.remoteUrl;
+  const st = location.state as { remoteUrl?: string; searchMode?: string; searchProvider?: string } | null;
+  const remoteUrl = st?.remoteUrl;
+  const searchMode = st?.searchMode ?? "requests";
+  const searchProvider = st?.searchProvider;
   const isRemote = !!remoteUrl;
   const [novel, setNovel] = useState<NovelMeta | null>(null);
   const [chapters, setChapters] = useState<ChapterBrief[]>([]);
@@ -36,10 +40,10 @@ export default function DetailPage() {
     setDescExpanded(false);
     setCompareMode(false);
     const fetchLocalMeta = () => storageApi.getMeta(novelId);
-    const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!);
+    const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, "default", searchMode, searchProvider);
     (isRemote ? fetchRemoteMeta().catch(fetchLocalMeta) : fetchLocalMeta())
       .then(setNovel).catch(() => {});
-  }, [novelId, remoteUrl]);
+  }, [novelId, remoteUrl, searchMode]);
 
   useEffect(() => {
     if (!novelId) return;
@@ -47,7 +51,7 @@ export default function DetailPage() {
     if (isRemote) {
       // fetch remote full list + local for comparison
       Promise.all([
-        downloadApi.fetchChapterList(novelId, remoteUrl!),
+        downloadApi.fetchChapterList(novelId, remoteUrl!, "default", searchMode, searchProvider),
         storageApi.listChapters(novelId).catch(() => [] as ChapterBrief[]),
       ]).then(([remote, local]) => {
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
@@ -65,7 +69,7 @@ export default function DetailPage() {
       storageApi.listChapters(novelId, { page, size: pageSize })
         .then(paged => { setChapters(paged); }).catch(() => {}).finally(() => setLoading(false));
     }
-  }, [novelId, page, remoteUrl]);
+  }, [novelId, page, remoteUrl, searchMode]);
 
   const showCompare = isRemote || compareMode;
   const totalPages = Math.max(1, Math.ceil((novel?.serial ?? 0) / pageSize));
@@ -103,10 +107,23 @@ export default function DetailPage() {
 
   const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
 
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+
+  const handleStartDownload = useCallback((mode: string, provider?: string) => {
+    if (!novelId || selectedIds.size === 0) return;
+    const selected = merged
+      .filter(mc => selectedIds.has(mc.remote.id))
+      .map(mc => ({ id: mc.remote.id, url: mc.remote.url, novel_id: novelId, title: mc.remote.title, order: mc.remote.order, volume: mc.remote.volume }));
+    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, "default", mode, provider, novel?.url);
+    setSelectedIds(new Set());
+    setShowDownloadDialog(false);
+    navigate("/downloads");
+  }, [novelId, selectedIds, merged, novel?.title, navigate]);
+
   const handleCheckUpdate = useCallback(async () => {
     setChecking(true);
     try {
-      const remote = await downloadApi.fetchChapterList(novelId, remoteUrl ?? novel?.url ?? "");
+      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", "default", searchMode, searchProvider);
       const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
       const localMap = new Map(localAll.map((c: ChapterBrief) => [c.id, c]));
       const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
@@ -170,8 +187,10 @@ export default function DetailPage() {
                 <span className="text-xs text-slate-500">已选择 <span className="font-medium text-indigo-500">{selectedIds.size}</span> 章</span>
                 <div className="flex-1" />
                 {selectedIds.size > 0 && (
-                  <button className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
-                    <Download className="h-3 w-3" strokeWidth={2} />下载选中
+                  <button onClick={() => setShowDownloadDialog(true)}
+                    className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
+                    <Download className="h-3 w-3" strokeWidth={2} />
+                    下载选中 ({selectedIds.size})
                   </button>
                 )}
               </>
@@ -260,6 +279,11 @@ export default function DetailPage() {
           <img src={cover} alt={novel?.title} className="rounded-2xl object-contain shadow-2xl transition-transform duration-75" style={{ transform: `scale(${coverScale})`, maxHeight: "90vh", maxWidth: "90vw" }} onClick={e => e.stopPropagation()} />
         </div>
       )}
+
+      {/* download options dialog */}
+      <DownloadDialog open={showDownloadDialog} onClose={() => setShowDownloadDialog(false)}
+        novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
+        onStart={handleStartDownload} />
     </div>
   );
 }
