@@ -19,10 +19,12 @@ async def trigger_export(body: ExportRequest):
     task_id = str(uuid.uuid4())[:8]
     _tasks[task_id] = {"status": "pending", "progress": 0.0}
     try:
-        from nldlder import LocalStorage
+        from nldlder.core.storage import create_storage
         from nldlder.core.options import StorageOptions, Options, ExportOptions
-        base_dir = Path(__file__).parent.parent.parent / "app_data" / "storage"
-        store = LocalStorage(StorageOptions(base_dir=base_dir))
+        store = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
         novel = store.load_meta(body.novel_id)
         if not novel: raise HTTPException(404, "小说不存在")
         chapters = store.load_chapters(body.novel_id)
