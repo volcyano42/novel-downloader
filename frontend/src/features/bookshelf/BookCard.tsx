@@ -27,9 +27,9 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
   return (
     <div className={cn("cursor-pointer flex flex-col rounded-2xl border border-white/20 bg-white/80 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-0.5 transition-all duration-300 ease-out", className)}
       onClick={onRead}>
-      <div className="aspect-[4/5] overflow-hidden rounded-t-2xl bg-slate-100">
+      <div className="aspect-[4/5] overflow-hidden rounded-t-2xl bg-slate-100 p-[25%]">
         {loadedCover ? (
-          <img src={loadedCover} alt={title} className="h-full w-full object-cover animate-in fade-in duration-300" loading="lazy" />
+          <img src={loadedCover} alt={title} className="h-full w-full object-contain animate-in fade-in duration-300" loading="lazy" />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             {coverLoading
