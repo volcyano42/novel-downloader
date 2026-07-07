@@ -6,7 +6,7 @@ import { BookCard, BookCardSkeleton } from "./BookCard";
 import { SearchBar } from "./SearchBar";
 import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
-import { storageApi, coverToUrl, type NovelMeta } from "@/api/storage";
+import { storageApi, type NovelMeta } from "@/api/storage";
 import { downloadApi, type SearchResult, type TaskInfo } from "@/api/download";
 import { configApi, type AppConfig } from "@/api/config";
 import { SettingsView } from "@/features/settings/SettingsPage";
@@ -177,7 +177,7 @@ export default function BookshelfPage() {
                   </button>
                   {!collapsed.has(tag) && (
                     <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} cover={coverToUrl(novel.cover) ?? undefined} onRead={() => navigate(`/novel/${novel.id}`)} />)}
+                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} onRead={() => navigate(`/novel/${novel.id}`)} />)}
                     </div>
                   )}
                 </div>

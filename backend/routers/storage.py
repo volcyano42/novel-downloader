@@ -83,6 +83,14 @@ async def list_novels():
         })
     return result
 
+@router.get("/novel/{novel_id}/cover")
+async def get_cover(novel_id: str):
+    """只加载封面插图，不读整本小说 meta。"""
+    store = _get_storage()
+    novel = store.load_meta(novel_id)
+    if not novel: raise HTTPException(404, "小说不存在")
+    return _cover_to_response(novel.cover)
+
 @router.get("/novel/{novel_id}/meta")
 async def get_meta(novel_id: str):
     store = _get_storage(); novel = store.load_meta(novel_id)

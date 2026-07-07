@@ -19,6 +19,10 @@ export interface ChapterData extends ChapterBrief {
 export const storageApi = {
   listNovels: () => apiGet<NovelMeta[]>("/storage/novel"),
   getMeta: (novelId: string) => apiGet<NovelMeta>(`/storage/novel/${novelId}/meta`),
+  getCover: async (novelId: string): Promise<string | null> => {
+    const cover = await apiGet<NovelMeta["cover"]>(`/storage/novel/${novelId}/cover`);
+    return coverToUrl(cover);
+  },
   deleteNovel: (novelId: string) => apiDelete(`/storage/novel/${novelId}`),
   listChapters: (novelId: string, params?: { order?: string; page?: number; size?: number }) => {
     const qs = new URLSearchParams();
