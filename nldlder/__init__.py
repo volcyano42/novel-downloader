@@ -9,7 +9,7 @@ from .core.downloader import (
     search,
     login,
 )
-from .core.engine import create_engine
+from .core.engine import create_engine, delete_engine
 from .core.exceptions import (
     NovelDownloaderError,
     NetworkError,
@@ -42,6 +42,7 @@ __version__ = "3.0.0"
 __all__ = [
     "NovelDownloader",
     "create_engine",
+    "delete_engine",
     "get_fetcher_for_url",
     "get_fetcher_for_id",
     "get_fetchers",
