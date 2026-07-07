@@ -709,7 +709,7 @@ class PostgreSQLStorage(BaseStorage):
             rows = cur.fetchall()
         for row in rows:
             images = self._load_illustrations('chapter', row[0])
-            yield self._row_to_chapter(row, novel.id, images)
+            yield self._row_to_chapter(row, novel_id, images)
 
     @staticmethod
     def _row_to_chapter(row: tuple, novel_id: str,
