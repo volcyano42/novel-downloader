@@ -284,7 +284,7 @@ class SQLiteStorage(BaseStorage):
                 );
                 CREATE TABLE IF NOT EXISTS chapters (
                     id          TEXT NOT NULL,
-                    novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                    novel_id    TEXT NOT NULL REFERENCES novels(id),
                     url         TEXT NOT NULL,
                     title       TEXT NOT NULL,
                     "order"     INTEGER NOT NULL DEFAULT 0,
@@ -318,13 +318,9 @@ class SQLiteStorage(BaseStorage):
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
         with self._connect() as conn:
             conn.execute("""
-                INSERT INTO novels (id, title, url, author, serial,
+                INSERT OR REPLACE INTO novels (id, title, url, author, serial,
                     description, tags, count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    title=EXCLUDED.title, url=EXCLUDED.url, author=EXCLUDED.author,
-                    serial=EXCLUDED.serial, description=EXCLUDED.description,
-                    tags=EXCLUDED.tags, count=EXCLUDED.count
             """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
                   novel.description, tags_json, novel.count))
             self._save_illustration(conn, 'novel', novel.id, novel.cover)
@@ -530,7 +526,7 @@ class PostgreSQLStorage(BaseStorage):
                 );
                 CREATE TABLE IF NOT EXISTS chapters (
                     id          TEXT NOT NULL,
-                    novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                    novel_id    TEXT NOT NULL REFERENCES novels(id),
                     url         TEXT NOT NULL,
                     title       TEXT NOT NULL,
                     "order"     INTEGER NOT NULL DEFAULT 0,

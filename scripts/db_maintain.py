@@ -60,7 +60,7 @@ def fix_schema(db_path: str, dry_run=False):
     conn.executescript("""
         CREATE TABLE chapters_new (
             id          TEXT NOT NULL,
-            novel_id    TEXT NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+            novel_id    TEXT NOT NULL REFERENCES novels(id),
             url         TEXT NOT NULL,
             title       TEXT NOT NULL,
             "order"     INTEGER NOT NULL DEFAULT 0,
