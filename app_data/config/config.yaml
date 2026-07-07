@@ -21,6 +21,8 @@ download:
     on_complete: true
     on_incomplete: true
     sound: bell                    # bell | system | none
+    on_chapter_unavailable: true
+    chapter_unavailable_sound: bell
   requests:
     backoff_factor: 2
     delay:
