@@ -1268,6 +1268,10 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
 
                         # 增量持久化
                         if result_ch is not None:
+                            # 旧有 images 而新为空 → 继承旧的；图片数相同保留新的
+                            old = novel.chapters.get_chapter_by_id(result_ch.id)
+                            if old is not None and old.images and not result_ch.images:
+                                result_ch.images = old.images
                             chs = Chapters(chapters=[result_ch])
                             storage.save_chapter(novel, chs)
                             novel.update_chapter(chs)

@@ -211,6 +211,31 @@ class TestChapters:
         assert len(chapters) == 3
         assert len(merged) == 4
 
+    def test_merge_keeps_new_images_when_both_have_same_count(self, illustration):
+        """新旧图片数相同时保留新的"""
+        old_img = illustration
+        new_img = Illustration(raw_data=b"\x89PNG\r\n\x1a\n" + b"\x01" * 20,
+                               alt="新图", insert=0, url="http://new.com/img.png")
+        old = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(old_img,))
+        new = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(new_img,))
+        merged = Chapters([old]).merge(new)
+        result = merged.get_chapter_by_id("ch1")
+        assert result.images[0] is new_img
+
+    def test_merge_keeps_new_images_when_both_have_images(self, illustration):
+        """新旧都有 images → 保留新的（无论数量是否相同）"""
+        new_img = Illustration(raw_data=b"\x89PNG\r\n\x1a\n" + b"\x02" * 20,
+                               alt="新图", insert=0, url="http://new.com/img.png")
+        old = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(illustration,))
+        new = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(new_img,))
+        merged = Chapters([old]).merge(new)
+        result = merged.get_chapter_by_id("ch1")
+        assert result.images[0] is new_img
+
     def test_total_property(self, chapters: Chapters):
         assert chapters.total == 3
 
