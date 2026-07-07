@@ -169,9 +169,14 @@ export default function DetailPage() {
           </div>
           {novel.description && (
             <div className="relative mt-6">
-              <p className={`text-sm text-slate-600 leading-relaxed whitespace-pre-line ${descExpanded ? "" : "line-clamp-4"}`}>
-                {novel.description}
-              </p>
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${descExpanded ? "max-h-[2000px]" : "max-h-[5.5rem]"}`}>
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                  {novel.description}
+                </p>
+              </div>
+              {!descExpanded && novel.description.length > 200 && (
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-slate-50 to-transparent dark:from-slate-950 pointer-events-none" />
+              )}
               {novel.description.length > 200 && (
                 <button onClick={() => setDescExpanded(!descExpanded)} className="mt-1 text-xs text-indigo-500 hover:text-indigo-600">
                   {descExpanded ? "收起" : "展开全部"}
