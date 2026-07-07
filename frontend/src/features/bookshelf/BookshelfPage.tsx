@@ -119,7 +119,7 @@ export default function BookshelfPage() {
   const handleSaveSettings = useCallback(async () => {
     if (!settings) return;
     setSaving(true);
-    try { await configApi.save(settings); setSaved(true); setTimeout(() => setSaved(false), 2500); }
+    try { await configApi.save(settings as unknown as Record<string, unknown>); setSaved(true); setTimeout(() => setSaved(false), 2500); }
     catch { /* ignore */ }
     finally { setSaving(false); }
   }, [settings]);

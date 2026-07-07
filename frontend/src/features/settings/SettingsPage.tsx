@@ -121,7 +121,7 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
 
 export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsViewProps) {
   const [engineOpen, setEngineOpen] = useState(false);
-  const [platform, setPlatform] = useState(PLATFORMS[0].id);
+  const [platform, setPlatform] = useState<string>(PLATFORMS[0].id);
 
   // 平台引擎配置：优先 platforms.{platform}.{mode}，回退顶层 {mode}
   const platforms = cfg.platforms ?? {};
