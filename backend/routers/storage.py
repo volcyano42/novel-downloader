@@ -1,22 +1,22 @@
-"""Storage 路由 — 10 条，对接 SQLiteStorage。"""
+"""Storage 路由 — 10 条，对接 PostgreSQL。"""
 from base64 import b64encode
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
-from nldlder.core.storage import SQLiteStorage
+from nldlder.core.storage import create_storage
 from nldlder.core.options import StorageOptions
 
 router = APIRouter(prefix="/api/v1/storage", tags=["storage"])
 
-_storage: SQLiteStorage | None = None
-_base_dir = Path(__file__).parent.parent.parent / "app_data" / "storage"
-_db_url = "sqlite:///app_data/storage/novels.db"
+_storage = None
 
-def _get_storage() -> SQLiteStorage:
+def _get_storage():
     global _storage
     if _storage is None:
-        _storage = SQLiteStorage(StorageOptions(backend="sqlite", database_url=_db_url))
+        _storage = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
     return _storage
 
 def _cover_to_response(cover) -> dict | None:
@@ -71,7 +71,17 @@ async def switch_backend(body: BackendSwitch): return {"backend": body.backend, 
 @router.get("/novel")
 async def list_novels():
     store = _get_storage()
-    return [_novel_to_meta(novel) for novel in store.iter_metas()]
+    result: list[dict] = []
+    for novel in store.iter_metas():
+        result.append({
+            "title": novel.title, "url": novel.url, "id": novel.id,
+            "serial": novel.serial, "author": novel.author,
+            "description": novel.description,
+            "tags": list(novel.tags) if novel.tags else None,
+            "count": novel.count,
+            "cover": None,  # 书架列表不传封面，减少响应体积
+        })
+    return result
 
 @router.get("/novel/{novel_id}/meta")
 async def get_meta(novel_id: str):
