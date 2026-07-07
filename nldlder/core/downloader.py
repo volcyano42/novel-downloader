@@ -149,9 +149,10 @@ class NovelDownloader:
             已填充的 Chapter，章节不可获取时返回 None。
         """
         if fetcher is None:
-            fetcher = get_fetcher_for_id(chapter.novel_id)()
-            if fetcher is None:
+            fetcher_cls = get_fetcher_for_id(chapter.novel_id)
+            if fetcher_cls is None:
                 raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
+            fetcher = fetcher_cls()
         return fetcher.fetch_chapter_content(chapter=chapter, engine=self._engine, **kwargs)
 
     def export(self, novel: Novel, format: Iterable[str] | None = None, **kwargs):
