@@ -257,7 +257,8 @@ class SQLiteStorage(BaseStorage):
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        # timeout: 写锁等待秒数（默认 5s，加长避免并发读写报 database is locked）
+        conn = sqlite3.connect(self.db_path, timeout=15)
         try:
             conn.execute("PRAGMA journal_mode=WAL")
         except sqlite3.OperationalError:
@@ -317,9 +318,13 @@ class SQLiteStorage(BaseStorage):
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
         with self._connect() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO novels (id, title, url, author, serial,
+                INSERT INTO novels (id, title, url, author, serial,
                     description, tags, count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=EXCLUDED.title, url=EXCLUDED.url, author=EXCLUDED.author,
+                    serial=EXCLUDED.serial, description=EXCLUDED.description,
+                    tags=EXCLUDED.tags, count=EXCLUDED.count
             """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
                   novel.description, tags_json, novel.count))
             self._save_illustration(conn, 'novel', novel.id, novel.cover)
