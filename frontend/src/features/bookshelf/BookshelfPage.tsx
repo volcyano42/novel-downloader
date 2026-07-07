@@ -41,9 +41,9 @@ export default function BookshelfPage() {
   const searchProviderRef = useRef<string | undefined>(undefined);
   const navigate = useNavigate();
 
-  useEffect(() => { storageApi.listNovels().then(setNovels).catch(() => {}).finally(() => setLoadingNovels(false)); }, []);
-  useEffect(() => { configApi.get().then(c => { setSettings(c); setAppName(c.name); setGroups(c.groups); }).catch(() => {}); }, []);
-  useEffect(() => { downloadApi.platforms().then(p => { setSearchPlatforms(p); if (p.length) setSearchPlatform(p[0].id); }).catch(() => {}); }, []);
+  useEffect(() => { storageApi.listNovels().then(setNovels).catch(e => console.error("书架加载失败:", e)).finally(() => setLoadingNovels(false)); }, []);
+  useEffect(() => { configApi.get().then(c => { setSettings(c); setAppName(c.name); setGroups(c.groups); }).catch(e => console.error("配置加载失败:", e)); }, []);
+  useEffect(() => { downloadApi.platforms().then(p => { setSearchPlatforms(p); if (p.length) setSearchPlatform(p[0].id); }).catch(e => console.error("平台列表加载失败:", e)); }, []);
 
   // --- 下载任务轮询（仅在下载管理 Tab 时） ---
   useEffect(() => {
