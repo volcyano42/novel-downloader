@@ -23,16 +23,21 @@ _tasks_lock = threading.Lock()
 def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | None = None):
     """后台线程：逐章下载，支持暂停/恢复。"""
     from nldlder.models.novel import Chapter, Chapters, Novel
-    from nldlder.core.storage import SQLiteStorage
+    from nldlder.core.storage import create_storage
     from nldlder.core.options import StorageOptions
     from nldlder.core.downloader import get_fetcher_for_id
 
     # API 模式自动发现 provider（如果前端没指定）
     platform = None
     if mode == "api" and not provider:
-        fetcher_cls = get_fetcher_for_id(task["novel_id"])
+        from nldlder.core.downloader import get_fetcher_for_id as _gffi, get_fetchers as _gf
+        fetcher_cls = _gffi(task["novel_id"])
         if fetcher_cls:
-            platform = fetcher_cls.host[0].split(".")[0] if fetcher_cls.host else None
+            # 反向查 get_fetchers() 字典，用 fetcher class 匹配正确的平台名
+            for name, cls in _gf().items():
+                if cls is fetcher_cls:
+                    platform = name
+                    break
             site = _load_site_cfg(platform) if platform else {}
             api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
             for name, prov in api_section.items():
@@ -43,7 +48,10 @@ def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | 
     try:
         engine = _get_engine(engine_id, mode, provider=provider, platform=platform)
         dl = NovelDownloader(engine)
-        store = SQLiteStorage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
+        store = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
 
         # 先保存小说元数据
         novel_url = task.get("novel_url", "")
