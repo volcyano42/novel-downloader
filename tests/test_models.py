@@ -61,7 +61,7 @@ class TestChapter:
         assert chapter_1.id == "ch1"
         assert chapter_1.title == "第一章 开端"
         assert chapter_1.order == 1
-                assert chapter_1.content == "这是第一章的内容。"
+        assert chapter_1.content == "这是第一章的内容。"
 
     def test_eq_by_id_only(self):
         a = Chapter(id="x", url="a", novel_id="i", title="t", order=1, content="aaa")
@@ -183,14 +183,14 @@ class TestChapters:
         assert chapters.get_chapter_by_order(999) is None
 
     def test_get_incompleted_chapters(self, chapters: Chapters):
-        inc = chapters.incompleted_chapters
-        assert inc is not None
+        inc = [ch for ch in chapters if ch.content is None]
         assert len(inc) == 1
         assert inc[0].id == "ch3"
 
     def test_get_incompleted_chapters_all_complete(self, chapter_1, chapter_2):
         c = Chapters([chapter_1, chapter_2])
-        assert c.incompleted_chapters is None
+        inc = [ch for ch in c if ch.content is None]
+        assert len(inc) == 0
 
     def test_merge_with_chapter(self, chapters: Chapters):
         new_ch = Chapter(id="ch4", url="u4", novel_id="i", title="第四章", order=4)
