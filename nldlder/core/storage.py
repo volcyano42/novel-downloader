@@ -544,9 +544,10 @@ class PostgreSQLStorage(BaseStorage):
                     url         TEXT NOT NULL,
                     insert_pos  INTEGER,
                     raw_data    BYTEA,
-                    format      TEXT,
-                    UNIQUE(owner_type, owner_id, COALESCE(insert_pos, -1))
+                    format      TEXT
                 );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_illustrations_unique
+                    ON illustrations(owner_type, owner_id, COALESCE(insert_pos, -1));
                 CREATE INDEX IF NOT EXISTS idx_chapters_novel
                     ON chapters(novel_id, "order");
                 CREATE INDEX IF NOT EXISTS idx_illustrations_owner
