@@ -342,7 +342,7 @@ class QimaoBrowserFetcher(BaseFetcher):
         return QimaoHTMLParser.parse_chapter_list(html, novel_id=standardize_id(url))
 
     def fetch_chapter_content(self, chapter: Chapter, engine,
-                              **kwargs) -> Chapters:
+                              **kwargs) -> Chapter | None:
         html = engine.fetch_text(url=chapter.url, **kwargs)
         result = QimaoHTMLParser.parse_chapter_content(html, chapter)
         return result
@@ -497,7 +497,7 @@ class QimaoRainFetcher(BaseFetcher):
             results.append(chapter)
         return Chapters(results)
 
-    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
+    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapter | None:
         """解析并填充content, count, (True)"""
         item_id = standardize_id(chapter)
         url = QimaoRainFetcher._api_url(engine, type=4, itemid=item_id)
@@ -546,7 +546,7 @@ class QimaoRequestsFetcher(BaseFetcher):
         html = engine.fetch_text(url=url, **kwargs)
         return QimaoHTMLParser.parse_novel_info(html, url=url)
 
-    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapters:
+    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapter | None:
         novel_id = standardize_id(url)
         url = f"https://www.qimao.com/shuku/{novel_id}/"
         html = engine.fetch_text(url=url, **kwargs)
@@ -559,7 +559,7 @@ class QimaoRequestsFetcher(BaseFetcher):
         return chapters
 
     def fetch_chapter_content(self, chapter: Chapter, engine,
-                              **kwargs) -> Chapters:
+                              **kwargs) -> Chapter | None:
         html = engine.fetch_text(url=chapter.url, **kwargs)
         result = QimaoHTMLParser.parse_chapter_content(html, chapter)
         return result
@@ -611,7 +611,7 @@ class QimaoFetcher(BaseFetcher):
         return fetcher.fetch_chapter_list(url=url, engine=engine, **kwargs)
 
     def fetch_chapter_content(self, chapter: Chapter, engine,
-                              **kwargs) -> Chapters:
+                              **kwargs) -> Chapter | None:
         fetcher = use_fetcher(engine=engine)()
         return fetcher.fetch_chapter_content(chapter=chapter, engine=engine,
                                              **kwargs)

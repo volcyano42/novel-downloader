@@ -417,7 +417,7 @@ class FanqieBrowserFetcher(BaseFetcher):
             self,
             chapter: Chapter,
             engine,
-            **kwargs) -> Chapters:
+            **kwargs) -> Chapter | None:
 
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter)}"
         html = engine.fetch_text(url=url, **kwargs)
@@ -538,7 +538,7 @@ class FanqieOIAPIFetcher(BaseFetcher):
 
         return Chapters(results)
 
-    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
+    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapter | None:
         """解析并填充content, count, (True)"""
         novel_id = standardize_id(chapter.novel_id)
         post_data = {
@@ -686,7 +686,7 @@ class FanqieRainFetcher(BaseFetcher):
                       )
         return novel
 
-    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
+    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapter | None:
 
         novel_id = standardize_id(url)
         url = FanqieRainFetcher._api_url(engine, type=3, bookid=novel_id)
@@ -718,7 +718,7 @@ class FanqieRainFetcher(BaseFetcher):
             results.append(chapter)
         return Chapters(results)
 
-    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapters:
+    def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapter | None:
         """解析并填充content, count, (True)"""
         item_id = standardize_id(chapter)
         url = FanqieRainFetcher._api_url(engine, type=4, itemid=item_id)
@@ -766,7 +766,7 @@ class FanqieRequestsFetcher(BaseFetcher):
 
         return novel
 
-    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapters:
+    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapter | None:
         url = f"https://fanqienovel.com/page/{standardize_id(url)}"
         html = engine.fetch_text(url=url, **kwargs)
         chapter_list = FanqieHTMLParser.parse_chapter_list(html=html)
@@ -776,7 +776,7 @@ class FanqieRequestsFetcher(BaseFetcher):
             self,
             chapter,
             engine,
-            **kwargs) -> Chapters:
+            **kwargs) -> Chapter | None:
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter)}"
         html = engine.fetch_text(url=url, **kwargs)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
@@ -828,6 +828,6 @@ class FanqieFetcher(BaseFetcher):
     def fetch_chapter_content(self,
                               chapter: Chapter,
                               engine,
-                              **kwargs) -> Chapters:
+                              **kwargs) -> Chapter | None:
         fetcher = use_fetcher(engine=engine)()
         return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)

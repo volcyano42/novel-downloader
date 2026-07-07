@@ -1243,7 +1243,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                         batch = future_to_group[future]
                         pending_futures.discard(future)
                         try:
-                            result_chapters = future.result(timeout=120)
+                            result_ch = future.result(timeout=120)
                         except TimeoutError:
                             _log.error("批次下载超时 (120s)，标记失败: %d章", len(batch))
                             failed_chapters += len(batch)
@@ -1261,13 +1261,16 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                             raise
 
                         # 增量持久化
-                        storage.save_chapter(novel, result_chapters)
-                        novel.update_chapter(result_chapters)
-                        done += len(result_chapters)
+                        if result_ch is not None:
+                            chs = Chapters(chapters=[result_ch])
+                            storage.save_chapter(novel, chs)
+                            novel.update_chapter(chs)
+                            done += 1
 
-                        # 进度栏
-                        last_title = result_chapters[-1].title if result_chapters else "?"
-                        _advance_progress(progress, task, len(result_chapters), last_title)
+                            # 进度栏
+                            _advance_progress(progress, task, 1, result_ch.title)
+                        else:
+                            failed_chapters += 1
 
                         # 周期日志
                         if done - _done_at_last_log >= _log_interval:

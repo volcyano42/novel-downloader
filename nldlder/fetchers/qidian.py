@@ -285,7 +285,7 @@ class QidianBrowserFetcher(BaseFetcher):
             self,
             chapter: Chapter,
             engine,
-            **kwargs) -> Chapters:
+            **kwargs) -> Chapter | None:
         url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
@@ -315,7 +315,7 @@ class QidianRequestsFetcher(BaseFetcher):
             self,
             chapter: Chapter,
             engine,
-            **kwargs) -> Chapters:
+            **kwargs) -> Chapter | None:
         url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
         if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
@@ -362,6 +362,6 @@ class QidianFetcher(BaseFetcher):
             self,
             chapter: Chapter,
             engine,
-            **kwargs) -> Chapters:
+            **kwargs) -> Chapter | None:
         fetcher = use_fetcher(engine=engine)()
         return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)

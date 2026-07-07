@@ -200,14 +200,11 @@ class LocalStorage(BaseStorage):
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
-        novel = self.load_meta(novel_id)
-        if novel is None:
-            return None
         path = self._chapter_path(novel_id, chapter_id)
         if not path.exists():
             return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
-        json_data["novel_id"] = novel.id
+        json_data.setdefault("novel_id", novel_id)
         return Chapter.loads(**json_data)
 
     def load_chapters(self, novel_id: str) -> Chapters:
@@ -216,8 +213,6 @@ class LocalStorage(BaseStorage):
     def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
         chapters_dir = self._chapters_dir(novel_id)
         if not chapters_dir.exists():
-            return
-        if self.load_meta(novel_id) is None:
             return
         for file in chapters_dir.glob("*.json"):
             try:
@@ -434,9 +429,6 @@ class SQLiteStorage(BaseStorage):
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
-        novel = self.load_meta(novel_id)
-        if novel is None:
-            return None
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
@@ -446,15 +438,12 @@ class SQLiteStorage(BaseStorage):
         if row is None:
             return None
         images = self._load_illustrations('chapter', chapter_id)
-        return self._row_to_chapter(row, novel.id, images)
+        return self._row_to_chapter(row, novel_id, images)
 
     def load_chapters(self, novel_id: str) -> Chapters:
         return Chapters(self._iter_chapters(novel_id))
 
     def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
-        novel = self.load_meta(novel_id)
-        if novel is None:
-            return
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
@@ -463,7 +452,7 @@ class SQLiteStorage(BaseStorage):
             ).fetchall()
         for row in rows:
             images = self._load_illustrations('chapter', row[0])
-            yield self._row_to_chapter(row, novel.id, images)
+            yield self._row_to_chapter(row, novel_id, images)
 
     @staticmethod
     def _row_to_chapter(row: tuple, novel_id: str,
@@ -692,9 +681,6 @@ class PostgreSQLStorage(BaseStorage):
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
-        novel = self.load_meta(novel_id)
-        if novel is None:
-            return None
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id, url, title, \"order\", volume, content, "
@@ -706,15 +692,12 @@ class PostgreSQLStorage(BaseStorage):
         if row is None:
             return None
         images = self._load_illustrations('chapter', chapter_id)
-        return self._row_to_chapter(row, novel.id, images)
+        return self._row_to_chapter(row, novel_id, images)
 
     def load_chapters(self, novel_id: str) -> Chapters:
         return Chapters(self._iter_chapters(novel_id))
 
     def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
-        novel = self.load_meta(novel_id)
-        if novel is None:
-            return
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id, url, title, \"order\", volume, content, "
