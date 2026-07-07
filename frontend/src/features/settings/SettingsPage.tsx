@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Folder, Monitor, Globe, Zap, Bell } from "lucide-react";
+import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers } from "lucide-react";
 import type { AppConfig } from "@/api/config";
 
 // ── tiny helpers ──
@@ -20,7 +20,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   return (
     <button onClick={() => onChange(!checked)}
       className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${checked ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"}`}>
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-[18px]" : "translate-x-[2px]"}`} />
+      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ${checked ? "translate-x-4" : "translate-x-0"}`} />
     </button>
   );
 }
@@ -83,6 +83,12 @@ interface SettingsViewProps {
   onSave: () => void;
 }
 
+const PLATFORMS = [
+  { id: "fanqie", label: "番茄" },
+  { id: "qidian", label: "起点" },
+  { id: "qimao", label: "七猫" },
+] as const;
+
 const ENGINES = [
   { id: "browser", label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
   { id: "requests", label: "Requests", icon: Globe, desc: "直接 HTTP，最快" },
@@ -115,29 +121,41 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
 
 export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsViewProps) {
   const [engineOpen, setEngineOpen] = useState(false);
+  const [platform, setPlatform] = useState(PLATFORMS[0].id);
 
-  const engineCfg = cfg[cfg.mode as "browser" | "requests" | "api"] as unknown as Record<string, unknown>;
+  // 平台引擎配置：优先 platforms.{platform}.{mode}，回退顶层 {mode}
+  const platforms = cfg.platforms ?? {};
+  const getEngineCfg = () => {
+    const platCfg = platforms[platform];
+    if (platCfg) return platCfg[cfg.mode as "browser" | "requests" | "api"] as unknown as Record<string, unknown>;
+    // 回退：旧版全局引擎配置
+    return cfg[cfg.mode as "browser" | "requests" | "api"] as unknown as Record<string, unknown>;
+  };
+  const engineCfg = getEngineCfg();
   const fields = ENGINE_FIELDS[cfg.mode] ?? [];
+
+  // 引擎字段更新路径前缀
+  const engPath = platforms[platform] ? `platforms.${platform}.${cfg.mode}` : cfg.mode;
 
   const renderField = (f: typeof fields[number]) => {
     const val = engineCfg[f.key];
     switch (f.type) {
       case "toggle":
-        return <Toggle checked={!!val} onChange={v => onUpdate(`${cfg.mode}.${f.key}`, v)} />;
+        return <Toggle checked={!!val} onChange={v => onUpdate(`${engPath}.${f.key}`, v)} />;
       case "select":
-        return <Select value={String(val ?? f.opts![0].value)} onChange={v => onUpdate(`${cfg.mode}.${f.key}`, v)} options={f.opts!} />;
+        return <Select value={String(val ?? f.opts![0].value)} onChange={v => onUpdate(`${engPath}.${f.key}`, v)} options={f.opts!} />;
       case "num":
-        return <Num value={Number(val) || 0} onChange={v => onUpdate(`${cfg.mode}.${f.key}`, v)} min={f.min} max={f.max} unit={f.unit} />;
+        return <Num value={Number(val) || 0} onChange={v => onUpdate(`${engPath}.${f.key}`, v)} min={f.min} max={f.max} unit={f.unit} />;
       case "text":
-        return <input type="text" value={String(val ?? "")} onChange={e => onUpdate(`${cfg.mode}.${f.key}`, e.target.value)}
+        return <input type="text" value={String(val ?? "")} onChange={e => onUpdate(`${engPath}.${f.key}`, e.target.value)}
           className="w-40 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2.5 py-1.5 text-xs text-slate-700 outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />;
       case "range-delay":
         return (
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <input type="number" value={(val as number[])?.[0] ?? 3} onChange={e => onUpdate(`${cfg.mode}.delay`, [Number(e.target.value), (val as number[])?.[1] ?? 5])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[0] ?? 3} onChange={e => onUpdate(`${engPath}.delay`, [Number(e.target.value), (val as number[])?.[1] ?? 5])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span>~</span>
-            <input type="number" value={(val as number[])?.[1] ?? 5} onChange={e => onUpdate(`${cfg.mode}.delay`, [(val as number[])?.[0] ?? 3, Number(e.target.value)])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[1] ?? 5} onChange={e => onUpdate(`${engPath}.delay`, [(val as number[])?.[0] ?? 3, Number(e.target.value)])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span className="text-[11px] text-slate-400">{f.unit}</span>
           </div>
@@ -159,10 +177,23 @@ export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsV
             ))}
           </div>
         </Row>
+      </Section>
+
+      {/* ── 平台引擎设置 ── */}
+      <Section icon={Layers} title="平台引擎设置">
+        {/* 平台选择 tab */}
+        <div className="flex gap-1.5 py-2.5">
+          {PLATFORMS.map(({ id, label }) => (
+            <button key={id} onClick={() => setPlatform(id)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${platform === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div>
           <button onClick={() => setEngineOpen(!engineOpen)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
             <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${engineOpen ? "" : "-rotate-90"}`} strokeWidth={1.5} />
-            {ENGINES.find(e => e.id === cfg.mode)?.label} 高级选项
+            {PLATFORMS.find(p => p.id === platform)?.label} · {ENGINES.find(e => e.id === cfg.mode)?.label} 选项
           </button>
           {engineOpen && fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(f)}</Row>)}
         </div>
@@ -210,14 +241,6 @@ export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsV
           <Row label="输出格式"><Select value={cfg.img.output_format} onChange={v => onUpdate("img.output_format", v)} options={[{ value: "original", label: "原始" }, { value: "jpeg", label: "JPEG" }, { value: "png", label: "PNG" }, { value: "webp", label: "WebP" }]} /></Row>
         </Section>
       )}
-
-      {/* ── 日志 ── */}
-      <Section icon={Folder} title="日志">
-        <Row label="日志级别">
-          <Select value={cfg.log_level} onChange={v => onUpdate("log_level", v)}
-            options={[{ value: "DEBUG", label: "DEBUG" }, { value: "INFO", label: "INFO" }, { value: "WARNING", label: "WARNING" }, { value: "ERROR", label: "ERROR" }]} />
-        </Row>
-      </Section>
 
       {/* ── 通知 ── */}
       <Section icon={Bell} title="通知">

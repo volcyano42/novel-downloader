@@ -2,6 +2,10 @@ export interface EngineOptions {
   headless?: boolean;
   browser_type?: string;
   user_data_dir?: string;
+  viewport?: { width: number; height: number };
+  headers?: Record<string, string>;
+  cookies?: Record<string, string>;
+  proxies?: Record<string, string>;
   delay: [number, number];
   timeout: number;
   retry_times: number;
@@ -10,8 +14,6 @@ export interface EngineOptions {
 
 export interface FormatOptions {
   enabled: boolean;
-  output_path: string;
-  file_name_template: string;
 }
 
 export interface TxtOptions extends FormatOptions {
@@ -37,20 +39,26 @@ export interface NotifyConfig {
   sound: "bell" | "system" | "none";
 }
 
+export interface PlatformConfig {
+  browser: EngineOptions;
+  requests: EngineOptions;
+  api: EngineOptions;
+  api_providers: string[];
+}
+
 export interface AppConfig {
   name: string;
   mode: string;
   max_workers: number;
   log_level: string;
-  output_path: string;
-  file_template: string;
+  notify: NotifyConfig;
+  platforms?: Record<string, PlatformConfig>;
   browser: EngineOptions;
   requests: EngineOptions;
   api: EngineOptions;
   txt: TxtOptions;
   epub: EpubOptions;
   img: ImgOptions;
-  notify: NotifyConfig;
   api_providers: Record<string, string[]>;
   groups: Record<string, Record<string, object>>;
 }
@@ -63,7 +71,7 @@ export const configApi = {
     if (!res.ok) throw new Error(res.statusText);
     return res.json();
   },
-  save: async (data: Partial<AppConfig>): Promise<void> => {
+  save: async (data: Record<string, unknown>): Promise<void> => {
     const res = await fetch(`${BASE}/config`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
