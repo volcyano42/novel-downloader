@@ -139,8 +139,6 @@ from nldlder import (
     AntiCrawlError,
     split_into_groups, get_fetcher_for_url, get_fetcher_for_id, Chapters,
 )
-from nldlder.core.storage import create_storage
-from nldlder.core.options import StorageOptions
 from nldlder.core.exceptions import ChapterNotFoundError
 from nldlder.utils.logger import get_logger
 
@@ -286,12 +284,11 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             delay=tuple(req_cfg.get("delay", [3, 5])),
         )
 
-    # Storage 配置：支持 local（JSON 文件）和 sqlite 两种后端
+    # Storage 配置：sqlite（默认）或 postgresql
     storage_cfg = cfg.get("storage", {})
-    backend = storage_cfg.get("backend", "local")
-    base_dir = storage_cfg.get("base_dir", APP_DATA / "storage")
-    database_url = storage_cfg.get("database_url", "")
-    options.set_storage_options(backend=backend, base_dir=base_dir, database_url=database_url)
+    backend = storage_cfg.get("backend", "sqlite")
+    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels.db"
+    options.set_storage_options(backend=backend, database_url=database_url)
 
     return options
 
@@ -1332,22 +1329,8 @@ def _do_export(novel, dl):
 def do_re_export(group: str, format_configs: dict, dl):
     """重新导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
     storage = dl.storage
-    storage_dir = APP_DATA / "storage"
 
-    if not storage_dir.exists():
-        print("未找到已下载的小说（storage 目录不存在）")
-        return
-
-    novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
-    if not novel_dirs:
-        print("未找到已下载的小说")
-        return
-
-    novels_info = []
-    for d in novel_dirs:
-        meta = storage.load_meta(d.name)
-        if meta:
-            novels_info.append(meta)
+    novels_info = list(storage.iter_metas())
 
     if not novels_info:
         print("未找到有效的小说元数据")
@@ -1391,25 +1374,11 @@ def do_re_export(group: str, format_configs: dict, dl):
     print("\n导出完成！")
 
 
-def do_delete():
-    """扫描 storage 目录，选择小说并彻底删除本地数据。"""
-    storage = create_storage(StorageOptions(backend="local", base_dir=APP_DATA / "storage"))
-    storage_dir = APP_DATA / "storage"
+def do_delete(dl):
+    """选择小说并彻底删除本地数据。"""
+    storage = dl.storage
 
-    if not storage_dir.exists():
-        print("未找到已下载的小说（storage 目录不存在）")
-        return
-
-    novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
-    if not novel_dirs:
-        print("未找到已下载的小说")
-        return
-
-    novels_info = []
-    for d in novel_dirs:
-        meta = storage.load_meta(d.name)
-        if meta:
-            novels_info.append(meta)
+    novels_info = list(storage.iter_metas())
 
     if not novels_info:
         print("未找到有效的小说元数据")
@@ -1466,24 +1435,10 @@ def do_delete():
 
 
 def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3):
-    """扫描 storage 目录下所有已下载小说，支持单选/全选更新。"""
+    """列出所有已下载小说，支持单选/全选更新。"""
     storage = dl.storage
-    storage_dir = APP_DATA / "storage"
 
-    if not storage_dir.exists():
-        print("未找到已下载的小说（storage 目录不存在）")
-        return
-
-    novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
-    if not novel_dirs:
-        print("未找到已下载的小说")
-        return
-
-    novels_info = []
-    for d in novel_dirs:
-        meta = storage.load_meta(d.name)
-        if meta:
-            novels_info.append(meta)
+    novels_info = list(storage.iter_metas())
 
     if not novels_info:
         print("未找到有效的小说元数据")
@@ -1711,7 +1666,8 @@ def main():
 
             elif action == "delete":
                 try:
-                    do_delete()
+                    e, d = _get_engine_dl()
+                    do_delete(d)
                 except Exception as e:
                     print(f"✗ 删除失败: {e}")
                     _log.exception("delete failed")
