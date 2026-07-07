@@ -284,11 +284,10 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             delay=tuple(req_cfg.get("delay", [3, 5])),
         )
 
-    # Storage 配置：sqlite（默认）或 postgresql
+    # Storage：PostgreSQL（跨平台并发读写）
     storage_cfg = cfg.get("storage", {})
-    backend = storage_cfg.get("backend", "sqlite")
     database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels.db"
-    options.set_storage_options(backend=backend, database_url=database_url)
+    options.set_storage_options(backend="sqlite", database_url=database_url)
 
     return options
 
@@ -1098,8 +1097,10 @@ def parse_order_string(s: str, total: int) -> set[int]:
         total: 章节总数，用于展开 "50-" 这种格式。
     """
     s = s.strip()
-    if not s or s == "all":
+    if not s:
         return set()
+    if s == "all":
+        return set(range(1, total + 1))
 
     result: set[int] = set()
     for part in s.split(","):
@@ -1189,7 +1190,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
         print(f"\n共 {total_chapters} 章，待下载: {len(target)} 章（线程数: {max_workers}）")
         print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
         raw = _text_input("章节范围 (留空=继续下载): ")
-        if raw and raw.strip() and raw.strip().lower() != "all":
+        if raw and raw.strip():
             selected_orders = parse_order_string(raw, total_chapters)
             if selected_orders:
                 filtered = Chapters(
@@ -1198,9 +1199,14 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                 )
                 print(f"  已选择 {len(filtered)} 章（含已完成）")
                 novel.chapters = filtered
-                incomplete = [ch for ch in novel.chapters if ch.content is None]
-                target = incomplete
-                print(f"  实际待下载: {len(target)} 章")
+                # "all" 从头重新下载全部章节；其他范围只下载未完成的
+                if raw.strip().lower() == "all":
+                    target = list(novel.chapters)
+                    print(f"  全部重新下载: {len(target)} 章")
+                else:
+                    incomplete = [ch for ch in novel.chapters if ch.content is None]
+                    target = incomplete
+                    print(f"  实际待下载: {len(target)} 章")
 
     if target:
         print(f"开始下载: {len(target)} 章")
@@ -1270,6 +1276,21 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                             # 进度栏
                             _advance_progress(progress, task, 1, result_ch.title)
                         else:
+                            # 章节不可获取 — 通知 + 暂停等待用户确认
+                            ch = batch[0]
+                            print(f"\n⚠ 章节不可获取: [{ch.order:>4}] {ch.title}")
+                            notify_cfg = cfg.get("download", {}).get("notify", {})
+                            if notify_cfg.get("on_chapter_unavailable", True):
+                                from nldlder.utils.notify import chapter_unavailable_notify
+                                chapter_unavailable_notify(notify_cfg, ch)
+
+                            answer = _text_input("继续下载？(y/n) [y]: ")
+                            if answer and answer.lower() == "n":
+                                print("用户取消，停止下载")
+                                for pf in pending_futures:
+                                    pf.cancel()
+                                    failed_chapters += len(future_to_group.get(pf, [batch]))
+                                break
                             failed_chapters += 1
 
                         # 周期日志

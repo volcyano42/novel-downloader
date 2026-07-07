@@ -55,6 +55,33 @@ def system_notify(title: str, body: str = ""):
         bell()
 
 
+def chapter_unavailable_notify(config: dict, chapter):
+    """章节不可获取时发送通知。
+
+    Args:
+        config:  download.notify 配置字典
+        chapter: 失败的 Chapter 对象
+    """
+    if not config:
+        return
+
+    sound = config.get("chapter_unavailable_sound", "bell")
+
+    if sound == "bell":
+        # 三短铃 — 区别于"完成"一声和"不完整"两声
+        print("\a", end="", flush=True)
+        import time
+        time.sleep(0.1)
+        print("\a", end="", flush=True)
+        time.sleep(0.1)
+        print("\a", end="", flush=True)
+    elif sound == "system":
+        system_notify(
+            "novel-downloader — 章节不可获取",
+            f"[{chapter.order}] {chapter.title}"
+        )
+
+
 def notify(config: dict, complete: int = 0, incomplete: int = 0):
     """根据配置触发通知。
 
