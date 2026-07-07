@@ -63,7 +63,7 @@ export interface AppConfig {
   groups: Record<string, Record<string, object>>;
 }
 
-const BASE = "http://localhost:8000";
+const BASE = "";
 
 export const configApi = {
   get: async (): Promise<AppConfig> => {
