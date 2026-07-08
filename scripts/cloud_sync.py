@@ -74,6 +74,15 @@ def _qiniu_auth():
     return Auth(ak, sk)
 
 
+def _base_url() -> str:
+    """拼接七牛域名，自动补 http://。"""
+    _, _, bucket, domain = _require_config()
+    domain = domain or f"{bucket}.bkt.clouddn.com"
+    if not domain.startswith("http"):
+        domain = "http://" + domain
+    return domain.rstrip("/")
+
+
 def _qiniu_upload(local_path: str, remote_key: str) -> str:
     """上传文件到七牛，返回直链 URL。"""
     from qiniu import Auth, put_file
@@ -83,16 +92,14 @@ def _qiniu_upload(local_path: str, remote_key: str) -> str:
     ret, info = put_file(token, remote_key, local_path)
     if info.status_code != 200:
         raise RuntimeError(f"上传失败: {info.status_code} {info.text_body}")
-    url = domain.rstrip("/") + "/" + remote_key if domain else f"http://{bucket}.bkt.clouddn.com/{remote_key}"
+    url = f"{_base_url()}/{remote_key}"
     return url
 
 
 def _qiniu_download(remote_key: str, local_path: str) -> None:
     """从七牛直链下载文件。"""
     import requests
-    _, _, _, domain = _require_config()
-    base = domain.rstrip("/") if domain else f"http://{_require_config()[2]}.bkt.clouddn.com"
-    url = f"{base}/{remote_key}"
+    url = f"{_base_url()}/{remote_key}"
     resp = requests.get(url, timeout=120)
     if resp.status_code != 200:
         raise RuntimeError(f"下载失败: {resp.status_code}")
