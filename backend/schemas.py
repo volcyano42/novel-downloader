@@ -103,6 +103,8 @@ class ExportTaskStatus(BaseModel):
     task_id: str
     status: str
     progress: float = 0.0
+    formats: list[str] | None = None
+    path: str | None = None
 
 class APIOptionsData(BaseModel):
     name: str
