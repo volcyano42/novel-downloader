@@ -37,7 +37,23 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
       if (cfg.txt?.enabled)   body.txt   = cfg.txt;
       if (cfg.epub?.enabled)  body.epub  = cfg.epub;
       if (cfg.img?.enabled)   body.img   = cfg.img;
-      await exportApi.trigger(body);
+      const { task_id } = await exportApi.trigger(body);
+      // 轮询直到完成
+      for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const task = await exportApi.taskStatus(task_id);
+        if (task.status === "completed") {
+          // 触发浏览器下载
+          const a = document.createElement("a");
+          a.href = `/api/v1/export/download/${task_id}`;
+          a.download = "";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          break;
+        }
+        if (task.status === "failed") break;
+      }
     } catch { /* ignore */ }
     finally { setExporting(false); }
   }, [novelId, exporting]);

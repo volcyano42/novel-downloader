@@ -1,9 +1,9 @@
-"""Export 路由 — 3 条，支持多格式导出自动打包 ZIP。"""
-import shutil
+"""Export 路由 — 4 条，支持多格式导出自动打包 ZIP + 浏览器下载。"""
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from backend.schemas import ExportRequest, ExportTaskStatus
 from nldlder import NovelDownloader, get_exporters
 
@@ -21,16 +21,6 @@ def _enabled_formats(body: ExportRequest) -> list[str]:
     if body.img and body.img.enabled:
         formats.append("img")
     return formats
-
-def _collect_exported_files(base_dir: Path, novel_id: str) -> list[Path]:
-    """收集导出目录下属于该小说的最新文件。"""
-    files: list[Path] = []
-    if not base_dir.exists():
-        return files
-    for p in base_dir.rglob("*"):
-        if p.is_file():
-            files.append(p)
-    return files
 
 @router.get("/format")
 async def list_formats():
@@ -130,3 +120,34 @@ async def get_task_status(task_id: str):
         status=task["status"],
         progress=task.get("progress", 0.0),
     )
+
+@router.get("/download/{task_id}")
+async def download_export(task_id: str):
+    """浏览器下载导出文件（ZIP 或单文件）。"""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+    if task["status"] != "completed":
+        raise HTTPException(400, "导出尚未完成")
+
+    path = task.get("path")
+    if not path:
+        raise HTTPException(404, "导出文件不存在")
+
+    file_path = Path(path)
+    if file_path.is_file():
+        # 单文件（单格式或 ZIP）
+        media_type = "application/zip" if file_path.suffix == ".zip" else "application/octet-stream"
+        return FileResponse(file_path, media_type=media_type, filename=file_path.name)
+    elif file_path.is_dir():
+        # 多格式但未打包的罕见情况 → 临时打包
+        import tempfile, zipfile
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tmp.close()
+        with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in file_path.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f.relative_to(file_path))
+        return FileResponse(tmp.name, media_type="application/zip", filename=f"{file_path.name}.zip")
+
+    raise HTTPException(404, "导出文件不可访问")
