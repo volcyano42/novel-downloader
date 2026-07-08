@@ -3,15 +3,14 @@
 
 依赖::
 
-    pip install qiniu requests pyyaml
+    pip install qiniu requests
 
-配置 — 在 config.yaml 中新增 cloud 段::
+环境变量::
 
-    cloud:
-      access_key: your-access-key
-      secret_key: your-secret-key
-      bucket: novels-backup
-      domain: http://xxx.bkt.clouddn.com      # 可选，下载时自动拼接
+    export QINIU_ACCESS_KEY=...
+    export QINIU_SECRET_KEY=...
+    export QINIU_BUCKET=novels-backup
+    export QINIU_DOMAIN=http://xxx.bkt.clouddn.com  # 可选
 
 用法::
 
@@ -20,6 +19,7 @@
     python scripts/cloud_sync.py pull              # 下载全部小说
     python scripts/cloud_sync.py pull <novel_id>   # 下载指定小说
     python scripts/cloud_sync.py status            # 对比本地与云端
+    python scripts/cloud_sync.py delete <novel_id> # 从云端删除备份
 """
 
 import argparse
@@ -30,38 +30,19 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-import yaml
-
 
 # ── 配置 ──
 
-def _load_config() -> dict:
-    """从 config.yaml 读取 cloud 段。"""
-    candidates = [
-        Path("config/config.yaml"),
-        Path("app_data/config/config.yaml"),
-    ]
-    cfg_path = None
-    for p in candidates:
-        if p.exists():
-            cfg_path = p
-            break
-    if cfg_path is None:
-        return {}
-    with open(cfg_path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
-    return cfg.get("cloud", {})
-
-
 def _require_config() -> tuple[str, str, str, str]:
-    cfg = _load_config()
-    ak = cfg.get("access_key", "") or os.environ.get("QINIU_ACCESS_KEY", "")
-    sk = cfg.get("secret_key", "") or os.environ.get("QINIU_SECRET_KEY", "")
-    bucket = cfg.get("bucket", "") or os.environ.get("QINIU_BUCKET", "")
-    domain = cfg.get("domain", "") or os.environ.get("QINIU_DOMAIN", "")
+    ak = os.environ.get("QINIU_ACCESS_KEY", "")
+    sk = os.environ.get("QINIU_SECRET_KEY", "")
+    bucket = os.environ.get("QINIU_BUCKET", "")
+    domain = os.environ.get("QINIU_DOMAIN", "")
     if not all([ak, sk, bucket]):
-        print("错误: 请先配置七牛密钥。在 config.yaml 中添加 cloud 段，或设置环境变量：")
-        print("  QINIU_ACCESS_KEY / QINIU_SECRET_KEY / QINIU_BUCKET")
+        print("错误: 请先设置七牛密钥环境变量：")
+        print("  export QINIU_ACCESS_KEY=...")
+        print("  export QINIU_SECRET_KEY=...")
+        print("  export QINIU_BUCKET=...")
         sys.exit(1)
     return ak, sk, bucket, domain
 
@@ -153,9 +134,8 @@ def _qiniu_delete(remote_key: str) -> None:
 
 def _get_local_db_dir() -> Path:
     """获取本地小说库目录。"""
-    cfg = _load_config()
-    base_dir = cfg.get("base_dir", "") or "app_data/storage"
-    return Path(base_dir)
+    base = os.environ.get("NOVELS_STORAGE_DIR", "app_data/storage")
+    return Path(base)
 
 
 def _local_novels() -> list[str]:
