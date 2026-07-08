@@ -1,21 +1,26 @@
 api:
+  backoff_factor: 2
+  delay:
+  - 3
+  - 5
   rain:
     backoff_factor: 2
     delay:
     - 0
     - 0.5
     enabled: true
-    key: ""
+    key: ''
     params: {}
     retry_times: 3
     timeout: 30
-
+  retry_times: 3
+  timeout: 30
 browser:
   backoff_factor: 2
   browser_type: chromium
   delay:
-  - 3.0
-  - 5.0
+  - 3
+  - 5
   headless: false
   retry_times: 3
   timeout: 30
@@ -23,7 +28,6 @@ browser:
   viewport:
     height: 720
     width: 1280
-
 requests:
   backoff_factor: 2
   cookies: {}

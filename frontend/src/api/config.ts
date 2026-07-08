@@ -14,6 +14,8 @@ export interface EngineOptions {
 
 export interface FormatOptions {
   enabled: boolean;
+  output_path?: string;
+  file_name_template?: string;
 }
 
 export interface TxtOptions extends FormatOptions {
@@ -27,6 +29,8 @@ export interface EpubOptions extends FormatOptions {
   jpeg_quality: number;
   max_image_width: number;
   include_toc: boolean;
+  encoding?: string;
+  css_style?: string;
 }
 
 export interface ImgOptions extends FormatOptions {
