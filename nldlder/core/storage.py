@@ -8,11 +8,12 @@
     opts = StorageOptions(backend="local", base_dir="app_data/storage")
     store = create_storage(opts)
 
-    opts2 = StorageOptions(backend="sqlite", db_path="app_data/storage/novels.db")
+    opts2 = StorageOptions(backend="sqlite", base_dir="app_data/storage")
     store2 = create_storage(opts2)
 """
 
 import json
+import os
 import shutil
 import sqlite3
 from abc import ABC, abstractmethod
@@ -236,89 +237,94 @@ class LocalStorage(BaseStorage):
 # ═══════════════════════════════════════════════════════════════════
 
 class SQLiteStorage(BaseStorage):
-    """SQLite 数据库存储。
+    """SQLite 分库存储 — 一小说一库。
 
-    表结构::
+    目录结构::
 
-        novels (id TEXT PK, title, url, author, serial, description,
-                tags, count, cover_json, created_at)
-        chapters (id TEXT PK, novel_id TEXT FK, url, title, "order",
-                  volume, content, time, count)
+        base_dir/
+            {novel_id}.db       ← 单本小说（meta + chapters + illustrations）
+
+    每本小说的库内表结构::
+
+        meta (id, title, url, author, serial, description, tags, count, created_at)
+        chapters (id, url, title, "order", volume, content, time, count)
+        illustrations (id, owner_type, owner_id, alt, url, insert_pos, raw_data, format)
     """
 
     def __init__(self, config: StorageOptions):
         url = config.database_url
         if url:
             db_path = _parse_sqlite_url(url)
+            self.base_dir = db_path.parent
         else:
-            db_path = Path(config.base_dir) / "novels.db"
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = str(db_path)
-        self._init_db()
+            self.base_dir = Path(config.base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def _connect(self) -> sqlite3.Connection:
-        # timeout: 写锁等待秒数（默认 5s，加长避免并发读写报 database is locked）
-        conn = sqlite3.connect(self.db_path, timeout=15)
+    def _novel_path(self, novel_id: str) -> str:
+        return str(self.base_dir / f"{novel_id}.db")
+
+    def _connect_novel(self, novel_id: str) -> sqlite3.Connection:
+        path = self._novel_path(novel_id)
+        conn = sqlite3.connect(path, timeout=15)
         try:
             conn.execute("PRAGMA journal_mode=WAL")
         except sqlite3.OperationalError:
-            # WSL / 网络文件系统不支持 WAL，降级为 DELETE
             _log.warning("WAL 模式不可用，降级为 DELETE journal")
             conn.execute("PRAGMA journal_mode=DELETE")
         conn.execute("PRAGMA foreign_keys=ON")
+        self._init_novel_db(conn)
         return conn
 
-    def _init_db(self):
-        with self._connect() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS novels (
-                    id          TEXT PRIMARY KEY,
-                    title       TEXT NOT NULL,
-                    url         TEXT NOT NULL,
-                    author      TEXT NOT NULL DEFAULT '',
-                    serial      INTEGER NOT NULL DEFAULT 0,
-                    description TEXT NOT NULL DEFAULT '',
-                    tags        TEXT NOT NULL DEFAULT '[]',
-                    count       INTEGER,
-                    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-                );
-                CREATE TABLE IF NOT EXISTS chapters (
-                    id          TEXT NOT NULL,
-                    novel_id    TEXT NOT NULL REFERENCES novels(id),
-                    url         TEXT NOT NULL,
-                    title       TEXT NOT NULL,
-                    "order"     INTEGER NOT NULL DEFAULT 0,
-                    volume      TEXT,
-                    content     TEXT,
-                    time        REAL,
-                    count       INTEGER,
-                                        PRIMARY KEY (novel_id, id)
-                );
-                CREATE TABLE IF NOT EXISTS illustrations (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    owner_type  TEXT NOT NULL CHECK(owner_type IN ('novel','chapter')),
-                    owner_id    TEXT NOT NULL,
-                    alt         TEXT,
-                    url         TEXT NOT NULL,
-                    insert_pos  INTEGER,
-                    raw_data    BLOB,
-                    format      TEXT,
-                    UNIQUE(owner_type, owner_id, insert_pos)
-                );
-                CREATE INDEX IF NOT EXISTS idx_chapters_novel
-                    ON chapters(novel_id, "order");
-                CREATE INDEX IF NOT EXISTS idx_illustrations_owner
-                    ON illustrations(owner_type, owner_id);
-            """)
+    @staticmethod
+    def _init_novel_db(conn: sqlite3.Connection):
+        """首次访问时初始化单本小说的库。"""
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS meta (
+                id          TEXT PRIMARY KEY,
+                title       TEXT NOT NULL,
+                url         TEXT NOT NULL,
+                author      TEXT NOT NULL DEFAULT '',
+                serial      INTEGER NOT NULL DEFAULT 0,
+                description TEXT NOT NULL DEFAULT '',
+                tags        TEXT NOT NULL DEFAULT '[]',
+                count       INTEGER,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS chapters (
+                id          TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                "order"     INTEGER NOT NULL DEFAULT 0,
+                volume      TEXT,
+                content     TEXT,
+                time        REAL,
+                count       INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS illustrations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_type  TEXT NOT NULL CHECK(owner_type IN ('novel','chapter')),
+                owner_id    TEXT NOT NULL,
+                alt         TEXT,
+                url         TEXT NOT NULL,
+                insert_pos  INTEGER,
+                raw_data    BLOB,
+                format      TEXT,
+                UNIQUE(owner_type, owner_id, insert_pos)
+            );
+            CREATE INDEX IF NOT EXISTS idx_chapters_order
+                ON chapters("order");
+            CREATE INDEX IF NOT EXISTS idx_illustrations_owner
+                ON illustrations(owner_type, owner_id);
+        """)
 
     # ── 元数据 ──
 
     def save_meta(self, novel: Novel) -> str:
         _log.debug("save_meta sqlite: id=%s", novel.id)
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
-        with self._connect() as conn:
+        with self._connect_novel(novel.id) as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO novels (id, title, url, author, serial,
+                INSERT OR REPLACE INTO meta (id, title, url, author, serial,
                     description, tags, count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
@@ -327,10 +333,10 @@ class SQLiteStorage(BaseStorage):
         return novel.id
 
     def load_meta(self, novel_id: str) -> Novel | None:
-        with self._connect() as conn:
+        with self._connect_novel(novel_id) as conn:
             row = conn.execute(
                 "SELECT id, title, url, author, serial, description, tags, count "
-                "FROM novels WHERE id = ?", (novel_id,)
+                "FROM meta WHERE id = ?", (novel_id,)
             ).fetchone()
         if row is None:
             return None
@@ -338,14 +344,18 @@ class SQLiteStorage(BaseStorage):
         return self._row_to_novel(row, cover)
 
     def iter_metas(self) -> Iterator[Novel]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT id, title, url, author, serial, description, tags, count "
-                "FROM novels ORDER BY title"
-            ).fetchall()
-        for row in rows:
-            cover = self._load_illustration(row[0], 'novel', row[0])
-            yield self._row_to_novel(row, cover)
+        # 目录就是索引：扫描 *.db 读每本的 meta 表
+        for path in sorted(self.base_dir.glob("*.db"), key=lambda p: p.name):
+            try:
+                with sqlite3.connect(str(path), timeout=5) as conn:
+                    row = conn.execute(
+                        "SELECT id, title, url, author, serial, description, tags, count "
+                        "FROM meta"
+                    ).fetchone()
+                if row:
+                    yield self._row_to_novel(row, cover=None)
+            except sqlite3.Error:
+                _log.warning("iter_metas skip broken db: %s", path.name)
 
     @staticmethod
     def _row_to_novel(row: tuple, cover=None) -> Novel:
@@ -363,7 +373,6 @@ class SQLiteStorage(BaseStorage):
                            img: "Illustration | None"):
         if img is None or not img.raw_data:
             return
-        # 先删旧，再插入（避免 COALESCE 在 UNIQUE 中不兼容）
         conn.execute(
             "DELETE FROM illustrations WHERE owner_type = ? AND owner_id = ? "
             "AND insert_pos IS ?",
@@ -376,27 +385,25 @@ class SQLiteStorage(BaseStorage):
         """, (owner_type, owner_id, img.alt, img.url or '',
               img.insert, img.raw_data, img.image_format))
 
-    def _load_illustration(self, conn_or_id, owner_type: str,
+    def _load_illustration(self, novel_id: str, owner_type: str,
                            owner_id: str) -> "Illustration | None":
-        """加载单张插图（封面）。conn 可以是 connection 或 novel_id。"""
-        if isinstance(conn_or_id, str):
-            with self._connect() as conn:
-                return self._load_illustration(conn, owner_type, conn_or_id)
-        row = conn_or_id.execute(
-            "SELECT alt, url, insert_pos, raw_data, format "
-            "FROM illustrations WHERE owner_type = ? AND owner_id = ? "
-            "ORDER BY insert_pos LIMIT 1",
-            (owner_type, owner_id)
-        ).fetchone()
+        """加载单张插图（封面）。"""
+        with self._connect_novel(novel_id) as conn:
+            row = conn.execute(
+                "SELECT alt, url, insert_pos, raw_data, format "
+                "FROM illustrations WHERE owner_type = ? AND owner_id = ? "
+                "ORDER BY insert_pos LIMIT 1",
+                (owner_type, owner_id)
+            ).fetchone()
         if row is None:
             return None
         from ..models.novel import Illustration
         return Illustration(raw_data=row[3], alt=row[0], insert=row[2], url=row[1])
 
-    def _load_illustrations(self, owner_type: str,
+    def _load_illustrations(self, novel_id: str, owner_type: str,
                             owner_id: str) -> tuple["Illustration", ...]:
         """加载所有插图（章节）。"""
-        with self._connect() as conn:
+        with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
                 "SELECT alt, url, insert_pos, raw_data, format "
                 "FROM illustrations WHERE owner_type = ? AND owner_id = ? "
@@ -415,14 +422,13 @@ class SQLiteStorage(BaseStorage):
         if isinstance(chapters, Chapter):
             chapters = [chapters]
         saved = []
-        with self._connect() as conn:
+        with self._connect_novel(novel.id) as conn:
             for ch in chapters:
                 conn.execute("""
                     INSERT OR REPLACE INTO chapters
-                        (id, novel_id, url, title, "order", volume,
-                         content, time, count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (ch.id, novel.id, ch.url, ch.title, ch.order, ch.volume,
+                        (id, url, title, "order", volume, content, time, count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (ch.id, ch.url, ch.title, ch.order, ch.volume,
                       ch.content, ch.time, ch.count))
                 for img in ch.images:
                     self._save_illustration(conn, 'chapter', ch.id, img)
@@ -430,29 +436,27 @@ class SQLiteStorage(BaseStorage):
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
-        with self._connect() as conn:
+        with self._connect_novel(novel_id) as conn:
             row = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
-                "FROM chapters WHERE novel_id = ? AND id = ?",
-                (novel_id, chapter_id)
+                "FROM chapters WHERE id = ?", (chapter_id,)
             ).fetchone()
         if row is None:
             return None
-        images = self._load_illustrations('chapter', chapter_id)
+        images = self._load_illustrations(novel_id, 'chapter', chapter_id)
         return self._row_to_chapter(row, novel_id, images)
 
     def load_chapters(self, novel_id: str) -> Chapters:
         return Chapters(self._iter_chapters(novel_id))
 
     def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
-        with self._connect() as conn:
+        with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
-                "FROM chapters WHERE novel_id = ? ORDER BY \"order\"",
-                (novel_id,)
+                "FROM chapters ORDER BY \"order\""
             ).fetchall()
         for row in rows:
-            images = self._load_illustrations('chapter', row[0])
+            images = self._load_illustrations(novel_id, 'chapter', row[0])
             yield self._row_to_chapter(row, novel_id, images)
 
     @staticmethod
@@ -469,13 +473,16 @@ class SQLiteStorage(BaseStorage):
 
     def delete_novel(self, novel_id: str) -> None:
         _log.info("delete_novel sqlite: id=%s", novel_id)
-        with self._connect() as conn:
-            conn.execute("DELETE FROM illustrations WHERE owner_id IN "
-                         "(SELECT id FROM chapters WHERE novel_id = ?)", (novel_id,))
-            conn.execute("DELETE FROM illustrations WHERE owner_type = 'novel' "
-                         "AND owner_id = ?", (novel_id,))
-            conn.execute("DELETE FROM chapters WHERE novel_id = ?", (novel_id,))
-            conn.execute("DELETE FROM novels WHERE id = ?", (novel_id,))
+        novel_path = self._novel_path(novel_id)
+        try:
+            os.remove(novel_path)
+        except FileNotFoundError:
+            pass
+        for ext in ("-wal", "-shm"):
+            try:
+                os.remove(novel_path + ext)
+            except FileNotFoundError:
+                pass
 
 
 class PostgreSQLStorage(BaseStorage):
