@@ -1,25 +1,23 @@
 """Export 路由 — 4 条，支持多格式导出自动打包 ZIP + 浏览器下载。"""
+import tempfile
 import uuid
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from backend.schemas import ExportRequest, ExportTaskStatus
-from nldlder import NovelDownloader, get_exporters
+from nldlder import NovelDownloader, create_engine, get_exporters
 
 router = APIRouter(prefix="/api/v1/export", tags=["export"])
 
 _tasks: dict[str, dict] = {}
 
 def _enabled_formats(body: ExportRequest) -> list[str]:
-    """返回启用的导出格式列表。"""
     formats: list[str] = []
-    if body.txt and body.txt.enabled:
-        formats.append("txt")
-    if body.epub and body.epub.enabled:
-        formats.append("epub")
-    if body.img and body.img.enabled:
-        formats.append("img")
+    if body.txt and body.txt.enabled:   formats.append("txt")
+    if body.epub and body.epub.enabled: formats.append("epub")
+    if body.img and body.img.enabled:   formats.append("img")
     return formats
 
 @router.get("/format")
@@ -32,7 +30,7 @@ async def trigger_export(body: ExportRequest):
     _tasks[task_id] = {"status": "downloading", "progress": 0.0}
     try:
         from nldlder.core.storage import create_storage
-        from nldlder.core.options import StorageOptions, Options, ExportOptions
+        from nldlder.core.options import StorageOptions, Options
         store = create_storage(StorageOptions(
             backend="sqlite",
             database_url="sqlite:///app_data/storage/novels.db",
@@ -45,62 +43,65 @@ async def trigger_export(body: ExportRequest):
             chapters = [ch for ch in chapters if ch.id in body.chapter_id]
         novel.update_chapter(chapters)
 
-        # 构建导出选项
-        opts = Options().set_mode("api")
         formats = _enabled_formats(body)
         if not formats:
             raise HTTPException(400, "没有启用任何导出格式")
 
-        # 收集输出根目录（统一到一个根下方便打包）
-        export_roots: list[Path] = []
+        # 统一导出到临时目录
+        export_dir = Path(tempfile.mkdtemp(prefix="nld_export_"))
+
+        opts = Options().set_mode("api")
         if body.txt and body.txt.enabled:
-            root = Path(body.txt.output_path or f"app_data/exports/{novel.title}/txt")
-            opts.set_export_options(ExportOptions(format="txt", output_path=str(root), enabled=True,
-                file_name_template=body.txt.file_name_template or "{name}"))
-            export_roots.append(root.parent if root.name == "txt" else root)
+            from nldlder.exporters.txt import TXTExportOptions
+            sub = export_dir / "txt"; sub.mkdir()
+            opt = TXTExportOptions(
+                format="txt", output_path=str(sub), enabled=True,
+                file_name_template=body.txt.file_name_template or "{name}",
+                encoding=body.txt.encoding)
+            setattr(opts, '_exports', {**opts.exports, 'txt': opt})
         if body.epub and body.epub.enabled:
-            root = Path(body.epub.output_path or f"app_data/exports/{novel.title}/epub")
-            opts.set_export_options(ExportOptions(format="epub", output_path=str(root), enabled=True,
-                file_name_template=body.epub.file_name_template or "{name}"))
-            export_roots.append(root.parent if root.name == "epub" else root)
+            from nldlder.exporters.epub import EPUBExportOptions
+            sub = export_dir / "epub"; sub.mkdir()
+            opt = EPUBExportOptions(
+                format="epub", output_path=str(sub), enabled=True,
+                file_name_template=body.epub.file_name_template or "{name}",
+                compression=body.epub.compression, compresslevel=body.epub.compresslevel,
+                include_toc=body.epub.include_toc, optimize_images=body.epub.optimize_images,
+                jpeg_quality=body.epub.jpeg_quality, max_image_width=body.epub.max_image_width)
+            setattr(opts, '_exports', {**opts.exports, 'epub': opt})
         if body.img and body.img.enabled:
-            root = Path(body.img.output_path or f"app_data/exports/{novel.title}/img")
-            opts.set_export_options(ExportOptions(format="img", output_path=str(root), enabled=True,
-                file_name_template=body.img.file_name_template or "{n}"))
-            export_roots.append(root.parent if root.name == "img" else root)
+            from nldlder.exporters.img import IMGExportOptions
+            sub = export_dir / "img"; sub.mkdir()
+            opt = IMGExportOptions(
+                format="img", output_path=str(sub), enabled=True,
+                file_name_template=body.img.file_name_template or "{n}",
+                output_format=body.img.output_format)
+            setattr(opts, '_exports', {**opts.exports, 'img': opt})
 
         # 执行导出
-        dl = NovelDownloader.from_options(opts)
+        engine = create_engine(opts)
+        dl = NovelDownloader(engine, opts)
         dl.export(novel)
 
-        # 多格式 → 打包 ZIP
-        result_path: str | None = None
-        if len(formats) >= 2:
-            # 找到共同父目录
-            parents = set(str(r.resolve()) for r in export_roots)
-            if len(parents) == 1:
-                common = export_roots[0].resolve()
-                archive_name = common / f"{novel.title}.zip"
-                # 收集所有导出文件
-                files = list(common.rglob("*"))
-                if files:
-                    # 创建 zip，保留相对路径
-                    import zipfile
-                    with zipfile.ZipFile(str(archive_name), "w", zipfile.ZIP_DEFLATED) as zf:
-                        for f in files:
-                            if f.is_file() and f.suffix != ".zip":
-                                zf.write(f, f.relative_to(common))
-                    # 删除原始文件，保留 zip
-                    for f in files:
-                        if f.is_file() and f.suffix != ".zip":
-                            f.unlink()
-                    # 清理空文件夹
-                    for d in sorted(common.rglob("*"), reverse=True):
-                        if d.is_dir() and d != common and not any(d.iterdir()):
-                            d.rmdir()
-                    result_path = str(archive_name)
-        if not result_path and export_roots:
-            result_path = str(export_roots[0])
+        # 收集导出文件
+        exported: list[Path] = []
+        for f in export_dir.rglob("*"):
+            if f.is_file():
+                exported.append(f)
+
+        if not exported:
+            raise RuntimeError("导出未生成任何文件")
+
+        result_path: str
+        if len(exported) == 1:
+            result_path = str(exported[0])
+        else:
+            # 多文件 → ZIP
+            zip_path = export_dir / f"{novel.title}.zip"
+            with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+                for f in exported:
+                    zf.write(f, f.relative_to(export_dir))
+            result_path = str(zip_path)
 
         _tasks[task_id] = {
             "status": "completed", "progress": 1.0,
@@ -123,31 +124,15 @@ async def get_task_status(task_id: str):
 
 @router.get("/download/{task_id}")
 async def download_export(task_id: str):
-    """浏览器下载导出文件（ZIP 或单文件）。"""
     task = _tasks.get(task_id)
     if not task:
         raise HTTPException(404, "任务不存在")
     if task["status"] != "completed":
         raise HTTPException(400, "导出尚未完成")
 
-    path = task.get("path")
-    if not path:
-        raise HTTPException(404, "导出文件不存在")
+    file_path = Path(task["path"])
+    if not file_path.exists():
+        raise HTTPException(404, "导出文件已被清理")
 
-    file_path = Path(path)
-    if file_path.is_file():
-        # 单文件（单格式或 ZIP）
-        media_type = "application/zip" if file_path.suffix == ".zip" else "application/octet-stream"
-        return FileResponse(file_path, media_type=media_type, filename=file_path.name)
-    elif file_path.is_dir():
-        # 多格式但未打包的罕见情况 → 临时打包
-        import tempfile, zipfile
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-        tmp.close()
-        with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
-            for f in file_path.rglob("*"):
-                if f.is_file():
-                    zf.write(f, f.relative_to(file_path))
-        return FileResponse(tmp.name, media_type="application/zip", filename=f"{file_path.name}.zip")
-
-    raise HTTPException(404, "导出文件不可访问")
+    media_type = "application/zip" if file_path.suffix == ".zip" else "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=file_path.name)

@@ -47,7 +47,8 @@ class StorageOptions:
 
 @dataclass
 class ExportOptions:
-    output_path: Path | str
+    format: str = ""
+    output_path: Path | str = ""
     enabled: bool = True
     file_name_template: str = "{name}"
 
