@@ -1,4 +1,4 @@
-"""Storage 路由 — 10 条，对接 PostgreSQL。"""
+"""Storage 路由。"""
 from base64 import b64encode
 
 from fastapi import APIRouter, HTTPException, Query

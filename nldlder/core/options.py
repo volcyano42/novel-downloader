@@ -39,11 +39,9 @@ class BrowserOptions:
 
 @dataclass
 class StorageOptions:
-    backend: str = "local"           # local | sqlite | postgresql
-    base_dir: Path | str = ""        # local 模式：JSON 文件根目录
-    database_url: str = ""           # 数据库连接字符串
-                                     #   sqlite:///path/to/novels.db
-                                     #   postgresql://user:pass@host:5432/dbname
+    backend: str = "local"           # local | sqlite
+    base_dir: Path | str = ""        # 存储根目录
+    database_url: str = ""           # sqlite:///path/to/novels.db
 
 @dataclass
 class ExportOptions:

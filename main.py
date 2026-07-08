@@ -284,7 +284,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             delay=tuple(req_cfg.get("delay", [3, 5])),
         )
 
-    # Storage：PostgreSQL（跨平台并发读写）
+    # Storage
     storage_cfg = cfg.get("storage", {})
     database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels.db"
     options.set_storage_options(backend="sqlite", database_url=database_url)
