@@ -107,23 +107,14 @@ export default function DetailPage() {
 
   const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
 
-  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
+  const [savedMode, setSavedMode] = useState(searchMode ?? "browser");
+  const [savedProvider, setSavedProvider] = useState(searchProvider ?? "");
 
-  const handleStartDownload = useCallback((mode: string, provider?: string) => {
-    if (!novelId || selectedIds.size === 0) return;
-    const selected = merged
-      .filter(mc => selectedIds.has(mc.remote.id))
-      .map(mc => ({ id: mc.remote.id, url: mc.remote.url, novel_id: novelId, title: mc.remote.title, order: mc.remote.order, volume: mc.remote.volume }));
-    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, "default", mode, provider, novel?.url);
-    setSelectedIds(new Set());
-    setShowDownloadDialog(false);
-    navigate("/downloads");
-  }, [novelId, selectedIds, merged, novel?.title, navigate]);
-
-  const handleCheckUpdate = useCallback(async () => {
+  const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
     try {
-      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", "default", searchMode, searchProvider);
+      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", "default", mode, provider);
       const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
       const localMap = new Map(localAll.map((c: ChapterBrief) => [c.id, c]));
       const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
@@ -139,7 +130,41 @@ export default function DetailPage() {
       }
     } catch { /* ignore */ }
     finally { setChecking(false); }
-  }, [novelId, novel?.url]);
+  }, [novelId, remoteUrl, novel?.url]);
+
+  const runDownload = useCallback((mode: string, provider?: string) => {
+    if (!novelId || selectedIds.size === 0) return;
+    const selected = merged
+      .filter(mc => selectedIds.has(mc.remote.id))
+      .map(mc => ({ id: mc.remote.id, url: mc.remote.url, novel_id: novelId, title: mc.remote.title, order: mc.remote.order, volume: mc.remote.volume }));
+    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, "default", mode, provider, novel?.url);
+    setSelectedIds(new Set());
+    navigate("/downloads");
+  }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate]);
+
+  const handleCheckUpdate = useCallback(() => {
+    setDialogVariant("check");
+  }, []);
+
+  const handleDownloadClick = useCallback(() => {
+    if (savedMode) {
+      runDownload(savedMode, savedProvider || undefined);
+    } else {
+      setDialogVariant("download");
+    }
+  }, [savedMode, savedProvider, runDownload]);
+
+  const handleDialogConfirm = useCallback((mode: string, provider?: string) => {
+    setSavedMode(mode);
+    setSavedProvider(provider ?? "");
+    const v = dialogVariant;
+    setDialogVariant(null);
+    if (v === "check") {
+      runCheckUpdate(mode, provider);
+    } else {
+      runDownload(mode, provider);
+    }
+  }, [dialogVariant, runCheckUpdate, runDownload]);
 
   if (!novel && !loading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
 
@@ -192,7 +217,7 @@ export default function DetailPage() {
                 <span className="text-xs text-slate-500">已选择 <span className="font-medium text-indigo-500">{selectedIds.size}</span> 章</span>
                 <div className="flex-1" />
                 {selectedIds.size > 0 && (
-                  <button onClick={() => setShowDownloadDialog(true)}
+                  <button onClick={handleDownloadClick}
                     className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
                     <Download className="h-3 w-3" strokeWidth={2} />
                     下载选中 ({selectedIds.size})
@@ -285,10 +310,11 @@ export default function DetailPage() {
         </div>
       )}
 
-      {/* download options dialog */}
-      <DownloadDialog open={showDownloadDialog} onClose={() => setShowDownloadDialog(false)}
-        novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
-        onStart={handleStartDownload} />
+      {/* download / check-update dialog */}
+      <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
+        variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
+        initialMode={savedMode} initialProvider={savedProvider}
+        onStart={handleDialogConfirm} />
     </div>
   );
 }

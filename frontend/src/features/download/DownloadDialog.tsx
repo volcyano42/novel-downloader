@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { Download, Monitor, Globe, Zap, ChevronDown, Loader2 } from "lucide-react";
+import { Download, Monitor, Globe, Zap, ChevronDown, Loader2, RefreshCw } from "lucide-react";
 import { configApi, type AppConfig } from "@/api/config";
 import { cn } from "@/lib/utils";
 
 interface DownloadDialogProps {
   open: boolean; onClose: () => void;
   novelTitle: string; chapterCount: number;
+  variant?: "download" | "check";
+  initialMode?: string;
+  initialProvider?: string;
   onStart: (mode: string, provider?: string) => void;
 }
 
@@ -24,14 +27,15 @@ function ModeField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, onStart }: DownloadDialogProps) {
-  const [mode, setMode] = useState("browser");
-  const [provider, setProvider] = useState("");
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, onStart }: DownloadDialogProps) {
+  const [mode, setMode] = useState(initialMode ?? "browser");
+  const [provider, setProvider] = useState(initialProvider ?? "");
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [advOpen, setAdvOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { if (open) configApi.get().then(setCfg).catch(() => {}); }, [open]);
+  useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); } }, [open, initialMode, initialProvider]);
 
   const modeCfg = cfg?.[mode as keyof typeof cfg] as Record<string, unknown> | undefined;
   const apiMap = cfg?.api_providers ?? {};
@@ -49,8 +53,8 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, onStar
       <div onClick={e => e.stopPropagation()}
         className="w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl p-6 animate-in zoom-in-95 fade-in duration-200">
         {/* header */}
-        <h2 className="text-base font-semibold text-slate-800 mb-1">下载设置</h2>
-        <p className="text-xs text-slate-500 mb-4 truncate">{novelTitle} · {chapterCount} 章</p>
+        <h2 className="text-base font-semibold text-slate-800 mb-1">{variant === "check" ? "检查更新设置" : "下载设置"}</h2>
+        <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
         {/* mode selector */}
         <div className="space-y-2 mb-4">
@@ -113,8 +117,8 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, onStar
           </button>
           <button onClick={handleStart} disabled={loading}
             className="flex-1 rounded-xl bg-indigo-500 text-white py-2.5 text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Download className="h-4 w-4" strokeWidth={2} />}
-            {loading ? "启动中..." : `开始下载 (${chapterCount}章)`}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : variant === "check" ? <RefreshCw className="h-4 w-4" strokeWidth={2} /> : <Download className="h-4 w-4" strokeWidth={2} />}
+            {loading ? "启动中..." : variant === "check" ? "开始检查" : `开始下载 (${chapterCount}章)`}
           </button>
         </div>
       </div>
