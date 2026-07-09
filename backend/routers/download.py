@@ -1,6 +1,7 @@
 """Download 路由 — 8 条，对接 search + NovelDownloader + 后台下载任务管理。"""
 import hashlib
 import json
+import os
 import threading
 import uuid
 from base64 import b64encode
@@ -154,7 +155,8 @@ def _get_engine(engine_id: str, mode: str | None = None, provider: str | None = 
     # ── API 模式：一个 provider 一个 engine ──
     if mode == "api" and provider:
         prov_cfg = _find_provider_options(provider) or {}
-        fp = _mode_fingerprint(prov_cfg)
+        key = os.environ.get(f"{provider.upper()}_API_KEY", "") or prov_cfg.get("key", "")
+        fp = _mode_fingerprint({**prov_cfg, "key": key})
         cache_key = f"{engine_id}:api:{provider}"
         if cache_key in _engines:
             stored_engine, stored_fp = _engines[cache_key]
@@ -165,10 +167,9 @@ def _get_engine(engine_id: str, mode: str | None = None, provider: str | None = 
             except Exception:
                 pass
             del _engines[cache_key]
-
         opts = Options().set_mode("api").set_api_options(
             name=provider,
-            key=prov_cfg.get("key", ""),
+            key=key,
             delay=tuple(prov_cfg.get("delay", [3, 5])),
             timeout=prov_cfg.get("timeout", 30),
             retry_times=prov_cfg.get("retry_times", 3),
