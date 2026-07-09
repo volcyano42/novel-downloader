@@ -25,6 +25,7 @@
 import argparse
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -104,8 +105,17 @@ def _qiniu_download(remote_key: str, local_path: str) -> None:
     resp = requests.get(url, timeout=120)
     if resp.status_code != 200:
         raise RuntimeError(f"下载失败: {resp.status_code}")
+    data = resp.content
+    # SQLite 文件头校验 — CDN 可能返回缓存的错误页
+    if not data.startswith(b"SQLite format 3\x00"):
+        preview = data[:200].decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"下载的不是 SQLite 数据库（{len(data)} 字节），可能是 CDN 缓存了错误页面。\n"
+            f"  请运行 push --manifest-only --refresh-cdn 刷新缓存后重试。\n"
+            f"  内容预览: {preview}"
+        )
     with open(local_path, "wb") as f:
-        f.write(resp.content)
+        f.write(data)
 
 
 def _qiniu_list(prefix: str = "novels/") -> list[str]:
@@ -280,7 +290,7 @@ def cmd_pull(novel_id: Optional[str] = None):
     """下载恢复：下载 → 完整性校验 → 原子替换。"""
     local_dir = _get_local_db_dir()
     local_dir.mkdir(parents=True, exist_ok=True)
-    remote_keys = _qiniu_list("novels/")
+    remote_keys = [k for k in _qiniu_list("novels/") if k.endswith(".db")]
 
     if novel_id:
         remote_key = f"novels/{novel_id}.db"
@@ -305,8 +315,8 @@ def cmd_pull(novel_id: Optional[str] = None):
                 print(f"  ✗ {nid} — 下载的文件损坏，跳过")
                 continue
 
-            # 原子替换
-            os.replace(download_path, str(db_path))
+            # 替换（shutil.move 兼容跨盘，Windows temp 与目标盘可能不同）
+            shutil.move(download_path, str(db_path))
             # 清理旧 WAL/SHM（新连接会自动重建）
             for ext in ("-wal", "-shm"):
                 try:
