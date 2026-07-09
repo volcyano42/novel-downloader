@@ -138,6 +138,18 @@ def _qiniu_delete(remote_key: str) -> None:
         raise RuntimeError(f"删除失败: {info.status_code} {info.text_body}")
 
 
+# ── CDN 刷新 ──
+
+def _cdn_refresh(urls: list[str]) -> None:
+    """刷新七牛 CDN 缓存。"""
+    from qiniu import CdnManager
+    cdn = CdnManager(_qiniu_auth())
+    ret, info = cdn.refresh_urls(urls)
+    if info.status_code != 200:
+        raise RuntimeError(f"CDN 刷新失败: {info.status_code} {info.text_body}")
+    print(f"  🔄 CDN 刷新已提交 ({len(urls)} 个 URL)")
+
+
 # ── manifest：轻量元数据清单 ──
 
 def _read_novel_meta(db_path: str) -> dict | None:
@@ -209,7 +221,7 @@ def _local_novels() -> list[str]:
 
 # ── 命令 ──
 
-def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False):
+def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refresh_cdn: bool = False):
     """上传：snapshot → 上传七牛。"""
     local_dir = _get_local_db_dir()
     if novel_id:
@@ -250,6 +262,12 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False):
             os.remove(mt.name)
             if manifest_only:
                 print(f"  ✓ {nid} — manifest 已更新 ({manifest['chapter_count']} 章)")
+            # CDN 刷新
+            if refresh_cdn:
+                refresh_urls = [f"{_base_url()}/novels/{nid}.manifest.json"]
+                if not manifest_only:
+                    refresh_urls.append(f"{_base_url()}/novels/{nid}.db")
+                _cdn_refresh(refresh_urls)
         finally:
             if snapshot_path:
                 try:
@@ -410,6 +428,7 @@ def main():
     p_push = sub.add_parser("push", help="上传到七牛")
     p_push.add_argument("novel_id", nargs="?", help="小说 ID，不指定则上传全部")
     p_push.add_argument("--manifest-only", action="store_true", help="仅重新上传 manifest，不传 .db")
+    p_push.add_argument("--refresh-cdn", action="store_true", help="上传后刷新 CDN 缓存")
 
     p_pull = sub.add_parser("pull", help="从七牛下载恢复")
     p_pull.add_argument("novel_id", nargs="?", help="小说 ID，不指定则下载全部")
@@ -422,7 +441,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "push":
-        cmd_push(args.novel_id, manifest_only=args.manifest_only)
+        cmd_push(args.novel_id, manifest_only=args.manifest_only, refresh_cdn=args.refresh_cdn)
     elif args.cmd == "pull":
         cmd_pull(args.novel_id)
     elif args.cmd == "delete":
