@@ -22,11 +22,11 @@ _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | None = None):
-    """后台线程：逐章下载，支持暂停/恢复。"""
+    """后台线程：并发下载章节，支持暂停/恢复。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from nldlder.models.novel import Chapter, Chapters, Novel
     from nldlder.core.storage import create_storage
     from nldlder.core.options import StorageOptions
-    from nldlder.core.downloader import get_fetcher_for_id
 
     # API 模式自动发现 provider（如果前端没指定）
     platform = None
@@ -34,7 +34,6 @@ def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | 
         from nldlder.core.downloader import get_fetcher_for_id as _gffi, get_fetchers as _gf
         fetcher_cls = _gffi(task["novel_id"])
         if fetcher_cls:
-            # 反向查 get_fetchers() 字典，用 fetcher class 匹配正确的平台名
             for name, cls in _gf().items():
                 if cls is fetcher_cls:
                     platform = name
@@ -64,30 +63,48 @@ def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | 
                 pass
         novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"], serial=0, author="", description="")
 
-        for ch_data in task["chapters"]:
+        cfg = load_config()
+        max_workers = cfg.get("download", {}).get("max_workers", 3)
+
+        def _download_one(ch_data: dict):
+            """下载单个章节（线程安全：引擎/存储已做线程隔离）。"""
             if task["_pause"].is_set():
-                task["status"] = "paused"
+                with _tasks_lock:
+                    if task["status"] == "downloading":
+                        task["status"] = "paused"
                 task["_pause"].wait()
-                task["status"] = "downloading"
+                with _tasks_lock:
+                    if task["status"] == "paused":
+                        task["status"] = "downloading"
 
             ch = Chapter(id=ch_data["id"], url=ch_data["url"], novel_id=task["novel_id"],
                          title=ch_data["title"], order=ch_data["order"], volume=ch_data.get("volume"))
-            task["current_title"] = ch.title
             try:
                 downloaded = dl.resolve_chapter(ch)
                 if downloaded is not None:
                     store.save_chapter(novel, Chapters(chapters=[downloaded]))
-                else:
-                    msg = f"章节不可获取: {ch.title}"
                     with _tasks_lock:
-                        task["errors"].append(msg)
-                        task["detail"] = msg
+                        task["current_title"] = downloaded.title
+                else:
+                    with _tasks_lock:
+                        task["errors"].append(f"章节不可获取: {ch.title}")
+                        task["detail"] = f"章节不可获取: {ch.title}"
             except Exception as e:
-                msg = f"{ch.title}: {e}"
                 with _tasks_lock:
-                    task["errors"].append(msg)
-                    task["detail"] = msg
-            task["progress"] += 1
+                    task["errors"].append(f"{ch.title}: {e}")
+                    task["detail"] = f"{ch.title}: {e}"
+            finally:
+                with _tasks_lock:
+                    task["progress"] += 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_download_one, ch) for ch in task["chapters"]]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    pass  # 异常已在 _download_one 内收集
+
         task["status"] = "completed"
         if task["errors"]:
             task["error"] = "; ".join(task["errors"][:3])
