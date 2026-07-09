@@ -237,7 +237,7 @@ export function SettingsView({ cfg, saving, saved, onUpdate, onSave }: SettingsV
         </Section>
       )}
       {cfg.img.enabled && (
-        <Section icon={Package} title="IMG 图片序列">
+        <Section icon={Package} title="IMG 小说插图">
           <Row label="输出格式"><Select value={cfg.img.output_format} onChange={v => onUpdate("img.output_format", v)} options={[{ value: "original", label: "原始" }, { value: "jpeg", label: "JPEG" }, { value: "png", label: "PNG" }, { value: "webp", label: "WebP" }]} /></Row>
         </Section>
       )}

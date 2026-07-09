@@ -34,7 +34,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
     setShowExport(true);
   }, []);
 
-  const handleStartExport = useCallback(async (formats: string[], _mode: string, _provider?: string) => {
+  const handleStartExport = useCallback(async (formats: string[]) => {
     if (!novelId || exporting) return;
     setExporting(true);
     try {
@@ -109,7 +109,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
         </div>
       </div>
       <ExportDialog open={showExport} onClose={() => setShowExport(false)}
-        novelTitle={title} chapterCount={0}
+        novelTitle={title}
         onExport={handleStartExport} />
     </>
   );
