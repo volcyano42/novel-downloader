@@ -23,6 +23,7 @@
 """
 
 import argparse
+import json
 import os
 import sqlite3
 import sys
@@ -137,6 +138,55 @@ def _qiniu_delete(remote_key: str) -> None:
         raise RuntimeError(f"删除失败: {info.status_code} {info.text_body}")
 
 
+# ── manifest：轻量元数据清单 ──
+
+def _read_novel_meta(db_path: str) -> dict | None:
+    """从 per-novel .db 读取元数据。"""
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        meta = conn.execute(
+            "SELECT title, author, count FROM meta"
+        ).fetchone()
+        if not meta:
+            conn.close()
+            return None
+        last = conn.execute(
+            "SELECT title FROM chapters ORDER BY \"order\" DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        return {
+            "title": meta[0],
+            "author": meta[1],
+            "chapter_count": meta[2] or 0,
+            "last_chapter": last[0] if last else "",
+        }
+    except sqlite3.Error:
+        return None
+
+
+def _make_manifest(novel_id: str, db_path: str) -> dict:
+    """生成本地小说的 manifest。"""
+    meta = _read_novel_meta(db_path) or {}
+    return {
+        "novel_id": novel_id,
+        "title": meta.get("title", ""),
+        "author": meta.get("author", ""),
+        "chapter_count": meta.get("chapter_count", 0),
+        "last_chapter": meta.get("last_chapter", ""),
+        "db_size": os.path.getsize(db_path),
+    }
+
+
+def _qiniu_download_json(remote_key: str) -> dict | None:
+    """从七牛下载 manifest JSON。"""
+    import requests
+    url = f"{_base_url()}/{remote_key}"
+    resp = requests.get(url, timeout=10)
+    if resp.status_code != 200:
+        return None
+    return resp.json()
+
+
 # ── 本地文件管理 ──
 
 def _get_local_db_dir() -> Path:
@@ -183,6 +233,14 @@ def cmd_push(novel_id: Optional[str] = None):
             url = _qiniu_upload(snapshot_path, remote_key)
             size_mb = os.path.getsize(db_path) / (1024 * 1024)
             print(f"  ✓ {nid} ({size_mb:.1f}MB) → {url}")
+            # 上传 manifest
+            manifest = _make_manifest(nid, str(db_path))
+            manifest_bytes = json.dumps(manifest, ensure_ascii=False).encode("utf-8")
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as mt:
+                mt.write(manifest_bytes)
+                mt.flush()
+                _qiniu_upload(mt.name, f"novels/{nid}.manifest.json")
+            os.remove(mt.name)
         finally:
             try:
                 os.remove(snapshot_path)
@@ -249,37 +307,88 @@ def cmd_delete(novel_id: Optional[str] = None):
         return
 
     _qiniu_delete(remote_key)
+    _qiniu_delete(f"novels/{novel_id}.manifest.json")
     print(f"  ✓ {novel_id} — 已从云端删除")
 
 
 def cmd_status():
-    """对比本地与云端。"""
+    """对比本地与云端 — 基于 manifest 展示书名、章节数、差异。"""
+    local_dir = _get_local_db_dir()
     local_ids = set(_local_novels())
-    remote_keys = _qiniu_list("novels/")
-    remote_ids = {Path(k).stem for k in remote_keys}
 
+    # 下载所有云端 manifest（轻量 JSON，几 KB）
+    all_keys = _qiniu_list("novels/")
+    remote_db_keys = {k for k in all_keys if k.endswith(".db")}
+    remote_ids = {Path(k).stem for k in remote_db_keys}
+
+    # 解析云端 manifest
+    cloud_meta: dict[str, dict] = {}
+    for nid in remote_ids:
+        manifest = _qiniu_download_json(f"novels/{nid}.manifest.json")
+        if manifest:
+            cloud_meta[nid] = manifest
+
+    # 分类
     only_local = local_ids - remote_ids
     only_remote = remote_ids - local_ids
     both = local_ids & remote_ids
 
-    print(f"本地: {len(local_ids)} 本 | 云端: {len(remote_ids)} 本\n")
+    ahead = []
+    behind = []
+    synced = []
 
-    if both:
-        print(f"已同步 ({len(both)} 本):")
-        for nid in sorted(both):
-            local_size = os.path.getsize(_get_local_db_dir() / f"{nid}.db") / (1024 * 1024)
-            print(f"  ✓ {nid} ({local_size:.1f}MB)")
+    for nid in sorted(both):
+        local = _read_novel_meta(str(local_dir / f"{nid}.db")) or {}
+        remote = cloud_meta.get(nid, {})
+        lc = local.get("chapter_count", 0)
+        rc = remote.get("chapter_count", 0)
+        title = local.get("title") or remote.get("title") or nid
+
+        if lc > rc:
+            ahead.append((title, lc, rc, local.get("last_chapter", "")))
+        elif lc < rc:
+            behind.append((title, lc, rc, remote.get("last_chapter", "")))
+        else:
+            synced.append((title, lc, local.get("last_chapter", "")))
+
+    # 输出
+    print(f"本地 {len(local_ids)} 本  |  云端 {len(remote_ids)} 本\n")
+
+    if ahead:
+        print(f"本地领先 ({len(ahead)} 本) — 需 push:")
+        for title, lc, rc, last in ahead:
+            print(f"  ↑ {title}")
+            print(f"    本地 {lc} 章 / 云端 {rc} 章  ·  最后: {last}")
+        print()
+
+    if behind:
+        print(f"云端领先 ({len(behind)} 本) — 需 pull:")
+        for title, lc, rc, last in behind:
+            print(f"  ↓ {title}")
+            print(f"    本地 {lc} 章 / 云端 {rc} 章  ·  云端最后: {last}")
+        print()
+
+    if synced:
+        print(f"已同步 ({len(synced)} 本):")
+        for title, count, last in sorted(synced):
+            print(f"  ✓ {title}  ({count} 章)")
+        print()
 
     if only_local:
-        print(f"\n仅本地 ({len(only_local)} 本) — 运行 push 上传:")
+        print(f"仅本地 ({len(only_local)} 本) — push 上传:")
         for nid in sorted(only_local):
-            local_size = os.path.getsize(_get_local_db_dir() / f"{nid}.db") / (1024 * 1024)
-            print(f"  → {nid} ({local_size:.1f}MB)")
+            local = _read_novel_meta(str(local_dir / f"{nid}.db")) or {}
+            title = local.get("title", nid)
+            count = local.get("chapter_count", 0)
+            print(f"  → {title}  ({count} 章)")
 
     if only_remote:
-        print(f"\n仅云端 ({len(only_remote)} 本) — 运行 pull 下载:")
+        print(f"仅云端 ({len(only_remote)} 本) — pull 下载:")
         for nid in sorted(only_remote):
-            print(f"  → {nid}")
+            remote = cloud_meta.get(nid, {})
+            title = remote.get("title", nid)
+            count = remote.get("chapter_count", 0)
+            print(f"  → {title}  ({count} 章)")
 
 
 # ── CLI ──
