@@ -265,12 +265,16 @@ class SQLiteStorage(BaseStorage):
         path = self._novel_path(novel_id)
         conn = sqlite3.connect(path, timeout=15)
         try:
-            conn.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.OperationalError:
-            _log.warning("WAL 模式不可用，降级为 DELETE journal")
-            conn.execute("PRAGMA journal_mode=DELETE")
-        conn.execute("PRAGMA foreign_keys=ON")
-        self._init_novel_db(conn)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.OperationalError:
+                _log.warning("WAL 模式不可用，降级为 DELETE journal")
+                conn.execute("PRAGMA journal_mode=DELETE")
+            conn.execute("PRAGMA foreign_keys=ON")
+            self._init_novel_db(conn)
+        except Exception:
+            conn.close()
+            raise
         return conn
 
     @staticmethod

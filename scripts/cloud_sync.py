@@ -53,19 +53,16 @@ def _require_config() -> tuple[str, str, str, str]:
 
 def _snapshot(src_path: str, dst_path: str) -> None:
     """在线快照 — SQLite backup API，不阻塞读写。"""
-    src = sqlite3.connect(src_path)
-    dst = sqlite3.connect(dst_path)
-    src.backup(dst)
-    dst.close()
-    src.close()
+    with sqlite3.connect(src_path) as src:
+        with sqlite3.connect(dst_path) as dst:
+            src.backup(dst)
 
 
 def _integrity_check(db_path: str) -> bool:
     """检查数据库是否完整。"""
-    conn = sqlite3.connect(db_path)
-    result = conn.execute("PRAGMA integrity_check").fetchone()
-    conn.close()
-    return result[0] == "ok"
+    with sqlite3.connect(db_path) as conn:
+        result = conn.execute("PRAGMA integrity_check").fetchone()
+        return result[0] == "ok"
 
 
 # ── 七牛操作 ──
@@ -165,26 +162,24 @@ def _cdn_refresh(urls: list[str]) -> None:
 def _read_novel_meta(db_path: str) -> dict | None:
     """从 per-novel .db 读取元数据。"""
     try:
-        conn = sqlite3.connect(db_path, timeout=5)
-        meta = conn.execute(
-            "SELECT title, author FROM meta"
-        ).fetchone()
-        if not meta:
-            conn.close()
-            return None
-        chapter_count = conn.execute(
-            "SELECT COUNT(*) FROM chapters"
-        ).fetchone()[0]
-        last = conn.execute(
-            "SELECT title FROM chapters ORDER BY \"order\" DESC LIMIT 1"
-        ).fetchone()
-        conn.close()
-        return {
-            "title": meta[0],
-            "author": meta[1],
-            "chapter_count": chapter_count,
-            "last_chapter": last[0] if last else "",
-        }
+        with sqlite3.connect(db_path, timeout=5) as conn:
+            meta = conn.execute(
+                "SELECT title, author FROM meta"
+            ).fetchone()
+            if not meta:
+                return None
+            chapter_count = conn.execute(
+                "SELECT COUNT(*) FROM chapters"
+            ).fetchone()[0]
+            last = conn.execute(
+                "SELECT title FROM chapters ORDER BY \"order\" DESC LIMIT 1"
+            ).fetchone()
+            return {
+                "title": meta[0],
+                "author": meta[1],
+                "chapter_count": chapter_count,
+                "last_chapter": last[0] if last else "",
+            }
     except sqlite3.Error:
         return None
 
