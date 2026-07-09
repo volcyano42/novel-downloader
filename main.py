@@ -1186,6 +1186,18 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
 
     if not target:
         print("所有章节已下载完毕！")
+        print(f"\n共 {total_chapters} 章（线程数: {max_workers}）")
+        print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部重新下载）")
+        raw = _text_input("章节范围 (留空=跳过): ")
+        if raw and raw.strip():
+            selected_orders = parse_order_string(raw, total_chapters)
+            if selected_orders:
+                novel.chapters = Chapters(
+                    ch for ch in novel.chapters
+                    if ch.order in selected_orders
+                )
+                target = list(novel.chapters)
+                print(f"  已选择 {len(target)} 章，开始重新下载")
     else:
         print(f"\n共 {total_chapters} 章，待下载: {len(target)} 章（线程数: {max_workers}）")
         print("  格式: 1-100、50-、-50、1,3,5-10 或 all（全部）")
