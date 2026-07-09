@@ -209,7 +209,7 @@ def _local_novels() -> list[str]:
 
 # ── 命令 ──
 
-def cmd_push(novel_id: Optional[str] = None):
+def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False):
     """上传：snapshot → 上传七牛。"""
     local_dir = _get_local_db_dir()
     if novel_id:
@@ -227,15 +227,19 @@ def cmd_push(novel_id: Optional[str] = None):
             print(f"  ✗ {nid} — 文件不存在，跳过")
             continue
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        snapshot_path = None
+        if not manifest_only:
+            tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
             snapshot_path = tmp.name
+            tmp.close()
 
         try:
-            _snapshot(str(db_path), snapshot_path)
-            remote_key = f"novels/{nid}.db"
-            url = _qiniu_upload(snapshot_path, remote_key)
-            size_mb = os.path.getsize(db_path) / (1024 * 1024)
-            print(f"  ✓ {nid} ({size_mb:.1f}MB) → {url}")
+            if not manifest_only:
+                _snapshot(str(db_path), snapshot_path)
+                remote_key = f"novels/{nid}.db"
+                url = _qiniu_upload(snapshot_path, remote_key)
+                size_mb = os.path.getsize(db_path) / (1024 * 1024)
+                print(f"  ✓ {nid} ({size_mb:.1f}MB) → {url}")
             # 上传 manifest
             manifest = _make_manifest(nid, str(db_path))
             manifest_bytes = json.dumps(manifest, ensure_ascii=False).encode("utf-8")
@@ -244,11 +248,14 @@ def cmd_push(novel_id: Optional[str] = None):
                 mt.flush()
                 _qiniu_upload(mt.name, f"novels/{nid}.manifest.json")
             os.remove(mt.name)
+            if manifest_only:
+                print(f"  ✓ {nid} — manifest 已更新 ({manifest['chapter_count']} 章)")
         finally:
-            try:
-                os.remove(snapshot_path)
-            except FileNotFoundError:
-                pass
+            if snapshot_path:
+                try:
+                    os.remove(snapshot_path)
+                except FileNotFoundError:
+                    pass
 
 
 def cmd_pull(novel_id: Optional[str] = None):
@@ -402,6 +409,7 @@ def main():
 
     p_push = sub.add_parser("push", help="上传到七牛")
     p_push.add_argument("novel_id", nargs="?", help="小说 ID，不指定则上传全部")
+    p_push.add_argument("--manifest-only", action="store_true", help="仅重新上传 manifest，不传 .db")
 
     p_pull = sub.add_parser("pull", help="从七牛下载恢复")
     p_pull.add_argument("novel_id", nargs="?", help="小说 ID，不指定则下载全部")
@@ -414,7 +422,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "push":
-        cmd_push(args.novel_id)
+        cmd_push(args.novel_id, manifest_only=args.manifest_only)
     elif args.cmd == "pull":
         cmd_pull(args.novel_id)
     elif args.cmd == "delete":
