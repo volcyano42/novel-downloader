@@ -55,10 +55,7 @@ class TXTExporter(BASEExporter):
 
     def _build_file_path(self, novel: Novel) -> Path:
         """从 options + novel 构建输出文件路径。"""
-        raw = str(getattr(self.options, "output_path", ""))
-        raw = raw.replace("{file_name_template}", self._file_name_template)
-        ext = ".txt"
-        raw = raw + ext
+        output_dir = Path(str(getattr(self.options, "output_path", ".")))
         variables = {
             "title": novel.title if novel else "",
             "author": novel.author if novel else "",
@@ -66,7 +63,8 @@ class TXTExporter(BASEExporter):
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
-        return Path(raw.format(**variables))
+        filename = self._file_name_template.format(**variables)
+        return output_dir / f"{filename}.txt"
 
     def _write_header(self, novel: Novel):
         """生成小说信息头部并创建/覆盖文件"""

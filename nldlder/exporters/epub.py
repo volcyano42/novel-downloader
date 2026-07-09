@@ -186,12 +186,8 @@ img {
 
     def _build_file_path(self, novel: Novel) -> Path:
         """从 options + novel 构建输出文件路径。"""
-        encoding = getattr(self.options, "encoding", "utf-8")
+        output_dir = Path(str(getattr(self.options, "output_path", ".")))
         file_name_template = getattr(self.options, "file_name_template", "{title}")
-
-        raw = str(getattr(self.options, "output_path", "."))
-        raw = raw.replace("{file_name_template}", file_name_template)
-        raw = raw + ".epub"
         variables = {
             "name": novel.title if novel else "",
             "title": novel.title if novel else "",
@@ -200,7 +196,8 @@ img {
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
-        return Path(raw.format(**variables))
+        filename = file_name_template.format(**variables)
+        return output_dir / f"{filename}.epub"
 
     def _build_epub(self, chapters: list[Chapter]):
         """从头构建完整 EPUB ZIP 文件。"""
