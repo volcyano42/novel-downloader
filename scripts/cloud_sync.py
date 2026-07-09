@@ -231,11 +231,17 @@ def _local_novels() -> list[str]:
 
 # ── 命令 ──
 
-def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refresh_cdn: bool = False):
+def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refresh_cdn: bool = False, ahead_only: bool = False):
     """上传：snapshot → 上传七牛。"""
     local_dir = _get_local_db_dir()
     if novel_id:
         targets = [novel_id]
+    elif ahead_only:
+        ahead, _, _, _, only_local, _ = _diff_novels()
+        targets = [nid for nid, *_ in ahead] + sorted(only_local)
+        if not targets:
+            print("没有需要 push 的小说（本地未领先）。")
+            return
     else:
         targets = _local_novels()
 
@@ -349,24 +355,26 @@ def cmd_delete(novel_id: Optional[str] = None):
     print(f"  ✓ {novel_id} — 已从云端删除")
 
 
-def cmd_status():
-    """对比本地与云端 — 基于 manifest 展示书名、章节数、差异。"""
+def _diff_novels():
+    """对比本地与云端，返回 (ahead, behind, synced, cloud_meta, only_local, only_remote)。
+
+    ahead/behind 每项: (nid, title, local_chapters, remote_chapters, last_chapter)
+    synced 每项: (nid, title, chapters, last_chapter)
+    only_local/only_remote: set of nid
+    """
     local_dir = _get_local_db_dir()
     local_ids = set(_local_novels())
 
-    # 下载所有云端 manifest（轻量 JSON，几 KB）
     all_keys = _qiniu_list("novels/")
     remote_db_keys = {k for k in all_keys if k.endswith(".db")}
     remote_ids = {Path(k).stem for k in remote_db_keys}
 
-    # 解析云端 manifest
     cloud_meta: dict[str, dict] = {}
     for nid in remote_ids:
         manifest = _qiniu_download_json(f"novels/{nid}.manifest.json")
         if manifest:
             cloud_meta[nid] = manifest
 
-    # 分类
     only_local = local_ids - remote_ids
     only_remote = remote_ids - local_ids
     both = local_ids & remote_ids
@@ -389,8 +397,16 @@ def cmd_status():
         else:
             synced.append((nid, title, lc, local.get("last_chapter", "")))
 
-    # 输出
-    print(f"本地 {len(local_ids)} 本  |  云端 {len(remote_ids)} 本\n")
+    return ahead, behind, synced, cloud_meta, only_local, only_remote
+
+
+def cmd_status():
+    """对比本地与云端 — 基于 manifest 展示书名、章节数、差异。"""
+    ahead, behind, synced, cloud_meta, only_local, only_remote = _diff_novels()
+    n_local = len(set(_local_novels()))
+    n_remote = len(cloud_meta)
+
+    print(f"本地 {n_local} 本  |  云端 {n_remote} 本\n")
 
     if ahead:
         print(f"本地领先 ({len(ahead)} 本) — 需 push:")
@@ -439,6 +455,7 @@ def main():
     p_push.add_argument("novel_id", nargs="?", help="小说 ID，不指定则上传全部")
     p_push.add_argument("--manifest-only", action="store_true", help="仅重新上传 manifest，不传 .db")
     p_push.add_argument("--refresh-cdn", action="store_true", help="上传后刷新 CDN 缓存")
+    p_push.add_argument("--ahead", action="store_true", help="仅 push 本地领先的小说（含仅本地）")
 
     p_pull = sub.add_parser("pull", help="从七牛下载恢复")
     p_pull.add_argument("novel_id", nargs="?", help="小说 ID，不指定则下载全部")
@@ -451,7 +468,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "push":
-        cmd_push(args.novel_id, manifest_only=args.manifest_only, refresh_cdn=args.refresh_cdn)
+        cmd_push(args.novel_id, manifest_only=args.manifest_only, refresh_cdn=args.refresh_cdn, ahead_only=args.ahead)
     elif args.cmd == "pull":
         cmd_pull(args.novel_id)
     elif args.cmd == "delete":
