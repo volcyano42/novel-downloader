@@ -22,21 +22,14 @@ const FORMATS = [
 ] as const;
 
 export function ExportDialog({ open, onClose, novelTitle, chapterCount, onExport, defaultMode, defaultProvider }: ExportDialogProps) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(["txt"]));
+  const [selected, setSelected] = useState("txt");
   const [mode, setMode] = useState(defaultMode ?? "requests");
   const [provider, setProvider] = useState(defaultProvider ?? "");
   const [loading, setLoading] = useState(false);
 
-  const toggle = (id: string) => setSelected(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-
   const handleExport = () => {
-    if (selected.size === 0) return;
     setLoading(true);
-    onExport([...selected], mode, mode === "api" && provider ? provider : undefined);
+    onExport([selected], mode, mode === "api" && provider ? provider : undefined);
   };
 
   if (!open) return null;
@@ -53,9 +46,9 @@ export function ExportDialog({ open, onClose, novelTitle, chapterCount, onExport
         <p className="text-xs font-medium text-slate-500 mb-2">选择格式</p>
         <div className="space-y-2 mb-5">
           {FORMATS.map(({ id, label, desc }) => {
-            const checked = selected.has(id);
+            const checked = selected === id;
             return (
-              <button key={id} onClick={() => toggle(id)}
+              <button key={id} onClick={() => setSelected(id)}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
                   checked
@@ -105,7 +98,7 @@ export function ExportDialog({ open, onClose, novelTitle, chapterCount, onExport
             className="flex-1 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
             取消
           </button>
-          <button onClick={handleExport} disabled={selected.size === 0 || loading}
+          <button onClick={handleExport} disabled={loading}
             className="flex-1 rounded-xl bg-indigo-500 text-white py-2.5 text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FileDown className="h-4 w-4" strokeWidth={2} />}
             {loading ? "导出中..." : "开始导出"}
