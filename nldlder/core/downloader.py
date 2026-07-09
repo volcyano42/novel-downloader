@@ -112,6 +112,10 @@ class NovelDownloader:
         self._options = options or Options()
         self._storage_instance: BaseStorage | None = None
 
+    @property
+    def options(self) -> Options:
+        return self._options
+
     def fetch_meta(self, url: str, **kwargs) -> Novel:
         """获取小说元数据。
 
@@ -155,33 +159,24 @@ class NovelDownloader:
             fetcher = fetcher_cls()
         return fetcher.fetch_chapter_content(chapter=chapter, engine=self._engine, **kwargs)
 
-    def export(self, novel: Novel, format: Iterable[str] | None = None, **kwargs):
+    def export(self, novel: Novel, format: str | None = None,
+              options: "ExportOptions | None" = None, **kwargs):
+        from ..utils.registry import register_exporter
 
-        from ..utils.registry import register_exporter, register_export_options
+        opt = options or self._options.export
+        if opt is None or not opt.enabled:
+            return
 
-        exporters = register_exporter()
-        export_opts_map = register_export_options()
+        fmt = format or opt.format
+        if not fmt:
+            return
 
-        # 确定要导出的格式
-        if format is not None:
-            candidates = list(format)
-        else:
-            candidates = list(self._options.exports.keys())
+        exporter_cls = register_exporter().get(fmt)
+        if exporter_cls is None:
+            return
 
-        for fmt in candidates:
-            # 跳过没有对应导出器的格式
-            exporter_cls = exporters.get(fmt)
-            if exporter_cls is None:
-                continue
-            # 跳过未启用或没有选项类的格式
-            opt = self._options.exports.get(fmt)
-            if opt is None or not opt.enabled:
-                continue
-            opt_cls = export_opts_map.get(fmt)
-            if opt_cls is None:
-                continue
-            exporter = exporter_cls(options=opt)
-            exporter.export(novel.chapters, novel, **kwargs)
+        exporter = exporter_cls(options=opt)
+        exporter.export(novel.chapters, novel, **kwargs)
 
     @property
     def engine(self) -> APIEngine | RequestsEngine | BrowserEngine:

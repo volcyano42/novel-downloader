@@ -50,7 +50,9 @@ async def trigger_export(body: ExportRequest):
         # 统一导出到临时目录
         export_dir = Path(tempfile.mkdtemp(prefix="nld_export_"))
 
-        opts = Options().set_mode("api")
+        engine = create_engine(Options().set_mode("api"))
+        dl = NovelDownloader(engine)
+
         if body.txt and body.txt.enabled:
             from nldlder.exporters.txt import TXTExportOptions
             sub = export_dir / "txt"; sub.mkdir()
@@ -58,7 +60,7 @@ async def trigger_export(body: ExportRequest):
                 format="txt", output_path=str(sub), enabled=True,
                 file_name_template=body.txt.file_name_template or "{name}",
                 encoding=body.txt.encoding)
-            setattr(opts, '_exports', {**opts.exports, 'txt': opt})
+            dl.export(novel, options=opt)
         if body.epub and body.epub.enabled:
             from nldlder.exporters.epub import EPUBExportOptions
             sub = export_dir / "epub"; sub.mkdir()
@@ -68,7 +70,7 @@ async def trigger_export(body: ExportRequest):
                 compression=body.epub.compression, compresslevel=body.epub.compresslevel,
                 include_toc=body.epub.include_toc, optimize_images=body.epub.optimize_images,
                 jpeg_quality=body.epub.jpeg_quality, max_image_width=body.epub.max_image_width)
-            setattr(opts, '_exports', {**opts.exports, 'epub': opt})
+            dl.export(novel, options=opt)
         if body.img and body.img.enabled:
             from nldlder.exporters.img import IMGExportOptions
             sub = export_dir / "img"; sub.mkdir()
@@ -76,12 +78,7 @@ async def trigger_export(body: ExportRequest):
                 format="img", output_path=str(sub), enabled=True,
                 file_name_template=body.img.file_name_template or "{n}",
                 output_format=body.img.output_format)
-            setattr(opts, '_exports', {**opts.exports, 'img': opt})
-
-        # 执行导出
-        engine = create_engine(opts)
-        dl = NovelDownloader(engine, opts)
-        dl.export(novel)
+            dl.export(novel, options=opt)
 
         # 收集导出文件
         exported: list[Path] = []

@@ -80,21 +80,21 @@ def _get_engine_dl(platform: str, engine_mode: str):
     site_cfg = load_site_config(platform)
     options = build_options(cfg, site_cfg)
 
-    # 注册导出格式
+    # 注册导出格式 — 单格式模式
     format_configs = load_format_configs()
     from nldlder.utils.registry import register_export_options
     _opt_cls_map = register_export_options()
     group = cfg.get("group", "default")
-    for fmt, fmt_cfg in format_configs.items():
-        opt_cls = _opt_cls_map.get(fmt)
-        if opt_cls is None:
-            continue
+    active_format = next(iter(format_configs), None)  # 取第一个配置的格式
+    fmt_cfg = format_configs.get(active_format, {}) if active_format else {}
+    opt_cls = _opt_cls_map.get(active_format) if active_format else None
+    if opt_cls and fmt_cfg:
         raw_path = fmt_cfg.get("output_path", "").replace("{group}", group)
         extra = {k: fmt_cfg[k] for k in (
             "encoding", "file_name_template", "css_style", "include_toc",
         ) if k in fmt_cfg}
         opt = opt_cls(output_path=raw_path, **extra)
-        options.set_export_options(opt)
+        options.set_export(opt)
 
     engine = create_engine(options)
     dl = NovelDownloader(engine, options=options)

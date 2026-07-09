@@ -1354,20 +1354,10 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
             from nldlder.utils.notify import notify
             notify(notify_cfg, complete=success, incomplete=incomplete_count)
 
-    # ── 5. 导出 ──────────────────────────────────────────────────
-    print("正在导出...")
-    _do_export(novel, dl)
-    export_group = get_novel_group(novel.id) or group
-    print(f"  导出完成 → app_data/exports/{export_group}/")
 
 
-def _do_export(novel, dl):
-    """执行导出（通过 NovelDownloader.export）。"""
-    dl.export(novel)
-
-
-def do_re_export(group: str, format_configs: dict, dl):
-    """重新导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
+def do_export_menu(group: str, format_configs: dict, dl):
+    """导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
     storage = dl.storage
 
     novels_info = list(storage.iter_metas())
@@ -1377,7 +1367,6 @@ def do_re_export(group: str, format_configs: dict, dl):
         return
 
     groups = load_groups()
-    # 旧数据自动归类到 default
     for n in novels_info:
         ensure_novel_in_group(n.id)
     print(f"\n找到 {len(novels_info)} 本已下载小说：")
@@ -1395,6 +1384,28 @@ def do_re_export(group: str, format_configs: dict, dl):
     if selection is None:
         return
 
+    # 选择导出格式
+    from nldlder.utils.registry import register_export_options
+    _opt_cls_map = register_export_options()
+    available = [f for f in format_configs if f in _opt_cls_map]
+    if not available:
+        print("没有可用的导出格式")
+        return
+    fmt_choices = [(f, f) for f in available]
+    chosen_fmt = _select("选择导出格式：", choices=fmt_choices)
+    if chosen_fmt is None:
+        return
+
+    # 构建对应格式的 ExportOptions
+    fmt_cfg = format_configs.get(chosen_fmt, {})
+    opt_cls = _opt_cls_map.get(chosen_fmt)
+    raw_path = fmt_cfg.get("output_path", "").replace("{group}", group)
+    extra = {k: fmt_cfg[k] for k in (
+        "encoding", "file_name_template", "css_style", "include_toc",
+    ) if k in fmt_cfg}
+    opt = opt_cls(output_path=raw_path, **extra)
+    dl.options.set_export(opt)
+
     targets = novels_info if selection == "all" else [selection]
 
     total = len(targets)
@@ -1405,11 +1416,11 @@ def do_re_export(group: str, format_configs: dict, dl):
             local = storage.load_chapters(novel.id)
             if local:
                 novel.update_chapter(local)
-            _do_export(novel, dl)
+            dl.export(novel)
             print(f"  导出完成 → app_data/exports/{export_group}/")
         except Exception as e:
             print(f"✗ 导出失败: {e}")
-            _log.exception("re-export failed: %s", novel.title)
+            _log.exception("export failed: %s", novel.title)
 
     print("\n导出完成！")
 
@@ -1546,26 +1557,22 @@ def main():
 
     options = build_options(cfg, site_cfg)
 
-    # 注册导出格式到 options，由 cfg.formats 控制 enabled
-    enabled_formats = cfg.get("formats")
+    # 注册导出格式到 options — 单格式模式
+    active_format = cfg.get("formats")
+    if active_format in (None, "all"):
+        active_format = next(iter(format_configs), None)  # 取第一个配置的格式
     from nldlder.utils.registry import register_export_options
     _opt_cls_map = register_export_options()
-    for fmt, fmt_cfg in format_configs.items():
-        opt_cls = _opt_cls_map.get(fmt)
-        if opt_cls is None:
-            continue
+    fmt_cfg = format_configs.get(active_format, {}) if active_format else {}
+    opt_cls = _opt_cls_map.get(active_format) if active_format else None
+    if opt_cls and fmt_cfg:
         raw_path = fmt_cfg.get("output_path", "").replace("{group}", group)
         extra = {k: fmt_cfg[k] for k in (
             "encoding", "file_name_template",
             "css_style", "include_toc",
         ) if k in fmt_cfg}
         opt = opt_cls(output_path=raw_path, **extra)
-        options.set_export_options(opt)
-
-    # cfg.formats 控制哪些格式启用（None/"all" = 全部启用）
-    if enabled_formats and enabled_formats != "all":
-        for fmt in format_configs:
-            options.enable_format(fmt, enabled=(fmt in enabled_formats))
+        options.set_export(opt)
 
     # 延迟初始化引擎和下载器（首次使用时创建）
     grouped_novels = sum(len(ids) for ids in groups.values() if isinstance(ids, dict))
@@ -1602,7 +1609,7 @@ def main():
                     ("登录", "login"),
                     ("下载（搜索或输入 URL）", "download"),
                     ("更新已下载", "update"),
-                    ("重新导出", "re_export"),
+                    ("导出", "export"),
                     ("删除小说", "delete"),
                     ("设置", "settings"),
                     ("退出", "quit"),
@@ -1696,13 +1703,13 @@ def main():
                             print(f"✗ 下载失败: {e}")
                             _log.exception("download failed")
 
-            elif action == "re_export":
+            elif action == "export":
                 try:
                     e, d = _get_engine_dl()
-                    do_re_export(group, format_configs, d)
+                    do_export_menu(group, format_configs, d)
                 except Exception as e:
                     print(f"✗ 导出失败: {e}")
-                    _log.exception("re_export failed")
+                    _log.exception("export failed")
 
             elif action == "delete":
                 try:

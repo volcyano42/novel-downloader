@@ -88,7 +88,7 @@ def cmd_export(novel_id: str, fmt: str):
         "encoding", "file_name_template", "css_style", "include_toc",
     ) if k in fmt_cfg}
     opt = opt_cls(output_path=raw_path, **extra)
-    options.set_export_options(opt)
+    options.set_export(opt)
 
     engine = create_engine(options)
     dl = NovelDownloader(engine, options=options)

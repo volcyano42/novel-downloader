@@ -58,7 +58,7 @@ class Options:
         _api: APIOptions = field(default_factory=APIOptions)
         _storage: StorageOptions | None = None
         _log: LogOptions = field(default_factory=LogOptions)
-        _exports: dict[str, ExportOptions] = field(default_factory=dict)
+        _export: ExportOptions | None = None
 
         def set_mode(self, mode: Literal["api", "browser", "requests"]) -> "Options":
             self._mode = mode
@@ -122,12 +122,13 @@ class Options:
             self._log = LogOptions(enabled=enabled, output_dir=output_dir, level=level)
             return self
 
-        def set_export_options(self, options: ExportOptions) -> "Options":
-            self._exports[options.format] = options
+        def set_export(self, options: ExportOptions) -> "Options":
+            self._export = options
             return self
 
-        def enable_format(self, name: str, enabled: bool = True) -> "Options":
-            self._exports[name].enabled = enabled
+        def enable_export(self, enabled: bool = True) -> "Options":
+            if self._export:
+                self._export.enabled = enabled
             return self
 
         @property
@@ -149,5 +150,5 @@ class Options:
         def log(self) -> LogOptions: return self._log
 
         @property
-        def exports(self) -> dict[str, ExportOptions]:return self._exports
+        def export(self) -> ExportOptions | None: return self._export
 
