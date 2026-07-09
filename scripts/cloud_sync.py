@@ -383,33 +383,33 @@ def cmd_status():
         title = local.get("title") or remote.get("title") or nid
 
         if lc > rc:
-            ahead.append((title, lc, rc, local.get("last_chapter", "")))
+            ahead.append((nid, title, lc, rc, local.get("last_chapter", "")))
         elif lc < rc:
-            behind.append((title, lc, rc, remote.get("last_chapter", "")))
+            behind.append((nid, title, lc, rc, remote.get("last_chapter", "")))
         else:
-            synced.append((title, lc, local.get("last_chapter", "")))
+            synced.append((nid, title, lc, local.get("last_chapter", "")))
 
     # 输出
     print(f"本地 {len(local_ids)} 本  |  云端 {len(remote_ids)} 本\n")
 
     if ahead:
         print(f"本地领先 ({len(ahead)} 本) — 需 push:")
-        for title, lc, rc, last in ahead:
-            print(f"  ↑ {title}")
+        for nid, title, lc, rc, last in ahead:
+            print(f"  ↑ {title}  [{nid}]")
             print(f"    本地 {lc} 章 / 云端 {rc} 章  ·  最后: {last}")
         print()
 
     if behind:
         print(f"云端领先 ({len(behind)} 本) — 需 pull:")
-        for title, lc, rc, last in behind:
-            print(f"  ↓ {title}")
+        for nid, title, lc, rc, last in behind:
+            print(f"  ↓ {title}  [{nid}]")
             print(f"    本地 {lc} 章 / 云端 {rc} 章  ·  云端最后: {last}")
         print()
 
     if synced:
         print(f"已同步 ({len(synced)} 本):")
-        for title, count, last in sorted(synced):
-            print(f"  ✓ {title}  ({count} 章)")
+        for nid, title, count, last in sorted(synced):
+            print(f"  ✓ {title}  [{nid}]  ({count} 章)")
         print()
 
     if only_local:
