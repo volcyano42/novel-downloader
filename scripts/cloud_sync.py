@@ -86,11 +86,11 @@ def _base_url() -> str:
 
 def _qiniu_upload(local_path: str, remote_key: str) -> str:
     """上传文件到七牛，返回直链 URL。"""
-    from qiniu import Auth, put_file
+    from qiniu import Auth, put_file_v2
     ak, sk, bucket, domain = _require_config()
     q = Auth(ak, sk)
     token = q.upload_token(bucket, remote_key, 3600)
-    ret, info = put_file(token, remote_key, local_path)
+    ret, info = put_file_v2(token, remote_key, local_path)
     if info.status_code != 200:
         raise RuntimeError(f"上传失败: {info.status_code} {info.text_body}")
     url = f"{_base_url()}/{remote_key}"
@@ -145,11 +145,14 @@ def _read_novel_meta(db_path: str) -> dict | None:
     try:
         conn = sqlite3.connect(db_path, timeout=5)
         meta = conn.execute(
-            "SELECT title, author, count FROM meta"
+            "SELECT title, author FROM meta"
         ).fetchone()
         if not meta:
             conn.close()
             return None
+        chapter_count = conn.execute(
+            "SELECT COUNT(*) FROM chapters"
+        ).fetchone()[0]
         last = conn.execute(
             "SELECT title FROM chapters ORDER BY \"order\" DESC LIMIT 1"
         ).fetchone()
@@ -157,7 +160,7 @@ def _read_novel_meta(db_path: str) -> dict | None:
         return {
             "title": meta[0],
             "author": meta[1],
-            "chapter_count": meta[2] or 0,
+            "chapter_count": chapter_count,
             "last_chapter": last[0] if last else "",
         }
     except sqlite3.Error:
