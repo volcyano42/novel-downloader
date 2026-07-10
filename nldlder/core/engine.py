@@ -69,6 +69,9 @@ class APIEngine(Engine):
         super().__init__()
         self.name = "API"
         self.options = options
+        self._session_local = threading.local()
+        self._session_lock = threading.Lock()
+        self._sessions: list[requests.Session] = []
 
     def update_options(self, options: APIOptions) -> None:
         for attr in ("delay", "timeout", "retry_times", "backoff_factor", "key", "params"):
@@ -186,6 +189,11 @@ class BrowserEngine(Engine):
         super().__init__()
         self.name = "browser"
         self.options = options
+        self._thread_local = threading.local()
+        self._page_lock = threading.Lock()
+        self._page_pool: list = []
+        self._browser = None
+        self._init_browser()
 
     def update_options(self, options: BrowserOptions) -> None:
         """热更新 delay/timeout/retry 等参数，不重建浏览器。
@@ -199,6 +207,21 @@ class BrowserEngine(Engine):
 
     def _init_browser(self) -> None:
         from DrissionPage import Chromium, ChromiumOptions
+
+        # 确保内部状态已初始化（update_options 也会经过这里）
+        if not hasattr(self, '_thread_local'):
+            self._thread_local = threading.local()
+        if not hasattr(self, '_page_lock'):
+            self._page_lock = threading.Lock()
+        if not hasattr(self, '_page_pool'):
+            self._page_pool = []
+
+        # quit 旧浏览器防止进程泄漏
+        if hasattr(self, '_browser'):
+            try:
+                self._browser.quit()
+            except Exception:
+                pass
 
         co = ChromiumOptions()
         co.headless(self.options.headless)
@@ -272,6 +295,11 @@ class BrowserEngine(Engine):
                 page.close()
             except (OSError, AttributeError):
                 pass
+        if self._browser:
+            try:
+                self._browser.quit()
+            except (OSError, AttributeError):
+                pass
 
     def close_current(self) -> None:
         if not hasattr(self._thread_local, 'page'):
@@ -298,6 +326,9 @@ class RequestsEngine(Engine):
         super().__init__()
         self.name = "requests"
         self.options = options
+        self._session_local = threading.local()
+        self._session_lock = threading.Lock()
+        self._sessions: list[requests.Session] = []
 
     def update_options(self, options: RequestsOptions) -> None:
         for attr in ("delay", "timeout", "retry_times", "backoff_factor", "headers", "cookies", "proxies"):
