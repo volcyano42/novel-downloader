@@ -32,7 +32,6 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-
 # ── 配置 ──
 
 def _require_config() -> tuple[str, str, str, str]:
@@ -48,7 +47,6 @@ def _require_config() -> tuple[str, str, str, str]:
         sys.exit(1)
     return ak, sk, bucket, domain
 
-
 # ── 安全快照 ──
 
 def _snapshot(src_path: str, dst_path: str) -> None:
@@ -57,13 +55,11 @@ def _snapshot(src_path: str, dst_path: str) -> None:
         with sqlite3.connect(dst_path) as dst:
             src.backup(dst)
 
-
 def _integrity_check(db_path: str) -> bool:
     """检查数据库是否完整。"""
     with sqlite3.connect(db_path) as conn:
         result = conn.execute("PRAGMA integrity_check").fetchone()
         return result[0] == "ok"
-
 
 # ── 七牛操作 ──
 
@@ -72,7 +68,6 @@ def _qiniu_auth():
     ak, sk, _, _ = _require_config()
     return Auth(ak, sk)
 
-
 def _base_url() -> str:
     """拼接七牛域名，自动补 http://。"""
     _, _, bucket, domain = _require_config()
@@ -80,7 +75,6 @@ def _base_url() -> str:
     if not domain.startswith("http"):
         domain = "http://" + domain
     return domain.rstrip("/")
-
 
 def _qiniu_upload(local_path: str, remote_key: str) -> str:
     """上传文件到七牛，返回直链 URL。"""
@@ -93,7 +87,6 @@ def _qiniu_upload(local_path: str, remote_key: str) -> str:
         raise RuntimeError(f"上传失败: {info.status_code} {info.text_body}")
     url = f"{_base_url()}/{remote_key}"
     return url
-
 
 def _qiniu_download(remote_key: str, local_path: str) -> None:
     """从七牛直链下载文件。"""
@@ -108,12 +101,11 @@ def _qiniu_download(remote_key: str, local_path: str) -> None:
         preview = data[:200].decode("utf-8", errors="replace")
         raise RuntimeError(
             f"下载的不是 SQLite 数据库（{len(data)} 字节），可能是 CDN 缓存了错误页面。\n"
-            f"  请运行 push --manifest-only --refresh-cdn 刷新缓存后重试。\n"
+            f"  请运行 push --manifest-only 刷新缓存后重试。\n"
             f"  内容预览: {preview}"
         )
     with open(local_path, "wb") as f:
         f.write(data)
-
 
 def _qiniu_list(prefix: str = "novels/") -> list[str]:
     """列出七牛上指定前缀的所有文件。"""
@@ -133,7 +125,6 @@ def _qiniu_list(prefix: str = "novels/") -> list[str]:
         marker = ret.get("marker") if ret else None
     return keys
 
-
 def _qiniu_delete(remote_key: str) -> None:
     """从七牛删除文件。"""
     from qiniu import Auth, BucketManager
@@ -143,7 +134,6 @@ def _qiniu_delete(remote_key: str) -> None:
     ret, info = bm.delete(bucket, remote_key)
     if info.status_code != 200:
         raise RuntimeError(f"删除失败: {info.status_code} {info.text_body}")
-
 
 # ── CDN 刷新 ──
 
@@ -155,7 +145,6 @@ def _cdn_refresh(urls: list[str]) -> None:
     if info.status_code != 200:
         raise RuntimeError(f"CDN 刷新失败: {info.status_code} {info.text_body}")
     print(f"  🔄 CDN 刷新已提交 ({len(urls)} 个 URL)")
-
 
 # ── manifest：轻量元数据清单 ──
 
@@ -183,7 +172,6 @@ def _read_novel_meta(db_path: str) -> dict | None:
     except sqlite3.Error:
         return None
 
-
 def _make_manifest(novel_id: str, db_path: str) -> dict:
     """生成本地小说的 manifest。"""
     meta = _read_novel_meta(db_path) or {}
@@ -196,7 +184,6 @@ def _make_manifest(novel_id: str, db_path: str) -> dict:
         "db_size": os.path.getsize(db_path),
     }
 
-
 def _qiniu_download_json(remote_key: str) -> dict | None:
     """从七牛下载 manifest JSON。"""
     import requests
@@ -206,14 +193,12 @@ def _qiniu_download_json(remote_key: str) -> dict | None:
         return None
     return resp.json()
 
-
 # ── 本地文件管理 ──
 
 def _get_local_db_dir() -> Path:
     """获取本地小说库目录。"""
     base = os.environ.get("NOVELS_STORAGE_DIR", "app_data/storage")
     return Path(base)
-
 
 def _local_novels() -> list[str]:
     """列出本地所有小说 ID。"""
@@ -223,11 +208,10 @@ def _local_novels() -> list[str]:
         ids.append(f.stem)
     return ids
 
-
 # ── 命令 ──
 
-def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refresh_cdn: bool = False, ahead_only: bool = False):
-    """上传：snapshot → 上传七牛。"""
+def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, ahead_only: bool = False):
+    """上传：snapshot → 上传七牛 → CDN 刷新。"""
     local_dir = _get_local_db_dir()
     if novel_id:
         targets = [novel_id]
@@ -243,6 +227,13 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refres
     if not targets:
         print("本地没有小说可上传。")
         return
+
+    # 收集待刷新 CDN 的 URL
+    all_refresh_urls: list[str] = []
+    for nid in targets:
+        if not manifest_only:
+            all_refresh_urls.append(f"{_base_url()}/novels/{nid}.db")
+        all_refresh_urls.append(f"{_base_url()}/novels/{nid}.manifest.json")
 
     for nid in targets:
         db_path = local_dir / f"{nid}.db"
@@ -273,12 +264,6 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refres
             os.remove(mt.name)
             if manifest_only:
                 print(f"  ✓ {nid} — manifest 已更新 ({manifest['chapter_count']} 章)")
-            # CDN 刷新
-            if refresh_cdn:
-                refresh_urls = [f"{_base_url()}/novels/{nid}.manifest.json"]
-                if not manifest_only:
-                    refresh_urls.append(f"{_base_url()}/novels/{nid}.db")
-                _cdn_refresh(refresh_urls)
         finally:
             if snapshot_path:
                 try:
@@ -286,6 +271,12 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, refres
                 except FileNotFoundError:
                     pass
 
+    # 上传完成后统一刷新 CDN
+    if all_refresh_urls:
+        try:
+            _cdn_refresh(all_refresh_urls)
+        except Exception as e:
+            print(f"  \u26a0 CDN 刷新失败: {e}")
 
 def cmd_pull(novel_id: Optional[str] = None):
     """下载恢复：下载 → 完整性校验 → 原子替换。"""
@@ -332,7 +323,6 @@ def cmd_pull(novel_id: Optional[str] = None):
             except FileNotFoundError:
                 pass
 
-
 def cmd_delete(novel_id: Optional[str] = None):
     """从云端删除备份。"""
     if not novel_id:
@@ -348,7 +338,6 @@ def cmd_delete(novel_id: Optional[str] = None):
     _qiniu_delete(remote_key)
     _qiniu_delete(f"novels/{novel_id}.manifest.json")
     print(f"  ✓ {novel_id} — 已从云端删除")
-
 
 def _diff_novels():
     """对比本地与云端，返回 (ahead, behind, synced, cloud_meta, only_local, only_remote)。
@@ -394,7 +383,6 @@ def _diff_novels():
 
     return ahead, behind, synced, cloud_meta, only_local, only_remote
 
-
 def cmd_status():
     """对比本地与云端 — 基于 manifest 展示书名、章节数、差异。"""
     ahead, behind, synced, cloud_meta, only_local, only_remote = _diff_novels()
@@ -425,6 +413,7 @@ def cmd_status():
 
     if only_local:
         print(f"仅本地 ({len(only_local)} 本) — push 上传:")
+        local_dir = _get_local_db_dir()
         for nid in sorted(only_local):
             local = _read_novel_meta(str(local_dir / f"{nid}.db")) or {}
             title = local.get("title", nid)
@@ -439,7 +428,6 @@ def cmd_status():
             count = remote.get("chapter_count", 0)
             print(f"  → {title}  ({count} 章)")
 
-
 # ── CLI ──
 
 def main():
@@ -449,7 +437,6 @@ def main():
     p_push = sub.add_parser("push", help="上传到七牛")
     p_push.add_argument("novel_id", nargs="?", help="小说 ID，不指定则上传全部")
     p_push.add_argument("--manifest-only", action="store_true", help="仅重新上传 manifest，不传 .db")
-    p_push.add_argument("--refresh-cdn", action="store_true", help="上传后刷新 CDN 缓存")
     p_push.add_argument("--ahead", action="store_true", help="仅 push 本地领先的小说（含仅本地）")
 
     p_pull = sub.add_parser("pull", help="从七牛下载恢复")
@@ -463,7 +450,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "push":
-        cmd_push(args.novel_id, manifest_only=args.manifest_only, refresh_cdn=args.refresh_cdn, ahead_only=args.ahead)
+        cmd_push(args.novel_id, manifest_only=args.manifest_only, ahead_only=args.ahead)
     elif args.cmd == "pull":
         cmd_pull(args.novel_id)
     elif args.cmd == "delete":
@@ -472,7 +459,6 @@ def main():
         cmd_status()
     else:
         parser.print_help()
-
 
 if __name__ == "__main__":
     main()
