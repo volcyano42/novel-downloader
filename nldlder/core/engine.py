@@ -189,11 +189,13 @@ class BrowserEngine(Engine):
         self.options = options
 
     def update_options(self, options: BrowserOptions) -> None:
-        """更新选项。注意：headless/viewport/user_data_dir 变更需重启浏览器才能生效。"""
-        self.options = options
-        self._thread_local = threading.local()
-        self._page_lock = threading.Lock()
-        self._page_pool: list[Any] = []
+        """热更新 delay/timeout/retry 等参数，不重建浏览器。
+
+        headless / viewport / user_data_dir 变更需重启浏览器（调用 _init_browser）。
+        """
+        for attr in ("delay", "timeout", "retry_times", "backoff_factor"):
+            if hasattr(options, attr):
+                setattr(self.options, attr, getattr(options, attr))
         self._init_browser()
 
     def _init_browser(self) -> None:
