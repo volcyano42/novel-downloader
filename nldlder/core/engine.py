@@ -54,6 +54,11 @@ class Engine(ABC):
         except ValueError:
             pass
 
+    @abstractmethod
+    def update_options(self, options) -> None:
+        """更新引擎选项（运行时热更新）。"""
+        ...
+
     def close_current(self) -> None:
         """关闭当前线程持有的资源（page / session），线程退出前调用。"""
         _log.debug("%s.close_current: no-op", type(self).__name__)
@@ -63,6 +68,9 @@ class APIEngine(Engine):
     def __init__(self, options: APIOptions) -> None:
         super().__init__()
         self.name = "API"
+        self.options = options
+
+    def update_options(self, options: APIOptions) -> None:
         self.options = options
         self._session_local = threading.local()
         self._session_lock = threading.Lock()
@@ -179,6 +187,10 @@ class BrowserEngine(Engine):
         super().__init__()
         self.name = "browser"
         self.options = options
+
+    def update_options(self, options: BrowserOptions) -> None:
+        """更新选项。注意：headless/viewport/user_data_dir 变更需重启浏览器才能生效。"""
+        self.options = options
         self._thread_local = threading.local()
         self._page_lock = threading.Lock()
         self._page_pool: list[Any] = []
@@ -284,6 +296,9 @@ class RequestsEngine(Engine):
     def __init__(self, options: RequestsOptions) -> None:
         super().__init__()
         self.name = "requests"
+        self.options = options
+
+    def update_options(self, options: RequestsOptions) -> None:
         self.options = options
         self._session_local = threading.local()
         self._session_lock = threading.Lock()
