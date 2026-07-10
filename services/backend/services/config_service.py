@@ -2,7 +2,7 @@
 from pathlib import Path
 import yaml
 
-_config_dir = Path(__file__).parent.parent.parent / "app_data" / "config"
+_config_dir = Path(__file__).parent.parent.parent.parent / "app_data" / "config"
 
 
 # ═══════════════════════════════════════════════════════════════════

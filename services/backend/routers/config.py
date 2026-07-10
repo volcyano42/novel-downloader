@@ -1,11 +1,10 @@
-"""Config 路由 — GET/PUT，委托 config_service 读写 + engine_manager 热更新。"""
+"""Config 路由 — GET/PUT，委托 config_service 读写。"""
 from pathlib import Path
 
 from fastapi import APIRouter
 from services.backend.services import config_service
-from services.backend.services.engine_manager import reload_engine_options
 
-router = APIRouter(prefix="/config", tags=["config"])
+router = APIRouter(prefix="/api/v1/config", tags=["config"])
 
 _config_dir = config_service._config_dir  # noqa: SLF001
 
@@ -52,7 +51,6 @@ async def save_config(body: dict):
 
     # ── 平台引擎配置 → sites/{platform}.yaml ──
     platforms_body = body.get("platforms")
-    changed_modes: set[str] = set()
     if isinstance(platforms_body, dict):
         for platform, plat_data in platforms_body.items():
             if not isinstance(plat_data, dict):
@@ -62,7 +60,6 @@ async def save_config(body: dict):
                 if mode in plat_data and isinstance(plat_data[mode], dict):
                     site_raw[mode] = config_service.deep_merge(
                         site_raw.get(mode, {}), plat_data[mode])
-                    changed_modes.add(mode)
             config_service.save_yaml(_config_dir / "sites" / f"{platform}.yaml", site_raw)
 
     # ── 全局标量 → config.yaml ──
@@ -95,9 +92,5 @@ async def save_config(body: dict):
             existing_fmt = existing.get(fmt_key, {}) if isinstance(existing, dict) else {}
             merged = config_service.deep_merge(existing_fmt, body[fmt_key])
             config_service.save_format_config(fmt_key, merged)
-
-    # ── 热更新运行中引擎 ──
-    for mode in changed_modes:
-        reload_engine_options(mode)
 
     return {"status": "ok"}
