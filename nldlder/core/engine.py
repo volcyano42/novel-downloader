@@ -71,10 +71,9 @@ class APIEngine(Engine):
         self.options = options
 
     def update_options(self, options: APIOptions) -> None:
-        self.options = options
-        self._session_local = threading.local()
-        self._session_lock = threading.Lock()
-        self._sessions: list[requests.Session] = []
+        for attr in ("delay", "timeout", "retry_times", "backoff_factor", "key", "params"):
+            if hasattr(options, attr):
+                setattr(self.options, attr, getattr(options, attr))
 
     def _create_session(self) -> requests.Session:
         retry_strategy = Retry(
@@ -301,10 +300,9 @@ class RequestsEngine(Engine):
         self.options = options
 
     def update_options(self, options: RequestsOptions) -> None:
-        self.options = options
-        self._session_local = threading.local()
-        self._session_lock = threading.Lock()
-        self._sessions: list[requests.Session] = []
+        for attr in ("delay", "timeout", "retry_times", "backoff_factor", "headers", "cookies", "proxies"):
+            if hasattr(options, attr):
+                setattr(self.options, attr, getattr(options, attr))
 
     # ── Session 管理 ─────────────────────────────────────────────
 
