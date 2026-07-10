@@ -19,7 +19,7 @@ api:
     - 2
     - 3
     enabled: true
-    key: "***REDACTED***"
+    key: ''
     params: {}
     retry_times: 3
     timeout: 30
