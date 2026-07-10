@@ -39,17 +39,30 @@ export default function BookshelfPage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const searchModeRef = useRef("requests");
   const searchProviderRef = useRef<string | undefined>(undefined);
+  const prevTaskStatusRef = useRef<Record<string, string>>({});
   const navigate = useNavigate();
 
   useEffect(() => { storageApi.listNovels().then(setNovels).catch(e => console.error("书架加载失败:", e)).finally(() => setLoadingNovels(false)); }, []);
   useEffect(() => { configApi.get().then(c => { setSettings(c); setAppName(c.name); setGroups(c.groups); }).catch(e => console.error("配置加载失败:", e)); }, []);
   useEffect(() => { downloadApi.platforms().then(p => { setSearchPlatforms(p); if (p.length) setSearchPlatform(p[0].id); }).catch(e => console.error("平台列表加载失败:", e)); }, []);
 
-  // --- 下载任务轮询（仅在下载管理 Tab 时） ---
+  // --- 下载任务轮询（仅在下载管理 Tab 时）— 完成后自动刷新书架 ---
   useEffect(() => {
     if (activeNav !== "downloads") return;
     downloadApi.listTasks().then(setDownloadTasks).catch(() => {});
-    const id = setInterval(() => { downloadApi.listTasks().then(setDownloadTasks).catch(() => {}); }, 1000);
+    const id = setInterval(() => {
+      downloadApi.listTasks().then(tasks => {
+        setDownloadTasks(tasks);
+        const prev = prevTaskStatusRef.current;
+        const hasJustFinished = tasks.some(
+          t => (t.status === "completed" || t.status === "failed") && prev[t.task_id] === "downloading"
+        );
+        for (const t of tasks) prev[t.task_id] = t.status;
+        if (hasJustFinished) {
+          storageApi.listNovels().then(setNovels).catch(() => {});
+        }
+      }).catch(() => {});
+    }, 1000);
     return () => clearInterval(id);
   }, [activeNav]);
 
@@ -80,7 +93,7 @@ export default function BookshelfPage() {
       const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
       if (isUrlOrId && r.length === 1) {
         try {
-          const meta = await downloadApi.fetchMeta(r[0].url, "default", mode, provider);
+          const meta = await downloadApi.fetchMeta(r[0].url, mode, provider);
           navigate(`/search/${meta.id}`, { state: { remoteUrl: r[0].url, searchMode: mode, searchProvider: provider } });
         } catch { alert("获取小说信息失败"); }
         return;
@@ -127,7 +140,7 @@ export default function BookshelfPage() {
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     setNavigatingId(result.url);
     try {
-      const meta = await downloadApi.fetchMeta(result.url, "default", searchModeRef.current, searchProviderRef.current);
+      const meta = await downloadApi.fetchMeta(result.url, searchModeRef.current, searchProviderRef.current);
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current } });
     } catch { setNavigatingId(null); }
   }, [navigate]);

@@ -6,6 +6,14 @@ import { downloadApi } from "@/api/download";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
+function platformFromUrl(url?: string): string {
+  if (!url) return "fanqie";
+  if (url.includes("fanqienovel.com")) return "fanqie";
+  if (url.includes("qidian.com")) return "qidian";
+  if (url.includes("qimao.com")) return "qimao";
+  return "fanqie";
+}
+
 interface MergedChapter {
   remote: ChapterBrief;
   local: ChapterBrief | null;
@@ -40,7 +48,7 @@ export default function DetailPage() {
     setDescExpanded(false);
     setCompareMode(false);
     const fetchLocalMeta = () => storageApi.getMeta(novelId);
-    const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, "default", searchMode, searchProvider);
+    const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, searchMode, searchProvider);
     (isRemote ? fetchRemoteMeta().catch(fetchLocalMeta) : fetchLocalMeta())
       .then(setNovel).catch(() => {});
   }, [novelId, remoteUrl, searchMode]);
@@ -51,7 +59,7 @@ export default function DetailPage() {
     if (isRemote) {
       // fetch remote full list + local for comparison
       Promise.all([
-        downloadApi.fetchChapterList(novelId, remoteUrl!, "default", searchMode, searchProvider),
+        downloadApi.fetchChapterList(novelId, remoteUrl!, searchMode, searchProvider),
         storageApi.listChapters(novelId).catch(() => [] as ChapterBrief[]),
       ]).then(([remote, local]) => {
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
@@ -114,7 +122,7 @@ export default function DetailPage() {
   const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
     try {
-      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", "default", mode, provider);
+      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
       const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
       const localMap = new Map(localAll.map((c: ChapterBrief) => [c.id, c]));
       const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
@@ -137,7 +145,7 @@ export default function DetailPage() {
     const selected = merged
       .filter(mc => selectedIds.has(mc.remote.id))
       .map(mc => ({ id: mc.remote.id, url: mc.remote.url, novel_id: novelId, title: mc.remote.title, order: mc.remote.order, volume: mc.remote.volume }));
-    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, "default", mode, provider, novel?.url);
+    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, mode, provider, novel?.url, platformFromUrl(novel?.url));
     setSelectedIds(new Set());
     navigate("/downloads");
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate]);

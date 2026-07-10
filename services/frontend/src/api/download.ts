@@ -10,33 +10,33 @@ export interface TaskInfo {
 }
 
 export const downloadApi = {
-  search: (params: { platform: string; query: string; page?: number; mode?: string; provider?: string; engine_id?: string }) => {
+  search: (params: { platform: string; query: string; page?: number; mode?: string; provider?: string }) => {
     const qs = new URLSearchParams(); qs.set("query", params.query);
     qs.set("platform", params.platform);
     if (params.page) qs.set("page", String(params.page));
     if (params.mode) qs.set("mode", params.mode);
     if (params.provider) qs.set("provider", params.provider);
-    qs.set("engine_id", params.engine_id ?? "default");
     return apiGet<SearchResult[]>(`/download/search?${qs}`);
   },
-  fetchMeta: (url: string, engineId = "default", mode?: string, provider?: string) => {
+  fetchMeta: (url: string, mode?: string, provider?: string) => {
     const qs = new URLSearchParams();
     if (mode) qs.set("mode", mode);
     if (provider) qs.set("provider", provider);
     const suffix = qs.toString() ? `?${qs}` : "";
-    return apiPost<any>(`/download/novel${suffix}`, { url, engine_id: engineId });
+    return apiPost<any>(`/download/novel${suffix}`, { url });
   },
-  fetchChapterList: (novelId: string, url: string, engineId = "default", mode?: string, provider?: string) => {
-    const qs = new URLSearchParams(); qs.set("url", url); qs.set("engine_id", engineId);
+  fetchChapterList: (novelId: string, url: string, mode?: string, provider?: string) => {
+    const qs = new URLSearchParams(); qs.set("url", url);
     if (mode) qs.set("mode", mode);
     if (provider) qs.set("provider", provider);
     return apiGet<ChapterBrief[]>(`/download/novel/${novelId}/chapters?${qs}`);
   },
-  downloadChapters: (novelId: string, chapters: { id: string; url: string; novel_id: string; title: string; order: number; volume: string | null }[], title: string, engineId = "default", mode?: string, provider?: string, novelUrl?: string) => {
-    const qs = new URLSearchParams(); qs.set("engine_id", engineId); qs.set("title", title);
+  downloadChapters: (novelId: string, chapters: { id: string; url: string; novel_id: string; title: string; order: number; volume: string | null }[], title: string, mode?: string, provider?: string, novelUrl?: string, platform?: string) => {
+    const qs = new URLSearchParams(); qs.set("title", title);
     if (mode) qs.set("mode", mode);
     if (provider) qs.set("provider", provider);
     if (novelUrl) qs.set("novel_url", novelUrl);
+    if (platform) qs.set("platform", platform);
     return apiPost<{ task_id: string; total: number }>(`/download/novel/${novelId}/chapter?${qs}`, chapters);
   },
   listTasks: () => apiGet<TaskInfo[]>("/download/tasks"),
