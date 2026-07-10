@@ -1,0 +1,162 @@
+"""下载任务管理器 — 后台线程池、暂停/恢复、进度跟踪。"""
+import threading
+import uuid
+
+from services.backend.services.config_service import load_config, load_site_config
+from services.backend.services.engine_manager import get_or_create_engine
+
+
+_tasks: dict[str, dict] = {}
+_tasks_lock = threading.Lock()
+
+
+def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | None = None):
+    """后台线程：并发下载章节，支持暂停/恢复。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from nldlder import NovelDownloader
+    from nldlder.models.novel import Chapter, Chapters, Novel
+    from nldlder.core.storage import create_storage
+    from nldlder.core.options import StorageOptions
+
+    # API 模式自动发现 provider（如果前端没指定）
+    platform = None
+    if mode == "api" and not provider:
+        from nldlder.core.downloader import get_fetcher_for_id as _gffi, get_fetchers as _gf
+        fetcher_cls = _gffi(task["novel_id"])
+        if fetcher_cls:
+            for name, cls in _gf().items():
+                if cls is fetcher_cls:
+                    platform = name
+                    break
+            site = load_site_config(platform) if platform else {}
+            api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
+            for name, prov in api_section.items():
+                if isinstance(prov, dict) and prov.get("enabled", True):
+                    provider = name
+                    break
+
+    try:
+        engine = get_or_create_engine(engine_id, mode, provider=provider, platform=platform)
+        dl = NovelDownloader(engine)
+        store = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
+
+        novel_url = task.get("novel_url", "")
+        if novel_url:
+            try:
+                meta = dl.fetch_meta(novel_url)
+                store.save_meta(meta)
+            except Exception:
+                pass
+        novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"],
+                      serial=0, author="", description="")
+
+        cfg = load_config()
+        max_workers = cfg.get("download", {}).get("max_workers", 3)
+
+        def _download_one(ch_data: dict):
+            if task["_pause"].is_set():
+                with _tasks_lock:
+                    if task["status"] == "downloading":
+                        task["status"] = "paused"
+                task["_pause"].wait()
+                with _tasks_lock:
+                    if task["status"] == "paused":
+                        task["status"] = "downloading"
+
+            ch = Chapter(id=ch_data["id"], url=ch_data["url"], novel_id=task["novel_id"],
+                         title=ch_data["title"], order=ch_data["order"],
+                         volume=ch_data.get("volume"))
+            try:
+                downloaded = dl.resolve_chapter(ch)
+                if downloaded is not None:
+                    store.save_chapter(novel, Chapters(chapters=[downloaded]))
+                    with _tasks_lock:
+                        task["current_title"] = downloaded.title
+                else:
+                    with _tasks_lock:
+                        task["errors"].append(f"章节不可获取: {ch.title}")
+            except Exception as e:
+                with _tasks_lock:
+                    task["errors"].append(f"{ch.title}: {e}")
+            finally:
+                with _tasks_lock:
+                    task["progress"] += 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_download_one, ch) for ch in task["chapters"]]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    pass
+
+        task["status"] = "completed"
+        if task["errors"]:
+            task["error"] = "; ".join(task["errors"][:3])
+    except Exception as e:
+        task["status"] = "failed"
+        task["error"] = str(e)
+
+
+def create_task(novel_id: str, chapters: list[dict], title: str, engine_id: str,
+                mode: str | None, provider: str | None, novel_url: str = "") -> dict:
+    task_id = str(uuid.uuid4())[:8]
+    task = {
+        "task_id": task_id, "novel_id": novel_id, "title": title,
+        "total": len(chapters), "progress": 0, "status": "downloading",
+        "error": None, "errors": [], "current_title": "",
+        "chapters": chapters, "novel_url": novel_url,
+        "_pause": threading.Event(),
+    }
+    with _tasks_lock:
+        _tasks[task_id] = task
+
+    t = threading.Thread(target=_run_download, args=(task, engine_id, mode, provider),
+                         daemon=True)
+    t.start()
+    return {"task_id": task_id, "total": len(chapters)}
+
+
+def list_tasks() -> list[dict]:
+    with _tasks_lock:
+        return [
+            {"task_id": t["task_id"], "novel_id": t["novel_id"], "title": t["title"],
+             "total": t["total"], "progress": t["progress"], "status": t["status"],
+             "error": t.get("error"), "errors": t.get("errors", []),
+             "current_title": t.get("current_title", "")}
+            for t in _tasks.values()
+        ]
+
+
+def get_task(task_id: str) -> dict | None:
+    return _tasks.get(task_id)
+
+
+def pause_task(task_id: str) -> bool:
+    task = _tasks.get(task_id)
+    if task and task.get("_pause"):
+        task["_pause"].set()
+        return True
+    return False
+
+
+def resume_task(task_id: str) -> bool:
+    task = _tasks.get(task_id)
+    if task and task.get("_pause"):
+        task["_pause"].clear()
+        with _tasks_lock:
+            if task["status"] == "paused":
+                task["status"] = "downloading"
+        return True
+    return False
+
+
+def delete_task(task_id: str) -> bool:
+    with _tasks_lock:
+        task = _tasks.pop(task_id, None)
+        if task and task.get("_pause"):
+            task["_pause"].set()  # 信号线程停止
+        return task is not None
