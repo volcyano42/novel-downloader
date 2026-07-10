@@ -1173,7 +1173,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
     novel.update_chapter(chapters)
 
     # ── 3. 合并本地已有进度 ──────────────────────────────────────
-    local_chapters = storage.load_chapters(novel.id)
+    local_chapters = storage.load_chapters(novel.id, include_images=False)
     if local_chapters:
         _log.info("本地已有 %d章, 合并进度", len(local_chapters))
         novel.update_chapter(local_chapters)
