@@ -75,8 +75,8 @@ class BaseStorage(ABC):
         ...
 
     @abstractmethod
-    def iter_metas(self) -> Iterator[Novel]:
-        """逐条遍历所有小说元数据。"""
+    def iter_metas(self, include_images: bool = True) -> Iterator[Novel]:
+        """逐条遍历所有小说元数据。include_images=False 时不加载封面/插图数据。"""
         ...
 
     @abstractmethod
@@ -93,8 +93,8 @@ class BaseStorage(ABC):
         ...
 
     @abstractmethod
-    def load_chapters(self, novel_id: str) -> Chapters:
-        """读取某部小说的全部章节。"""
+    def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
+        """读取某部小说的全部章节。include_images=False 时不加载章节插图数据。"""
         ...
 
     @abstractmethod
@@ -163,7 +163,7 @@ class LocalStorage(BaseStorage):
         json_data = json.loads(path.read_text(encoding="utf-8"))
         return Novel.loads(**json_data)
 
-    def iter_metas(self) -> Iterator[Novel]:
+    def iter_metas(self, include_images: bool = True) -> Iterator[Novel]:
         if not self.base_dir.exists():
             return
         for entry in sorted(self.base_dir.iterdir()):
@@ -174,6 +174,8 @@ class LocalStorage(BaseStorage):
                 continue
             try:
                 json_data = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not include_images:
+                    json_data.pop("cover", None)
                 yield Novel.loads(**json_data)
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的 meta 文件: %s", meta_path)
@@ -206,10 +208,10 @@ class LocalStorage(BaseStorage):
         json_data.setdefault("novel_id", novel_id)
         return Chapter.loads(**json_data)
 
-    def load_chapters(self, novel_id: str) -> Chapters:
-        return Chapters(self._iter_chapters(novel_id))
+    def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
+        return Chapters(self._iter_chapters(novel_id, include_images))
 
-    def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+    def _iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
         chapters_dir = self._chapters_dir(novel_id)
         if not chapters_dir.exists():
             return
@@ -217,6 +219,13 @@ class LocalStorage(BaseStorage):
             try:
                 ch = self.load_chapter(novel_id, file.stem)
                 if ch is not None:
+                    if not include_images and ch.images:
+                        ch = Chapter(
+                            id=ch.id, url=ch.url, novel_id=ch.novel_id,
+                            title=ch.title, order=ch.order, volume=ch.volume,
+                            content=ch.content, time=ch.time, count=ch.count,
+                            images=(),
+                        )
                     yield ch
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的章节文件: %s", file)
@@ -345,7 +354,7 @@ class SQLiteStorage(BaseStorage):
         cover = self._load_illustration(novel_id, 'novel', novel_id)
         return self._row_to_novel(row, cover)
 
-    def iter_metas(self) -> Iterator[Novel]:
+    def iter_metas(self, include_images: bool = True) -> Iterator[Novel]:
         # 目录就是索引：扫描 *.db 读每本的 meta 表
         for path in sorted(self.base_dir.glob("*.db"), key=lambda p: p.name):
             try:
@@ -355,7 +364,10 @@ class SQLiteStorage(BaseStorage):
                         "FROM meta"
                     ).fetchone()
                 if row:
-                    yield self._row_to_novel(row, cover=None)
+                    cover = None
+                    if include_images:
+                        cover = self._load_illustration(row[0], 'novel', row[0])
+                    yield self._row_to_novel(row, cover=cover)
             except sqlite3.Error:
                 _log.warning("iter_metas skip broken db: %s", path.name)
 
@@ -448,17 +460,19 @@ class SQLiteStorage(BaseStorage):
         images = self._load_illustrations(novel_id, 'chapter', chapter_id)
         return self._row_to_chapter(row, novel_id, images)
 
-    def load_chapters(self, novel_id: str) -> Chapters:
-        return Chapters(self._iter_chapters(novel_id))
+    def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
+        return Chapters(self._iter_chapters(novel_id, include_images))
 
-    def _iter_chapters(self, novel_id: str) -> Iterator[Chapter]:
+    def _iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
         with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
                 "FROM chapters ORDER BY \"order\""
             ).fetchall()
         for row in rows:
-            images = self._load_illustrations(novel_id, 'chapter', row[0])
+            images = ()
+            if include_images:
+                images = self._load_illustrations(novel_id, 'chapter', row[0])
             yield self._row_to_chapter(row, novel_id, images)
 
     @staticmethod

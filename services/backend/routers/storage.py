@@ -72,14 +72,14 @@ async def switch_backend(body: BackendSwitch): return {"backend": body.backend, 
 async def list_novels():
     store = _get_storage()
     result: list[dict] = []
-    for novel in store.iter_metas():
+    for novel in store.iter_metas(include_images=False):
         result.append({
             "title": novel.title, "url": novel.url, "id": novel.id,
             "serial": novel.serial, "author": novel.author,
             "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
-            "cover": None,  # 书架列表不传封面，减少响应体积
+            "cover": None,
         })
     return result
 
@@ -110,7 +110,7 @@ async def delete_novel(novel_id: str):
 @router.get("/novel/{novel_id}/chapters")
 async def list_chapters(novel_id: str, order: str | None = Query(None), volume: str | None = Query(None),
                         status: str | None = Query(None), page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
-    store = _get_storage(); chapters = store.load_chapters(novel_id)
+    store = _get_storage(); chapters = store.load_chapters(novel_id, include_images=False)
     result = [_chapter_to_brief(ch) for ch in chapters]
     if order:
         parts = order.split("-"); lo = int(parts[0]) if parts[0] else 1
