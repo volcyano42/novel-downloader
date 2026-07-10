@@ -11,7 +11,6 @@ class SearchResultData(BaseModel):
 
 class FetchMetaRequest(BaseModel):
     url: str
-    engine_id: str
 
 
 class DownloadChapterRequest(BaseModel):

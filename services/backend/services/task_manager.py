@@ -2,41 +2,25 @@
 import threading
 import uuid
 
-from services.backend.services.config_service import load_config, load_site_config
-from services.backend.services.engine_manager import get_or_create_engine
+from services.backend.services.config_service import load_config
+from services.backend.services.engine_manager import create_engine_for_request
 
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 
-def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | None = None):
-    """后台线程：并发下载章节，支持暂停/恢复。"""
+def _run_download(task: dict, mode: str, provider: str | None, platform: str):
+    """后台线程：创建 engine → 并发下载章节 → close engine，支持暂停/恢复。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from nldlder import NovelDownloader
     from nldlder.models.novel import Chapter, Chapters, Novel
     from nldlder.core.storage import create_storage
     from nldlder.core.options import StorageOptions
 
-    # API 模式自动发现 provider（如果前端没指定）
-    platform = None
-    if mode == "api" and not provider:
-        from nldlder.core.downloader import get_fetcher_for_id as _gffi, get_fetchers as _gf
-        fetcher_cls = _gffi(task["novel_id"])
-        if fetcher_cls:
-            for name, cls in _gf().items():
-                if cls is fetcher_cls:
-                    platform = name
-                    break
-            site = load_site_config(platform) if platform else {}
-            api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
-            for name, prov in api_section.items():
-                if isinstance(prov, dict) and prov.get("enabled", True):
-                    provider = name
-                    break
-
+    engine = None
     try:
-        engine = get_or_create_engine(engine_id, mode, provider=provider, platform=platform)
+        engine = create_engine_for_request(platform, mode, provider=provider)
         dl = NovelDownloader(engine)
         store = create_storage(StorageOptions(
             backend="sqlite",
@@ -99,10 +83,14 @@ def _run_download(task: dict, engine_id: str, mode: str | None, provider: str | 
     except Exception as e:
         task["status"] = "failed"
         task["error"] = str(e)
+    finally:
+        if engine:
+            engine.close()
 
 
-def create_task(novel_id: str, chapters: list[dict], title: str, engine_id: str,
-                mode: str | None, provider: str | None, novel_url: str = "") -> dict:
+def create_task(novel_id: str, chapters: list[dict], title: str,
+                mode: str = "browser", provider: str | None = None,
+                novel_url: str = "", platform: str = "fanqie") -> dict:
     task_id = str(uuid.uuid4())[:8]
     task = {
         "task_id": task_id, "novel_id": novel_id, "title": title,
@@ -114,7 +102,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str, engine_id: str,
     with _tasks_lock:
         _tasks[task_id] = task
 
-    t = threading.Thread(target=_run_download, args=(task, engine_id, mode, provider),
+    t = threading.Thread(target=_run_download, args=(task, mode, provider, platform),
                          daemon=True)
     t.start()
     return {"task_id": task_id, "total": len(chapters)}
@@ -158,5 +146,5 @@ def delete_task(task_id: str) -> bool:
     with _tasks_lock:
         task = _tasks.pop(task_id, None)
         if task and task.get("_pause"):
-            task["_pause"].set()  # 信号线程停止
+            task["_pause"].set()
         return task is not None
