@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from backend.routers.config import load_config
 from nldlder import NovelDownloader, Options, create_engine, get_fetchers, search
+from nldlder.core.options import APIOptions, RequestsOptions, BrowserOptions
 
 router = APIRouter(prefix="/api/v1/download", tags=["download"])
 
@@ -243,6 +244,77 @@ def _get_engine(engine_id: str, mode: str | None = None, provider: str | None = 
     engine = create_engine(opts)
     _engines[cache_key] = (engine, fp)
     return engine
+
+
+def reload_engine_options(mode: str):
+    """重新加载指定 mode 的所有运行中引擎配置（热更新，不重建）。"""
+    cfg = load_config()
+
+    for cache_key, (engine, _old_fp) in list(_engines.items()):
+        # 匹配 mode：cache_key 格式为 "{id}:{mode}" 或 "{id}:api:{provider}"
+        parts = cache_key.split(":")
+        if len(parts) < 2:
+            continue
+
+        if mode == "api":
+            # API 模式：匹配 "api" 或 "api:{provider}"
+            if parts[1] != "api":
+                continue
+            provider = parts[2] if len(parts) > 2 else None
+
+            if provider:
+                # API + provider 模式：重建 APIOptions
+                prov_cfg = _find_provider_options(provider) or {}
+                key = os.environ.get(f"{provider.upper()}_API_KEY", "") or prov_cfg.get("key", "")
+                sub_opts = APIOptions(
+                    name=provider,
+                    key=key,
+                    delay=tuple(prov_cfg.get("delay", [3, 5])),
+                    timeout=prov_cfg.get("timeout", 30),
+                    retry_times=prov_cfg.get("retry_times", 3),
+                    backoff_factor=prov_cfg.get("backoff_factor", 2),
+                    params=prov_cfg.get("params"),
+                )
+                new_fp = _mode_fingerprint({**prov_cfg, "key": key})
+            else:
+                # API 无 provider：不处理（该路径走非 API 分支，但 cache_key 仍是 api）
+                continue
+        else:
+            # browser / requests 模式
+            if parts[1] != mode:
+                continue
+
+            dl = cfg.get("download", {})
+            mode_cfg = dl.get(mode, {})
+
+            if mode == "browser":
+                sub_opts = BrowserOptions(
+                    headless=mode_cfg.get("headless", True),
+                    browser_type=mode_cfg.get("browser_type", "chromium"),
+                    user_data_dir=mode_cfg.get("user_data_dir"),
+                    delay=tuple(mode_cfg.get("delay", [3, 5])),
+                    timeout=mode_cfg.get("timeout", 30),
+                    retry_times=mode_cfg.get("retry_times", 3),
+                    backoff_factor=mode_cfg.get("backoff_factor", 2),
+                )
+            elif mode == "requests":
+                sub_opts = RequestsOptions(
+                    delay=tuple(mode_cfg.get("delay", [3, 5])),
+                    timeout=mode_cfg.get("timeout", 30),
+                    retry_times=mode_cfg.get("retry_times", 3),
+                    backoff_factor=mode_cfg.get("backoff_factor", 2),
+                )
+            else:
+                continue
+
+            new_fp = _mode_fingerprint(mode_cfg)
+
+        try:
+            engine.update_options(sub_opts)
+            _engines[cache_key] = (engine, new_fp)
+        except Exception:
+            pass  # 单个引擎更新失败不影响其他引擎
+
 
 @router.get("/search")
 async def search_novels(platform: str = Query(...), query: str = Query(...), page: int = Query(1), mode: str | None = Query(None), provider: str | None = Query(None), engine_id: str = Query("default")):

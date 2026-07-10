@@ -198,6 +198,7 @@ async def save_config(body: dict):
 
     # ── 平台引擎配置: platforms.{platform}.{mode}.{key} → sites/{platform}.yaml ──
     platforms_body = body.get("platforms")
+    changed_modes: set[str] = set()
     if isinstance(platforms_body, dict):
         for platform, plat_data in platforms_body.items():
             if not isinstance(plat_data, dict):
@@ -206,6 +207,7 @@ async def save_config(body: dict):
             for mode in ("browser", "requests", "api"):
                 if mode in plat_data and isinstance(plat_data[mode], dict):
                     site_raw[mode] = _deep_merge(site_raw.get(mode, {}), plat_data[mode])
+                    changed_modes.add(mode)
             _save_yaml(_config_dir / "sites" / f"{platform}.yaml", site_raw)
 
     # ── 全局标量: mode / name → config.yaml ──
@@ -239,5 +241,11 @@ async def save_config(body: dict):
             existing_fmt = existing.get(fmt_key, {}) if isinstance(existing, dict) else {}
             merged = _deep_merge(existing_fmt, body[fmt_key])
             _save_format_config(fmt_key, merged)
+
+    # ── 热更新运行中引擎（惰性导入避免循环依赖）──
+    if changed_modes:
+        from backend.routers.download import reload_engine_options
+        for mode in changed_modes:
+            reload_engine_options(mode)
 
     return {"status": "ok"}

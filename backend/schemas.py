@@ -137,6 +137,13 @@ class BrowserOptionsData(BaseModel):
 
 class CreateEngineRequest(BaseModel):
     mode: str = "api"
+    platform: str = ""
+    api: APIOptionsData | None = None
+    requests: RequestsOptionsData | None = None
+    browser: BrowserOptionsData | None = None
+
+class UpdateEngineRequest(BaseModel):
+    mode: str
     api: APIOptionsData | None = None
     requests: RequestsOptionsData | None = None
     browser: BrowserOptionsData | None = None
