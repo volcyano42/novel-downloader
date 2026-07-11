@@ -35,7 +35,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { if (open) configApi.get().then(setCfg).catch(() => {}); }, [open]);
-  useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); } }, [open, initialMode, initialProvider]);
+  useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); setLoading(false); } }, [open, initialMode, initialProvider]);
 
   const modeCfg = cfg?.[mode as keyof typeof cfg] as Record<string, unknown> | undefined;
   const apiMap = cfg?.api_providers ?? {};
