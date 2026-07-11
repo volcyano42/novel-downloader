@@ -201,6 +201,23 @@ def _qiniu_download_json(remote_key: str) -> dict | None:
 
 # ── 本地文件管理 ──
 
+def _resolve_by_name(name: str) -> Optional[str]:
+    """通过小说名称查找 ID。先在本地找，再到云端找。"""
+    local_dir = _get_local_db_dir()
+    # 本地搜索
+    for nid in _local_novels():
+        meta = _read_novel_meta(str(local_dir / f"{nid}.db"))
+        if meta and meta.get("title") == name:
+            return nid
+    # 云端搜索
+    all_keys = _qiniu_list("novels/")
+    remote_ids = {Path(k).stem for k in all_keys if k.endswith(".db")}
+    for nid in remote_ids:
+        manifest = _qiniu_download_json(f"novels/{nid}.manifest.json")
+        if manifest and manifest.get("title") == name:
+            return nid
+    return None
+
 def _get_local_db_dir() -> Path:
     """获取本地小说库目录 — 优先环境变量，其次脚本所在项目的相对路径。"""
     base = os.environ.get("NOVELS_STORAGE_DIR", "")
@@ -286,7 +303,7 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, ahead_
         try:
             _cdn_refresh(all_refresh_urls)
         except Exception as e:
-            print(f"  \u26a0 CDN 刷新失败: {e}")
+            print(f"  ⚠ CDN 刷新失败: {e}")
 
 def cmd_pull(novel_id: Optional[str] = None):
     """下载恢复：下载 → 完整性校验 → 原子替换。"""
