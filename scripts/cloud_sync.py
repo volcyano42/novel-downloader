@@ -32,6 +32,12 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+# 跨平台终端输出一致：强制 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # ── 配置 ──
 
 def _require_config() -> tuple[str, str, str, str]:
