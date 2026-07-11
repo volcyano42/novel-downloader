@@ -201,20 +201,26 @@ def _qiniu_download_json(remote_key: str) -> dict | None:
 
 # ── 本地文件管理 ──
 
-def _resolve_by_name(name: str) -> Optional[str]:
-    """通过小说名称查找 ID。先在本地找，再到云端找。"""
+def _resolve_novel_id(arg: str) -> Optional[str]:
+    """ID 或名称 → novel_id。先查本地 ID，再查名称。"""
+    # 1. 直接匹配本地 ID
+    if arg in set(_local_novels()):
+        return arg
+    # 2. 本地名称匹配
     local_dir = _get_local_db_dir()
-    # 本地搜索
     for nid in _local_novels():
         meta = _read_novel_meta(str(local_dir / f"{nid}.db"))
-        if meta and meta.get("title") == name:
+        if meta and meta.get("title") == arg:
             return nid
-    # 云端搜索
+    # 3. 云端 ID 匹配
     all_keys = _qiniu_list("novels/")
     remote_ids = {Path(k).stem for k in all_keys if k.endswith(".db")}
+    if arg in remote_ids:
+        return arg
+    # 4. 云端名称匹配
     for nid in remote_ids:
         manifest = _qiniu_download_json(f"novels/{nid}.manifest.json")
-        if manifest and manifest.get("title") == name:
+        if manifest and manifest.get("title") == arg:
             return nid
     return None
 
@@ -475,6 +481,14 @@ def main():
     sub.add_parser("status", help="对比本地与云端")
 
     args = parser.parse_args()
+
+    # 位置参数支持 ID 或名称
+    if hasattr(args, "novel_id") and args.novel_id:
+        resolved = _resolve_novel_id(args.novel_id)
+        if not resolved:
+            print(f"未找到小说: {args.novel_id}")
+            sys.exit(1)
+        args.novel_id = resolved
 
     if args.cmd == "push":
         cmd_push(args.novel_id, manifest_only=args.manifest_only, ahead_only=args.ahead)
