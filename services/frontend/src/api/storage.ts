@@ -59,6 +59,9 @@ export const storageApi = {
     if (url) _cacheSet(key, url);
     return url;
   },
+  getCoverSync: (novelId: string): string | null => {
+    return _cacheGet<string>(LS_COVER_PREFIX + novelId) ?? null;
+  },
   deleteNovel: (novelId: string) => {
     _cacheRemove(LS_COVER_PREFIX + novelId);
     // 也从小说列表中移除

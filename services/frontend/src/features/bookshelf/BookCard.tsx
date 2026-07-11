@@ -46,6 +46,9 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
   useEffect(() => {
     if (cover) { setLoadedCover(cover); return; }
     if (!novelId) return;
+    // sync cache — immediate, no render delay
+    const cached = storageApi.getCoverSync(novelId);
+    if (cached) { setLoadedCover(cached); return; }
     let cancelled = false;
     setCoverLoading(true);
     storageApi.getCover(novelId).then(url => {
