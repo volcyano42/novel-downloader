@@ -16,12 +16,6 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 interface BookCardProps {
   title: string; author: string; novelId?: string; cover?: string; progress?: number;
@@ -40,7 +34,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
   const [showExport, setShowExport] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [inlineNewGroup, setInlineNewGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
   useEffect(() => {
@@ -99,7 +93,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
     const name = newGroupName.trim();
     if (!name || !novelId) return;
     onNewGroup?.(novelId, name);
-    setShowNewGroup(false);
+    setInlineNewGroup(false);
     setNewGroupName("");
   }, [novelId, newGroupName, onNewGroup]);
 
@@ -158,11 +152,29 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => { setTimeout(() => { setShowNewGroup(true); setNewGroupName(""); }, 100); }}
-                      className="text-indigo-500 focus:text-indigo-600 focus:bg-indigo-50 rounded-lg">
-                      <FolderPlus className="mr-2 h-3.5 w-3.5 text-indigo-500" />
-                      新建分组
-                    </DropdownMenuItem>
+                    {inlineNewGroup ? (
+                      <div className="px-2 py-1">
+                        <input
+                          value={newGroupName}
+                          onChange={e => setNewGroupName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") handleNewGroupSubmit();
+                            if (e.key === "Escape") { setInlineNewGroup(false); setNewGroupName(""); }
+                            e.stopPropagation();
+                          }}
+                          onBlur={() => { setInlineNewGroup(false); setNewGroupName(""); }}
+                          placeholder="输入分组名"
+                          autoFocus
+                          className="w-full h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30"
+                        />
+                      </div>
+                    ) : (
+                      <DropdownMenuItem onSelect={e => { e.preventDefault(); setInlineNewGroup(true); setNewGroupName(""); }}
+                        className="text-indigo-500 focus:text-indigo-600 focus:bg-indigo-50 rounded-lg">
+                        <FolderPlus className="mr-2 h-3.5 w-3.5 text-indigo-500" />
+                        新建分组
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
@@ -208,23 +220,6 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* 新建分组 */}
-      <Dialog open={showNewGroup} onOpenChange={setShowNewGroup}>
-        <DialogContent className="max-w-sm rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl">
-          <DialogHeader>
-            <DialogTitle>新建分组</DialogTitle>
-            <DialogDescription>输入分组名称，将《{title}》移入该分组。</DialogDescription>
-          </DialogHeader>
-          <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
-            placeholder="分组名称" autoFocus
-            onKeyDown={e => { if (e.key === "Enter") handleNewGroupSubmit(); }} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewGroup(false)}>取消</Button>
-            <Button onClick={handleNewGroupSubmit} disabled={!newGroupName.trim()}>创建并移入</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <ExportDialog open={showExport} onClose={() => setShowExport(false)}
         novelTitle={title}
         onExport={handleStartExport} />
