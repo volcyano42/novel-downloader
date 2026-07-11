@@ -38,20 +38,21 @@ function _cacheRemove(pattern?: string) {
 
 export const storageApi = {
   listNovels: async () => {
-    // 先返回缓存
     const cached = _cacheGet<NovelMeta[]>(LS_NOVELS);
-    // 后台刷新
-    apiGet<NovelMeta[]>("/storage/novel").then(data => _cacheSet(LS_NOVELS, data)).catch(() => {});
-    return cached ?? apiGet<NovelMeta[]>("/storage/novel");
+    if (cached) return cached;
+    const data = await apiGet<NovelMeta[]>("/storage/novel");
+    _cacheSet(LS_NOVELS, data);
+    return data;
+  },
+  refreshNovels: async () => {
+    const data = await apiGet<NovelMeta[]>("/storage/novel");
+    _cacheSet(LS_NOVELS, data);
+    return data;
   },
   getMeta: (novelId: string) => apiGet<NovelMeta>(`/storage/novel/${novelId}/meta`),
   getCover: async (novelId: string): Promise<string | null> => {
     const key = LS_COVER_PREFIX + novelId;
     const cachedUrl = _cacheGet<string>(key);
-    // 后台刷新
-    apiGet<NovelMeta["cover"]>(`/storage/novel/${novelId}/cover`)
-      .then(cover => { const u = coverToUrl(cover); if (u) _cacheSet(key, u); })
-      .catch(() => {});
     if (cachedUrl) return cachedUrl;
     const cover = await apiGet<NovelMeta["cover"]>(`/storage/novel/${novelId}/cover`);
     const url = coverToUrl(cover);

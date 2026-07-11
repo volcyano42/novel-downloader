@@ -61,7 +61,7 @@ export default function BookshelfPage() {
         );
         for (const t of tasks) prev[t.task_id] = t.status;
         if (hasJustFinished) {
-          storageApi.listNovels().then(setNovels).catch(() => {});
+          storageApi.refreshNovels().then(setNovels).catch(() => {});
         }
       }).catch(() => {});
     }, 1000);
