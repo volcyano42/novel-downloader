@@ -93,4 +93,8 @@ async def save_config(body: dict):
             merged = config_service.deep_merge(existing_fmt, body[fmt_key])
             config_service.save_format_config(fmt_key, merged)
 
+    # ── 分组配置 → groups.yaml ──
+    if "groups" in body and isinstance(body["groups"], dict):
+        config_service.save_yaml(_config_dir / "groups.yaml", body["groups"])
+
     return {"status": "ok"}
