@@ -202,9 +202,13 @@ def _qiniu_download_json(remote_key: str) -> dict | None:
 # ── 本地文件管理 ──
 
 def _get_local_db_dir() -> Path:
-    """获取本地小说库目录。"""
-    base = os.environ.get("NOVELS_STORAGE_DIR", "app_data/storage")
-    return Path(base)
+    """获取本地小说库目录 — 优先环境变量，其次脚本所在项目的相对路径。"""
+    base = os.environ.get("NOVELS_STORAGE_DIR", "")
+    if base:
+        return Path(base)
+    # 脚本所在目录 = 项目根目录，不依赖 CWD
+    project_root = Path(__file__).parent.parent
+    return project_root / "app_data" / "storage"
 
 def _local_novels() -> list[str]:
     """列出本地所有小说 ID。"""
