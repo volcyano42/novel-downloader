@@ -137,6 +137,66 @@ export default function BookshelfPage() {
     finally { setSaving(false); }
   }, [settings]);
 
+  // ── 分组 & 删除回调 ──
+  const groupNames = useMemo(() => Object.keys(groups), [groups]);
+
+  const saveGroups = useCallback(async (newGroups: Record<string, Record<string, object>>) => {
+    if (!settings) return;
+    const updated = { ...settings, groups: newGroups };
+    setSettings(updated);
+    setGroups(newGroups);
+    try { await configApi.save(updated as unknown as Record<string, unknown>); }
+    catch { /* ignore */ }
+  }, [settings]);
+
+  const handleDeleteNovel = useCallback((novelId: string) => {
+    setNovels(prev => prev.filter(n => n.id !== novelId));
+    // 从分组中移除
+    const newGroups = { ...groups };
+    for (const g of Object.keys(newGroups)) {
+      if (novelId in newGroups[g]) {
+        const { [novelId]: _, ...rest } = newGroups[g];
+        if (Object.keys(rest).length === 0) delete newGroups[g];
+        else newGroups[g] = rest;
+        break;
+      }
+    }
+    saveGroups(newGroups);
+  }, [groups, saveGroups]);
+
+  const handleMoveToGroup = useCallback((novelId: string, group: string) => {
+    const newGroups = { ...groups };
+    // 先从旧组移除
+    for (const g of Object.keys(newGroups)) {
+      if (novelId in newGroups[g]) {
+        const { [novelId]: _, ...rest } = newGroups[g];
+        if (Object.keys(rest).length === 0) delete newGroups[g];
+        else newGroups[g] = rest;
+        break;
+      }
+    }
+    // 加入新组
+    newGroups[group] = { ...newGroups[group], [novelId]: {} };
+    saveGroups(newGroups);
+  }, [groups, saveGroups]);
+
+  const handleRemoveFromGroup = useCallback((novelId: string) => {
+    const newGroups = { ...groups };
+    for (const g of Object.keys(newGroups)) {
+      if (novelId in newGroups[g]) {
+        const { [novelId]: _, ...rest } = newGroups[g];
+        if (Object.keys(rest).length === 0) delete newGroups[g];
+        else newGroups[g] = rest;
+        break;
+      }
+    }
+    saveGroups(newGroups);
+  }, [groups, saveGroups]);
+
+  const handleNewGroup = useCallback((novelId: string, name: string) => {
+    handleMoveToGroup(novelId, name);
+  }, [handleMoveToGroup]);
+
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     setNavigatingId(result.url);
     try {
@@ -150,7 +210,7 @@ export default function BookshelfPage() {
   return (
     <AppShell activeNav={activeNav} onNavigate={(item) => navigate(toPath[item])} searchQuery={searchQuery} onSearch={handleSearch} appName={appName}>
       {activeNav === "bookshelf" && (
-        <div className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 md:px-8">
+        <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
           {loadingNovels ? (
             <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">{Array.from({ length: 6 }).map((_, i) => <BookCardSkeleton key={i} />)}</div>
           ) : (() => {
@@ -190,7 +250,7 @@ export default function BookshelfPage() {
                   </button>
                   {!collapsed.has(tag) && (
                     <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} onRead={() => navigate(`/novel/${novel.id}`)} />)}
+                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} onRead={() => navigate(`/novel/${novel.id}`)} groups={groupNames} currentGroup={tag === "未分类" ? undefined : tag} onDelete={handleDeleteNovel} onMoveToGroup={handleMoveToGroup} onRemoveFromGroup={handleRemoveFromGroup} onNewGroup={handleNewGroup} />)}
                     </div>
                   )}
                 </div>
@@ -201,7 +261,7 @@ export default function BookshelfPage() {
         </div>
       )}
       {activeNav === "downloads" && (
-        <div className="mx-auto max-w-[720px] space-y-2 px-4 py-6 md:px-8">
+        <div className="mx-auto max-w-[720px] space-y-2 px-6 pt-12 pb-8 md:px-12">
           {downloadTasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
           : downloadTasks.map(task => {
             const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
@@ -219,7 +279,7 @@ export default function BookshelfPage() {
         </div>
       )}
       {activeNav === "search" && (
-        <div className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 md:px-8">
+        <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
           <SearchBar onSearch={handleOnlineSearch} platforms={searchPlatforms} engineModes={["browser", "requests", "api"]} apiProviders={settings?.api_providers} loading={searching} />
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
@@ -230,7 +290,7 @@ export default function BookshelfPage() {
           )}
         </div>
       )}
-      {activeNav === "settings" && settings && <div className="px-4 py-6 md:px-8"><SettingsView cfg={settings} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} /></div>}
+      {activeNav === "settings" && settings && <div className="px-6 pt-12 pb-8 md:px-12"><SettingsView cfg={settings} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} /></div>}
     </AppShell>
   );
 }
