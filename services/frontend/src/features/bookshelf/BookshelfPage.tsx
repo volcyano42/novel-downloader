@@ -39,6 +39,8 @@ export default function BookshelfPage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const searchModeRef = useRef("requests");
   const searchProviderRef = useRef<string | undefined>(undefined);
+  const lastDownloadModeRef = useRef("browser");
+  const lastDownloadProviderRef = useRef<string | undefined>(undefined);
   const prevTaskStatusRef = useRef<Record<string, string>>({});
   const navigate = useNavigate();
 
@@ -197,6 +199,14 @@ export default function BookshelfPage() {
     handleMoveToGroup(novelId, name);
   }, [handleMoveToGroup]);
 
+  const handleDownloadAll = useCallback((novelId: string, mode: string, provider?: string) => {
+    lastDownloadModeRef.current = mode;
+    lastDownloadProviderRef.current = provider;
+    const novel = novels.find(n => n.id === novelId);
+    if (!novel) return;
+    navigate(`/search/${novelId}`, { state: { remoteUrl: novel.url, searchMode: mode, searchProvider: provider } });
+  }, [novels, navigate]);
+
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     setNavigatingId(result.url);
     try {
@@ -250,7 +260,7 @@ export default function BookshelfPage() {
                   </button>
                   {!collapsed.has(tag) && (
                     <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} onRead={() => navigate(`/novel/${novel.id}`)} groups={groupNames} currentGroup={tag === "未分类" ? undefined : tag} onDelete={handleDeleteNovel} onMoveToGroup={handleMoveToGroup} onRemoveFromGroup={handleRemoveFromGroup} onNewGroup={handleNewGroup} />)}
+                      {items.map(novel => <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author} onRead={() => navigate(`/novel/${novel.id}`)} groups={groupNames} currentGroup={tag === "未分类" ? undefined : tag} onDelete={handleDeleteNovel} onMoveToGroup={handleMoveToGroup} onRemoveFromGroup={handleRemoveFromGroup} onNewGroup={handleNewGroup} onDownloadAll={handleDownloadAll} serial={novel.serial} defaultMode={lastDownloadModeRef.current} defaultProvider={lastDownloadProviderRef.current} />)}
                     </div>
                   )}
                 </div>

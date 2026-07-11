@@ -5,6 +5,7 @@ import { storageApi } from "@/api/storage";
 import { exportApi } from "@/api/export";
 import { configApi } from "@/api/config";
 import { ExportDialog } from "@/features/download/ExportDialog";
+import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -26,12 +27,17 @@ interface BookCardProps {
   onMoveToGroup?: (novelId: string, group: string) => void;
   onRemoveFromGroup?: (novelId: string) => void;
   onNewGroup?: (novelId: string, name: string) => void;
+  onDownloadAll?: (novelId: string, mode: string, provider?: string) => void;
+  serial?: number;
+  defaultMode?: string;
+  defaultProvider?: string;
 }
 
-export function BookCard({ title, author, novelId, cover, progress = 0, onRead, className, groups = [], currentGroup, onDelete, onMoveToGroup, onRemoveFromGroup, onNewGroup }: BookCardProps) {
+export function BookCard({ title, author, novelId, cover, progress = 0, onRead, className, groups = [], currentGroup, onDelete, onMoveToGroup, onRemoveFromGroup, onNewGroup, onDownloadAll, serial, defaultMode, defaultProvider }: BookCardProps) {
   const [loadedCover, setLoadedCover] = useState<string | null>(null);
   const [coverLoading, setCoverLoading] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [inlineNewGroup, setInlineNewGroup] = useState(false);
@@ -113,7 +119,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
           )}
           {/* 右下角操作图标 — hover 时显示 */}
           <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200">
-            <button onClick={e => e.stopPropagation()}
+            <button onClick={e => { e.stopPropagation(); setShowDownloadDialog(true); }}
               className="rounded-lg bg-white/80 p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-white transition-colors shadow-sm">
               <Download className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
@@ -223,6 +229,19 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
       <ExportDialog open={showExport} onClose={() => setShowExport(false)}
         novelTitle={title}
         onExport={handleStartExport} />
+      <DownloadDialog
+        open={showDownloadDialog}
+        onClose={() => setShowDownloadDialog(false)}
+        novelTitle={title}
+        chapterCount={serial ?? 0}
+        variant="download"
+        initialMode={defaultMode}
+        initialProvider={defaultProvider}
+        onStart={(mode, provider) => {
+          setShowDownloadDialog(false);
+          onDownloadAll?.(novelId!, mode, provider);
+        }}
+      />
     </>
   );
 }
