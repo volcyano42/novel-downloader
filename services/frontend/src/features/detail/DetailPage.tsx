@@ -39,6 +39,7 @@ export default function DetailPage() {
   const [coverScale, setCoverScale] = useState(1);
   const [compareMode, setCompareMode] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
@@ -121,6 +122,7 @@ export default function DetailPage() {
 
   const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
+    setCheckResult(null);
     try {
       const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
       const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
@@ -135,6 +137,9 @@ export default function DetailPage() {
         }
         setSelectedIds(preSelected);
         setCompareMode(true);
+      } else {
+        setCheckResult("latest");
+        setTimeout(() => setCheckResult(null), 2000);
       }
     } catch { /* ignore */ }
     finally { setChecking(false); }
@@ -238,7 +243,7 @@ export default function DetailPage() {
                 <div className="flex-1" />
                 <button onClick={handleCheckUpdate} disabled={checking} className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1 disabled:opacity-50">
                   <RefreshCw className={`h-3 w-3 ${checking ? "animate-spin" : ""}`} strokeWidth={2} />
-                  {checking ? "检查中..." : "检查更新"}
+                  {checking ? "检查中..." : checkResult === "latest" ? "已是最新 ✓" : "检查更新"}
                 </button>
               </>
             )}
