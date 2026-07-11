@@ -357,7 +357,7 @@ def cmd_pull(novel_id: Optional[str] = None):
                 pass
 
 def cmd_delete(novel_id: Optional[str] = None):
-    """从云端删除备份。"""
+    """从云端删除备份（.db + .manifest.json + CDN 缓存刷新）。"""
     if not novel_id:
         print("错误: delete 必须指定 novel_id，不支持一键全删。")
         sys.exit(1)
@@ -368,9 +368,26 @@ def cmd_delete(novel_id: Optional[str] = None):
         print(f"  ✗ {novel_id} — 云端不存在")
         return
 
+    # 删除 .db
     _qiniu_delete(remote_key)
-    _qiniu_delete(f"novels/{novel_id}.manifest.json")
-    print(f"  ✓ {novel_id} — 已从云端删除")
+    print(f"  ✓ {novel_id}.db 已删除")
+
+    # 删除 manifest（可能不存在）
+    manifest_key = f"novels/{novel_id}.manifest.json"
+    if manifest_key in remote_keys:
+        try:
+            _qiniu_delete(manifest_key)
+            print(f"  ✓ {novel_id}.manifest.json 已删除")
+        except Exception as e:
+            print(f"  ⚠ manifest 删除失败: {e}")
+
+    # CDN 刷新
+    refresh_urls = [f"{_base_url()}/novels/{novel_id}.db",
+                    f"{_base_url()}/novels/{novel_id}.manifest.json"]
+    try:
+        _cdn_refresh(refresh_urls)
+    except Exception as e:
+        print(f"  ⚠ CDN 刷新失败: {e}")
 
 def _diff_novels():
     """对比本地与云端，返回 (ahead, behind, synced, cloud_meta, only_local, only_remote)。
