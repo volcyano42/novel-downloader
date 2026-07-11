@@ -116,8 +116,8 @@ export default function DetailPage() {
   const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
 
   const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
-  const [savedMode, setSavedMode] = useState(searchMode ?? "browser");
-  const [savedProvider, setSavedProvider] = useState(searchProvider ?? "");
+  const [savedMode, setSavedMode] = useState("");
+  const [savedProvider, setSavedProvider] = useState("");
 
   const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
