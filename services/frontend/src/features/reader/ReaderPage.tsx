@@ -15,7 +15,7 @@ export default function ReaderPage() {
 
   useEffect(() => {
     if (!novelId) return;
-    storageApi.listChapters(novelId).then(setChapters).catch(() => {});
+    storageApi.listChapters(novelId, { size: 20000 }).then(setChapters).catch(() => {});
     storageApi.getMeta(novelId).then(m => setAuthor(m.author)).catch(() => {});
   }, [novelId]);
 
