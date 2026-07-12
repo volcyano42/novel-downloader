@@ -15,7 +15,7 @@ import type { ChapterBrief } from "@/api/endpoints";
 export function useNovels() {
   return useQuery({
     queryKey: ["novels"],
-    queryFn: listNovels,
+    queryFn: () => listNovels(),
     refetchOnWindowFocus: true,
     staleTime: 10_000,
   });

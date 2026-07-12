@@ -44,8 +44,8 @@ export async function apiFetch<T = unknown>(
     throw new ApiError(0, "网络连接失败");
   }
   if (!res.ok) await parseError(res);
-  const body = (await res.json()) as ApiResponse<T>;
-  return body.data;
+  const body = await res.json();
+  return (body as ApiResponse<T>).data;
 }
 
 export function apiGet<T = unknown>(path: string, signal?: AbortSignal) {
