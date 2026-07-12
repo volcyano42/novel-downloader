@@ -16,61 +16,14 @@ export interface ChapterData extends ChapterBrief {
   images: { raw_data: string | null; alt: string | null; insert: number | null; url: string | null }[];
 }
 
-// ── localStorage 缓存 ──
-const LS_NOVELS = "nl_novels";
-const LS_COVER_PREFIX = "nl_cover_";
-
-function _cacheGet<T>(key: string): T | null {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : null; }
-  catch { return null; }
-}
-function _cacheSet(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-function _cacheRemove(pattern?: string) {
-  try {
-    const keys = Object.keys(localStorage);
-    for (const k of keys) {
-      if (!pattern || k.startsWith(pattern)) localStorage.removeItem(k);
-    }
-  } catch {}
-}
-
 export const storageApi = {
-  listNovels: async () => {
-    const cached = _cacheGet<NovelMeta[]>(LS_NOVELS);
-    if (cached) return cached;
-    const data = await apiGet<NovelMeta[]>("/storage/novel");
-    _cacheSet(LS_NOVELS, data);
-    return data;
-  },
-  refreshNovels: async () => {
-    const data = await apiGet<NovelMeta[]>("/storage/novel");
-    _cacheSet(LS_NOVELS, data);
-    return data;
-  },
+  listNovels: () => apiGet<NovelMeta[]>("/storage/novel"),
   getMeta: (novelId: string) => apiGet<NovelMeta>(`/storage/novel/${novelId}/meta`),
   getCover: async (novelId: string): Promise<string | null> => {
-    const key = LS_COVER_PREFIX + novelId;
-    const cachedUrl = _cacheGet<string>(key);
-    if (cachedUrl) return cachedUrl;
     const cover = await apiGet<NovelMeta["cover"]>(`/storage/novel/${novelId}/cover`);
-    const url = coverToUrl(cover);
-    if (url) _cacheSet(key, url);
-    return url;
+    return coverToUrl(cover);
   },
-  getCoverSync: (novelId: string): string | null => {
-    return _cacheGet<string>(LS_COVER_PREFIX + novelId) ?? null;
-  },
-  deleteNovel: (novelId: string) => {
-    _cacheRemove(LS_COVER_PREFIX + novelId);
-    // 也从小说列表中移除
-    const novels = _cacheGet<NovelMeta[]>(LS_NOVELS);
-    if (novels) {
-      _cacheSet(LS_NOVELS, novels.filter(n => n.id !== novelId));
-    }
-    return apiDelete(`/storage/novel/${novelId}`);
-  },
+  deleteNovel: (novelId: string) => apiDelete(`/storage/novel/${novelId}`),
   listChapters: (novelId: string, params?: { order?: string; page?: number; size?: number }) => {
     const qs = new URLSearchParams();
     if (params?.order) qs.set("order", params.order);
