@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Download, Monitor, Globe, Zap, ChevronDown, Loader2, RefreshCw } from "lucide-react";
-import { configApi, type AppConfig } from "@/api/config";
+import { useConfig } from "@/hooks/index";
+import type { AppConfig } from "@/api/endpoints";
 import { cn } from "@/lib/utils";
 
 interface DownloadDialogProps {
@@ -30,11 +31,10 @@ function ModeField({ label, value }: { label: string; value: string }) {
 export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [provider, setProvider] = useState(initialProvider ?? "");
-  const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [advOpen, setAdvOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { data: cfg } = useConfig();
 
-  useEffect(() => { if (open) configApi.get().then(setCfg).catch(() => {}); }, [open]);
   useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); setLoading(false); } }, [open, initialMode, initialProvider]);
 
   const modeCfg = cfg?.[mode as keyof typeof cfg] as Record<string, unknown> | undefined;
@@ -52,46 +52,43 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
         className="w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl p-6 animate-in zoom-in-95 fade-in duration-200">
-        {/* header */}
         <h2 className="text-base font-semibold text-slate-800 mb-1">{variant === "check" ? "检查更新设置" : "下载设置"}</h2>
         <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
-        {/* mode selector */}
         <div className="space-y-2 mb-4">
           {MODES.map(({ id, label, icon: Icon, desc }) => {
             const isApi = id === "api";
             return (
-            <button key={id} onClick={() => { setMode(id); if (!isApi) setProvider(""); }}
-              className={cn(
-                "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                mode === id
-                  ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
-                  : "border-white/20 bg-white/60 hover:border-slate-200"
-              )}>
-              <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
-              <div className="min-w-0 flex-1">
-                <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
-                <p className="text-[11px] text-slate-400">{desc}</p>
-              </div>
-              {/* 右侧：API provider 选择 */}
-              {isApi && mode === "api" && uniqueProviders.length > 0 && (
-                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                  {uniqueProviders.map(p => (
-                    <span key={p} onClick={() => setProvider(prev => prev === p ? "" : p)}
-                      className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] font-medium cursor-pointer transition-colors",
-                        provider === p
-                          ? "bg-indigo-500 text-white"
-                          : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400"
-                      )}>{p}</span>
-                  ))}
+              <button key={id} onClick={() => { setMode(id); if (!isApi) setProvider(""); }}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                  mode === id
+                    ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
+                    : "border-white/20 bg-white/60 hover:border-slate-200"
+                )}>
+                <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
+                <div className="min-w-0 flex-1">
+                  <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
+                  <p className="text-[11px] text-slate-400">{desc}</p>
                 </div>
-              )}
-            </button>
-          )})}
+                {isApi && mode === "api" && uniqueProviders.length > 0 && (
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    {uniqueProviders.map(p => (
+                      <span key={p} onClick={() => setProvider(prev => prev === p ? "" : p)}
+                        className={cn(
+                          "rounded-md px-2 py-0.5 text-[11px] font-medium cursor-pointer transition-colors",
+                          provider === p
+                            ? "bg-indigo-500 text-white"
+                            : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        )}>{p}</span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* advanced options */}
         {modeCfg && (
           <div className="mb-4">
             <button onClick={() => setAdvOpen(!advOpen)}
@@ -109,7 +106,6 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
           </div>
         )}
 
-        {/* actions */}
         <div className="flex gap-2">
           <button onClick={onClose}
             className="flex-1 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors">

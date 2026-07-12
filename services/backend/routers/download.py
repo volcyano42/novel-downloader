@@ -6,7 +6,7 @@ from services.backend.services import task_manager
 from services.backend.utils.cover import encode_cover
 from nldlder import NovelDownloader, get_fetchers, search
 
-router = APIRouter(prefix="/api/v1/download", tags=["download"])
+router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
 
 def _platform_from_url(url: str) -> str:

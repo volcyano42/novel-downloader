@@ -6,7 +6,7 @@ from services.backend.schemas import BackendSwitch, NovelMeta, ChapterData, Chap
 from nldlder.core.storage import create_storage
 from nldlder.core.options import StorageOptions
 
-router = APIRouter(prefix="/api/v1/storage", tags=["storage"])
+router = APIRouter(prefix="/api/v2/storage", tags=["storage"])
 
 _storage = None
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from services.backend.schemas import CreateEngineRequest, UpdateEngineRequest
 from services.backend.services import engine_manager
 
-router = APIRouter(prefix="/api/v1/engine", tags=["engine"])
+router = APIRouter(prefix="/api/v2/engine", tags=["engine"])
 
 
 @router.get("")

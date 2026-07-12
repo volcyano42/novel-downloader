@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from services.backend.services import config_service
 
-router = APIRouter(prefix="/api/v1/config", tags=["config"])
+router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
 _config_dir = config_service._config_dir  # noqa: SLF001
 

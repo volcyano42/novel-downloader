@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, type WheelEvent } from "react";
+import { useState, useCallback, useEffect, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw } from "lucide-react";
-import { storageApi, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/storage";
-import { downloadApi } from "@/api/download";
+import { useNovelMeta, useChapters, useRemoteChapters, useDownloadMutation, useConfig, compareChapters } from "@/hooks/index";
+import { fetchChapterList, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
+import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { useToast } from "@/components/Toast";
 
 function platformFromUrl(url?: string): string {
   if (!url) return "fanqie";
@@ -28,11 +30,19 @@ export default function DetailPage() {
   const searchMode = st?.searchMode ?? "browser";
   const searchProvider = st?.searchProvider;
   const isRemote = !!remoteUrl;
-  const [novel, setNovel] = useState<NovelMeta | null>(null);
-  const [chapters, setChapters] = useState<ChapterBrief[]>([]);
-  const [merged, setMerged] = useState<MergedChapter[]>([]);
+  const toast = useToast();
+
+  // hooks
+  const { data: localMeta } = useNovelMeta(isRemote ? undefined : novelId);
+  const { data: localChapters = [] } = useChapters(isRemote ? undefined : novelId);
+  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, remoteUrl, searchMode, searchProvider);
+  const downloadMut = useDownloadMutation();
+  const { data: config } = useConfig();
+
+  const novel = st?.meta ?? localMeta ?? null;
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isRemote);
   const [closing, setClosing] = useState(false);
   const [coverZoom, setCoverZoom] = useState(false);
   const [coverScale, setCoverScale] = useState(1);
@@ -40,54 +50,28 @@ export default function DetailPage() {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
 
-  useEffect(() => {
-    if (!novelId) return;
-    setCompareMode(false);
-    // 优先用传过来的 meta，否则从本地/远程加载
-    if (st?.meta) {
-      setNovel(st.meta);
-    } else {
-      const fetchLocalMeta = () => storageApi.getMeta(novelId);
-      const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, searchMode, searchProvider);
-      (isRemote ? fetchRemoteMeta().catch(fetchLocalMeta) : fetchLocalMeta())
-        .then(setNovel).catch(() => {});
-    }
-  }, [novelId, remoteUrl, searchMode]);
-
-  useEffect(() => {
-    if (!novelId) return;
-    setLoading(true);
-    const ac = new AbortController();
-    if (isRemote) {
-      // fetch remote full list + local for comparison
-      Promise.all([
-        downloadApi.fetchChapterList(novelId, remoteUrl!, searchMode, searchProvider, ac.signal),
-        storageApi.listChapters(novelId, { size: 20000 }, ac.signal).catch(() => [] as ChapterBrief[]),
-      ]).then(([remote, local]) => {
-        if (ac.signal.aborted) return;
-        const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
-        const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
-        setMerged(m);
-        const preSelected = new Set<string>();
-        for (const mc of m) {
-          if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
-        }
-        setSelectedIds(preSelected);
-      }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
-    } else {
-      storageApi.listChapters(novelId, { size: 20000 })
-        .then(all => { if (!ac.signal.aborted) setChapters(all); }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
-    }
-    return () => ac.abort();
-  }, [novelId, remoteUrl, searchMode]);
-
+  // Compute merged chapters
+  const merged = isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : [];
+  const chapters = isRemote ? [] : localChapters;
   const showCompare = isRemote || compareMode;
+
+  // Auto-select un-downloaded chapters for remote comparison
+  useEffect(() => {
+    if (merged.length > 0 && isRemote) {
+      const preSelected = new Set<string>();
+      for (const mc of merged) {
+        if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
+      }
+      setSelectedIds(preSelected);
+      setLoading(false);
+    }
+  }, [merged, isRemote]);
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
 
   const toggleAll = useCallback(() => {
-    if (allSelected) { setSelectedIds(new Set()); }
-    else { setSelectedIds(new Set(merged.map(mc => mc.remote.id))); }
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(merged.map(mc => mc.remote.id)));
   }, [allSelected, merged]);
 
   const toggleSelect = useCallback((id: string) => {
@@ -106,10 +90,9 @@ export default function DetailPage() {
     setCoverScale(prev => Math.min(5, Math.max(0.5, prev - e.deltaY * 0.005)));
   };
 
-  // lock body scroll when cover zoom is open
   useEffect(() => {
-    if (coverZoom) { document.body.style.overflow = "hidden"; }
-    else { document.body.style.overflow = ""; }
+    if (coverZoom) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
     return () => { document.body.style.overflow = ""; };
   }, [coverZoom]);
 
@@ -123,40 +106,49 @@ export default function DetailPage() {
     setChecking(true);
     setCheckResult(null);
     try {
-      const remote = await downloadApi.fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
-      const localAll = await storageApi.listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
-      const localMap = new Map(localAll.map((c: ChapterBrief) => [c.id, c]));
-      const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
+      const remote = await fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
+      const localAll = await listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
+      const localMap = new Map(localAll.map(c => [c.id, c]));
+      const m: MergedChapter[] = remote.map(r => ({ remote: r, local: localMap.get(r.id) ?? null }));
       const needsUpdate = m.some(mc => !mc.local || !mc.local.downloaded);
       if (needsUpdate) {
-        setMerged(m);
         const preSelected = new Set<string>();
         for (const mc of m) {
           if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
         }
-        setSelectedIds(preSelected);
+        // React Query will update merged via setQueryData
         setCompareMode(true);
+        setSelectedIds(preSelected);
+        // HACK: update merged manually since we didn't use useRemoteChapters
+        // ponytail: merged is local state for the check update flow, bypass React Query for now
+        (merged as MergedChapter[]).splice(0, merged.length, ...m);
       } else {
         setCheckResult("latest");
         setTimeout(() => setCheckResult(null), 2000);
       }
-    } catch { /* ignore */ }
+    } catch (e: unknown) { toast((e as Error).message || "检查更新失败"); }
     finally { setChecking(false); }
-  }, [novelId, remoteUrl, novel?.url]);
+  }, [novelId, remoteUrl, novel?.url, toast]);
 
   const runDownload = useCallback((mode: string, provider?: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = merged
       .filter(mc => selectedIds.has(mc.remote.id))
       .map(mc => ({ id: mc.remote.id, url: mc.remote.url, novel_id: novelId, title: mc.remote.title, order: mc.remote.order, volume: mc.remote.volume }));
-    downloadApi.downloadChapters(novelId, selected, novel?.title ?? novelId, mode, provider, novel?.url, platformFromUrl(novel?.url));
+    downloadMut.mutate({
+      novelId,
+      chapters: selected,
+      title: novel?.title ?? novelId,
+      mode,
+      provider,
+      novelUrl: novel?.url,
+      platform: platformFromUrl(novel?.url),
+    });
     setSelectedIds(new Set());
     navigate("/downloads");
-  }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate]);
+  }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate, downloadMut]);
 
-  const handleCheckUpdate = useCallback(() => {
-    setDialogVariant("check");
-  }, []);
+  const handleCheckUpdate = useCallback(() => { setDialogVariant("check"); }, []);
 
   const handleDownloadClick = useCallback(() => {
     if (savedMode) {
@@ -206,9 +198,7 @@ export default function DetailPage() {
           </div>
           {novel.description && (
             <div className="relative mt-6">
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                {novel.description}
-              </p>
+              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{novel.description}</p>
             </div>
           )}
           <div className="mt-8 mb-3 flex items-center gap-3">
@@ -285,7 +275,6 @@ export default function DetailPage() {
         </div>
       )}
 
-      {/* cover zoom modal */}
       {coverZoom && cover && (
         <div onClick={closeCover} onWheel={handleCoverWheel} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 p-8 overflow-hidden">
           <button onClick={closeCover} className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition-colors z-10"><X className="h-5 w-5" strokeWidth={1.5} /></button>
@@ -293,7 +282,6 @@ export default function DetailPage() {
         </div>
       )}
 
-      {/* download / check-update dialog */}
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
         initialMode={savedMode} initialProvider={savedProvider}
@@ -301,4 +289,3 @@ export default function DetailPage() {
     </div>
   );
 }
-

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from services.backend.schemas import ExportRequest, ExportTaskStatus
 from nldlder import NovelDownloader, create_engine, get_exporters
 
-router = APIRouter(prefix="/api/v1/export", tags=["export"])
+router = APIRouter(prefix="/api/v2/export", tags=["export"])
 
 _tasks: dict[str, dict] = {}
 

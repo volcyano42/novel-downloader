@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers } from "lucide-react";
-import type { AppConfig } from "@/api/config";
+import type { AppConfig } from "@/api/endpoints";
 
 // ── tiny helpers ──
 

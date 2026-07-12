@@ -1,38 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Reader, ReaderSkeleton } from "./Reader";
-import { storageApi, type ChapterBrief } from "@/api/storage";
+import { useChapters, useChapter, useNovelMeta } from "@/hooks/index";
 
 export default function ReaderPage() {
   const { novelId, chapterId } = useParams<{ novelId: string; chapterId: string }>();
   const navigate = useNavigate();
-  const [chapters, setChapters] = useState<ChapterBrief[]>([]);
-  const [content, setContent] = useState("");
   const [currentId, setCurrentId] = useState("");
-  const [author, setAuthor] = useState("");
-  const [loading, setLoading] = useState(true);
   const loadingRef = useRef(false);
 
-  useEffect(() => {
-    if (!novelId) return;
-    storageApi.listChapters(novelId, { size: 20000 }).then(setChapters).catch(() => {});
-    storageApi.getMeta(novelId).then(m => setAuthor(m.author)).catch(() => {});
-  }, [novelId]);
+  const { data: chapters = [] } = useChapters(novelId);
+  const { data: chapter, isLoading: loading } = useChapter(novelId, chapterId);
+  const { data: meta } = useNovelMeta(novelId);
 
   useEffect(() => {
-    if (!novelId || !chapterId) return;
-    let cancelled = false;
-    loadingRef.current = true;
-    setLoading(true);
-    storageApi.getChapter(novelId, chapterId).then(c => {
-      if (cancelled) return;
-      setContent(c.content ?? "(空章节)");
-      setCurrentId(chapterId);
-    }).catch(() => {}).finally(() => {
-      if (!cancelled) { setLoading(false); loadingRef.current = false; }
-    });
-    return () => { cancelled = true; };
-  }, [novelId, chapterId]);
+    if (chapter) {
+      setCurrentId(chapter.id);
+      loadingRef.current = false;
+    }
+  }, [chapter]);
 
   const handleNavigate = useCallback((cid: string) => {
     if (loadingRef.current) return;
@@ -40,6 +26,7 @@ export default function ReaderPage() {
   }, [novelId, navigate]);
 
   const currentTitle = chapters.find(ch => ch.id === currentId)?.title ?? "";
+  const content = chapter?.content ?? "";
 
   if (loading || !content) return <ReaderSkeleton />;
 
@@ -50,7 +37,7 @@ export default function ReaderPage() {
       chapters={chapters.map(ch => ({ id: ch.id, title: ch.title, url: ch.url }))}
       currentChapterId={currentId}
       onNavigate={handleNavigate}
-      author={author}
+      author={meta?.author ?? ""}
       onBack={() => navigate(`/novel/${novelId}`)}
     />
   );
