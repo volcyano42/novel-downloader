@@ -212,11 +212,19 @@ export default function BookshelfPage() {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
     setNavigatingId(result.url);
+    // 从 URL 提取 possible ID → 检查本地是否存在
+    const idMatch = result.url.match(/\/page\/(\d+)/);
+    const maybeId = idMatch ? idMatch[1] : null;
+    const local = maybeId ? novels.find(n => n.id === maybeId) : undefined;
+    if (local) {
+      navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta: local } });
+      return;
+    }
     try {
       const meta = await downloadApi.fetchMeta(result.url, searchModeRef.current, searchProviderRef.current);
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
     } catch { setNavigatingId(null); navigatingRef.current = false; }
-  }, [navigate]);
+  }, [navigate, novels]);
 
   const toPath: Record<string, string> = { bookshelf: "/bookshelf", search: "/search-tab", downloads: "/downloads", settings: "/settings" };
 
