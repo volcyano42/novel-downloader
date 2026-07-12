@@ -196,6 +196,7 @@ img {
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
         }
+        output_dir = Path(str(getattr(self.options, "output_path", ".")).format(**variables))
         filename = file_name_template.format(**variables)
         return output_dir / f"{filename}.epub"
 
