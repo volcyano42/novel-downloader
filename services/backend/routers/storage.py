@@ -72,14 +72,14 @@ async def switch_backend(body: BackendSwitch): return {"backend": body.backend, 
 async def list_novels():
     store = _get_storage()
     result: list[dict] = []
-    for novel in store.iter_metas(include_images=False):
+    for novel in store.iter_metas(include_images=True):
         result.append({
             "title": novel.title, "url": novel.url, "id": novel.id,
             "serial": novel.serial, "author": novel.author,
             "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
-            "cover": None,
+            "cover": _cover_to_response(novel.cover),
         })
     return result
 
