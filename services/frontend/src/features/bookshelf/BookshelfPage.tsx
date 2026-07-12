@@ -9,6 +9,7 @@ import { DownloadTask } from "@/features/download/DownloadTask";
 import { storageApi, coverToUrl, type NovelMeta } from "@/api/storage";
 import { downloadApi, type SearchResult, type TaskInfo } from "@/api/download";
 import { configApi, type AppConfig } from "@/api/config";
+import { notify } from "@/lib/notify";
 import { SettingsView } from "@/features/settings/SettingsPage";
 
 
