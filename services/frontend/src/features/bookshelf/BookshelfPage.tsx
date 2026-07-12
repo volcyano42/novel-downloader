@@ -72,7 +72,7 @@ export default function BookshelfPage() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        storageApi.listNovels().then(setNovels).catch(() => {});
+        storageApi.refreshNovels().then(setNovels).catch(() => {});
       }
     };
     document.addEventListener("visibilitychange", onVisible);
