@@ -18,18 +18,18 @@ export const downloadApi = {
     if (params.provider) qs.set("provider", params.provider);
     return apiGet<SearchResult[]>(`/download/search?${qs}`);
   },
-  fetchMeta: (url: string, mode?: string, provider?: string) => {
+  fetchMeta: (url: string, mode?: string, provider?: string, signal?: AbortSignal) => {
     const qs = new URLSearchParams();
     if (mode) qs.set("mode", mode);
     if (provider) qs.set("provider", provider);
     const suffix = qs.toString() ? `?${qs}` : "";
-    return apiPost<any>(`/download/novel${suffix}`, { url });
+    return apiPost<any>(`/download/novel${suffix}`, { url }, signal);
   },
-  fetchChapterList: (novelId: string, url: string, mode?: string, provider?: string) => {
+  fetchChapterList: (novelId: string, url: string, mode?: string, provider?: string, signal?: AbortSignal) => {
     const qs = new URLSearchParams(); qs.set("url", url);
     if (mode) qs.set("mode", mode);
     if (provider) qs.set("provider", provider);
-    return apiGet<ChapterBrief[]>(`/download/novel/${novelId}/chapters?${qs}`);
+    return apiGet<ChapterBrief[]>(`/download/novel/${novelId}/chapters?${qs}`, signal);
   },
   downloadChapters: (novelId: string, chapters: { id: string; url: string; novel_id: string; title: string; order: number; volume: string | null }[], title: string, mode?: string, provider?: string, novelUrl?: string, platform?: string) => {
     const qs = new URLSearchParams(); qs.set("title", title);
