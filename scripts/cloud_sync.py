@@ -468,7 +468,7 @@ def cmd_status():
             local = _read_novel_meta(str(local_dir / f"{nid}.db")) or {}
             title = local.get("title", nid)
             count = local.get("chapter_count", 0)
-            print(f"  → {title}  ({count} 章)")
+            print(f"  → {title}  [{nid}]  ({count} 章)")
 
     if only_remote:
         print(f"仅云端 ({len(only_remote)} 本) — pull 下载:")
@@ -476,7 +476,7 @@ def cmd_status():
             remote = cloud_meta.get(nid, {})
             title = remote.get("title", nid)
             count = remote.get("chapter_count", 0)
-            print(f"  → {title}  ({count} 章)")
+            print(f"  → {title}  [{nid}]  ({count} 章)")
 
 # ── CLI ──
 
