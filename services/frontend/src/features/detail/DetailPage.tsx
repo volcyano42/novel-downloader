@@ -67,7 +67,7 @@ export default function DetailPage() {
       // fetch remote full list + local for comparison
       Promise.all([
         downloadApi.fetchChapterList(novelId, remoteUrl!, searchMode, searchProvider, ac.signal),
-        storageApi.listChapters(novelId, undefined, ac.signal).catch(() => [] as ChapterBrief[]),
+        storageApi.listChapters(novelId, { size: 20000 }, ac.signal).catch(() => [] as ChapterBrief[]),
       ]).then(([remote, local]) => {
         if (ac.signal.aborted) return;
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
