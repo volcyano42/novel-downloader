@@ -39,12 +39,9 @@ export default function DetailPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
-  const [page, setPage] = useState(1);
-  const pageSize = 50;
 
   useEffect(() => {
     if (!novelId) return;
-    setPage(1);
     setCompareMode(false);
     // 优先用传过来的 meta，否则从本地/远程加载
     if (st?.meta) {
@@ -78,15 +75,13 @@ export default function DetailPage() {
         setSelectedIds(preSelected);
       }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
     } else {
-      storageApi.listChapters(novelId, { page, size: pageSize })
-        .then(paged => { if (!ac.signal.aborted) setChapters(paged); }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
+      storageApi.listChapters(novelId, { size: 20000 })
+        .then(all => { if (!ac.signal.aborted) setChapters(all); }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
     }
     return () => ac.abort();
-  }, [novelId, page, remoteUrl, searchMode]);
+  }, [novelId, remoteUrl, searchMode]);
 
   const showCompare = isRemote || compareMode;
-  const totalPages = Math.max(1, Math.ceil((novel?.serial ?? 0) / pageSize));
-  const pagedChapters = chapters; // 本地模式已由服务端分页，远程模式使用 merged
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
 
@@ -273,7 +268,7 @@ export default function DetailPage() {
             </div>
           ) : (
             <div className="space-y-1">
-              {pagedChapters.map(ch => (
+              {chapters.map(ch => (
                 <div key={ch.id} className="flex items-center gap-2">
                   <span className={`shrink-0 text-xs w-10 text-right ${ch.downloaded ? "text-emerald-500" : "text-red-400"}`}>{ch.downloaded ? "✓" : "✗"}</span>
                   <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -286,25 +281,6 @@ export default function DetailPage() {
               ))}
             </div>
           )}
-          {!showCompare && totalPages > 1 && (() => {
-            const pages: number[] = [];
-            const start = Math.max(1, page - 2);
-            const end = Math.min(totalPages, page + 2);
-            for (let i = start; i <= end; i++) pages.push(i);
-            return (
-              <div className="mt-6 flex items-center justify-center gap-1">
-                <button onClick={() => setPage(1)} disabled={page <= 1} className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-20 transition-colors">1</button>
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-20 transition-colors">‹</button>
-                {start > 1 && <span className="px-1 text-xs text-slate-300">…</span>}
-                {pages.map(p => (
-                  <button key={p} onClick={() => setPage(p)} className={`rounded-lg px-2.5 py-1.5 text-xs transition-colors ${p === page ? "bg-indigo-500 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{p}</button>
-                ))}
-                {end < totalPages && <span className="px-1 text-xs text-slate-300">…</span>}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-20 transition-colors">›</button>
-                <button onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-20 transition-colors">{totalPages}</button>
-              </div>
-            );
-          })()}
           <p className="mt-12 text-center text-xs text-slate-300"><span>仅供个人阅读使用 · 版权归 <span className="font-medium text-slate-400">{novel?.author ?? "原作者"}</span> 所有</span></p>
         </div>
       )}
