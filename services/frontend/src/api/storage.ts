@@ -24,12 +24,12 @@ export const storageApi = {
     return coverToUrl(cover);
   },
   deleteNovel: (novelId: string) => apiDelete(`/storage/novel/${novelId}`),
-  listChapters: (novelId: string, params?: { order?: string; page?: number; size?: number }) => {
+  listChapters: (novelId: string, params?: { order?: string; page?: number; size?: number }, signal?: AbortSignal) => {
     const qs = new URLSearchParams();
     if (params?.order) qs.set("order", params.order);
     if (params?.page) qs.set("page", String(params.page));
     if (params?.size) qs.set("size", String(params.size));
-    return apiGet<ChapterBrief[]>(`/storage/novel/${novelId}/chapters${qs.toString() ? `?${qs}` : ""}`);
+    return apiGet<ChapterBrief[]>(`/storage/novel/${novelId}/chapters${qs.toString() ? `?${qs}` : ""}`, signal);
   },
   getChapter: (novelId: string, chapterId: string) => apiGet<ChapterData>(`/storage/novel/${novelId}/chapter/${chapterId}`),
 };
