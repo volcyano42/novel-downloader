@@ -63,7 +63,7 @@ export default function BookshelfPage() {
         );
         for (const t of tasks) prev[t.task_id] = t.status;
         if (hasJustFinished) {
-          storageApi.refreshNovels().then(setNovels).catch(() => {});
+          storageApi.listNovels().then(setNovels).catch(() => {});
         }
       }).catch(() => {});
     }, 1000);
@@ -74,7 +74,7 @@ export default function BookshelfPage() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        storageApi.refreshNovels().then(setNovels).catch(() => {});
+        storageApi.listNovels().then(setNovels).catch(() => {});
       }
     };
     document.addEventListener("visibilitychange", onVisible);
