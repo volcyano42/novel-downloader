@@ -56,15 +56,20 @@ class TXTExporter(BASEExporter):
     def _build_file_path(self, novel: Novel) -> Path:
         """从 options + novel 构建输出文件路径。"""
         from datetime import datetime
-        variables = {
+
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+
+        variables = _SafeDict({
             "title": novel.title if novel else "",
             "author": novel.author if novel else "",
             "novel_id": novel.id if novel else "",
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
-        }
+        })
         raw_path = str(getattr(self.options, "output_path", "."))
-        output_dir = Path(raw_path.format(**variables))
+        output_dir = Path(raw_path.format_map(variables))
         filename = self._file_name_template.format(**variables)
         return output_dir / f"{filename}.txt"
 

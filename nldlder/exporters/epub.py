@@ -186,18 +186,25 @@ img {
 
     def _build_file_path(self, novel: Novel) -> Path:
         """从 options + novel 构建输出文件路径。"""
-        output_dir = Path(str(getattr(self.options, "output_path", ".")))
+        from datetime import datetime
+
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+
         file_name_template = getattr(self.options, "file_name_template", "{title}")
-        variables = {
+        variables = _SafeDict({
             "name": novel.title if novel else "",
             "title": novel.title if novel else "",
             "author": novel.author if novel else "",
             "novel_id": novel.id if novel else "",
             "total_chapters": novel.serial if novel else 0,
             "date": datetime.now().strftime("%Y%m%d"),
-        }
-        output_dir = Path(str(getattr(self.options, "output_path", ".")).format(**variables))
-        filename = file_name_template.format(**variables)
+            "file_name_template": file_name_template,
+        })
+        raw_path = str(getattr(self.options, "output_path", "."))
+        output_dir = Path(raw_path.format_map(variables))
+        filename = file_name_template.format_map(variables)
         return output_dir / f"{filename}.epub"
 
     def _build_epub(self, chapters: list[Chapter]):
