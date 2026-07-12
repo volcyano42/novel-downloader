@@ -33,7 +33,6 @@ export default function DetailPage() {
   const [merged, setMerged] = useState<MergedChapter[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [descExpanded, setDescExpanded] = useState(false);
   const [closing, setClosing] = useState(false);
   const [coverZoom, setCoverZoom] = useState(false);
   const [coverScale, setCoverScale] = useState(1);
@@ -46,7 +45,6 @@ export default function DetailPage() {
   useEffect(() => {
     if (!novelId) return;
     setPage(1);
-    setDescExpanded(false);
     setCompareMode(false);
     // 优先用传过来的 meta，否则从本地/远程加载
     if (st?.meta) {
@@ -213,19 +211,9 @@ export default function DetailPage() {
           </div>
           {novel.description && (
             <div className="relative mt-6">
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${descExpanded ? "max-h-[2000px]" : "max-h-[5.5rem]"}`}>
-                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                  {novel.description}
-                </p>
-              </div>
-              {!descExpanded && novel.description.length > 200 && (
-                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-slate-50 to-transparent dark:from-slate-950 pointer-events-none" />
-              )}
-              {novel.description.length > 200 && (
-                <button onClick={() => setDescExpanded(!descExpanded)} className="mt-1 text-xs text-indigo-500 hover:text-indigo-600">
-                  {descExpanded ? "收起" : "展开全部"}
-                </button>
-              )}
+              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                {novel.description}
+              </p>
             </div>
           )}
           <div className="mt-8 mb-3 flex items-center gap-3">
