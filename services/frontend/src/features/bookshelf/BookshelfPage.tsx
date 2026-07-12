@@ -96,7 +96,7 @@ export default function BookshelfPage() {
       if (isUrlOrId && r.length === 1) {
         try {
           const meta = await downloadApi.fetchMeta(r[0].url, mode, provider);
-          navigate(`/search/${meta.id}`, { state: { remoteUrl: r[0].url, searchMode: mode, searchProvider: provider } });
+          navigate(`/search/${meta.id}`, { state: { remoteUrl: r[0].url, searchMode: mode, searchProvider: provider, meta } });
         } catch { alert("获取小说信息失败"); }
         return;
       }
@@ -211,7 +211,7 @@ export default function BookshelfPage() {
     setNavigatingId(result.url);
     try {
       const meta = await downloadApi.fetchMeta(result.url, searchModeRef.current, searchProviderRef.current);
-      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current } });
+      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
     } catch { setNavigatingId(null); }
   }, [navigate]);
 

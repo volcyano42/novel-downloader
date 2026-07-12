@@ -23,9 +23,9 @@ export default function DetailPage() {
   const { novelId } = useParams<{ novelId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const st = location.state as { remoteUrl?: string; searchMode?: string; searchProvider?: string } | null;
+  const st = location.state as { remoteUrl?: string; searchMode?: string; searchProvider?: string; meta?: NovelMeta } | null;
   const remoteUrl = st?.remoteUrl;
-  const searchMode = st?.searchMode ?? "requests";
+  const searchMode = st?.searchMode ?? "browser";
   const searchProvider = st?.searchProvider;
   const isRemote = !!remoteUrl;
   const [novel, setNovel] = useState<NovelMeta | null>(null);
@@ -48,10 +48,15 @@ export default function DetailPage() {
     setPage(1);
     setDescExpanded(false);
     setCompareMode(false);
-    const fetchLocalMeta = () => storageApi.getMeta(novelId);
-    const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, searchMode, searchProvider);
-    (isRemote ? fetchRemoteMeta().catch(fetchLocalMeta) : fetchLocalMeta())
-      .then(setNovel).catch(() => {});
+    // 优先用传过来的 meta，否则从本地/远程加载
+    if (st?.meta) {
+      setNovel(st.meta);
+    } else {
+      const fetchLocalMeta = () => storageApi.getMeta(novelId);
+      const fetchRemoteMeta = () => downloadApi.fetchMeta(remoteUrl!, searchMode, searchProvider);
+      (isRemote ? fetchRemoteMeta().catch(fetchLocalMeta) : fetchLocalMeta())
+        .then(setNovel).catch(() => {});
+    }
   }, [novelId, remoteUrl, searchMode]);
 
   useEffect(() => {
