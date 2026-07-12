@@ -85,7 +85,7 @@ export default function BookshelfPage() {
     if (!query.trim()) { setSearchResults([]); return; }
     setSearching(true);
     const platform = filters?.platform || searchPlatform;
-    const mode = filters?.mode ?? "requests";
+    const mode = filters?.mode ?? "browser";
     const provider = filters?.provider;
     searchModeRef.current = mode;
     searchProviderRef.current = provider;
