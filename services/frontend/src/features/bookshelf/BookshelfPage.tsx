@@ -37,7 +37,8 @@ export default function BookshelfPage() {
   const [saved, setSaved] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const searchModeRef = useRef("requests");
+  const navigatingRef = useRef(false);
+  const searchModeRef = useRef("browser");
   const searchProviderRef = useRef<string | undefined>(undefined);
   const lastDownloadModeRef = useRef("browser");
   const lastDownloadProviderRef = useRef<string | undefined>(undefined);
@@ -208,11 +209,13 @@ export default function BookshelfPage() {
   }, [novels, navigate]);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
     setNavigatingId(result.url);
     try {
       const meta = await downloadApi.fetchMeta(result.url, searchModeRef.current, searchProviderRef.current);
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
-    } catch { setNavigatingId(null); }
+    } catch { setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate]);
 
   const toPath: Record<string, string> = { bookshelf: "/bookshelf", search: "/search-tab", downloads: "/downloads", settings: "/settings" };

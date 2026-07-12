@@ -62,27 +62,28 @@ export default function DetailPage() {
   useEffect(() => {
     if (!novelId) return;
     setLoading(true);
+    const ac = new AbortController();
     if (isRemote) {
       // fetch remote full list + local for comparison
       Promise.all([
         downloadApi.fetchChapterList(novelId, remoteUrl!, searchMode, searchProvider),
         storageApi.listChapters(novelId).catch(() => [] as ChapterBrief[]),
       ]).then(([remote, local]) => {
+        if (ac.signal.aborted) return;
         const localMap = new Map(local.map((c: ChapterBrief) => [c.id, c]));
         const m: MergedChapter[] = remote.map((r: ChapterBrief) => ({ remote: r, local: localMap.get(r.id) ?? null }));
         setMerged(m);
-        // pre-select not-yet-downloaded chapters
         const preSelected = new Set<string>();
         for (const mc of m) {
           if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
         }
         setSelectedIds(preSelected);
-      }).catch(() => {}).finally(() => setLoading(false));
+      }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
     } else {
-      // 本地模式：server-side 分页，每页只加载 pageSize 条
       storageApi.listChapters(novelId, { page, size: pageSize })
-        .then(paged => { setChapters(paged); }).catch(() => {}).finally(() => setLoading(false));
+        .then(paged => { if (!ac.signal.aborted) setChapters(paged); }).catch(() => {}).finally(() => { if (!ac.signal.aborted) setLoading(false); });
     }
+    return () => ac.abort();
   }, [novelId, page, remoteUrl, searchMode]);
 
   const showCompare = isRemote || compareMode;
