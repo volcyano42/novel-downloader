@@ -7,7 +7,7 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useConfig, usePlatforms, useTasks, useSearch, useDeleteNovel, useSaveConfig, useFetchMeta } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, useSaveGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import type { TaskInfo } from "@/api/endpoints";
@@ -25,12 +25,14 @@ export default function BookshelfPage() {
 
   // hooks
   const { data: novels = [], isLoading: loadingNovels, refetch: refetchNovels } = useNovels();
-  const { data: config } = useConfig();
+  const { data: globalConfig } = useGlobalConfig();
+  const { data: groups = {} } = useGroups();
   const { data: platforms = [] } = usePlatforms();
   const { data: tasks = [] } = useTasks(activeNav === "downloads");
   const toast = useToast();
   const deleteNovelMut = useDeleteNovel();
-  const saveConfigMut = useSaveConfig();
+  const saveGlobalConfigMut = useSaveGlobalConfig();
+  const saveGroupsMut = useSaveGroups();
   const fetchMetaMut = useFetchMeta();
 
   // local state
@@ -109,15 +111,14 @@ export default function BookshelfPage() {
   }, []);
 
   const handleSaveSettings = useCallback(async () => {
-    if (!config) return;
+    if (!globalConfig) return;
     setSaving(true);
-    try { await saveConfigMut.mutateAsync(config as unknown as Record<string, unknown>); setSaved(true); setTimeout(() => setSaved(false), 2500); }
+    try { await saveGlobalConfigMut.mutateAsync(globalConfig); setSaved(true); setTimeout(() => setSaved(false), 2500); }
     catch { /* Toast handled by mutation */ }
     finally { setSaving(false); }
-  }, [config, saveConfigMut]);
+  }, [globalConfig, saveGlobalConfigMut]);
 
   // groups
-  const groups = config?.groups ?? {};
   const groupNames = useMemo(() => Object.keys(groups), [groups]);
 
   const handleDeleteNovel = useCallback((novelId: string) => {
@@ -219,7 +220,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={config?.api_providers} loading={searching} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} loading={searching} />
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (
@@ -230,9 +231,9 @@ export default function BookshelfPage() {
         </div>
       )}
 
-      {activeNav === "settings" && config && (
+      {activeNav === "settings" && globalConfig && (
         <div className="px-6 pt-12 pb-8 md:px-12">
-          <SettingsView cfg={config} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} />
+          <SettingsView globalConfig={globalConfig} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} />
         </div>
       )}
     </>

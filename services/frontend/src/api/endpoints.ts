@@ -57,20 +57,17 @@ export interface NotifyConfig {
   on_complete: boolean; on_incomplete: boolean; sound: "bell" | "system" | "none";
 }
 
-export interface PlatformConfig {
+export interface GlobalConfig {
+  name: string; mode: string; max_workers: number; log_level: string;
+  notify: NotifyConfig;
+}
+
+export interface SiteConfig {
   browser: EngineOptions; requests: EngineOptions; api: EngineOptions;
   api_providers: string[];
 }
 
-export interface AppConfig {
-  name: string; mode: string; max_workers: number; log_level: string;
-  notify: NotifyConfig;
-  platforms?: Record<string, PlatformConfig>;
-  browser: EngineOptions; requests: EngineOptions; api: EngineOptions;
-  txt: TxtOptions; epub: EpubOptions; img: ImgOptions;
-  api_providers: Record<string, string[]>;
-  groups: Record<string, Record<string, object>>;
-}
+export type GroupsConfig = Record<string, Record<string, object>>;
 
 export interface ExportTaskResult {
   task_id: string; status: string; progress: number;
@@ -180,12 +177,36 @@ export function downloadPlatforms() {
 
 // ── Config ─────────────────────────────────────────
 
-export function getConfig() {
-  return apiGet<AppConfig>("/config");
+export function getGlobalConfig() {
+  return apiGet<GlobalConfig>("/config");
 }
 
-export function saveConfig(data: Record<string, unknown>) {
+export function saveGlobalConfig(data: Partial<GlobalConfig>) {
   return apiPut<void>("/config", data);
+}
+
+export function getGroups() {
+  return apiGet<GroupsConfig>("/config/groups");
+}
+
+export function saveGroups(data: GroupsConfig) {
+  return apiPut<void>("/config/groups", data);
+}
+
+export function getSiteConfig(website: string) {
+  return apiGet<SiteConfig>(`/config/sites/${website}`);
+}
+
+export function saveSiteConfig(website: string, data: Partial<SiteConfig>) {
+  return apiPut<void>(`/config/sites/${website}`, data);
+}
+
+export function getFormatConfig(format: string) {
+  return apiGet<Record<string, unknown>>(`/config/formats/${format}`);
+}
+
+export function saveFormatConfig(format: string, data: Record<string, unknown>) {
+  return apiPut<void>(`/config/formats/${format}`, data);
 }
 
 // ── Engine ─────────────────────────────────────────

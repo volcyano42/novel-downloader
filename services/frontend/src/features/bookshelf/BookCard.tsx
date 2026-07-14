@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from "react";
 import { BookOpen, Download, FileDown, MoreHorizontal, Loader2, Trash2, FolderPlus, Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDeleteNovel, useExport, useSaveConfig, useConfig } from "@/hooks/index";
+import { useDeleteNovel, useExport, useGroups, useSaveGroups } from "@/hooks/index";
 import { ExportDialog } from "@/features/download/ExportDialog";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -36,17 +36,15 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
   const [inlineNewGroup, setInlineNewGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const exportMut = useExport();
-  const { data: config } = useConfig();
-  const saveConfigMut = useSaveConfig();
+  const { data: groupsData = {} } = useGroups();
+  const saveGroupsMut = useSaveGroups();
 
-  const saveGroups = useCallback(async (newGroups: Record<string, Record<string, object>>) => {
-    if (!config) return;
-    await saveConfigMut.mutateAsync({ ...config, groups: newGroups } as unknown as Record<string, unknown>);
-  }, [config, saveConfigMut]);
+  const saveGroupsFn = useCallback(async (newGroups: Record<string, Record<string, object>>) => {
+    await saveGroupsMut.mutateAsync(newGroups);
+  }, [saveGroupsMut]);
 
   const handleMoveToGroup = useCallback((novelId: string, group: string) => {
-    if (!config) return;
-    const newGroups = { ...config.groups };
+    const newGroups = { ...groupsData };
     for (const g of Object.keys(newGroups)) {
       if (novelId in newGroups[g]) {
         const { [novelId]: _, ...rest } = newGroups[g];
@@ -55,13 +53,12 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
         break;
       }
     }
-    newGroups[group] = { ...newGroups[group], [novelId]: {} };
-    saveGroups(newGroups);
-  }, [config, saveGroups]);
+    newGroups[group] = { ...newGroups[group], [novelId]: { pending_export: false } };
+    saveGroupsFn(newGroups);
+  }, [groupsData, saveGroupsFn]);
 
   const handleRemoveFromGroup = useCallback((novelId: string) => {
-    if (!config) return;
-    const newGroups = { ...config.groups };
+    const newGroups = { ...groupsData };
     for (const g of Object.keys(newGroups)) {
       if (novelId in newGroups[g]) {
         const { [novelId]: _, ...rest } = newGroups[g];
@@ -70,8 +67,8 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
         break;
       }
     }
-    saveGroups(newGroups);
-  }, [config, saveGroups]);
+    saveGroupsFn(newGroups);
+  }, [groupsData, saveGroupsFn]);
 
   const handleNewGroup = useCallback((novelId: string, name: string) => {
     handleMoveToGroup(novelId, name);
@@ -87,11 +84,9 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
     setExporting(true);
     try {
       const body: Record<string, unknown> = { novel_id: novelId, chapter_id: null };
-      if (config) {
-        if (formats.includes("txt")) body.txt = { ...config.txt, enabled: true };
-        if (formats.includes("epub")) body.epub = { ...config.epub, enabled: true };
-        if (formats.includes("img")) body.img = { ...config.img, enabled: true };
-      }
+      if (formats.includes("txt")) body.txt = { enabled: true };
+      if (formats.includes("epub")) body.epub = { enabled: true };
+      if (formats.includes("img")) body.img = { enabled: true };
       const task = await exportMut.mutateAsync(body);
       if (task.status === "completed" && task.task_id) {
         const a = document.createElement("a");
@@ -103,7 +98,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
       }
     } catch { /* Toast handled by mutation */ }
     finally { setExporting(false); setShowExport(false); }
-  }, [novelId, exporting, config, exportMut]);
+  }, [novelId, exporting, exportMut]);
 
   const handleDelete = useCallback(() => {
     if (!novelId) return;

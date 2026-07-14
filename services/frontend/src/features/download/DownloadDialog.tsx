@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
-import { Download, Monitor, Globe, Zap, ChevronDown, Loader2, RefreshCw } from "lucide-react";
-import { useConfig } from "@/hooks/index";
-import type { AppConfig } from "@/api/endpoints";
+import { Download, Monitor, Globe, Zap, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DownloadDialogProps {
@@ -10,6 +8,7 @@ interface DownloadDialogProps {
   variant?: "download" | "check";
   initialMode?: string;
   initialProvider?: string;
+  providers?: string[];
   onStart: (mode: string, provider?: string) => void;
 }
 
@@ -19,27 +18,12 @@ const MODES = [
   { id: "api", label: "API", icon: Zap, desc: "第三方接口" },
 ] as const;
 
-function ModeField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between py-1 text-[11px]">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-slate-700 font-mono">{value}</span>
-    </div>
-  );
-}
-
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, onStart }: DownloadDialogProps) {
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, providers = [], onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [provider, setProvider] = useState(initialProvider ?? "");
-  const [advOpen, setAdvOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { data: cfg } = useConfig();
 
   useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); setLoading(false); } }, [open, initialMode, initialProvider]);
-
-  const modeCfg = cfg?.[mode as keyof typeof cfg] as Record<string, unknown> | undefined;
-  const apiMap = cfg?.api_providers ?? {};
-  const uniqueProviders = [...new Set(Object.values(apiMap).flat())];
 
   const handleStart = () => {
     setLoading(true);
@@ -56,55 +40,35 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
         <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
         <div className="space-y-2 mb-4">
-          {MODES.map(({ id, label, icon: Icon, desc }) => {
-            const isApi = id === "api";
-            return (
-              <button key={id} onClick={() => { setMode(id); if (!isApi) setProvider(""); }}
-                className={cn(
-                  "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                  mode === id
-                    ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
-                    : "border-white/20 bg-white/60 hover:border-slate-200"
-                )}>
-                <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
-                <div className="min-w-0 flex-1">
-                  <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
-                  <p className="text-[11px] text-slate-400">{desc}</p>
-                </div>
-                {isApi && mode === "api" && uniqueProviders.length > 0 && (
-                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    {uniqueProviders.map(p => (
-                      <span key={p} onClick={() => setProvider(prev => prev === p ? "" : p)}
-                        className={cn(
-                          "rounded-md px-2 py-0.5 text-[11px] font-medium cursor-pointer transition-colors",
-                          provider === p
-                            ? "bg-indigo-500 text-white"
-                            : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                        )}>{p}</span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {modeCfg && (
-          <div className="mb-4">
-            <button onClick={() => setAdvOpen(!advOpen)}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors">
-              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", advOpen ? "" : "-rotate-90")} strokeWidth={1.5} />
-              {MODES.find(m => m.id === mode)?.label} 当前配置
-            </button>
-            {advOpen && (
-              <div className="mt-2 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm px-3 py-2 space-y-0.5">
-                {Object.entries(modeCfg).map(([k, v]) => (
-                  <ModeField key={k} label={k} value={Array.isArray(v) ? v.join(" ~ ") : String(v)} />
-                ))}
+          {MODES.map(({ id, label, icon: Icon, desc }) => (
+            <button key={id} onClick={() => { setMode(id); if (id !== "api") setProvider(""); }}
+              className={cn(
+                "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                mode === id
+                  ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
+                  : "border-white/20 bg-white/60 hover:border-slate-200"
+              )}>
+              <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
+                <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
+                <p className="text-[11px] text-slate-400">{desc}</p>
               </div>
-            )}
-          </div>
-        )}
+              {id === "api" && mode === "api" && providers.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                  {providers.map(p => (
+                    <span key={p} onClick={() => setProvider(prev => prev === p ? "" : p)}
+                      className={cn(
+                        "rounded-md px-2 py-0.5 text-[11px] font-medium cursor-pointer transition-colors",
+                        provider === p
+                          ? "bg-indigo-500 text-white"
+                          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      )}>{p}</span>
+                  ))}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
 
         <div className="flex gap-2">
           <button onClick={onClose}

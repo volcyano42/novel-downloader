@@ -30,6 +30,7 @@ async function parseError(res: Response): Promise<never> {
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {},
+  baseUrl = BASE_URL,
 ): Promise<T> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> ?? {}),
@@ -39,7 +40,7 @@ export async function apiFetch<T = unknown>(
   }
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    res = await fetch(`${baseUrl}${path}`, { ...options, headers });
   } catch {
     throw new ApiError(0, "网络连接失败");
   }
@@ -48,24 +49,25 @@ export async function apiFetch<T = unknown>(
   return (body as ApiResponse<T>).data;
 }
 
-export function apiGet<T = unknown>(path: string, signal?: AbortSignal) {
-  return apiFetch<T>(path, { signal });
+export function apiGet<T = unknown>(path: string, signal?: AbortSignal, baseUrl?: string) {
+  return apiFetch<T>(path, { signal }, baseUrl);
 }
 
 export function apiPost<T = unknown>(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  baseUrl?: string,
 ) {
   return apiFetch<T>(path, {
     method: "POST",
     body: JSON.stringify(body),
     signal,
-  });
+  }, baseUrl);
 }
 
-export function apiPut<T = unknown>(path: string, body: unknown) {
-  return apiFetch<T>(path, { method: "PUT", body: JSON.stringify(body) });
+export function apiPut<T = unknown>(path: string, body: unknown, baseUrl?: string) {
+  return apiFetch<T>(path, { method: "PUT", body: JSON.stringify(body) }, baseUrl);
 }
 
 export function apiDelete<T = unknown>(path: string) {

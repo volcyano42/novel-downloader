@@ -1,6 +1,6 @@
-import { useMemo } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
-import { BookOpen, Download, Settings, User, Library, Search as SearchIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BookOpen, Download, Settings, User, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/Toast";
@@ -42,26 +42,35 @@ function AppShell() {
     return "bookshelf";
   }, [pathname]);
 
+  const [collapsed, setCollapsed] = useState(false);
   const label = DESKTOP_ITEMS.find(i => i.id === activeNav)?.label ?? "Novel下载器";
 
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-64 shrink-0 border-r border-white/20 bg-white/60 backdrop-blur-xl">
-        <div className="flex items-center gap-2 px-5 py-6">
-          <BookOpen className="h-6 w-6 text-indigo-500" strokeWidth={1.5} />
-          <span className="text-lg font-semibold text-slate-800">Novel下载器</span>
+      <aside className={cn(
+        "hidden md:flex flex-col shrink-0 border-r border-white/20 bg-white/60 backdrop-blur-xl transition-all duration-300 relative",
+        collapsed ? "w-14" : "w-64"
+      )}>
+        <button onClick={() => setCollapsed(!collapsed)}
+          className="absolute top-3 right-3 rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors z-10">
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" strokeWidth={1.5} /> : <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />}
+        </button>
+        <div className={cn("flex items-center gap-2 px-5 py-6", collapsed && "justify-center px-0")}>
+          {!collapsed && <><BookOpen className="h-6 w-6 text-indigo-500" strokeWidth={1.5} />
+          <span className="text-lg font-semibold text-slate-800">Novel下载器</span></>}
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {DESKTOP_ITEMS.map(({ id, label: lbl, icon: Icon }) => (
-            <a key={id} href={TO_PATH[id]}
+            <a key={id} href={TO_PATH[id]} title={collapsed ? lbl : undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                collapsed && "justify-center px-0",
                 activeNav === id
                   ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10"
                   : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
               )}>
-              <Icon className="h-[18px] w-[18px]" strokeWidth={1.5} />{lbl}
+              <Icon className="h-[18px] w-[18px]" strokeWidth={1.5} />{!collapsed && lbl}
             </a>
           ))}
         </nav>

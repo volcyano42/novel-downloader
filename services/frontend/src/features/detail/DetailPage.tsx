@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw } from "lucide-react";
-import { useNovelMeta, useChapters, useRemoteChapters, useDownloadMutation, useConfig, compareChapters } from "@/hooks/index";
+import { useNovelMeta, useChapters, useRemoteChapters, useDownloadMutation, useSiteConfig, compareChapters } from "@/hooks/index";
 import { fetchChapterList, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
@@ -32,12 +32,12 @@ export default function DetailPage() {
   const isRemote = !!remoteUrl;
   const toast = useToast();
 
-  // hooks
+  const plat = platformFromUrl(st?.meta?.url ?? remoteUrl);
   const { data: localMeta } = useNovelMeta(isRemote ? undefined : novelId);
-  const { data: localChapters = [] } = useChapters(isRemote ? undefined : novelId);
+  const { data: localChapters = [] } = useChapters(novelId);
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, remoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
-  const { data: config } = useConfig();
+  const { data: siteCfg } = useSiteConfig(plat);
 
   const novel = st?.meta ?? localMeta ?? null;
 
@@ -49,23 +49,23 @@ export default function DetailPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
+  const [checkMerged, setCheckMerged] = useState<MergedChapter[] | null>(null);
 
-  // Compute merged chapters
-  const merged = isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : [];
+  const remoteMerged = isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : [];
+  const merged = compareMode && checkMerged ? checkMerged : remoteMerged;
   const chapters = isRemote ? [] : localChapters;
   const showCompare = isRemote || compareMode;
 
-  // Auto-select un-downloaded chapters for remote comparison
   useEffect(() => {
-    if (merged.length > 0 && isRemote) {
+    if (remoteMerged.length > 0 && isRemote) {
       const preSelected = new Set<string>();
-      for (const mc of merged) {
+      for (const mc of remoteMerged) {
         if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
       }
       setSelectedIds(preSelected);
       setLoading(false);
     }
-  }, [merged, isRemote]);
+  }, [remoteMerged, isRemote]);
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
 
@@ -116,12 +116,9 @@ export default function DetailPage() {
         for (const mc of m) {
           if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
         }
-        // React Query will update merged via setQueryData
         setCompareMode(true);
+        setCheckMerged(m);
         setSelectedIds(preSelected);
-        // HACK: update merged manually since we didn't use useRemoteChapters
-        // ponytail: merged is local state for the check update flow, bypass React Query for now
-        (merged as MergedChapter[]).splice(0, merged.length, ...m);
       } else {
         setCheckResult("latest");
         setTimeout(() => setCheckResult(null), 2000);
@@ -285,6 +282,7 @@ export default function DetailPage() {
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
         initialMode={savedMode} initialProvider={savedProvider}
+        providers={siteCfg?.api_providers ?? []}
         onStart={handleDialogConfirm} />
     </div>
   );

@@ -5,7 +5,11 @@ import {
   listNovels, getMeta, deleteNovel, listChapters, getChapter,
   searchDownload, fetchMeta, fetchChapterList, downloadChapters,
   listTasks, pauseTask, resumeTask, deleteTask,
-  getConfig, saveConfig, downloadPlatforms, exportFormats,
+  getGlobalConfig, saveGlobalConfig,
+  getGroups, saveGroups,
+  getSiteConfig, saveSiteConfig,
+  getFormatConfig, saveFormatConfig,
+  downloadPlatforms, exportFormats,
   triggerExport, exportTaskStatus,
 } from "@/api/endpoints";
 import type { ChapterBrief } from "@/api/endpoints";
@@ -47,10 +51,36 @@ export function useChapter(novelId: string | undefined, chapterId: string | unde
   });
 }
 
-export function useConfig() {
+export function useGlobalConfig() {
   return useQuery({
-    queryKey: ["config"],
-    queryFn: getConfig,
+    queryKey: ["global-config"],
+    queryFn: () => getGlobalConfig(),
+    staleTime: 60_000,
+  });
+}
+
+export function useGroups() {
+  return useQuery({
+    queryKey: ["groups"],
+    queryFn: () => getGroups(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSiteConfig(website: string | undefined) {
+  return useQuery({
+    queryKey: ["site-config", website],
+    queryFn: () => getSiteConfig(website!),
+    enabled: !!website,
+    staleTime: 60_000,
+  });
+}
+
+export function useFormatConfig(format: string | undefined) {
+  return useQuery({
+    queryKey: ["format-config", format],
+    queryFn: () => getFormatConfig(format!),
+    enabled: !!format,
     staleTime: 60_000,
   });
 }
@@ -107,11 +137,35 @@ export function useDeleteNovel() {
   });
 }
 
-export function useSaveConfig() {
+export function useSaveGlobalConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: saveConfig,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["config"] }),
+    mutationFn: saveGlobalConfig,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["global-config"] }),
+  });
+}
+
+export function useSaveGroups() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: saveGroups,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
+  });
+}
+
+export function useSaveSiteConfig(website: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => saveSiteConfig(website, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["site-config", website] }),
+  });
+}
+
+export function useSaveFormatConfig(format: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => saveFormatConfig(format, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["format-config", format] }),
   });
 }
 
@@ -184,3 +238,7 @@ export function compareChapters(remote: ChapterBrief[], local: ChapterBrief[]) {
     local: localMap.get(r.id) ?? null,
   }));
 }
+
+// ── Backward compat aliases ────────────────────────
+
+export { useGlobalConfig as useConfig, useSaveGlobalConfig as useSaveConfig };
