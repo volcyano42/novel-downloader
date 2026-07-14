@@ -7,7 +7,7 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, useSaveGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, useSaveGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta, useSiteConfig } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import type { TaskInfo } from "@/api/endpoints";
