@@ -64,6 +64,7 @@ def search(platform: str,
            query: str,
            engine,
            page: int = 1,
+           skip_delay: bool = False,
            **kwargs) -> tuple[SearchResult, ...]:
     """搜索小说。
 
@@ -72,12 +73,14 @@ def search(platform: str,
         query:    搜索关键词。
         engine:   下载引擎实例。
         page:     页码，从 1 开始。
+        skip_delay: 跳过请求间延迟。
     """
     fetcher_cls = get_fetchers().get(platform)
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found: {platform}")
     fetcher = fetcher_cls()
     kwargs["page"] = page
+    kwargs["skip_delay"] = skip_delay
     return fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
 
 
@@ -94,12 +97,13 @@ def login(platform: str, engine: BrowserEngine) -> AuthCredential:
     fetcher = fetcher_cls()
     return fetcher.login(engine=engine)
 
-def fetch_meta(url: str, engine, **kwargs) -> Novel:
+def fetch_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     """获取小说元数据。
 
     Args:
         url: 小说页面 URL。
         engine: 下载引擎实例。
+        skip_delay: 跳过请求间延迟。
 
     Returns:
         包含书名、作者、简介、封面等信息的 Novel 对象。
@@ -107,15 +111,17 @@ def fetch_meta(url: str, engine, **kwargs) -> Novel:
     fetcher_cls = get_fetcher_for_url(url)
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    kwargs["skip_delay"] = skip_delay
     return fetcher_cls().fetch_novel_info(url=url, engine=engine, **kwargs)
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> Chapters:
+def fetch_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> Chapters:
     """获取章节列表。
 
     Args:
         url: 小说页面 URL。
         engine: 下载引擎实例。
+        skip_delay: 跳过请求间延迟。
 
     Returns:
         按 order 排序的章节列表。
@@ -123,16 +129,18 @@ def fetch_chapter_list(url: str, engine, **kwargs) -> Chapters:
     fetcher_cls = get_fetcher_for_url(url)
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    kwargs["skip_delay"] = skip_delay
     return fetcher_cls().fetch_chapter_list(url=url, engine=engine, **kwargs)
 
 
-def resolve_chapter(chapter: Chapter, engine, fetcher=None, **kwargs) -> Chapter | None:
+def resolve_chapter(chapter: Chapter, engine, fetcher=None, skip_delay: bool = False, **kwargs) -> Chapter | None:
     """下载单个章节。
 
     Args:
         chapter: 要下载的章节。
         engine:  下载引擎实例。
         fetcher: 可选抓取器实例。为 None 时自动从章节 novel_id 解析。
+        skip_delay: 跳过请求间延迟。
 
     Returns:
         已填充的 Chapter，章节不可获取时返回 None。
@@ -142,16 +150,16 @@ def resolve_chapter(chapter: Chapter, engine, fetcher=None, **kwargs) -> Chapter
         if fetcher_cls is None:
             raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
         fetcher = fetcher_cls()
+    kwargs["skip_delay"] = skip_delay
     return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)
 
 
-def do_export(novel: Novel, engine, options: ExportOptions | None = None, format: str | None = None, **kwargs):
+def export(novel: Novel, options: ExportOptions | None = None, format: str | None = None, **kwargs):
     """导出小说。
 
     Args:
         novel:   要导出的小说。
-        engine:  下载引擎实例（供导出器使用）。
-        options: 导出选项。未传时从 engine 默认配置读取。
+        options: 导出选项。
         format:  可选导出格式覆盖。
     """
     from ..utils.registry import register_exporter

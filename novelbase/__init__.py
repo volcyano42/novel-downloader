@@ -2,7 +2,7 @@ from .core.downloader import (
     fetch_meta,
     fetch_chapter_list,
     resolve_chapter,
-    do_export,
+    export,
     get_fetcher_for_url,
     get_fetcher_for_id,
     get_fetchers,
@@ -37,7 +37,6 @@ from .core.storage import LocalStorage
 from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .fetchers.base import BaseFetcher
-from .utils.logger import LogOptions, configure_logging
 
 __version__ = "3.0.0"
 
@@ -46,7 +45,7 @@ __all__ = [
     "fetch_meta",
     "fetch_chapter_list",
     "resolve_chapter",
-    "do_export",
+    "export",
     "create_engine",
     "delete_engine",
     "get_fetcher_for_url",
@@ -81,6 +80,4 @@ __all__ = [
     "SearchResult",
     "BaseFetcher",
     "BASEExporter",
-    "LogOptions",
-    "configure_logging",
 ]
