@@ -148,8 +148,8 @@ def cmd_export(args):
 
     engine, _ = _get_engine("fanqie", "requests")  # 导出不需要真实引擎
     try:
-        from main import do_re_export
-        do_re_export(args.group, fmt_cfg, engine)
+        from main import do_export_menu
+        do_export_menu(args.group, fmt_cfg, engine)
     finally:
         engine.close()
 
