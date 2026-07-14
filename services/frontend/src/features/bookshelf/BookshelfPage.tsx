@@ -232,7 +232,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} loading={searching} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} />
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (

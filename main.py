@@ -1426,6 +1426,11 @@ def do_export_menu(group: str, format_configs: dict, engine):
     print("\n导出完成！")
 
 
+def do_re_export(group: str, format_configs: dict, engine):
+    """重新导出（不重新下载）— 直接调用导出菜单。"""
+    do_export_menu(group, format_configs, engine)
+
+
 def do_delete(engine):
     """选择小说并彻底删除本地数据。"""
     from novelbase.core.storage import create_storage
