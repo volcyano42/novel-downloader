@@ -35,6 +35,18 @@ export default function BookshelfPage() {
   const saveGroupsMut = useSaveGroups();
   const fetchMetaMut = useFetchMeta();
 
+  // apiProviders for SearchBar
+  const { data: fanqieCfg } = useSiteConfig("fanqie");
+  const { data: qidianCfg } = useSiteConfig("qidian");
+  const { data: qimaoCfg } = useSiteConfig("qimao");
+  const apiProviders = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (fanqieCfg?.api_providers) map.fanqie = fanqieCfg.api_providers;
+    if (qidianCfg?.api_providers) map.qidian = qidianCfg.api_providers;
+    if (qimaoCfg?.api_providers) map.qimao = qimaoCfg.api_providers;
+    return map;
+  }, [fanqieCfg, qidianCfg, qimaoCfg]);
+
   // local state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchPlatform, setSearchPlatform] = useState("fanqie");
