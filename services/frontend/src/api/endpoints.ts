@@ -13,7 +13,7 @@ export interface NovelMeta {
 
 export interface ChapterBrief {
   id: string; url: string; novel_id: string; title: string; order: number;
-  volume: string | null; count: number | null; downloaded: boolean;
+  volume: string | null; count: number | null; downloaded: boolean; image_count: number;
 }
 
 export interface ChapterData extends ChapterBrief {
@@ -107,6 +107,35 @@ export function listChapters(
 
 export function getChapter(novelId: string, chapterId: string) {
   return apiGet<ChapterData>(`/storage/novel/${novelId}/chapter/${chapterId}`);
+}
+
+export function streamChapters(
+  novelId: string,
+  onChapter: (ch: ChapterBrief) => void,
+  onDone: () => void,
+  signal?: AbortSignal,
+) {
+  const url = `/api/v2/storage/novel/${novelId}/chapters/stream`;
+  return fetch(url, { signal }).then(async (res) => {
+    if (!res.ok || !res.body) { onDone(); return; }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      buf += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const payload = line.slice(6);
+          if (payload === "[DONE]") { onDone(); return; }
+          try { onChapter(JSON.parse(payload) as ChapterBrief); } catch {}
+        }
+      }
+      if (done) { onDone(); return; }
+    }
+  });
 }
 
 // ── Download ───────────────────────────────────────

@@ -1,13 +1,14 @@
-import { useState, useCallback, useEffect, type WheelEvent } from "react";
+import { useState, useCallback, useEffect, useRef, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw } from "lucide-react";
-import { useNovelMeta, useChapters, useRemoteChapters, useDownloadMutation, useSiteConfig, compareChapters } from "@/hooks/index";
-import { fetchChapterList, coverToUrl, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
+import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image } from "lucide-react";
+import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, compareChapters } from "@/hooks/index";
+import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useToast } from "@/components/Toast";
 import { SessionCache } from "@/utils/sessionCache";
+import { getCachedChapters, setCachedChapters } from "@/utils/chapterCache";
 
 function platformFromUrl(url?: string): string {
   if (!url) return "fanqie";
@@ -35,7 +36,6 @@ export default function DetailPage() {
 
   const plat = platformFromUrl(st?.meta?.url ?? remoteUrl);
   const { data: localMeta } = useNovelMeta(isRemote ? undefined : novelId);
-  const { data: localChapters = [] } = useChapters(novelId);
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, remoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
   const { data: siteCfg } = useSiteConfig(plat);
@@ -51,6 +51,59 @@ export default function DetailPage() {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
   const [checkMerged, setCheckMerged] = useState<MergedChapter[] | null>(null);
+
+  // SSE 流式加载本地章节
+  const [localChapters, setLocalChapters] = useState<ChapterBrief[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const cacheHydratedRef = useRef(false);
+  const showLocal = !isRemote && !compareMode;
+
+  useEffect(() => {
+    if (!novelId || !showLocal) return;
+    cacheHydratedRef.current = false;
+
+    const cached = getCachedChapters(novelId);
+    if (cached && cached.length) {
+      setLocalChapters(cached);
+      setStreaming(false);
+      cacheHydratedRef.current = true;
+    } else {
+      setLocalChapters([]);
+      setStreaming(true);
+    }
+
+    const ac = new AbortController();
+    streamChapters(
+      novelId,
+      (ch: ChapterBrief) => {
+        setLocalChapters(prev => {
+          if (cacheHydratedRef.current) {
+            const idx = prev.findIndex(c => c.id === ch.id);
+            if (idx === -1) return [...prev, ch];
+            const next = prev.slice();
+            next[idx] = ch;
+            return next;
+          }
+          return [...prev, ch];
+        });
+      },
+      () => {
+        if (!cacheHydratedRef.current) {
+          setStreaming(false);
+        }
+      },
+      ac.signal,
+    );
+    return () => ac.abort();
+  }, [novelId, showLocal]);
+
+  // 章节缓存：流完成后写回 sessionStorage
+  useEffect(() => {
+    if (!novelId || !showLocal) return;
+    if (!streaming && localChapters.length) {
+      setCachedChapters(novelId, localChapters);
+    }
+  }, [novelId, showLocal, streaming, localChapters]);
 
   const remoteMerged = isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : [];
   const merged = compareMode && checkMerged ? checkMerged : remoteMerged;
@@ -147,7 +200,6 @@ export default function DetailPage() {
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate, downloadMut]);
 
   const handleCheckUpdate = useCallback(() => {
-    // 预填缓存值，用户可在 dialog 中修改
     setSavedMode(SessionCache.getMode());
     setSavedProvider(SessionCache.getProvider() ?? "");
     setDialogVariant("check");
@@ -210,6 +262,7 @@ export default function DetailPage() {
           )}
           <div className="mt-8 mb-3 flex items-center gap-3">
             <h3 className="text-base font-semibold text-slate-800">章节列表</h3>
+            {streaming && <span className="text-xs text-amber-500">加载中...</span>}
             {showCompare && (
               <>
                 <button onClick={toggleAll} className="text-xs text-slate-400 hover:text-indigo-500 transition-colors">{allSelected ? "全不选" : "全选"}</button>
@@ -255,6 +308,12 @@ export default function DetailPage() {
                     <TooltipProvider><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipProvider>
                     <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <span className="truncate text-slate-700 flex-1">{mc.remote.title}</span>
+                      {(mc.remote.image_count ?? 0) > 0 && (
+                        <span className="ml-1.5 shrink-0 inline-flex items-center gap-0.5 text-amber-500">
+                          <Image className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          <span className="text-xs">{mc.remote.image_count}</span>
+                        </span>
+                      )}
                     </button>
                     <a href={mc.remote.url} target="_blank" rel="noopener noreferrer" className="shrink-0 p-2 text-slate-300 hover:text-indigo-400 transition-colors" onClick={e => e.stopPropagation()}>
                       <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -270,6 +329,12 @@ export default function DetailPage() {
                   <span className={`shrink-0 text-xs w-10 text-right ${ch.downloaded ? "text-emerald-500" : "text-red-400"}`}>{ch.downloaded ? "✓" : "✗"}</span>
                   <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <span className="truncate text-slate-700 flex-1">{ch.title}</span>
+                    {(ch.image_count ?? 0) > 0 && (
+                      <span className="ml-1.5 shrink-0 inline-flex items-center gap-0.5 text-amber-500">
+                        <Image className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        <span className="text-xs">{ch.image_count}</span>
+                      </span>
+                    )}
                   </button>
                   <a href={ch.url} target="_blank" rel="noopener noreferrer" className="shrink-0 p-2 text-slate-300 hover:text-indigo-400 transition-colors" onClick={e => e.stopPropagation()}>
                     <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
