@@ -23,7 +23,7 @@ app.add_middleware(
 class V2ResponseMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        # Only wrap /api/v2 responses that are JSON
+        # Only wrap /api/v2 and /config responses that are JSON
         if not request.url.path.startswith("/api/v2"):
             return response
         content_type = response.headers.get("content-type", "")

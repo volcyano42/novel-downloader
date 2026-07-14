@@ -8,7 +8,7 @@ import os
 import uuid
 
 from services.backend.services.config_service import load_site_config, find_provider_options
-from nldlder import Options, create_engine
+from novelbase import Options, create_engine
 
 
 # ── 显式引擎实例（手动创建，key 为 engine_id）──
@@ -116,7 +116,7 @@ def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
 
 def _build_sub_options(mode: str, api=None, requests=None, browser=None):
     """从 Pydantic 数据构建子选项对象（APIOptions/RequestsOptions/BrowserOptions）。"""
-    from nldlder.core.options import APIOptions, RequestsOptions, BrowserOptions
+    from novelbase.core.options import APIOptions, RequestsOptions, BrowserOptions
     if mode == "api" and api:
         a = api
         return APIOptions(name=a.name, enabled=a.enabled, delay=a.delay, timeout=a.timeout,

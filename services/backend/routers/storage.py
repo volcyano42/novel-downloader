@@ -3,8 +3,8 @@ from base64 import b64encode
 
 from fastapi import APIRouter, HTTPException, Query
 from services.backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
-from nldlder.core.storage import create_storage
-from nldlder.core.options import StorageOptions
+from novelbase.core.storage import create_storage
+from novelbase.core.options import StorageOptions
 
 router = APIRouter(prefix="/api/v2/storage", tags=["storage"])
 
