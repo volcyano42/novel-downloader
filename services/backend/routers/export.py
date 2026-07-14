@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from services.backend.schemas import ExportRequest, ExportTaskStatus
-from nldlder import NovelDownloader, create_engine, get_exporters
+from novelbase import do_export, create_engine, get_exporters
 
 router = APIRouter(prefix="/api/v2/export", tags=["export"])
 
@@ -29,8 +29,8 @@ async def trigger_export(body: ExportRequest):
     task_id = str(uuid.uuid4())[:8]
     _tasks[task_id] = {"status": "downloading", "progress": 0.0}
     try:
-        from nldlder.core.storage import create_storage
-        from nldlder.core.options import StorageOptions, Options
+        from novelbase.core.storage import create_storage
+        from novelbase.core.options import StorageOptions, Options
         store = create_storage(StorageOptions(
             backend="sqlite",
             database_url="sqlite:///app_data/storage/novels.db",
@@ -51,18 +51,17 @@ async def trigger_export(body: ExportRequest):
         export_dir = Path(tempfile.mkdtemp(prefix="nld_export_"))
 
         engine = create_engine(Options().set_mode("api"))
-        dl = NovelDownloader(engine)
 
         if body.txt and body.txt.enabled:
-            from nldlder.exporters.txt import TXTExportOptions
+            from novelbase.exporters.txt import TXTExportOptions
             sub = export_dir / "txt"; sub.mkdir()
             opt = TXTExportOptions(
                 format="txt", output_path=str(sub), enabled=True,
                 file_name_template=body.txt.file_name_template or "{name}",
                 encoding=body.txt.encoding)
-            dl.export(novel, options=opt)
+            do_export(novel, engine, options=opt)
         if body.epub and body.epub.enabled:
-            from nldlder.exporters.epub import EPUBExportOptions
+            from novelbase.exporters.epub import EPUBExportOptions
             sub = export_dir / "epub"; sub.mkdir()
             opt = EPUBExportOptions(
                 format="epub", output_path=str(sub), enabled=True,
@@ -70,15 +69,15 @@ async def trigger_export(body: ExportRequest):
                 compression=body.epub.compression, compresslevel=body.epub.compresslevel,
                 include_toc=body.epub.include_toc, optimize_images=body.epub.optimize_images,
                 jpeg_quality=body.epub.jpeg_quality, max_image_width=body.epub.max_image_width)
-            dl.export(novel, options=opt)
+            do_export(novel, engine, options=opt)
         if body.img and body.img.enabled:
-            from nldlder.exporters.img import IMGExportOptions
+            from novelbase.exporters.img import IMGExportOptions
             sub = export_dir / "img"; sub.mkdir()
             opt = IMGExportOptions(
                 format="img", output_path=str(sub), enabled=True,
                 file_name_template=body.img.file_name_template or "{n}",
                 output_format=body.img.output_format)
-            dl.export(novel, options=opt)
+            do_export(novel, engine, options=opt)
 
         # 收集导出文件
         exported: list[Path] = []

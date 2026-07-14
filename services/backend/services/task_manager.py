@@ -13,15 +13,14 @@ _tasks_lock = threading.Lock()
 def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     """后台线程：创建 engine → 并发下载章节 → close engine，支持暂停/恢复。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from nldlder import NovelDownloader
-    from nldlder.models.novel import Chapter, Chapters, Novel
-    from nldlder.core.storage import create_storage
-    from nldlder.core.options import StorageOptions
+    from novelbase import fetch_meta, resolve_chapter
+    from novelbase.models.novel import Chapter, Chapters, Novel
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
 
     engine = None
     try:
         engine = create_engine_for_request(platform, mode, provider=provider)
-        dl = NovelDownloader(engine)
         store = create_storage(StorageOptions(
             backend="sqlite",
             database_url="sqlite:///app_data/storage/novels.db",
@@ -30,7 +29,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
         novel_url = task.get("novel_url", "")
         if novel_url:
             try:
-                meta = dl.fetch_meta(novel_url)
+                meta = fetch_meta(novel_url, engine)
                 store.save_meta(meta)
             except Exception:
                 pass
@@ -54,7 +53,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                          title=ch_data["title"], order=ch_data["order"],
                          volume=ch_data.get("volume"))
             try:
-                downloaded = dl.resolve_chapter(ch)
+                downloaded = resolve_chapter(ch, engine)
                 if downloaded is not None:
                     store.save_chapter(novel, Chapters(chapters=[downloaded]))
                     with _tasks_lock:

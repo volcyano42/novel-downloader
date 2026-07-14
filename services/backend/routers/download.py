@@ -1,10 +1,10 @@
-"""Download 路由 — 对接 search + NovelDownloader + 后台下载任务管理。"""
+"""Download 路由 — 对接 search + fetch_meta/fetch_chapter_list + 后台下载任务管理。"""
 from fastapi import APIRouter, HTTPException, Query
 from services.backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from services.backend.services.engine_manager import create_engine_for_request
 from services.backend.services import task_manager
 from services.backend.utils.cover import encode_cover
-from nldlder import NovelDownloader, get_fetchers, search
+from novelbase import fetch_meta, fetch_chapter_list, get_fetchers, search
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -24,7 +24,7 @@ def _platform_from_url(url: str) -> str:
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         page: int = Query(1), mode: str = Query("browser"),
                         provider: str | None = Query(None)):
-    from nldlder.core.downloader import get_fetcher_for_url, get_fetcher_for_id
+    from novelbase.core.downloader import get_fetcher_for_url, get_fetcher_for_id
 
     engine = create_engine_for_request(platform, mode, provider=provider)
     try:
@@ -32,7 +32,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
             fetcher_cls = get_fetcher_for_url(query)
             if fetcher_cls:
                 try:
-                    novel = NovelDownloader(engine).fetch_meta(query)
+                    novel = fetch_meta(query, engine)
                     return [SearchResultData(title=novel.title, author=novel.author,
                                              url=novel.url, description=novel.description)]
                 except Exception as e:
@@ -59,12 +59,12 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
 
 @router.post("/novel")
-async def fetch_meta(body: FetchMetaRequest, mode: str = Query("browser"),
+async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
                      provider: str | None = Query(None)):
     platform = _platform_from_url(body.url)
     engine = create_engine_for_request(platform, mode, provider=provider)
     try:
-        novel = NovelDownloader(engine).fetch_meta(body.url)
+        novel = fetch_meta(body.url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     finally:
@@ -81,7 +81,7 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
     platform = _platform_from_url(url)
     engine = create_engine_for_request(platform, mode, provider=provider)
     try:
-        novel = NovelDownloader(engine).fetch_meta(url)
+        novel = fetch_meta(url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     finally:
@@ -92,12 +92,12 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 
 
 @router.get("/novel/{novel_id}/chapters")
-async def fetch_chapter_list(novel_id: str, url: str = Query(...),
+async def fetch_chapter_list_route(novel_id: str, url: str = Query(...),
                              mode: str = Query("browser"), provider: str | None = Query(None)):
     platform = _platform_from_url(url)
     engine = create_engine_for_request(platform, mode, provider=provider)
     try:
-        chapters = NovelDownloader(engine).fetch_chapter_list(url)
+        chapters = fetch_chapter_list(url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     finally:

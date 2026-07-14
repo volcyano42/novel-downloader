@@ -24,15 +24,15 @@ from main import (
     load_main_config, load_site_config, load_format_configs, load_groups,
     build_options, add_novel_to_group, ensure_novel_in_group,
 )
-from nldlder import create_engine, NovelDownloader, get_fetcher_for_url
-from nldlder.utils.logger import get_logger
+from novelbase import create_engine, fetch_meta, get_fetcher_for_url
+from novelbase.utils.logger import get_logger
 
-_log = get_logger("nldlder.cli")
+_log = get_logger("novelbase.cli")
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="nldlder — 小说下载器命令行",
+        description="novelbase — 小说下载器命令行",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = p.add_subparsers(dest="command", required=True)
@@ -73,8 +73,8 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _get_engine_dl(platform: str, engine_mode: str):
-    """根据平台和引擎模式创建 engine + downloader。"""
+def _get_engine(platform: str, engine_mode: str):
+    """根据平台和引擎模式创建 engine。"""
     cfg = load_main_config()
     cfg["mode"] = engine_mode
     site_cfg = load_site_config(platform)
@@ -82,7 +82,7 @@ def _get_engine_dl(platform: str, engine_mode: str):
 
     # 注册导出格式 — 单格式模式
     format_configs = load_format_configs()
-    from nldlder.utils.registry import register_export_options
+    from novelbase.utils.registry import register_export_options
     _opt_cls_map = register_export_options()
     group = cfg.get("group", "default")
     active_format = next(iter(format_configs), None)  # 取第一个配置的格式
@@ -96,15 +96,13 @@ def _get_engine_dl(platform: str, engine_mode: str):
         opt = opt_cls(output_path=raw_path, **extra)
         options.set_export(opt)
 
-    engine = create_engine(options)
-    dl = NovelDownloader(engine, options=options)
-    return engine, dl, format_configs
+    return create_engine(options), format_configs
 
 
 def cmd_search(args):
-    engine, dl, _ = _get_engine_dl(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.engine)
     try:
-        from nldlder.core.downloader import search
+        from novelbase.core.downloader import search
         results = search(args.platform, args.query, engine, page=args.page)
         if not results:
             print("未找到任何结果")
@@ -123,20 +121,20 @@ def cmd_search(args):
 
 
 def cmd_download(args):
-    engine, dl, format_configs = _get_engine_dl(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.engine)
     try:
         from main import do_download
-        do_download(engine, dl, args.url, args.group, format_configs,
+        do_download(engine, engine, args.url, args.group, format_configs,
                     max_workers=args.workers)
     finally:
         engine.close()
 
 
 def cmd_update(args):
-    engine, dl, format_configs = _get_engine_dl(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.engine)
     try:
         from main import do_update
-        do_update(engine, dl, args.group, format_configs, max_workers=args.workers)
+        do_update(engine, engine, args.group, format_configs, max_workers=args.workers)
     finally:
         engine.close()
 
@@ -148,19 +146,19 @@ def cmd_export(args):
         print(f"格式 '{args.format}' 未在 app_data/config/formats/ 中配置")
         sys.exit(1)
 
-    engine, dl, _ = _get_engine_dl("fanqie", "requests")  # 导出不需要真实引擎
+    engine, _ = _get_engine("fanqie", "requests")  # 导出不需要真实引擎
     try:
         from main import do_re_export
-        do_re_export(args.group, fmt_cfg, dl)
+        do_re_export(args.group, fmt_cfg, engine)
     finally:
         engine.close()
 
 
 def cmd_info(args):
-    engine, dl, _ = _get_engine_dl(args.platform, args.engine)
+    engine, _ = _get_engine(args.platform, args.engine)
     try:
         print(f"正在获取: {args.url}")
-        novel = dl.fetch_meta(args.url)
+        novel = fetch_meta(args.url, engine)
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")

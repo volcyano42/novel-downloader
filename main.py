@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 # ═══════════════════════════════════════════════════════════════════
-# 日志初始化 — 必须在 import nldlder 之前，否则子模块的
+# 日志初始化 — 必须在 import novelbase 之前，否则子模块的
 # get_logger() 会在 configure_logging() 之前触发，导致日志散落
 # ═══════════════════════════════════════════════════════════════════
 
@@ -103,7 +103,7 @@ def add_novel_to_group(novel_id: str, group: str):
     if not isinstance(groups[group], dict):
         groups[group] = {}
     if novel_id not in groups[group]:
-        groups[group][novel_id] = {}
+        groups[group][novel_id] = {"pending_export": False}
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(groups, f, allow_unicode=True, default_flow_style=False)
@@ -111,18 +111,18 @@ def add_novel_to_group(novel_id: str, group: str):
     return False
 
 
-# 通过 importlib 直接加载 logger 模块，绕过 nldlder/__init__.py
+# 通过 importlib 直接加载 logger 模块，绕过 novelbase/__init__.py
 # （__init__.py 导入子模块时会触发 get_logger，必须在配置之后）
 # exe 环境下文件路径不可用，回退为 import_module。
-# import_module 会触发 nldlder.__init__ → get_logger → 自动初始化，
+# import_module 会触发 novelbase.__init__ → get_logger → 自动初始化，
 # 后续使用 force=True 覆盖为用户配置。
 if getattr(sys, "frozen", False):
-    _logger_mod = importlib.import_module("nldlder.utils.logger")
+    _logger_mod = importlib.import_module("novelbase.utils.logger")
 else:
-    _logger_path = Path(__file__).parent / "nldlder" / "utils" / "logger.py"
-    _spec = importlib.util.spec_from_file_location("nldlder.utils.logger", _logger_path)
+    _logger_path = Path(__file__).parent / "novelbase" / "utils" / "logger.py"
+    _spec = importlib.util.spec_from_file_location("novelbase.utils.logger", _logger_path)
     _logger_mod = importlib.util.module_from_spec(_spec)
-    sys.modules["nldlder.utils.logger"] = _logger_mod
+    sys.modules["novelbase.utils.logger"] = _logger_mod
     _spec.loader.exec_module(_logger_mod)
 
 configure_logging = _logger_mod.configure_logging
@@ -133,16 +133,16 @@ cfg = load_main_config()
 configure_logging(LogOptions(**cfg.get("log", {})),
                   force=getattr(sys, "frozen", False))
 
-from nldlder import (
-    NovelDownloader, Options, create_engine,
+from novelbase import (
+    fetch_meta, fetch_chapter_list, resolve_chapter, do_export, Options, create_engine,
     get_fetchers, search, login,
     AntiCrawlError,
     split_into_groups, get_fetcher_for_url, get_fetcher_for_id, Chapters,
 )
-from nldlder.core.exceptions import ChapterNotFoundError
-from nldlder.utils.logger import get_logger
+from novelbase.core.exceptions import ChapterNotFoundError
+from novelbase.utils.logger import get_logger
 
-_log = get_logger("nldlder.main")
+_log = get_logger("novelbase.main")
 
 # rich 和 concurrent.futures 延迟导入（减少 PyInstaller 启动时的模块加载量）
 # 使用处: _create_progress(), do_download(), do_update()
@@ -1008,7 +1008,6 @@ def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None
     Args:
         engine: 下载引擎实例
         query: 搜索关键词。为 None 时交互式输入。
-        dl: NovelDownloader实例
         platform: 网站
         page: 页数
     """
@@ -1125,8 +1124,8 @@ def _build_url_from_id(novel_id: str) -> str:
     fc = get_fetcher_for_id(novel_id)
     if fc is None:
         raise ValueError(f"无法识别 novel_id: {novel_id}")
-    from nldlder.fetchers.fanqie import FanqieFetcher
-    from nldlder.fetchers.qidian import QidianFetcher
+    from novelbase.fetchers.fanqie import FanqieFetcher
+    from novelbase.fetchers.qidian import QidianFetcher
     if fc is FanqieFetcher:
         return f"https://fanqienovel.com/page/{novel_id}"
     if fc is QidianFetcher:
@@ -1134,23 +1133,24 @@ def _build_url_from_id(novel_id: str) -> str:
     raise ValueError(f"Fetcher {fc.__name__} 未配置 URL 模板")
 
 
-def do_download(engine, dl, url: str, group: str, format_configs: dict, max_workers: int = 3):
+def do_download(engine, url: str, group: str, format_configs: dict, max_workers: int = 3):
     """下载单个小说：获取信息 → 章节列表 → 合并本地 → 下载新章 → 导出。
 
     Args:
         engine:         下载引擎
-        dl:             NovelDownloader 实例
         url:            小说页面 URL
         group:          分组名（用于填充导出路径中的 {group} 占位符）
         format_configs: 导出格式配置 {fmt_name: cfg_dict}
     """
     _log.info("===== 开始下载: %s =====", url)
 
-    storage = dl.storage
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
+    storage = create_storage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
 
     # ── 1. 获取小说信息 ──────────────────────────────────────────
     print("正在获取小说信息...")
-    novel = dl.fetch_meta(url, skip_delay = True)
+    novel = fetch_meta(url, engine, skip_delay = True)
     _log.info("小说: %s — %s | %s章 | %s字",
               novel.title, novel.author, novel.serial, novel.count or '未知')
     print(f"  书名：{novel.title}")
@@ -1167,7 +1167,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
 
     # ── 2. 获取章节列表 ──────────────────────────────────────────
     print("正在获取章节列表...")
-    chapters = dl.fetch_chapter_list(novel.url, skip_delay = True)
+    chapters = fetch_chapter_list(novel.url, engine, skip_delay = True)
     _log.info("章节列表: %d章", len(chapters))
     print(f"  共 {len(chapters)} 章")
     novel.update_chapter(chapters)
@@ -1251,7 +1251,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_group = {
                         executor.submit(
-                            dl.resolve_chapter, batch[0], fetcher=fetcher,
+                            resolve_chapter, batch[0], engine, fetcher=fetcher,
                         ): batch
                         for batch in groups
                     }
@@ -1297,7 +1297,7 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
                             print(f"\n⚠ 章节不可获取: [{ch.order:>4}] {ch.title}")
                             notify_cfg = cfg.get("download", {}).get("notify", {})
                             if notify_cfg.get("on_chapter_unavailable", True):
-                                from nldlder.utils.notify import chapter_unavailable_notify
+                                from novelbase.utils.notify import chapter_unavailable_notify
                                 chapter_unavailable_notify(notify_cfg, ch)
 
                             answer = _text_input("继续下载？(y/n) [y]: ")
@@ -1351,14 +1351,16 @@ def do_download(engine, dl, url: str, group: str, format_configs: dict, max_work
         # ── 通知 ──────────────────────────────────────────────
         notify_cfg = cfg.get("download", {}).get("notify", {})
         if notify_cfg:
-            from nldlder.utils.notify import notify
+            from novelbase.utils.notify import notify
             notify(notify_cfg, complete=success, incomplete=incomplete_count)
 
 
 
 def do_export_menu(group: str, format_configs: dict, dl):
     """导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
-    storage = dl.storage
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
+    storage = create_storage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
 
     novels_info = list(storage.iter_metas())
 
@@ -1385,7 +1387,7 @@ def do_export_menu(group: str, format_configs: dict, dl):
         return
 
     # 选择导出格式
-    from nldlder.utils.registry import register_export_options
+    from novelbase.utils.registry import register_export_options
     _opt_cls_map = register_export_options()
     available = [f for f in format_configs if f in _opt_cls_map]
     if not available:
@@ -1404,7 +1406,7 @@ def do_export_menu(group: str, format_configs: dict, dl):
         "encoding", "file_name_template", "css_style", "include_toc",
     ) if k in fmt_cfg}
     opt = opt_cls(output_path=raw_path, **extra)
-    dl.options.set_export(opt)
+    options.set_export(opt)
 
     targets = novels_info if selection == "all" else [selection]
 
@@ -1416,7 +1418,7 @@ def do_export_menu(group: str, format_configs: dict, dl):
             local = storage.load_chapters(novel.id)
             if local:
                 novel.update_chapter(local)
-            dl.export(novel)
+            do_export(novel, engine)
             print(f"  导出完成 → app_data/exports/{export_group}/")
         except Exception as e:
             print(f"✗ 导出失败: {e}")
@@ -1427,7 +1429,9 @@ def do_export_menu(group: str, format_configs: dict, dl):
 
 def do_delete(dl):
     """选择小说并彻底删除本地数据。"""
-    storage = dl.storage
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
+    storage = create_storage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
 
     novels_info = list(storage.iter_metas())
 
@@ -1485,9 +1489,11 @@ def do_delete(dl):
     print(f"\n删除完成！共删除 {len(targets)} 部小说")
 
 
-def do_update(engine, dl, group: str, format_configs: dict, max_workers: int = 3):
+def do_update(engine, group: str, format_configs: dict, max_workers: int = 3):
     """列出所有已下载小说，支持单选/全选更新。"""
-    storage = dl.storage
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
+    storage = create_storage(StorageOptions(backend="sqlite", database_url="sqlite:///app_data/storage/novels.db"))
 
     novels_info = list(storage.iter_metas())
 
@@ -1561,7 +1567,7 @@ def main():
     active_format = cfg.get("formats")
     if active_format in (None, "all"):
         active_format = next(iter(format_configs), None)  # 取第一个配置的格式
-    from nldlder.utils.registry import register_export_options
+    from novelbase.utils.registry import register_export_options
     _opt_cls_map = register_export_options()
     fmt_cfg = format_configs.get(active_format, {}) if active_format else {}
     opt_cls = _opt_cls_map.get(active_format) if active_format else None
@@ -1582,13 +1588,11 @@ def main():
     dl = None
 
     def _get_engine_dl():
-        nonlocal engine, dl
+        nonlocal engine
         if engine is None:
             _log.debug("creating engine: mode=%s", mode)
-            e = create_engine(options)
-            d = NovelDownloader(e, options=options)
-            engine, dl = e, d
-        return engine, dl
+            engine = create_engine(options)
+        return engine
 
     platform_labels = _show_platforms()
 
@@ -1670,9 +1674,9 @@ def main():
 
                 if url:
                     try:
-                        e, d = _get_engine_dl()
+                        eng = _get_engine_dl()
                         mw = cfg.get("download", {}).get("max_workers", 3)
-                        do_download(e, d, url, group, format_configs, max_workers=mw)
+                        do_download(e, url, group, format_configs, max_workers=mw)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
@@ -1687,16 +1691,16 @@ def main():
                     if search_platform is None:
                         continue
                     try:
-                        e, d = _get_engine_dl()
-                        url = do_search(e, d, search_platform, query=raw)
+                        eng = _get_engine_dl()
+                        url = do_search(eng, search_platform, query=raw)
                     except Exception as e:
                         print(f"✗ 搜索失败: {e}")
                         url = None
                     if url:
                         try:
-                            e, d = _get_engine_dl()
+                            eng = _get_engine_dl()
                             mw = cfg.get("download", {}).get("max_workers", 3)
-                            do_download(e, d, url, group, format_configs, max_workers=mw)
+                            do_download(e, url, group, format_configs, max_workers=mw)
                         except AntiCrawlError:
                             print("⚠ 触发反爬，下载中断（已保存部分进度）")
                         except Exception as e:
@@ -1705,7 +1709,7 @@ def main():
 
             elif action == "export":
                 try:
-                    e, d = _get_engine_dl()
+                    eng = _get_engine_dl()
                     do_export_menu(group, format_configs, d)
                 except Exception as e:
                     print(f"✗ 导出失败: {e}")
@@ -1713,7 +1717,7 @@ def main():
 
             elif action == "delete":
                 try:
-                    e, d = _get_engine_dl()
+                    eng = _get_engine_dl()
                     do_delete(d)
                 except Exception as e:
                     print(f"✗ 删除失败: {e}")
@@ -1721,9 +1725,9 @@ def main():
 
             elif action == "update":
                 try:
-                    e, d = _get_engine_dl()
+                    eng = _get_engine_dl()
                     mw = cfg.get("download", {}).get("max_workers", 3)
-                    do_update(e, d, group, format_configs, max_workers=mw)
+                    do_update(e, group, format_configs, max_workers=mw)
                 except Exception as e:
                     print(f"✗ 更新失败: {e}")
                     _log.exception("update failed")
