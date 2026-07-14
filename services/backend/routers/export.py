@@ -59,7 +59,7 @@ async def trigger_export(body: ExportRequest):
                 format="txt", output_path=str(sub), enabled=True,
                 file_name_template=body.txt.file_name_template or "{name}",
                 encoding=body.txt.encoding)
-            do_export(novel, engine, options=opt)
+            do_export(novel, options=opt)
         if body.epub and body.epub.enabled:
             from novelbase.exporters.epub import EPUBExportOptions
             sub = export_dir / "epub"; sub.mkdir()
@@ -69,7 +69,7 @@ async def trigger_export(body: ExportRequest):
                 compression=body.epub.compression, compresslevel=body.epub.compresslevel,
                 include_toc=body.epub.include_toc, optimize_images=body.epub.optimize_images,
                 jpeg_quality=body.epub.jpeg_quality, max_image_width=body.epub.max_image_width)
-            do_export(novel, engine, options=opt)
+            do_export(novel, options=opt)
         if body.img and body.img.enabled:
             from novelbase.exporters.img import IMGExportOptions
             sub = export_dir / "img"; sub.mkdir()
@@ -77,7 +77,7 @@ async def trigger_export(body: ExportRequest):
                 format="img", output_path=str(sub), enabled=True,
                 file_name_template=body.img.file_name_template or "{n}",
                 output_format=body.img.output_format)
-            do_export(novel, engine, options=opt)
+            do_export(novel, options=opt)
 
         # 收集导出文件
         exported: list[Path] = []
