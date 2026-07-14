@@ -1002,7 +1002,7 @@ def _settings_log(cfg: dict):
         else:
             print("无效选项")
 
-def do_search(engine, dl, platform: str, page: int = 1, query: str | None = None) -> str | None:
+def do_search(engine, platform: str, page: int = 1, query: str | None = None) -> str | None:
     """搜索小说，选择后返回小说 URL（或 None 表示取消）。
 
     Args:
