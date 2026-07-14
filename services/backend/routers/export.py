@@ -1,4 +1,4 @@
-"""Export 路由 — 4 条，支持多格式导出自动打包 ZIP + 浏览器下载。"""
+"""Export 路由 �?4 条，支持多格式导出自动打�?ZIP + 浏览器下载�?""
 import tempfile
 import uuid
 import zipfile
@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from services.backend.schemas import ExportRequest, ExportTaskStatus
-from novelbase import do_export, create_engine, get_exporters
+from novelbase import export as do_export, create_engine, get_exporters
 
 router = APIRouter(prefix="/api/v2/export", tags=["export"])
 
@@ -37,7 +37,7 @@ async def trigger_export(body: ExportRequest):
         ))
         novel = store.load_meta(body.novel_id)
         if not novel:
-            raise HTTPException(404, "小说不存在")
+            raise HTTPException(404, "小说不存�?)
         chapters = store.load_chapters(body.novel_id)
         if body.chapter_id:
             chapters = [ch for ch in chapters if ch.id in body.chapter_id]
@@ -47,7 +47,7 @@ async def trigger_export(body: ExportRequest):
         if not formats:
             raise HTTPException(400, "没有启用任何导出格式")
 
-        # 统一导出到临时目录
+        # 统一导出到临时目�?
         export_dir = Path(tempfile.mkdtemp(prefix="nld_export_"))
 
         engine = create_engine(Options().set_mode("api"))
@@ -86,13 +86,13 @@ async def trigger_export(body: ExportRequest):
                 exported.append(f)
 
         if not exported:
-            raise RuntimeError("导出未生成任何文件")
+            raise RuntimeError("导出未生成任何文�?)
 
         result_path: str
         if len(exported) == 1:
             result_path = str(exported[0])
         else:
-            # 多文件 → ZIP
+            # 多文�?�?ZIP
             zip_path = export_dir / f"{novel.title}.zip"
             with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
                 for f in exported:
@@ -113,7 +113,7 @@ async def trigger_export(body: ExportRequest):
 async def get_task_status(task_id: str):
     task = _tasks.get(task_id)
     if not task:
-        raise HTTPException(404, "任务不存在")
+        raise HTTPException(404, "任务不存�?)
     return ExportTaskStatus(
         task_id=task_id,
         status=task["status"],
@@ -124,7 +124,7 @@ async def get_task_status(task_id: str):
 async def download_export(task_id: str):
     task = _tasks.get(task_id)
     if not task:
-        raise HTTPException(404, "任务不存在")
+        raise HTTPException(404, "任务不存�?)
     if task["status"] != "completed":
         raise HTTPException(400, "导出尚未完成")
 

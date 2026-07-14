@@ -7,7 +7,7 @@ from novelbase import (
     fetch_meta,
     fetch_chapter_list,
     resolve_chapter,
-    do_export,
+    export as do_export,
     Options,
     create_engine,
     get_fetchers,
