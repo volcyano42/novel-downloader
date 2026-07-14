@@ -13,6 +13,11 @@ export default function ReaderPage() {
   const { data: chapter, isLoading: loading } = useChapter(novelId, chapterId);
   const { data: meta } = useNovelMeta(novelId);
 
+  // 进入/换章时置顶
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [chapterId]);
+
   useEffect(() => {
     if (chapter) {
       setCurrentId(chapter.id);
@@ -22,7 +27,7 @@ export default function ReaderPage() {
 
   const handleNavigate = useCallback((cid: string) => {
     if (loadingRef.current) return;
-    navigate(`/novel/${novelId}/${cid}`, { replace: true });
+    navigate(`/novel/${novelId}/${cid}`);
   }, [novelId, navigate]);
 
   const currentTitle = chapters.find(ch => ch.id === currentId)?.title ?? "";
@@ -34,11 +39,12 @@ export default function ReaderPage() {
     <Reader
       title={currentTitle}
       content={content}
+      images={chapter?.images ?? []}
       chapters={chapters.map(ch => ({ id: ch.id, title: ch.title, url: ch.url }))}
       currentChapterId={currentId}
       onNavigate={handleNavigate}
       author={meta?.author ?? ""}
-      onBack={() => navigate(`/novel/${novelId}`)}
+      onBack={() => { if (window.history.length > 1) navigate(-1); else navigate(`/novel/${novelId}`); }}
     />
   );
 }

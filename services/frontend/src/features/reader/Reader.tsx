@@ -3,16 +3,46 @@ import { ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, Type, List } from "
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
+interface ImageData { raw_data: string | null; alt: string | null; insert: number | null; url: string | null; }
 interface TocItem { id: string; title: string; url?: string; }
 interface ReaderProps {
-  title: string; content: string; chapters: TocItem[]; currentChapterId: string;
+  title: string; content: string; images?: ImageData[]; chapters: TocItem[]; currentChapterId: string;
   author?: string; onNavigate: (chapterId: string) => void; onBack?: () => void; className?: string;
 }
 
-export function Reader({ title, content, chapters, currentChapterId, author, onNavigate, onBack, className }: ReaderProps) {
+function buildImgTag(img: ImageData): string {
+  let src = "";
+  if (img.raw_data) {
+    src = img.raw_data.startsWith("data:")
+      ? img.raw_data
+      : `data:image/jpeg;base64,${img.raw_data}`;
+  } else if (img.url) {
+    src = img.url;
+  }
+  const alt = img.alt ?? "";
+  return `<img src="${src}" alt="${alt}" class="mx-auto my-4 max-w-full rounded-xl shadow-md" loading="lazy" />`;
+}
+
+function insertImages(content: string, images: ImageData[]): string {
+  if (!images.length) return content;
+  const positioned = images
+    .filter((img): img is ImageData & { insert: number } => img.insert != null)
+    .sort((a, b) => a.insert - b.insert);
+  if (!positioned.length) return content;
+  let result = content;
+  for (let i = positioned.length - 1; i >= 0; i--) {
+    const img = positioned[i];
+    const pos = Math.max(0, Math.min(img.insert, result.length));
+    result = result.slice(0, pos) + buildImgTag(img) + result.slice(pos);
+  }
+  return result;
+}
+
+export function Reader({ title, content, images = [], chapters, currentChapterId, author, onNavigate, onBack, className }: ReaderProps) {
   const [fontSize, setFontSize] = useState(18);
   const [isDark, setIsDark] = useState(() => typeof window !== "undefined" && document.documentElement.classList.contains("dark"));
   const touchStartX = useRef(0);
+  const touchTargetRef = useRef<EventTarget | null>(null);
   const navLock = useRef(false);
 
   const toggleDark = useCallback(() => {
@@ -34,8 +64,15 @@ export function Reader({ title, content, chapters, currentChapterId, author, onN
     return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
   }, [chapters, currentChapterId, onNavigate]);
 
-  const onTouchStart = (e: TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const onTouchStart = (e: TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchTargetRef.current = e.target;
+  };
   const onTouchEnd = (e: TouchEvent) => {
+    if (touchTargetRef.current) {
+      const el = touchTargetRef.current as HTMLElement;
+      if (el.closest("button, a, input, [role=button]")) return;
+    }
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const idx = chapters.findIndex(c => c.id === currentChapterId);
     if (Math.abs(dx) < 60) return;
@@ -45,6 +82,13 @@ export function Reader({ title, content, chapters, currentChapterId, author, onN
 
   const currentIdx = chapters.findIndex(c => c.id === currentChapterId);
   const hasPrev = currentIdx > 0, hasNext = currentIdx < chapters.length - 1;
+
+  const htmlContent = insertImages(content, images)
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => `<p>${p}</p>`)
+    .join("");
 
   return (
     <div className={cn("relative min-h-screen", className)}>
@@ -91,14 +135,7 @@ export function Reader({ title, content, chapters, currentChapterId, author, onN
         <article
           className="prose prose-slate max-w-none font-serif dark:prose-invert [&_p]:indent-8"
           style={{ fontSize: `${fontSize}px`, lineHeight: "1.8" }}
-          dangerouslySetInnerHTML={{
-            __html: content
-              .split(/\n\n+/)
-              .map(p => p.trim())
-              .filter(Boolean)
-              .map(p => `<p>${p}</p>`)
-              .join(""),
-          }}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
         {author && (
           <p className="mt-16 text-center text-xs text-slate-300 dark:text-slate-600">
