@@ -1356,7 +1356,7 @@ def do_download(engine, url: str, group: str, format_configs: dict, max_workers:
 
 
 
-def do_export_menu(group: str, format_configs: dict, dl):
+def do_export_menu(group: str, format_configs: dict, engine):
     """导出已下载的小说（不重新下载，仅从 storage 读取后导出）。"""
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
@@ -1406,7 +1406,6 @@ def do_export_menu(group: str, format_configs: dict, dl):
         "encoding", "file_name_template", "css_style", "include_toc",
     ) if k in fmt_cfg}
     opt = opt_cls(output_path=raw_path, **extra)
-    options.set_export(opt)
 
     targets = novels_info if selection == "all" else [selection]
 
@@ -1427,7 +1426,7 @@ def do_export_menu(group: str, format_configs: dict, dl):
     print("\n导出完成！")
 
 
-def do_delete(dl):
+def do_delete(engine):
     """选择小说并彻底删除本地数据。"""
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
@@ -1585,7 +1584,6 @@ def main():
     group_info = f"分组: {group} ({grouped_novels} 本已分组)" if grouped_novels else f"分组: {group}"
     print(f"平台: {platform}  |  模式: {mode}  |  {group_info}")
     engine = None
-    dl = None
 
     def _get_engine_dl():
         nonlocal engine
@@ -1676,7 +1674,7 @@ def main():
                     try:
                         eng = _get_engine_dl()
                         mw = cfg.get("download", {}).get("max_workers", 3)
-                        do_download(e, url, group, format_configs, max_workers=mw)
+                        do_download(eng, url, group, format_configs, max_workers=mw)
                     except AntiCrawlError:
                         print("⚠ 触发反爬，下载中断（已保存部分进度）")
                     except Exception as e:
@@ -1700,7 +1698,7 @@ def main():
                         try:
                             eng = _get_engine_dl()
                             mw = cfg.get("download", {}).get("max_workers", 3)
-                            do_download(e, url, group, format_configs, max_workers=mw)
+                            do_download(eng, url, group, format_configs, max_workers=mw)
                         except AntiCrawlError:
                             print("⚠ 触发反爬，下载中断（已保存部分进度）")
                         except Exception as e:
@@ -1710,7 +1708,7 @@ def main():
             elif action == "export":
                 try:
                     eng = _get_engine_dl()
-                    do_export_menu(group, format_configs, d)
+                    do_export_menu(group, format_configs, eng)
                 except Exception as e:
                     print(f"✗ 导出失败: {e}")
                     _log.exception("export failed")
@@ -1718,7 +1716,7 @@ def main():
             elif action == "delete":
                 try:
                     eng = _get_engine_dl()
-                    do_delete(d)
+                    do_delete(eng)
                 except Exception as e:
                     print(f"✗ 删除失败: {e}")
                     _log.exception("delete failed")
@@ -1727,7 +1725,7 @@ def main():
                 try:
                     eng = _get_engine_dl()
                     mw = cfg.get("download", {}).get("max_workers", 3)
-                    do_update(e, group, format_configs, max_workers=mw)
+                    do_update(eng, group, format_configs, max_workers=mw)
                 except Exception as e:
                     print(f"✗ 更新失败: {e}")
                     _log.exception("update failed")
