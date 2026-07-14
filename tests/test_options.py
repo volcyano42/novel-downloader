@@ -7,7 +7,6 @@ from novelbase.core.options import (
     Options, APIOptions, RequestsOptions, BrowserOptions,
     ExportOptions,
 )
-from novelbase.utils.logger import LogOptions
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -128,10 +127,6 @@ class TestOptions:
         o = Options().set_log_options(level="INFO", enabled=True, output_dir="/tmp/logs")
         assert o.log.level == "INFO"
         assert o.log.output_dir == "/tmp/logs"
-
-    def test_log_options_default(self):
-        o = Options()
-        assert isinstance(o.log, LogOptions)
 
     def test_set_export(self):
         opt = ExportOptions(format="txt", output_path="/tmp/out")

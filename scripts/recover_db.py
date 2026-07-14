@@ -190,7 +190,7 @@ def extract_chapters_stream(path: str) -> list[dict]:
             f.seek(read_start)
             raw = f.read(read_end - read_start)
 
-            text = raw.decode("utf-8", errors="replace")
+            text = b"".join(ch.get("content", "").encode() for ch in chapters).decode("utf-8", errors="replace")
             # 清理二进制垃圾
             text = re.sub(r'\x00+', '', text)
             text = re.sub(r'^[\x00-\x08\x0b\x0c\x0e-\x1f]+', '', text)
@@ -327,7 +327,7 @@ def main():
     # 用章节标题推断书名（如果 meta 没提取到）
     if not meta or not meta.get("title"):
         # 从章节内容中推断
-        text = raw.decode("utf-8", errors="replace")
+        text = b"".join(ch.get("content", "").encode() for ch in chapters).decode("utf-8", errors="replace")
         # 扫描内容中重复出现的角色名/小说特征来确认
         meta = meta or {}
         # 从章节标题猜测 — 找第1章的完整标题作为参考
