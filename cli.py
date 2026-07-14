@@ -18,9 +18,8 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-# ── 复用 main.py 的配置加载 ─────────────────────────────────────
-from main import (
-    APP_DATA, CONFIG_DIR,
+# ── 复用 app.config 的配置加载 ─────────────────────────────────
+from app.config import (
     load_main_config, load_site_config, load_format_configs, load_groups,
     build_options, add_novel_to_group, ensure_novel_in_group,
 )
@@ -123,9 +122,9 @@ def cmd_search(args):
 def cmd_download(args):
     engine, format_configs = _get_engine(args.platform, args.engine)
     try:
-        from main import do_download
-        do_download(engine, engine, args.url, args.group, format_configs,
-                    max_workers=args.workers)
+        from app.core import _do_download_inner
+        _do_download_inner(engine, args.url, args.group, format_configs,
+                           max_workers=args.workers)
     finally:
         engine.close()
 
@@ -133,8 +132,8 @@ def cmd_download(args):
 def cmd_update(args):
     engine, format_configs = _get_engine(args.platform, args.engine)
     try:
-        from main import do_update
-        do_update(engine, engine, args.group, format_configs, max_workers=args.workers)
+        from app.core import do_update
+        do_update(format_configs, max_workers=args.workers)
     finally:
         engine.close()
 
@@ -146,12 +145,8 @@ def cmd_export(args):
         print(f"格式 '{args.format}' 未在 app_data/config/formats/ 中配置")
         sys.exit(1)
 
-    engine, _ = _get_engine("fanqie", "requests")  # 导出不需要真实引擎
-    try:
-        from main import do_export_menu
-        do_export_menu(args.group, fmt_cfg, engine)
-    finally:
-        engine.close()
+    from app.menus import do_export_menu
+    do_export_menu(args.group, fmt_cfg)
 
 
 def cmd_info(args):
