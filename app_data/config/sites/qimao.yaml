@@ -24,7 +24,7 @@ browser:
   headless: false
   retry_times: 3
   timeout: 30
-  user_data_dir: app_data/browser/Chromium/User Data
+  user_data_dir: app_data\browser\Chromium\User Data
   viewport:
     height: 720
     width: 1280

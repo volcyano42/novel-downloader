@@ -9,6 +9,7 @@ download:
 log:
   level: INFO
 mode: api
+name: Novel下载器
 storage:
   backend: sqlite
   database_url: sqlite:///app_data/storage/novels.db

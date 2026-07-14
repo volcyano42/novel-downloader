@@ -16,9 +16,9 @@ api:
   rain:
     backoff_factor: 2
     delay:
+    - 1
     - 2
-    - 3
-    enabled: true
+    enabled: false
     key: ''
     params: {}
     retry_times: 3
@@ -29,12 +29,12 @@ browser:
   backoff_factor: 2
   browser_type: chromium
   delay:
-  - 3
+  - 2
   - 5
   headless: false
   retry_times: 3
   timeout: 30
-  user_data_dir: /mnt/d/Linux/novel-downloader/app_data/browser/Chromium/User Data
+  user_data_dir: app_data\browser\Chromium\User Data
   viewport:
     height: 720
     width: 1280
