@@ -1530,7 +1530,7 @@ def do_update(engine, group: str, format_configs: dict, max_workers: int = 3):
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
         try:
             mw = cfg.get("download", {}).get("max_workers", 3)
-            do_download(engine, dl, novel.url, group, format_configs, max_workers=mw)
+            do_download(engine, novel.url, group, format_configs, max_workers=mw)
         except AntiCrawlError:
             print("⚠ 触发反爬，更新中断（已保存部分进度）")
         except Exception as e:
@@ -1632,7 +1632,7 @@ def main():
                     options = build_options(cfg, site_cfg)
                     if engine is not None:
                         engine.close()
-                    engine, dl = None, None
+                    engine = None
                     print(f"✓ 已切换到: {platform_labels.get(platform, platform)}")
 
             elif action == "login":
@@ -1646,12 +1646,12 @@ def main():
                     options = build_options(cfg, site_cfg)
                     if engine is not None:
                         engine.close()
-                    engine, dl = None, None
+                    engine = None
                 else:
                     options = build_options(cfg, site_cfg)
                     if engine is not None:
                         engine.close()
-                    engine, dl = None, None
+                    engine = None
                 print("✓ 设置已应用")
 
             elif action == "download":

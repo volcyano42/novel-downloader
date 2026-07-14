@@ -91,10 +91,9 @@ def cmd_export(novel_id: str, fmt: str):
     options.set_export(opt)
 
     engine = create_engine(options)
-    dl = _NovelDownloader_removed(engine, options=options)
     try:
         print(f"\n正在导出为 {fmt}...")
-        dl.export(meta)
+        do_export(meta, engine, options=opt)
         print(f"✓ 导出完成 → {raw_path}")
     finally:
         engine.close()
