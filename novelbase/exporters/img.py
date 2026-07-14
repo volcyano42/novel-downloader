@@ -105,9 +105,7 @@ class IMGExporter(BASEExporter):
         """用 novel 变量格式化 output_path。"""
         from datetime import datetime
 
-        class _SafeDict(dict):
-            def __missing__(self, key):
-                return "{" + key + "}"
+        from ..utils.template_utils import SafeDict as _SafeDict
 
         variables = _SafeDict({
             "title": novel.title if novel else "",
@@ -174,5 +172,5 @@ class IMGExporter(BASEExporter):
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
-        """移除文件系统不允许的字符。"""
-        return re.sub(r'[\\/*?:"<>|]', "_", name)
+        from ..utils.template_utils import sanitize_filename
+        return sanitize_filename(name)

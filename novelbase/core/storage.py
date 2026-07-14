@@ -102,6 +102,11 @@ class BaseStorage(ABC):
         """彻底删除某部小说的所有数据。"""
         ...
 
+    @abstractmethod
+    def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
+        """删除单个章节。"""
+        ...
+
 
 class LocalStorage(BaseStorage):
     """本地 JSON 文件存储。
@@ -237,6 +242,12 @@ class LocalStorage(BaseStorage):
         path = self._novel_dir(novel_id)
         if path.exists():
             shutil.rmtree(path)
+
+    def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
+        _log.info("delete_chapter: novel=%s chapter=%s", novel_id, chapter_id)
+        chapter_dir = self._novel_dir(novel_id) / chapter_id
+        if chapter_dir.exists():
+            shutil.rmtree(chapter_dir)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -500,3 +511,9 @@ class SQLiteStorage(BaseStorage):
             except FileNotFoundError:
                 pass
 
+
+    def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
+        _log.info("delete_chapter sqlite: novel=%s chapter=%s", novel_id, chapter_id)
+        with self._connect_novel(novel_id) as conn:
+            conn.execute("DELETE FROM illustrations WHERE owner_type = ? AND owner_id = ?", ("chapter", chapter_id))
+            conn.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))

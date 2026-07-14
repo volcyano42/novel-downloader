@@ -188,9 +188,7 @@ img {
         """从 options + novel 构建输出文件路径。"""
         from datetime import datetime
 
-        class _SafeDict(dict):
-            def __missing__(self, key):
-                return "{" + key + "}"
+        from ..utils.template_utils import SafeDict as _SafeDict
 
         file_name_template = getattr(self.options, "file_name_template", "{title}")
         variables = _SafeDict({
@@ -715,8 +713,8 @@ img {
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
-        """移除文件系统不允许的字符。"""
-        return re.sub(r'[\\/*?:"<>|]', "_", name)
+        from ..utils.template_utils import sanitize_filename
+        return sanitize_filename(name)
 
 
 # 模块结尾 — 导出类的命名必须符合 register_exporter 的约定

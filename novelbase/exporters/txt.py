@@ -11,7 +11,7 @@ from ..models.novel import Chapter, Novel
 
 @dataclass
 class TXTExportOptions(ExportOptions):
-    format = "txt"
+    format: str = "txt"
     encoding: str = "utf-8"
 
 
@@ -57,9 +57,7 @@ class TXTExporter(BASEExporter):
         """从 options + novel 构建输出文件路径。"""
         from datetime import datetime
 
-        class _SafeDict(dict):
-            def __missing__(self, key):
-                return "{" + key + "}"
+        from ..utils.template_utils import SafeDict as _SafeDict
 
         variables = _SafeDict({
             "title": novel.title if novel else "",

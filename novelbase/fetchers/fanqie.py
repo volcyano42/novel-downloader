@@ -238,7 +238,7 @@ class FanqieHTMLParser:
         return Chapters(chapter_list)
 
     @staticmethod
-    def parse_chapter_content(html: str, chapter: Chapter) -> Chapter:
+    def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
         """解析并填充content, count, images, """
 
         if BeautifulSoup(html, 'lxml').find("div", class_="no-content"):
@@ -575,7 +575,6 @@ class FanqieOIAPIFetcher(BaseFetcher):
         for data in data_list.values() if isinstance(data_list, dict) else []:
             chapter.content = data.get('content', '').replace(f"{data.get('chapter_title', '')}\n\n", "")
             chapter.count = data.get('word_number', 0)
-            pass #  removed
             break
 
         return chapter
@@ -751,7 +750,6 @@ class FanqieRainFetcher(BaseFetcher):
 
         chapter.content = content
         chapter.count = len(content)
-        pass #  removed
 
         return chapter
 
@@ -779,7 +777,7 @@ class FanqieRequestsFetcher(BaseFetcher):
 
         return novel
 
-    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapter | None:
+    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapters:
         url = f"https://fanqienovel.com/page/{standardize_id(url)}"
         html = engine.fetch_text(url=url, **kwargs)
         chapter_list = FanqieHTMLParser.parse_chapter_list(html=html)

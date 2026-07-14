@@ -79,7 +79,7 @@ class QidianHTMLParser:
 
             name = soup.find('h1', id='bookName').get_text()
 
-            intro = None
+            intro = soup.find("p", class_="book-desc").get_text() if soup.find("p", class_="book-desc") else None
             if soup.find('div', class_='author-information'):
                 author = soup.find('a', class_='writer-name').get_text()
                 attribute_str = soup.find('p', class_='book-attribute').text
@@ -124,7 +124,6 @@ class QidianHTMLParser:
     @staticmethod
     def parse_chapter_list(html: str, *, url: str = "") -> Chapters:
 
-        html = html
         soup = BeautifulSoup(html, 'lxml')
 
         if not QidianHTMLParser.content_is_exist(html):

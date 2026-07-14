@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence, Literal
 
-from ..utils.logger import LogOptions
 
 
 @dataclass
@@ -57,7 +56,6 @@ class Options:
         _browser: BrowserOptions = field(default_factory=BrowserOptions)
         _api: APIOptions = field(default_factory=APIOptions)
         _storage: StorageOptions | None = None
-        _log: LogOptions = field(default_factory=LogOptions)
         _export: ExportOptions | None = None
 
         def set_mode(self, mode: Literal["api", "browser", "requests"]) -> "Options":
@@ -115,13 +113,6 @@ class Options:
                                            database_url=database_url)
             return self
 
-        def set_log_options(self,
-                            enabled: bool = True,
-                            output_dir: str | None = None,
-                            level: str = "DEBUG") -> "Options":
-            self._log = LogOptions(enabled=enabled, output_dir=output_dir, level=level)
-            return self
-
         def set_export(self, options: ExportOptions) -> "Options":
             self._export = options
             return self
@@ -145,9 +136,6 @@ class Options:
 
         @property
         def storage(self) -> StorageOptions | None: return self._storage
-
-        @property
-        def log(self) -> LogOptions: return self._log
 
         @property
         def export(self) -> ExportOptions | None: return self._export

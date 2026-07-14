@@ -240,7 +240,7 @@ class QimaoHTMLParser:
     # ---------- 章节正文 ----------
 
     @staticmethod
-    def parse_chapter_content(html: str, chapter: Chapter) -> Chapter:
+    def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
         """解析章节正文内容。"""
         soup = BeautifulSoup(html, "lxml")
 
@@ -517,7 +517,6 @@ class QimaoRainFetcher(BaseFetcher):
 
         chapter.content = content
         chapter.count = len(content)
-        pass #  removed
 
         return chapter
 

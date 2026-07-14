@@ -13,7 +13,7 @@ from urllib3.util.retry import Retry
 
 from .exceptions import NetworkError
 from .options import Options, BrowserOptions, APIOptions, RequestsOptions
-from ..utils.logger import get_logger
+from ..utils.logger import get_logger, mask_key
 
 _log = get_logger("novelbase.core.engine")
 
@@ -145,7 +145,7 @@ class APIEngine(Engine):
 
     def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         post_data = kwargs.pop('post_data', None)
-        _log.debug("API fetch_text: url=%s", url[:80])
+        _log.debug("API fetch_text: url=%s", mask_key(url[:120]))
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
         else:
@@ -155,7 +155,7 @@ class APIEngine(Engine):
 
     def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
         post_data = kwargs.pop('post_data', None)
-        _log.debug("API fetch_json: url=%s", url[:80])
+        _log.debug("API fetch_json: url=%s", mask_key(url[:120]))
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
         else:
@@ -257,20 +257,20 @@ class BrowserEngine(Engine):
         return self._browser.new_tab()
 
     def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
-        _log.debug("fetch_text start: url=%s", url[:80])
+        _log.debug("fetch_text start: url=%s", mask_key(url[:120]))
         page = self.get_page()
 
         for i in range(self.options.retry_times):
             if i > 0:
                 _log.warning(
                     "fetch_text retry %s/%s: url=%s",
-                    i + 1, self.options.retry_times, url[:80],
+                    i + 1, self.options.retry_times, mask_key(url[:120]),
                 )
             try:
                 page.get(url, timeout=self.options.timeout)
                 if not skip_delay:
                     time.sleep(random.uniform(*self.options.delay))
-                _log.debug("fetch_text ok: len=%s url=%s", len(page.html), url[:80])
+                _log.debug("fetch_text ok: len=%s url=%s", len(page.html), mask_key(url[:120]))
                 return page.html
             except Exception as e:
                 backoff = self.options.backoff_factor * (2 ** i)
@@ -278,7 +278,7 @@ class BrowserEngine(Engine):
                            i + 1, e, backoff)
                 time.sleep(backoff)
 
-        _log.error("fetch_text exhausted retries: url=%s", url[:80])
+        _log.error("fetch_text exhausted retries: url=%s", mask_key(url[:120]))
         raise NetworkError(
             f"fetch_text failed after {self.options.retry_times} retries",
             url=url,
@@ -363,7 +363,7 @@ class RequestsEngine(Engine):
     # ── 请求 ─────────────────────────────────────────────────────
 
     def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
-        _log.debug("Requests fetch_text: url=%s", url[:80])
+        _log.debug("Requests fetch_text: url=%s", mask_key(url[:120]))
         session = self._get_session()
         try:
             response = session.get(
