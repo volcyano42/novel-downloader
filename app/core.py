@@ -12,6 +12,7 @@ from app.menus import do_settings, do_export_menu, do_delete
 from app.ui import (
     _select, _text_input, _show_platforms, _platform_label,
     _create_progress, _advance_progress, parse_order_string, _build_url_from_id,
+    _display_width, _pad_right, _pad_center,
 )
 from novelbase import (
     fetch_meta, fetch_chapter_list, resolve_chapter, export,
@@ -376,19 +377,25 @@ def main():
             group = dl.get("group", "default")
             max_workers = dl.get("max_workers", 3)
 
-            print(f"\n┌{'─'*50}┐")
-            print(f"│ {platform_label:^48} │")
-            print(f"│ 模式: {mode:<8} 分组: {group:<10}         │")
-            print(f"├{'─'*50}┤")
-            print(f"│ 1. 🔍 搜索下载                │")
-            print(f"│ 2. 🔄 更新已有小说            │")
-            print(f"│ 3. 📤 导出小说                │")
-            print(f"│ 4. 🔁 重新导出                │")
-            print(f"│ 5. 🗑️  删除小说               │")
-            print(f"│ 6. ⚙️  设置                  │")
-            print(f"│ 7. 🔑 登录                    │")
-            print(f"│ 0. 🚪 退出                    │")
-            print(f"└{'─'*50}┘")
+            BOX_W = 48
+            items = [
+                "1. 🔍 搜索下载",
+                "2. 🔄 更新已有小说",
+                "3. 📤 导出小说",
+                "4. 🔁 重新导出",
+                "5. 🗑️  删除小说",
+                "6. ⚙️  设置",
+                "7. 🔑 登录",
+                "0. 🚪 退出",
+            ]
+            print(f"\n┌{'─'*(BOX_W+2)}┐")
+            print(f"│ {_pad_center(platform_label, BOX_W)} │")
+            info_line = f"模式: {mode}    分组: {group}"
+            print(f"│ {_pad_right(info_line, BOX_W)} │")
+            print(f"├{'─'*(BOX_W+2)}┤")
+            for item in items:
+                print(f"│ {_pad_right(item, BOX_W)} │")
+            print(f"└{'─'*(BOX_W+2)}┘")
 
             try:
                 ch = input("请选择: ").strip()

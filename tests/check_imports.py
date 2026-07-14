@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """CI 导入检查：运行在 github workflow 中"""
 import sys
 

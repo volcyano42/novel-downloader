@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import unicodedata
 from typing import Any
 
 from novelbase.utils.logger import get_logger
@@ -178,3 +179,28 @@ def _build_url_from_id(novel_id: str) -> str:
         if url:
             return url
     return ""
+
+
+# ── Display width helpers (CJK-aware) ─────────────────
+
+
+def _display_width(s: str) -> int:
+    """Return terminal display width (CJK chars / emoji = 2, others = 1)."""
+    w = 0
+    for ch in s:
+        w += 2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1
+    return w
+
+
+def _pad_right(s: str, width: int) -> str:
+    """Right-pad string to target display width, CJK-aware."""
+    return s + " " * max(0, width - _display_width(s))
+
+
+def _pad_center(s: str, width: int) -> str:
+    """Center string to target display width, CJK-aware."""
+    dw = _display_width(s)
+    if dw >= width:
+        return s
+    left = (width - dw) // 2
+    return " " * left + s + " " * (width - dw - left)
