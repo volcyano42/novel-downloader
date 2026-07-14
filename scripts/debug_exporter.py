@@ -15,7 +15,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from main import APP_DATA, load_format_configs, load_main_config, build_options
-from nldlder.utils.registry import register_exporter
+from novelbase.utils.registry import register_exporter
 
 
 def cmd_list():
@@ -24,7 +24,7 @@ def cmd_list():
         print("storage 目录不存在")
         return
 
-    from nldlder import LocalStorage
+    from novelbase import LocalStorage
     storage = LocalStorage(storage_dir)
     novel_dirs = [d for d in storage_dir.iterdir() if d.is_dir()]
     if not novel_dirs:
@@ -44,7 +44,7 @@ def cmd_export(novel_id: str, fmt: str):
         print("storage 目录不存在")
         return
 
-    from nldlder import LocalStorage, NovelDownloader, create_engine
+    from novelbase import LocalStorage, do_export, create_engine
     storage = LocalStorage(storage_dir)
 
     # 加载小说元数据和章节
@@ -75,7 +75,7 @@ def cmd_export(novel_id: str, fmt: str):
         return
 
     fmt_cfg = fmt_configs[fmt]
-    from nldlder.utils.registry import register_export_options
+    from novelbase.utils.registry import register_export_options
     opt_cls_map = register_export_options()
     opt_cls = opt_cls_map.get(fmt)
     if opt_cls is None:
@@ -91,7 +91,7 @@ def cmd_export(novel_id: str, fmt: str):
     options.set_export(opt)
 
     engine = create_engine(options)
-    dl = NovelDownloader(engine, options=options)
+    dl = _NovelDownloader_removed(engine, options=options)
     try:
         print(f"\n正在导出为 {fmt}...")
         dl.export(meta)

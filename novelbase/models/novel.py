@@ -104,7 +104,7 @@ class Illustration:
                                 insert=self.insert, url=self.url)
         except Exception as e:
             import logging
-            logging.getLogger("nldlder.models.novel").warning(
+            logging.getLogger("novelbase.models.novel").warning(
                 "Illustration.convert(%s) 失败: %s", target_format, e)
             return self
 

@@ -28,9 +28,9 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from nldlder.fetchers.base import BaseFetcher
-from nldlder.models.novel import Chapter
-from nldlder.utils.registry import register_fetcher
+from novelbase.fetchers.base import BaseFetcher
+from novelbase.models.novel import Chapter
+from novelbase.utils.registry import register_fetcher
 
 def _get_fetcher_class(platform: str) -> type[BaseFetcher]:
     fetchers = register_fetcher()
@@ -43,7 +43,7 @@ def _get_fetcher_class(platform: str) -> type[BaseFetcher]:
 
 def _get_parser_class(platform: str):
     """尝试导入 {Platform}HTMLParser。"""
-    module_name = f"nldlder.fetchers.{platform}"
+    module_name = f"novelbase.fetchers.{platform}"
     class_name = f"{platform.capitalize()}HTMLParser"
     try:
         mod = importlib.import_module(module_name)
@@ -54,7 +54,7 @@ def _get_parser_class(platform: str):
 
 def _get_standardize_id(platform: str):
     """尝试导入 standardize_id 函数。"""
-    module_name = f"nldlder.fetchers.{platform}"
+    module_name = f"novelbase.fetchers.{platform}"
     try:
         mod = importlib.import_module(module_name)
         return getattr(mod, "standardize_id", None)
@@ -133,7 +133,7 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
 
 def _build_engine(platform: str, engine_mode: str):
     from main import load_main_config, load_site_config, build_options
-    from nldlder import create_engine
+    from novelbase import create_engine
 
     cfg = load_main_config()
     cfg["mode"] = engine_mode
@@ -145,7 +145,7 @@ def cmd_live_search(platform: str, engine_mode: str, query: str):
     engine = _build_engine(platform, engine_mode)
     try:
         from main import load_main_config, load_site_config, build_options
-        from nldlder.core.downloader import search
+        from novelbase.core.downloader import search
         results = search(platform, query, engine)
         if not results:
             print("未找到任何结果")

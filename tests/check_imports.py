@@ -3,8 +3,11 @@ import sys
 
 sys.path.insert(0, ".")
 
-from nldlder import (
-    NovelDownloader,
+from novelbase import (
+    fetch_meta,
+    fetch_chapter_list,
+    resolve_chapter,
+    do_export,
     Options,
     create_engine,
     get_fetchers,
@@ -22,8 +25,8 @@ from nldlder import (
     configure_logging,
     LogOptions,
 )
-import nldlder
+import novelbase
 
-print("✓ nldlder v" + nldlder.__version__ + " 导入成功")
+print("✓ novelbase v" + novelbase.__version__ + " 导入成功")
 print("  注册的 Fetcher: " + str(list(get_fetchers().keys())))
 print("  注册的导出器: " + str(list(get_exporters().keys())))

@@ -15,7 +15,7 @@ from .exceptions import NetworkError
 from .options import Options, BrowserOptions, APIOptions, RequestsOptions
 from ..utils.logger import get_logger
 
-_log = get_logger("nldlder.core.engine")
+_log = get_logger("novelbase.core.engine")
 
 
 class Engine(ABC):

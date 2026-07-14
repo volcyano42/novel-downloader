@@ -2,8 +2,8 @@
 
 用法::
 
-    from nldlder.core.storage import create_storage
-    from nldlder.core.options import StorageOptions
+    from novelbase.core.storage import create_storage
+    from novelbase.core.options import StorageOptions
 
     opts = StorageOptions(backend="local", base_dir="app_data/storage")
     store = create_storage(opts)
@@ -23,7 +23,7 @@ from .options import StorageOptions
 from ..models.novel import Novel, Chapter, Chapters, Illustration
 from ..utils.logger import get_logger
 
-_log = get_logger("nldlder.core.storage")
+_log = get_logger("novelbase.core.storage")
 
 
 # ═══════════════════════════════════════════════════════════════════

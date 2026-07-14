@@ -11,11 +11,11 @@ from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
 from ..utils.logger import get_logger
 
-_log = get_logger("nldlder.fetchers.qimao")
+_log = get_logger("novelbase.fetchers.qimao")
 
 
 def standardize_id(ref: str | Novel | Chapter) -> str:
-    """从 URL 或对象中提取 nldlder 内部使用的 ID。
+    """从 URL 或对象中提取 novelbase 内部使用的 ID。
 
     对于七猫：
     - 小说 ID：纯数字（如 ``195958``）
@@ -546,7 +546,7 @@ class QimaoRequestsFetcher(BaseFetcher):
         html = engine.fetch_text(url=url, **kwargs)
         return QimaoHTMLParser.parse_novel_info(html, url=url)
 
-    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapter | None:
+    def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapters:
         novel_id = standardize_id(url)
         url = f"https://www.qimao.com/shuku/{novel_id}/"
         html = engine.fetch_text(url=url, **kwargs)

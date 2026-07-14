@@ -13,7 +13,7 @@ from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel, Illustration
 from ..utils.logger import get_logger
 
-_log = get_logger("nldlder.exporters.epub")
+_log = get_logger("novelbase.exporters.epub")
 
 from PIL import Image
 

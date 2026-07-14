@@ -23,7 +23,7 @@ def configure_logging(opts: LogOptions, force: bool = False) -> None:
 
     线程安全，多次调用只有第一次生效。
     ``force=True`` 可强制覆盖已初始化配置（exe 环境需要）。
-    推荐在任何 get_logger / import nldlder 子模块之前调用。
+    推荐在任何 get_logger / import novelbase 子模块之前调用。
     """
     global _initialized, _log_file
 
@@ -32,7 +32,7 @@ def configure_logging(opts: LogOptions, force: bool = False) -> None:
             return
         _initialized = True
 
-        root = logging.getLogger("nldlder")
+        root = logging.getLogger("novelbase")
         root.setLevel(getattr(logging, opts.level.upper(), logging.DEBUG))
 
         if not opts.enabled:
@@ -61,7 +61,7 @@ def configure_logging(opts: LogOptions, force: bool = False) -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """返回子 logger，继承 nldlder 父 logger 的 FileHandler。
+    """返回子 logger，继承 novelbase 父 logger 的 FileHandler。
 
     子 logger 自身不挂 handler，依赖 Python logging 层级传播。
     """

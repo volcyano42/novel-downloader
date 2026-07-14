@@ -7,9 +7,9 @@ import platform
 import subprocess
 import sys
 
-from nldlder.utils.logger import get_logger
+from novelbase.utils.logger import get_logger
 
-_log = get_logger("nldlder.notify")
+_log = get_logger("novelbase.notify")
 
 
 def bell():

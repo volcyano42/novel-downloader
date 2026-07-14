@@ -166,7 +166,7 @@ class IMGExporter(BASEExporter):
             return buf.getvalue()
         except ImportError:
             import logging
-            logging.getLogger("nldlder.exporters.img").warning(
+            logging.getLogger("novelbase.exporters.img").warning(
                 "Pillow 未安装，跳过格式转换，保持原格式")
             return raw_data
 

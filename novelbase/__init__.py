@@ -1,5 +1,8 @@
 from .core.downloader import (
-    NovelDownloader,
+    fetch_meta,
+    fetch_chapter_list,
+    resolve_chapter,
+    do_export,
     get_fetcher_for_url,
     get_fetcher_for_id,
     get_fetchers,
@@ -40,7 +43,10 @@ __version__ = "3.0.0"
 
 
 __all__ = [
-    "NovelDownloader",
+    "fetch_meta",
+    "fetch_chapter_list",
+    "resolve_chapter",
+    "do_export",
     "create_engine",
     "delete_engine",
     "get_fetcher_for_url",

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from nldlder.core.options import (
+from novelbase.core.options import (
     Options, APIOptions, RequestsOptions, BrowserOptions,
     ExportOptions,
 )
-from nldlder.utils.logger import LogOptions
+from novelbase.utils.logger import LogOptions
 
 
 # ═══════════════════════════════════════════════════════════════

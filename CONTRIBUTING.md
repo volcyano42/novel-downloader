@@ -37,7 +37,7 @@ novel-downloader/
 ├── main.py
 ├── requirements.txt
 │
-├── nldlder/
+├── novelbase/
 │   ├── __init__.py
 │   │
 │   ├── core/
@@ -102,7 +102,7 @@ exporters/       → core/options.py, models/
    ↓
 core/downloader.py
    ↓
-nldlder/__init__.py
+novelbase/__init__.py
    ↓
 main.py
 ```
@@ -132,21 +132,21 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML
 
 ### 新解析器
 
-1. 在 `nldlder/fetchers/` 下新建文件 `{name}.py`
+1. 在 `novelbase/fetchers/` 下新建文件 `{name}.py`
 2. 继承 `BaseFetcher`，实现抽象方法
 3. 必须有`{Name}Fetcher`
 4. 在 `app_data/config/sites/` 下添加对应的 `{name}.yaml`,模板可以复制其他的
 
 ### 新导出器
 
-1. 在 `nldlder/exporters/` 下新建文件
+1. 在 `novelbase/exporters/` 下新建文件
 2. 继承 `ExportOptions`，设置 `format` 字段，定义 `{Name}ExportOptions` 数据类
 3. 定义 `{Name}Exporter` 类（继承 `BASEExporter`，实现 `export()`）
 4. 在 `app_data/config/formats/` 下添加对应的 `{name}.yaml`，模板可以使用
 
 ### 新引擎
 
-1. 在`nldlder/core/engine.py`创建类 `{Name}Engine`
+1. 在`novelbase/core/engine.py`创建类 `{Name}Engine`
 2. 继承 `Engine`，实现所有抽象方法
 3. 在 `create_engine`的 `mode_map` 字典中，添加字段
 

@@ -2,9 +2,9 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-from nldlder.core.exceptions import FeatureNotSupportedError
-from nldlder.models.auth import AuthCredential
-from nldlder.models.novel import SearchResult, Novel, Chapter, Chapters
+from novelbase.core.exceptions import FeatureNotSupportedError
+from novelbase.models.auth import AuthCredential
+from novelbase.models.novel import SearchResult, Novel, Chapter, Chapters
 
 
 class BaseFetcher(ABC):

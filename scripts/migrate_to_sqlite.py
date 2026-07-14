@@ -13,9 +13,9 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from main import APP_DATA
-from nldlder.core.storage import LocalStorage, SQLiteStorage, create_storage
-from nldlder.core.options import StorageOptions
-from nldlder.utils.logger import get_logger
+from novelbase.core.storage import LocalStorage, SQLiteStorage, create_storage
+from novelbase.core.options import StorageOptions
+from novelbase.utils.logger import get_logger
 
 _log = get_logger("migrate_to_sqlite")
 

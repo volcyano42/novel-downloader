@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from nldlder.core.storage import SQLiteStorage
-from nldlder.core.options import StorageOptions
-from nldlder.models.novel import Novel, Chapter, Chapters
+from novelbase.core.storage import SQLiteStorage
+from novelbase.core.options import StorageOptions
+from novelbase.models.novel import Novel, Chapter, Chapters
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────

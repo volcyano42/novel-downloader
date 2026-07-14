@@ -1,7 +1,7 @@
 """异常测试：验证异常消息格式和属性"""
 from __future__ import annotations
 
-from nldlder.core.exceptions import (
+from novelbase.core.exceptions import (
     NovelDownloaderError,
     NetworkError,
     AuthenticationError,

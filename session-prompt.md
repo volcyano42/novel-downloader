@@ -2,13 +2,13 @@
 
 ## 项目
 
-Vite + React 18 + shadcn/ui + Tailwind 前端，FastAPI 后端，nldlder 小说下载引擎。WSL2 开发，Vite 代理访问后端。
+Vite + React 18 + shadcn/ui + Tailwind 前端，FastAPI 后端，novelbase 小说下载引擎。WSL2 开发，Vite 代理访问后端。
 
 ## 项目结构
 
 ```
 ├── app.py                      ← python app.py 一键启动前后端
-├── nldlder/                    ← 小说下载引擎（核心库）
+├── novelbase/                    ← 小说下载引擎（核心库）
 │   ├── core/        downloader engine options storage exceptions
 │   ├── fetchers/    fanqie qidian qimao (base)
 │   ├── exporters/   txt epub img (base)

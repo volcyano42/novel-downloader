@@ -12,7 +12,7 @@ from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
 from ..utils.logger import get_logger
 
-_log = get_logger("nldlder.fetchers.fanqie")
+_log = get_logger("novelbase.fetchers.fanqie")
 
 # 字符转码表
 content_transcoding = {"58670": "0", "58413": "1", "58678": "2", "58371": "3", "58353": "4", "58480": "5", "58359": "6",
@@ -119,6 +119,18 @@ def standardize_id(ref: str | Novel | Chapter) -> str:
         if search := re.search(r"\d{19}", ref):
             return search.group(0)
     raise ValueError(f"ref {ref} Non conformance")
+
+
+def resolve_changdunovel(url: str) -> str:
+    """解析 changdunovel.com 短链，提取 book_id 返回标准 fanqienovel URL。"""
+    if "changdunovel.com" not in url:
+        return url
+    try:
+        r = requests.get(url, allow_redirects=True, timeout=10)
+        book_id = standardize_id(r.url)
+        return f"https://fanqienovel.com/page/{book_id}"
+    except (requests.RequestException, ValueError):
+        return url
 
 
 # 通过html获取小说相关信息
@@ -687,7 +699,7 @@ class FanqieRainFetcher(BaseFetcher):
                       )
         return novel
 
-    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapter | None:
+    def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
 
         novel_id = standardize_id(url)
         url = FanqieRainFetcher._api_url(engine, type=3, bookid=novel_id)
@@ -819,10 +831,12 @@ class FanqieFetcher(BaseFetcher):
         return fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
 
     def fetch_novel_info(self, url: str, engine, **kwargs) -> Novel:
+        url = resolve_changdunovel(url)
         fetcher = use_fetcher(engine=engine)()
         return fetcher.fetch_novel_info(url=url, engine=engine, **kwargs)
 
     def fetch_chapter_list(self, url: str, engine, **kwargs) -> Chapters:
+        url = resolve_changdunovel(url)
         fetcher = use_fetcher(engine=engine)()
         return fetcher.fetch_chapter_list(url=url, engine=engine, **kwargs)
 

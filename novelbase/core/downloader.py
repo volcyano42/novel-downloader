@@ -12,7 +12,7 @@ from ..utils.logger import get_logger
 
 _T = TypeVar('_T')
 
-_log = get_logger("nldlder.core.downloader")
+_log = get_logger("novelbase.core.downloader")
 
 def get_fetcher_for_url(url: str):
     """根据 URL 查找匹配的 Fetcher 类。"""
@@ -94,110 +94,79 @@ def login(platform: str, engine: BrowserEngine) -> AuthCredential:
     fetcher = fetcher_cls()
     return fetcher.login(engine=engine)
 
-class NovelDownloader:
-    """小说下载编排器。
+def fetch_meta(url: str, engine, **kwargs) -> Novel:
+    """获取小说元数据。
 
-    不持有 Novel 或 Fetcher 状态，每次调用独立解析。
+    Args:
+        url: 小说页面 URL。
+        engine: 下载引擎实例。
+
+    Returns:
+        包含书名、作者、简介、封面等信息的 Novel 对象。
     """
+    fetcher_cls = get_fetcher_for_url(url)
+    if fetcher_cls is None:
+        raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    return fetcher_cls().fetch_novel_info(url=url, engine=engine, **kwargs)
 
-    def __init__(self,
-                 engine,
-                 options: Options | None = None):
-        """
-        Args:
-            engine:  下载引擎（由调用者创建和管理，可多实例共享）。
-            options: 下载配置（影响 batch_size 等）。
-        """
-        self._engine = engine
-        self._options = options or Options()
-        self._storage_instance: BaseStorage | None = None
 
-    @property
-    def options(self) -> Options:
-        return self._options
+def fetch_chapter_list(url: str, engine, **kwargs) -> Chapters:
+    """获取章节列表。
 
-    def fetch_meta(self, url: str, **kwargs) -> Novel:
-        """获取小说元数据。
+    Args:
+        url: 小说页面 URL。
+        engine: 下载引擎实例。
 
-        Args:
-            url: 小说页面 URL。
+    Returns:
+        按 order 排序的章节列表。
+    """
+    fetcher_cls = get_fetcher_for_url(url)
+    if fetcher_cls is None:
+        raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    return fetcher_cls().fetch_chapter_list(url=url, engine=engine, **kwargs)
 
-        Returns:
-            包含书名、作者、简介、封面等信息的 Novel 对象。
-        """
-        fetcher = self._resolve_fetcher(url)
-        return fetcher.fetch_novel_info(url=url, engine=self._engine, **kwargs)
 
-    def fetch_chapter_list(self, url: str, **kwargs) -> Chapters:
-        """获取章节列表。
+def resolve_chapter(chapter: Chapter, engine, fetcher=None, **kwargs) -> Chapter | None:
+    """下载单个章节。
 
-        Args:
-            url: 小说页面 URL。
+    Args:
+        chapter: 要下载的章节。
+        engine:  下载引擎实例。
+        fetcher: 可选抓取器实例。为 None 时自动从章节 novel_id 解析。
 
-        Returns:
-            按 order 排序的章节列表。
-        """
-        fetcher = self._resolve_fetcher(url)
-        return fetcher.fetch_chapter_list(url=url, engine=self._engine, **kwargs)
-
-    def resolve_chapter(self,
-                         chapter: Chapter,
-                         fetcher=None, **kwargs) -> Chapter | None:
-        """下载单个章节。
-
-        Args:
-            chapter: 要下载的章节。
-            fetcher: 可选抓取器实例。为 None 时自动从章节 URL 解析。
-
-        Returns:
-            已填充的 Chapter，章节不可获取时返回 None。
-        """
-        if fetcher is None:
-            fetcher_cls = get_fetcher_for_id(chapter.novel_id)
-            if fetcher_cls is None:
-                raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
-            fetcher = fetcher_cls()
-        return fetcher.fetch_chapter_content(chapter=chapter, engine=self._engine, **kwargs)
-
-    def export(self, novel: Novel, format: str | None = None,
-              options: "ExportOptions | None" = None, **kwargs):
-        from ..utils.registry import register_exporter
-
-        opt = options or self._options.export
-        if opt is None or not opt.enabled:
-            return
-
-        fmt = format or opt.format
-        if not fmt:
-            return
-
-        exporter_cls = register_exporter().get(fmt)
-        if exporter_cls is None:
-            return
-
-        exporter = exporter_cls(options=opt)
-        exporter.export(novel.chapters, novel, **kwargs)
-
-    @property
-    def engine(self) -> APIEngine | RequestsEngine | BrowserEngine:
-        return self._engine
-
-    @property
-    def storage(self) -> BaseStorage:
-        """获取当前配置的 Storage 实例（惰性初始化）。"""
-        if self._storage_instance is None:
-            storage_opts = self._options.storage
-            if storage_opts is None:
-                raise RuntimeError(
-                    "StorageOptions not configured. "
-                    "Call options.set_storage_options(...) first."
-                )
-            self._storage_instance = create_storage(storage_opts)
-        return self._storage_instance
-
-    @staticmethod
-    def _resolve_fetcher(url: str):
-        fetcher_cls = get_fetcher_for_url(url)
+    Returns:
+        已填充的 Chapter，章节不可获取时返回 None。
+    """
+    if fetcher is None:
+        fetcher_cls = get_fetcher_for_id(chapter.novel_id)
         if fetcher_cls is None:
-            raise FetcherNotFoundError(f"fetcher not found for: {url}")
-        return fetcher_cls()
+            raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
+        fetcher = fetcher_cls()
+    return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)
+
+
+def do_export(novel: Novel, engine, options: ExportOptions | None = None, format: str | None = None, **kwargs):
+    """导出小说。
+
+    Args:
+        novel:   要导出的小说。
+        engine:  下载引擎实例（供导出器使用）。
+        options: 导出选项。未传时从 engine 默认配置读取。
+        format:  可选导出格式覆盖。
+    """
+    from ..utils.registry import register_exporter
+
+    opt = options
+    if opt is None or not opt.enabled:
+        return
+
+    fmt = format or opt.format
+    if not fmt:
+        return
+
+    exporter_cls = register_exporter().get(fmt)
+    if exporter_cls is None:
+        return
+
+    exporter = exporter_cls(options=opt)
+    exporter.export(novel.chapters, novel, **kwargs)

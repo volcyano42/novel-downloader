@@ -6,14 +6,14 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from .base import BaseFetcher
-from nldlder.core.engine import BrowserEngine
-from nldlder.core.exceptions import ChapterNotFoundError, FeatureNotSupportedError, NovelNotFoundError, ParseError
-from nldlder.models.auth import AuthCredential
-from nldlder.models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
-from nldlder.utils.logger import get_logger
+from novelbase.core.engine import BrowserEngine
+from novelbase.core.exceptions import ChapterNotFoundError, FeatureNotSupportedError, NovelNotFoundError, ParseError
+from novelbase.models.auth import AuthCredential
+from novelbase.models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
+from novelbase.utils.logger import get_logger
 from .. import AntiCrawlError
 
-_log = get_logger("nldlder.fetchers.qidian")
+_log = get_logger("novelbase.fetchers.qidian")
 
 def standardize_id(url: str) -> str:
     if url.startswith("https"):

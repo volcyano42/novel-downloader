@@ -1,6 +1,6 @@
 import pytest
 
-from nldlder.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
+from novelbase.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
 
 # ── Illustration fixtures ─────────────────────────────────────
 
