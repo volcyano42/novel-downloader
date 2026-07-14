@@ -209,32 +209,6 @@ export function saveFormatConfig(format: string, data: Record<string, unknown>) 
   return apiPut<void>(`/config/formats/${format}`, data);
 }
 
-// ── Engine ─────────────────────────────────────────
-
-export function listEngines() {
-  return apiGet<EngineInfo[]>("/engine");
-}
-
-export function createEngine(body: unknown) {
-  return apiPost<EngineInfo>("/engine/create", body);
-}
-
-export function getEngine(id: string) {
-  return apiGet<EngineInfo>(`/engine/${id}`);
-}
-
-export function updateEngine(id: string, body: unknown) {
-  return apiPut<EngineInfo>(`/engine/${id}`, body);
-}
-
-export function deleteEngine(id: string) {
-  return apiDelete(`/engine/${id}`);
-}
-
-export function engineTypes() {
-  return apiGet<{ types: string[] }>("/engine/type/list");
-}
-
 // ── Export ─────────────────────────────────────────
 
 export function exportFormats() {
@@ -247,12 +221,6 @@ export function triggerExport(body: unknown) {
 
 export function exportTaskStatus(taskId: string) {
   return apiGet<ExportTaskResult>(`/export/task/${taskId}`);
-}
-
-// ── Health ─────────────────────────────────────────
-
-export function healthCheck() {
-  return apiGet<{ status: string }>("/health");
 }
 
 // ── Helpers ────────────────────────────────────────

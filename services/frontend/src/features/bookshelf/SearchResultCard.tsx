@@ -33,17 +33,3 @@ export function SearchResultCard({ title, author, description, loading, onClick,
     </div>
   );
 }
-
-export function SearchResultCardSkeleton() {
-  return (
-    <div className="flex flex-col rounded-2xl border border-indigo-200/40 bg-indigo-50/30 p-5">
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-indigo-200/60" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-3/4 animate-pulse rounded bg-indigo-200/60" />
-          <div className="h-3 w-1/2 animate-pulse rounded bg-indigo-200/60" />
-        </div>
-      </div>
-    </div>
-  );
-}

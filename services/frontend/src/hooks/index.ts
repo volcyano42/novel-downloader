@@ -20,8 +20,7 @@ export function useNovels() {
   return useQuery({
     queryKey: ["novels"],
     queryFn: () => listNovels(),
-    refetchOnWindowFocus: true,
-    staleTime: 10_000,
+    staleTime: Infinity,
   });
 }
 
@@ -55,7 +54,7 @@ export function useGlobalConfig() {
   return useQuery({
     queryKey: ["global-config"],
     queryFn: () => getGlobalConfig(),
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 }
 
@@ -63,7 +62,7 @@ export function useGroups() {
   return useQuery({
     queryKey: ["groups"],
     queryFn: () => getGroups(),
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 }
 
@@ -72,7 +71,7 @@ export function useSiteConfig(website: string | undefined) {
     queryKey: ["site-config", website],
     queryFn: () => getSiteConfig(website!),
     enabled: !!website,
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 }
 
@@ -81,7 +80,7 @@ export function useFormatConfig(format: string | undefined) {
     queryKey: ["format-config", format],
     queryFn: () => getFormatConfig(format!),
     enabled: !!format,
-    staleTime: 60_000,
+    staleTime: Infinity,
   });
 }
 
@@ -89,7 +88,7 @@ export function usePlatforms() {
   return useQuery({
     queryKey: ["platforms"],
     queryFn: downloadPlatforms,
-    staleTime: 60_000 * 60,
+    staleTime: Infinity,
   });
 }
 
@@ -241,4 +240,4 @@ export function compareChapters(remote: ChapterBrief[], local: ChapterBrief[]) {
 
 // ── Backward compat aliases ────────────────────────
 
-export { useGlobalConfig as useConfig, useSaveGlobalConfig as useSaveConfig };
+

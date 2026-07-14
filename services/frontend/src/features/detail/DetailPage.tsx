@@ -7,6 +7,7 @@ import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useToast } from "@/components/Toast";
+import { SessionCache } from "@/utils/sessionCache";
 
 function platformFromUrl(url?: string): string {
   if (!url) return "fanqie";
@@ -145,11 +146,18 @@ export default function DetailPage() {
     navigate("/downloads");
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate, downloadMut]);
 
-  const handleCheckUpdate = useCallback(() => { setDialogVariant("check"); }, []);
+  const handleCheckUpdate = useCallback(() => {
+    // 预填缓存值，用户可在 dialog 中修改
+    setSavedMode(SessionCache.getMode());
+    setSavedProvider(SessionCache.getProvider() ?? "");
+    setDialogVariant("check");
+  }, []);
 
   const handleDownloadClick = useCallback(() => {
-    if (savedMode) {
-      runDownload(savedMode, savedProvider || undefined);
+    const mode = savedMode || SessionCache.getMode();
+    const provider = savedProvider || SessionCache.getProvider();
+    if (mode) {
+      runDownload(mode, provider);
     } else {
       setDialogVariant("download");
     }
@@ -158,6 +166,8 @@ export default function DetailPage() {
   const handleDialogConfirm = useCallback((mode: string, provider?: string) => {
     setSavedMode(mode);
     setSavedProvider(provider ?? "");
+    SessionCache.setMode(mode);
+    SessionCache.setProvider(provider);
     const v = dialogVariant;
     setDialogVariant(null);
     if (v === "check") {

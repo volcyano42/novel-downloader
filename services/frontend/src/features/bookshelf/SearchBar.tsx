@@ -123,7 +123,3 @@ export function SearchBar({ onSearch, groups = [], formats = [], platforms = [],
     </div>
   );
 }
-
-export function SearchBarSkeleton() {
-  return <div className="flex items-center gap-2"><div className="h-10 flex-1 animate-pulse rounded-xl bg-slate-300/60" /><div className="h-10 w-10 animate-pulse rounded-xl bg-slate-300/60" /></div>;
-}

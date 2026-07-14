@@ -55,7 +55,3 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
     </div>
   );
 }
-
-export function DownloadTaskSkeleton() {
-  return <div className="flex items-center gap-3 rounded-xl border border-white/20 bg-white/80 px-4 py-3"><div className="h-4 w-2/3 animate-pulse rounded bg-slate-300/60" /><div className="h-5 w-14 animate-pulse rounded-lg bg-slate-300/60" /></div>;
-}

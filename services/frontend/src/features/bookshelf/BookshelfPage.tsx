@@ -11,6 +11,7 @@ import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, useSaveGrou
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import type { TaskInfo } from "@/api/endpoints";
+import { SessionCache } from "@/utils/sessionCache";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -54,11 +55,10 @@ export default function BookshelfPage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const searchModeRef = useRef("browser");
-  const searchProviderRef = useRef<string | undefined>(undefined);
-  const lastDownloadModeRef = useRef("browser");
-  const lastDownloadProviderRef = useRef<string | undefined>(undefined);
-  const prevTaskStatusRef = useRef<Record<string, string>>({});
+  const searchModeRef = useRef(SessionCache.getMode());
+  const searchProviderRef = useRef<string | undefined>(SessionCache.getProvider());
+  const lastDownloadModeRef = useRef(SessionCache.getMode());
+  const lastDownloadProviderRef = useRef<string | undefined>(SessionCache.getProvider());
   const navigatingRef = useRef(false);
   const navigate = useNavigate();
 
@@ -69,15 +69,22 @@ export default function BookshelfPage() {
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
 
   // tasks notification
+  const prevTaskRef = useRef<Record<string, string>>({});
   const tasksWithNotify = useMemo(() => {
-    const prev = prevTaskStatusRef.current;
-    const hasJustFinished = tasks.some(
-      t => (t.status === "completed" || t.status === "failed") && prev[t.task_id] === "downloading",
-    );
-    for (const t of tasks) prev[t.task_id] = t.status;
-    if (hasJustFinished) refetchNovels();
+    const prev = prevTaskRef.current;
+    for (const t of tasks) {
+      const wasDownloading = prev[t.task_id] === "downloading";
+      if (t.status === "completed" && wasDownloading) {
+        toast(`「${t.title}」下载完成`, "success");
+        refetchNovels();
+      } else if (t.status === "failed" && wasDownloading) {
+        toast(`「${t.title}」下载失败${t.error ? "：" + t.error : ""}`, "error");
+        refetchNovels();
+      }
+      prev[t.task_id] = t.status;
+    }
     return tasks;
-  }, [tasks, refetchNovels]);
+  }, [tasks, toast, refetchNovels]);
 
   const handleLocalSearch = useCallback((query: string) => setSearchQuery(query.trim()), []);
 
@@ -88,6 +95,8 @@ export default function BookshelfPage() {
     const provider = filters?.provider;
     searchModeRef.current = mode;
     searchProviderRef.current = provider;
+    SessionCache.setMode(mode);
+    SessionCache.setProvider(provider);
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
@@ -117,8 +126,8 @@ export default function BookshelfPage() {
     } catch { setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate, novels, fetchMetaMut]);
 
-  const handleSettingsUpdate = useCallback((path: string, value: unknown) => {
-    // config is managed by React Query — we use setQueryData for optimistic update
+  const handleSettingsUpdate = useCallback((_path: string, _value: unknown) => {
+    // 配置已在 SettingsView 内部通过 React Query 提交，此处仅重置保存标志
     setSaved(false);
   }, []);
 
@@ -224,7 +233,7 @@ export default function BookshelfPage() {
                   onPause={() => pauseTask(task.task_id)}
                   onResume={() => resumeTask(task.task_id)}
                   onCancel={() => deleteTask(task.task_id)}
-                  onRetry={() => {}} />
+                  onRetry={() => resumeTask(task.task_id)} />
               );
             })}
         </div>
