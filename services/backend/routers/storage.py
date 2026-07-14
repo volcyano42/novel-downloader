@@ -1,7 +1,9 @@
 """Storage 路由。"""
+import json
 from base64 import b64encode
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from services.backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
 from novelbase.core.storage import create_storage
 from novelbase.core.options import StorageOptions
@@ -20,7 +22,7 @@ def _get_storage():
     return _storage
 
 def _cover_to_response(cover) -> dict | None:
-    """HEIC → JPEG 后 base64；PIL 缺失时退回不发送 raw_data。"""
+    """HEIC -> JPEG 后 base64；PIL 缺失时退回不发送 raw_data。"""
     if not cover: return None
     if not cover.raw_data:
         return {"raw_data": None, "alt": cover.alt, "url": cover.url, "format": cover.image_format}
@@ -52,7 +54,8 @@ def _novel_to_meta(novel) -> NovelMeta:
 def _chapter_to_brief(ch) -> ChapterBrief:
     return ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                         order=ch.order, volume=ch.volume, count=ch.count,
-                        downloaded=ch.content is not None)
+                        downloaded=ch.content is not None,
+                        image_count=len(ch.images))
 
 def _chapter_to_data(ch) -> ChapterData:
     return ChapterData(
@@ -110,16 +113,29 @@ async def delete_novel(novel_id: str):
 @router.get("/novel/{novel_id}/chapters")
 async def list_chapters(novel_id: str, order: str | None = Query(None), volume: str | None = Query(None),
                         status: str | None = Query(None), page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
-    store = _get_storage(); chapters = store.load_chapters(novel_id, include_images=False)
+    store = _get_storage(); chapters = store.load_chapters(novel_id, include_images=True)
     result = [_chapter_to_brief(ch) for ch in chapters]
     if order:
         parts = order.split("-"); lo = int(parts[0]) if parts[0] else 1
         hi = int(parts[1]) if len(parts) > 1 and parts[1] else len(result)
         result = [r for r in result if lo <= r.order <= hi]
     if volume: result = [r for r in result if r.volume == volume]
-    # is_complete 字段已移除，status 过滤暂时不做
     if status: pass
     start = (page - 1) * size; return result[start:start + size]
+
+@router.get("/novel/{novel_id}/chapters/stream")
+async def stream_chapters(novel_id: str):
+    """SSE 流式返回章节，include_images=True。前端逐行渲染，首屏即见。"""
+    store = _get_storage()
+
+    def generate():
+        for ch in store.iter_chapters(novel_id, include_images=True):
+            brief = _chapter_to_brief(ch)
+            data = brief.model_dump_json()
+            yield f"data: {data}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 @router.put("/novel/{novel_id}/chapters")
 async def save_chapters(novel_id: str, body: list[ChapterData]): return {"status": "ok", "count": len(body)}

@@ -107,6 +107,11 @@ class BaseStorage(ABC):
         """删除单个章节。"""
         ...
 
+    @abstractmethod
+    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+        """逐条遍历章节。include_images=False 时 chapters.images 为空元组。"""
+        ...
+
 
 class LocalStorage(BaseStorage):
     """本地 JSON 文件存储。
@@ -214,9 +219,9 @@ class LocalStorage(BaseStorage):
         return Chapter.loads(**json_data)
 
     def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
-        return Chapters(self._iter_chapters(novel_id, include_images))
+        return Chapters(self.iter_chapters(novel_id, include_images))
 
-    def _iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
         chapters_dir = self._chapters_dir(novel_id)
         if not chapters_dir.exists():
             return
@@ -472,9 +477,9 @@ class SQLiteStorage(BaseStorage):
         return self._row_to_chapter(row, novel_id, images)
 
     def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
-        return Chapters(self._iter_chapters(novel_id, include_images))
+        return Chapters(self.iter_chapters(novel_id, include_images))
 
-    def _iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
         with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
