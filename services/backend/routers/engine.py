@@ -17,6 +17,11 @@ async def create(body: CreateEngineRequest):
         body.mode, body.platform, body.api, body.requests, body.browser)
 
 
+@router.get("/type/list")
+async def list_engine_types():
+    return {"types": ["api", "browser", "requests"]}
+
+
 @router.get("/{engine_id}")
 async def get_engine(engine_id: str):
     result = engine_manager.get_explicit_engine(engine_id)
@@ -42,8 +47,3 @@ async def delete_engine(engine_id: str):
     if not engine_manager.delete_explicit_engine(engine_id):
         raise HTTPException(404, "引擎不存在")
     return {"status": "deleted", "engine_id": engine_id}
-
-
-@router.get("/type/list")
-async def list_engine_types():
-    return {"types": ["api", "browser", "requests"]}

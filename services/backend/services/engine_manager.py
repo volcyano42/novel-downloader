@@ -149,7 +149,7 @@ def create_explicit_engine(mode: str, platform: str = "",
     opts = _build_options(mode, api, requests, browser)
     engine = create_engine(opts)
     _explicit_engines[engine_id] = {"engine": engine, "platform": platform, "mode": mode}
-    return {"engine_id": engine_id, "mode": mode, "platform": platform}
+    return {"id": engine_id, "mode": mode, "platform": platform}
 
 
 def get_explicit_engine(engine_id: str) -> dict | None:

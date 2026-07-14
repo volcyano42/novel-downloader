@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from services.backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from services.backend.services.engine_manager import create_engine_for_request
 from services.backend.services import task_manager
-from services.backend.utils.cover import encode_cover
+from services.backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import fetch_meta, fetch_chapter_list, get_fetchers, search
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])

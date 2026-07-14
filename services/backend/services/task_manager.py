@@ -97,6 +97,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
         "error": None, "errors": [], "current_title": "",
         "chapters": chapters, "novel_url": novel_url,
         "_pause": threading.Event(),
+        "_mode": mode, "_provider": provider, "_platform": platform,
     }
     with _tasks_lock:
         _tasks[task_id] = task
@@ -132,11 +133,24 @@ def pause_task(task_id: str) -> bool:
 
 def resume_task(task_id: str) -> bool:
     task = _tasks.get(task_id)
-    if task and task.get("_pause"):
+    if not task or not task.get("_pause"):
+        return False
+    if task["status"] == "paused":
         task["_pause"].clear()
-        with _tasks_lock:
-            if task["status"] == "paused":
-                task["status"] = "downloading"
+        task["status"] = "downloading"
+        return True
+    if task["status"] == "failed":
+        task["_pause"].clear()
+        task["status"] = "downloading"
+        task["error"] = None
+        task["errors"] = []
+        task["progress"] = 0
+        t = threading.Thread(
+            target=_run_download,
+            args=(task, task.get("_mode", "browser"), task.get("_provider"), task.get("_platform", "fanqie")),
+            daemon=True,
+        )
+        t.start()
         return True
     return False
 

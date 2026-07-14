@@ -103,6 +103,8 @@ async def trigger_export(body: ExportRequest):
             "status": "completed", "progress": 1.0,
             "formats": formats, "path": result_path,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         _tasks[task_id] = {"status": "failed", "progress": 0.0, "error": str(e)}
     return {"task_id": task_id}

@@ -11,14 +11,6 @@ from services.backend.routers import storage, download, export, engine, config
 
 app = FastAPI(title="Novel Downloader API", version="2.0.0", docs_url="/docs")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # ── v2 response wrapper — { ok, message, data } ──
 class V2ResponseMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -53,6 +45,14 @@ class V2ResponseMiddleware(BaseHTTPMiddleware):
         )
 
 app.add_middleware(V2ResponseMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(storage.router)
 app.include_router(download.router)
