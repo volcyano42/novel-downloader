@@ -4,6 +4,7 @@ import time
 from typing import Sequence, Any
 
 import requests
+from box.box import Box
 from bs4 import BeautifulSoup, Tag
 
 from .base import BaseFetcher
@@ -127,6 +128,13 @@ def resolve_changdunovel(url: str) -> str:
         return url
     try:
         r = requests.get(url, allow_redirects=True, timeout=10)
+        # 优先从 query params 提取 book_id（/t/ 短链不会重定向到 fanqienovel）
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(r.url).query)
+        bid = qs.get("book_id", [None])[0]
+        if bid and bid.isdigit():
+            return f"https://fanqienovel.com/page/{bid}"
+        # 兜底：从重定向后的 URL 提取
         book_id = standardize_id(r.url)
         return f"https://fanqienovel.com/page/{book_id}"
     except (requests.RequestException, ValueError):
@@ -641,11 +649,14 @@ class FanqieRainFetcher(BaseFetcher):
             author = book.get("author")
             description = book.get("abstract")
 
+            extras = Box(rating=book.get('score'))
+
             results.append(SearchResult(
                 title=book_name,
                 author=author,
                 url=book_url,
                 description=description,
+                extras=extras
             ))
         return tuple(results)
 
@@ -699,6 +710,8 @@ class FanqieRainFetcher(BaseFetcher):
         except json.JSONDecodeError:
             pass
 
+        extras = Box(rating=data.get("score"))
+
         novel = Novel(url=book_url,
                       id=novel_id,
                       title=name,
@@ -708,6 +721,7 @@ class FanqieRainFetcher(BaseFetcher):
                       description=data.get("abstract", ""),
                       cover=novel_image,
                       tags=tuple(tags),
+                      extras=extras
                       )
         return novel
 
@@ -725,7 +739,7 @@ class FanqieRainFetcher(BaseFetcher):
             raise ChapterNotFoundError("Rain API returned empty chapter list")
 
         results: list[Chapter] = []
-        for idx, chapter_item in enumerate(item_data_list):
+        for idx, chapter_item in enumerate(item_data_list, start=1):
             item_id = chapter_item.get("item_id")
             chapter_url = f"https://fanqienovel.com/reader/{item_id}"
             title: str = chapter_item.get("title", "")

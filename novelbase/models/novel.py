@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Sequence, Iterator
 from urllib.parse import urlparse, urlunparse
 
+from box import Box
+
 
 def normalize_url(url: str) -> str:
     """规范化 URL：去掉末尾斜杠、统一小写 scheme 和 host。
@@ -304,6 +306,7 @@ class Novel:
     count: int | None = None
     cover: Illustration | None = None
     chapters: Chapters = field(default_factory=Chapters)
+    extras: Box = field(default_factory=Box)
 
     @staticmethod
     def loads(title: str, url: str, id: str, serial: int, author: str, description: str,
@@ -328,3 +331,4 @@ class SearchResult:
     author: str
     url: str | None = None
     description: str | None = None
+    extras: Box = field(default_factory=Box)

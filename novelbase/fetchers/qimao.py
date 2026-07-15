@@ -3,6 +3,8 @@ import time
 import json
 import requests
 from typing import Sequence
+
+from box import Box
 from bs4 import BeautifulSoup, Tag
 
 from .base import BaseFetcher
@@ -400,6 +402,7 @@ class QimaoRainFetcher(BaseFetcher):
                 author=author,
                 url=book_url,
                 description=description,
+                extras=Box(rating=book.get('score'))
             ))
         return tuple(results)
 
@@ -453,6 +456,7 @@ class QimaoRainFetcher(BaseFetcher):
         except json.JSONDecodeError:
             pass
 
+        extras = Box(rating=data.get('score'))
         novel = Novel(url=book_url,
                       id=novel_id,
                       title=name,
@@ -462,6 +466,7 @@ class QimaoRainFetcher(BaseFetcher):
                       description=data.get("abstract", ""),
                       cover=novel_image,
                       tags=tuple(tags),
+                      extras=extras,
                       )
         return novel
 
@@ -479,7 +484,7 @@ class QimaoRainFetcher(BaseFetcher):
             raise ChapterNotFoundError("Rain API returned empty chapter list")
 
         results: list[Chapter] = []
-        for idx, chapter_item in enumerate(item_data_list):
+        for idx, chapter_item in enumerate(item_data_list, start=1):
             item_id = chapter_item.get("item_id")
             chapter_url = f"https://www.qimao.com/shuku/{novel_id}-{item_id}/"
             title: str = chapter_item.get("title", "")
