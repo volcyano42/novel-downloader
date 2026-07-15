@@ -7,10 +7,9 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, useSaveGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta, useSiteConfig } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta, useSiteConfig } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
-import type { TaskInfo } from "@/api/endpoints";
 import { SessionCache } from "@/utils/sessionCache";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
@@ -33,7 +32,6 @@ export default function BookshelfPage() {
   const toast = useToast();
   const deleteNovelMut = useDeleteNovel();
   const saveGlobalConfigMut = useSaveGlobalConfig();
-  const saveGroupsMut = useSaveGroups();
   const fetchMetaMut = useFetchMeta();
 
   // apiProviders for SearchBar
@@ -49,8 +47,8 @@ export default function BookshelfPage() {
   }, [fanqieCfg, qidianCfg, qimaoCfg]);
 
   // local state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchPlatform, setSearchPlatform] = useState("fanqie");
+  const searchQuery = "";
+  const searchPlatform = "fanqie";
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -80,7 +78,7 @@ export default function BookshelfPage() {
 
   // tasks notification
   const prevTaskRef = useRef<Record<string, string>>({});
-  const tasksWithNotify = useMemo(() => {
+  useEffect(() => {
     const prev = prevTaskRef.current;
     for (const t of tasks) {
       const wasDownloading = prev[t.task_id] === "downloading";
@@ -93,10 +91,8 @@ export default function BookshelfPage() {
       }
       prev[t.task_id] = t.status;
     }
-    return tasks;
   }, [tasks, toast, refetchNovels]);
 
-  const handleLocalSearch = useCallback((query: string) => setSearchQuery(query.trim()), []);
 
   const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; provider?: string }) => {
     if (!query.trim()) { setSearchParams(null); SessionCache.clearSearch(); return; }
@@ -134,7 +130,7 @@ export default function BookshelfPage() {
     try {
       const meta = await fetchMetaMut.mutateAsync({ url: result.url, mode: searchModeRef.current, provider: searchProviderRef.current });
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
-    } catch { setNavigatingId(null); navigatingRef.current = false; }
+    } catch { console.warn("fetchMeta failed", result.url); setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate, novels, fetchMetaMut]);
 
   const handleSettingsUpdate = useCallback((_path: string, _value: unknown) => {
@@ -146,7 +142,7 @@ export default function BookshelfPage() {
     if (!globalConfig) return;
     setSaving(true);
     try { await saveGlobalConfigMut.mutateAsync(globalConfig); setSaved(true); setTimeout(() => setSaved(false), 2500); }
-    catch { /* Toast handled by mutation */ }
+    catch { console.warn("saveGlobalConfig failed"); }
     finally { setSaving(false); }
   }, [globalConfig, saveGlobalConfigMut]);
 
@@ -157,7 +153,6 @@ export default function BookshelfPage() {
     deleteNovelMut.mutate(novelId);
   }, [deleteNovelMut]);
 
-  const toPath: Record<string, string> = { bookshelf: "/bookshelf", search: "/search-tab", downloads: "/downloads", settings: "/settings" };
 
   return (
     <>
@@ -221,8 +216,8 @@ export default function BookshelfPage() {
 
       {activeNav === "downloads" && (
         <div className="mx-auto max-w-[720px] space-y-2 px-6 pt-12 pb-8 md:px-12">
-          {tasksWithNotify.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
-            : tasksWithNotify.map(task => {
+          {tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
+            : tasks.map(task => {
               const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
               const status = task.status as "downloading" | "paused" | "completed" | "failed";
               return (

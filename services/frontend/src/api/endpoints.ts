@@ -242,10 +242,6 @@ export function saveFormatConfig(format: string, data: Record<string, unknown>) 
 
 // ── Export ─────────────────────────────────────────
 
-export function exportFormats() {
-  return apiGet<{ id: string; label: string }[]>("/export/format");
-}
-
 export function triggerExport(body: unknown) {
   return apiPost<{ task_id: string }>("/export", body);
 }

@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from "react";
 import { BookOpen, FileDown, MoreHorizontal, Trash2, FolderPlus, Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useDeleteNovel, useExport, useGroups, useSaveGroups } from "@/hooks/index";
+import { useExport, useGroups, useSaveGroups } from "@/hooks/index";
 import { ExportDialog } from "@/features/download/ExportDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -16,14 +16,14 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface BookCardProps {
-  title: string; author: string; novelId?: string; cover?: string | null; progress?: number;
+  title: string; author: string; novelId?: string; cover?: string | null;
   onRead?: () => void; className?: string;
   groups?: string[];
   currentGroup?: string;
   onDelete?: (novelId: string) => void;
 }
 
-export function BookCard({ title, author, novelId, cover, progress = 0, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
+export function BookCard({ title, author, novelId, cover, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
   const [showExport, setShowExport] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -85,7 +85,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
         a.click();
         document.body.removeChild(a);
       }
-    } catch { /* Toast handled by mutation */ }
+    } catch { console.warn("export failed", novelId); }
     finally { setExporting(false); setShowExport(false); }
   }, [novelId, exporting, exportMut]);
 
@@ -197,7 +197,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
             </Tooltip>
           </TooltipProvider>
           <p className="text-sm text-slate-500">{author}</p>
-          {progress > 0 && <div className="mt-auto pt-2"><div className="h-1.5 rounded-full bg-slate-200"><div className="h-full rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div></div>}
+          {/* progress bar removed — always 0 */}
         </div>
       </div>
 

@@ -9,7 +9,7 @@ import {
   getGroups, saveGroups,
   getSiteConfig, saveSiteConfig,
   getFormatConfig, saveFormatConfig,
-  downloadPlatforms, exportFormats,
+  downloadPlatforms,
   triggerExport, exportTaskStatus,
 } from "@/api/endpoints";
 import type { ChapterBrief } from "@/api/endpoints";
