@@ -8,6 +8,7 @@ interface SearchBarProps {
   groups?: string[]; formats?: string[]; platforms?: { id: string; label: string }[];
   engineModes?: string[]; apiProviders?: Record<string, string[]>;
   loading?: boolean; className?: string;
+  defaultQuery?: string; defaultPlatform?: string;
 }
 
 export interface SearchFilters {
@@ -54,9 +55,11 @@ function ModeSelect({ modes, selected, onSelect, className }: {
 
 // ── main ──
 
-export function SearchBar({ onSearch, groups = [], formats = [], platforms = [], engineModes = [], apiProviders = {}, loading, className }: SearchBarProps) {
-  const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<SearchFilters>({});
+export function SearchBar({ onSearch, groups = [], formats = [], platforms = [], engineModes = [], apiProviders = {}, loading, className, defaultQuery = "", defaultPlatform }: SearchBarProps) {
+  const [query, setQuery] = useState(defaultQuery);
+  const [filters, setFilters] = useState<SearchFilters>(
+    defaultPlatform ? { platform: defaultPlatform } : {}
+  );
   const [showFilters, setShowFilters] = useState(false);
 
   const trigger = (q: string, f: SearchFilters) => onSearch(q, f);
@@ -109,7 +112,7 @@ export function SearchBar({ onSearch, groups = [], formats = [], platforms = [],
         )}
         <div className="relative flex-1">
           {loading ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-indigo-500 animate-spin" strokeWidth={1.5} /> : <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />}
-          <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} placeholder="搜索书名、作者..." disabled={loading} className={cn("w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30", loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400")} />
+          <input type="text" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} placeholder="搜索书名、作者..." className={`w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30 ${loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400"}`} />
           {!loading && query && <button onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>}
         </div>
         <button onClick={() => setShowFilters(!showFilters)} className={cn("rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl p-2.5 text-slate-500 transition-colors", showFilters && "text-indigo-500 border-indigo-500/30")}><Filter className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>

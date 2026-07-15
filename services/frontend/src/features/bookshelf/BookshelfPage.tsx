@@ -56,6 +56,9 @@ export default function BookshelfPage() {
   const searchModeRef = useRef(SessionCache.getMode());
   const searchProviderRef = useRef<string | undefined>(SessionCache.getProvider());
   const navigatingRef = useRef(false);
+  const [searchCachedQuery, setSearchCachedQuery] = useState("");
+  const [searchCachedPlatform, setSearchCachedPlatform] = useState("fanqie");
+  const [searchBarKey, setSearchBarKey] = useState(0);
   const navigate = useNavigate();
 
   // search — using React Query
@@ -64,15 +67,17 @@ export default function BookshelfPage() {
   } | null>(null);
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
 
-  // 切回搜索 tab 时恢复上次搜索
+  // 切回搜索 tab 时恢复上次搜索字符串（仅预填，不自动搜索）
   useEffect(() => {
     if (activeNav !== "search") return;
     const q = SessionCache.getSearchQuery();
     const p = SessionCache.getSearchPlatform();
     if (q) {
-      const mode = searchModeRef.current;
-      const provider = searchProviderRef.current;
-      setSearchParams({ platform: p, query: q, mode, provider });
+      searchModeRef.current = SessionCache.getMode();
+      searchProviderRef.current = SessionCache.getProvider();
+      setSearchCachedQuery(q);
+      setSearchCachedPlatform(p);
+      setSearchBarKey(k => k + 1); // 强制 SearchBar 重新挂载以接收新 defaultQuery
     }
   }, [activeNav]);
 
@@ -109,7 +114,7 @@ export default function BookshelfPage() {
     if (isUrlOrId) {
       try {
         const meta = await fetchMetaMut.mutateAsync({ url: query, mode, provider });
-        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, searchMode: mode, searchProvider: provider, meta } });
+        navigate(`/search/${meta.id}`, { state: { meta } });
       } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); }
       return;
     }
@@ -120,8 +125,8 @@ export default function BookshelfPage() {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
     setNavigatingId(result.url);
-    const idMatch = result.url.match(/\/page\/(\d+)/);
-    const maybeId = idMatch ? idMatch[1] : null;
+    const idMatch = result.url.match(/\/(page|book|info|shuku)\/(\d+)/);
+    const maybeId = idMatch ? idMatch[2] : null;
     const local = maybeId ? novels.find(n => n.id === maybeId) : undefined;
     if (local) {
       navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta: local } });
@@ -130,8 +135,8 @@ export default function BookshelfPage() {
     try {
       const meta = await fetchMetaMut.mutateAsync({ url: result.url, mode: searchModeRef.current, provider: searchProviderRef.current });
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
-    } catch { console.warn("fetchMeta failed", result.url); setNavigatingId(null); navigatingRef.current = false; }
-  }, [navigate, novels, fetchMetaMut]);
+    } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); setNavigatingId(null); navigatingRef.current = false; }
+  }, [navigate, novels, fetchMetaMut, toast]);
 
   const handleSettingsUpdate = useCallback((_path: string, _value: unknown) => {
     // 配置已在 SettingsView 内部通过 React Query 提交，此处仅重置保存标志
@@ -235,7 +240,21 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} />
+          <SearchBar key={searchBarKey} onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} defaultQuery={searchCachedQuery} defaultPlatform={searchCachedPlatform} />
+          {!searchParams && !searching && (
+            <div className="flex flex-col items-center gap-3 py-16 px-6 text-xs text-slate-400">
+              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">书籍ID</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono"># 1145141919810</span></div>
+              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">网页端链接</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono truncate max-w-[320px]">https://fanqienovel.com/page/1145141919810</span></div>
+              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">移动端分享链接</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono truncate max-w-[320px]">https://changdunovel.com/t/abc123/</span></div>
+              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">直接搜索关键词</span><span className="bg-slate-100 rounded-md px-2 py-0.5">穿越：……</span></div>
+            </div>
+          )}
+          {searchParams && searchResults.length === 0 && !searching && (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <p className="text-sm">未找到相关小说</p>
+              <p className="mt-1 text-xs text-slate-300">试试换个关键词或平台</p>
+            </div>
+          )}
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (
