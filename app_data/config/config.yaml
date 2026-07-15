@@ -1,8 +1,6 @@
 download:
   max_workers: 3
   notify:
-    chapter_unavailable_sound: bell
-    on_chapter_unavailable: true
     on_complete: true
     on_incomplete: true
     sound: bell
