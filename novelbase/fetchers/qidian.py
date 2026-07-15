@@ -17,9 +17,9 @@ _log = get_logger("novelbase.fetchers.qidian")
 
 def standardize_id(url: str) -> str:
     if url.startswith("https"):
-        m = re.search(r'/book/(\d+)', url)
+        m = re.search(r'/(book|info)/(\d+)', url)
         if m:
-            return m.group(1)
+            return m.group(2)
         m = re.search(r'/chapter/[^/]+/([^/]+)', url)
         if m:
             return m.group(1)
@@ -42,7 +42,7 @@ class QidianHTMLParser:
                 json_data = json.loads(json_str)
                 for book_data in json_data:
                     book_name = book_data.get('bookName')
-                    description = book_data.get('algInfo')
+                    description = book_data.get('bookInfo')
                     book_url = "https:" + book_data.get('bookUrl')
                     author_name = book_data.get('authorName')
                     results.append(SearchResult(
@@ -335,8 +335,8 @@ def use_fetcher(engine) -> type[QidianRequestsFetcher | QidianBrowserFetcher]:
 
 
 class QidianFetcher(BaseFetcher):
-    host = ("www.qidian.com",)
-    id_pattern = re.compile(r"^(?:/book/?)?(\d{10})$")
+    host = ("www.qidian.com", "book.qidian.com")
+    id_pattern = re.compile(r"^(?:/(book|info)/?)?(\d{10})/?$")
 
     def login(self, engine: BrowserEngine, **kwargs) -> AuthCredential:
         fetcher = use_fetcher(engine=engine)()
