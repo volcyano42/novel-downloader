@@ -423,35 +423,6 @@ class RequestsEngine(Engine):
             except Exception:
                 pass
 
-    def close_current(self) -> None:
-        if not hasattr(self._session_local, 'session'):
-            return
-        session = self._session_local.session
-        _log.debug("RequestsEngine.close_current: closing session")
-        try:
-            session.close()
-        except Exception:
-            pass
-        with self._session_lock:
-            if session in self._sessions:
-                self._sessions.remove(session)
-        del self._session_local.session
-
-def delete_engine(engine_id: str) -> bool:
-    """根据 engine_id 关闭并删除引擎实例。
-
-    Args:
-        engine_id: create_engine 返回的引擎 ID。
-    Returns:
-        True 表示删除成功，False 表示引擎不存在。
-    """
-    instance = Engine.get_engine(engine_id)
-    if instance is None:
-        return False
-    instance.close()
-    return True
-
-
 def create_engine(options: Options) -> Any:
     """根据 Options.mode 创建对应引擎实例。
 

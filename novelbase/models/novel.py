@@ -4,28 +4,8 @@ from base64 import b64encode, b64decode
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Sequence, Iterator
-from urllib.parse import urlparse, urlunparse
 
 from box import Box
-
-
-def normalize_url(url: str) -> str:
-    """规范化 URL：去掉末尾斜杠、统一小写 scheme 和 host。
-
-    不改变路径大小写（部分站点路径区分大小写）。
-    """
-    if not url:
-        return url
-    parsed = urlparse(url)
-    # 去掉末尾 /
-    path = parsed.path.rstrip("/") or "/"
-    # 统一 scheme 和 host 为小写
-    normalized = parsed._replace(
-        scheme=parsed.scheme.lower(),
-        netloc=parsed.netloc.lower(),
-        path=path,
-    )
-    return urlunparse(normalized)
 
 
 _IMAGE_SIGNATURES: list[tuple[bytes, str]] = [
@@ -113,14 +93,6 @@ class Illustration:
     def to_json(self) -> dict[str, Any]:
         return {
             "raw_data": b64encode(self.raw_data).decode(),
-            "alt": self.alt,
-            "insert": self.insert,
-            "url": self.url,
-        }
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "raw_data": self.raw_data,
             "alt": self.alt,
             "insert": self.insert,
             "url": self.url,
@@ -221,31 +193,6 @@ class Chapters(Sequence):
             merged[c.id] = c
 
         return Chapters(list(merged.values()))
-
-    def get_chapters_by_volume_name(self, name: str) -> Chapters:
-        """按卷名筛选章节，返回新 Chapters 对象。"""
-        return Chapters(
-            ch for ch in self._chapters
-            if ch.volume == name
-        )
-    @property
-    def volumes(self) -> dict[None | str, Chapters]:
-        """按卷分组。
-
-        返回 {卷名: Chapters} 字典。
-        """
-        volumes: dict[str | None, list[Chapter]] = {}
-
-        for ch in self._chapters:
-            volume_name = ch.volume
-
-            if volume_name not in volumes.keys():
-                volumes[volume_name] = [ch]
-            else:
-                volumes[volume_name].append(ch)
-
-        volumes: dict[None | str, Chapters] = {k:Chapters(v) for k,v in volumes.items()}
-        return volumes
 
     @property
     def total(self) -> int:

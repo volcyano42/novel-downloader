@@ -2,7 +2,6 @@ import re
 import time
 import json
 import requests
-from typing import Sequence
 
 from box import Box
 from bs4 import BeautifulSoup, Tag

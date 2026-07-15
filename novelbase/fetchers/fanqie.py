@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from typing import Sequence, Any
+from typing import Any
 
 import requests
 from box.box import Box
