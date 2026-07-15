@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from services.backend.schemas import ExportRequest, ExportTaskStatus
-from novelbase import export as do_export, create_engine, get_exporters
+from novelbase import export as do_export, get_exporters
 
 router = APIRouter(prefix="/api/v2/export", tags=["export"])
 
@@ -31,7 +31,7 @@ async def trigger_export(body: ExportRequest):
     _tasks[task_id] = {"status": "downloading", "progress": 0.0}
     try:
         from novelbase.core.storage import create_storage
-        from novelbase.core.options import StorageOptions, Options
+        from novelbase.core.options import StorageOptions
         store = create_storage(StorageOptions(
             backend="sqlite",
             database_url="sqlite:///app_data/storage/novels.db",
@@ -50,8 +50,6 @@ async def trigger_export(body: ExportRequest):
 
         # 统一导出到临时目录
         export_dir = Path(tempfile.mkdtemp(prefix="nld_export_"))
-
-        engine = create_engine(Options().set_mode("api"))
 
         if body.txt and body.txt.enabled:
             from novelbase.exporters.txt import TXTExportOptions

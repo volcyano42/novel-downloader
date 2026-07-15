@@ -1,9 +1,12 @@
 """下载任务管理器 — 后台线程池、暂停/恢复、进度跟踪。"""
+import logging
 import threading
 import uuid
 
 from services.backend.services.config_service import load_config
 from services.backend.services.engine_manager import get_cached_engine
+
+_log = logging.getLogger("services.backend.task_manager")
 
 
 _tasks: dict[str, dict] = {}
@@ -31,6 +34,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                 meta = fetch_meta(novel_url, engine)
                 store.save_meta(meta)
             except Exception:
+                _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
                 pass
         novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"],
                       serial=0, author="", description="")
@@ -73,7 +77,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                 try:
                     future.result()
                 except Exception:
-                    pass
+                    _log.warning("future.result() failed in download task", exc_info=True)
 
         task["status"] = "completed"
         if task["errors"]:

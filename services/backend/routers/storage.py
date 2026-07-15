@@ -113,7 +113,7 @@ async def delete_novel(novel_id: str):
 
 @router.get("/novel/{novel_id}/chapters")
 async def list_chapters(novel_id: str, order: str | None = Query(None), volume: str | None = Query(None),
-                        status: str | None = Query(None), page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
+                        page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
     store = _get_storage(); chapters = store.load_chapters(novel_id, include_images=True)
     result = [_chapter_to_brief(ch) for ch in chapters]
     if order:
@@ -121,7 +121,6 @@ async def list_chapters(novel_id: str, order: str | None = Query(None), volume: 
         hi = int(parts[1]) if len(parts) > 1 and parts[1] else len(result)
         result = [r for r in result if lo <= r.order <= hi]
     if volume: result = [r for r in result if r.volume == volume]
-    if status: pass
     start = (page - 1) * size; return result[start:start + size]
 
 @router.get("/novel/{novel_id}/chapters/stream")
