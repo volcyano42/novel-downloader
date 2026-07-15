@@ -1,7 +1,10 @@
 """Download 路由 — 对接 search + fetch_meta/fetch_chapter_list + 后台下载任务管理。"""
+import asyncio
+from functools import partial
+
 from fastapi import APIRouter, HTTPException, Query
 from services.backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
-from services.backend.services.engine_manager import create_engine_for_request
+from services.backend.services.engine_manager import get_cached_engine, _browser_executor, _requests_executor
 from services.backend.services import task_manager
 from services.backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import fetch_meta, fetch_chapter_list, get_fetchers, search
@@ -20,55 +23,60 @@ def _platform_from_url(url: str) -> str:
     return "fanqie"  # 默认
 
 
+def _pick_executor(mode: str):
+    return _browser_executor if mode == "browser" else _requests_executor
+
+
 @router.get("/search")
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         page: int = Query(1), mode: str = Query("browser"),
                         provider: str | None = Query(None)):
     from novelbase.core.downloader import get_fetcher_for_url, get_fetcher_for_id
 
-    engine = create_engine_for_request(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, provider=provider)
+    executor = _pick_executor(mode)
+    loop = asyncio.get_event_loop()
+
+    if query.startswith("http://") or query.startswith("https://"):
+        fetcher_cls = get_fetcher_for_url(query)
+        if fetcher_cls:
+            try:
+                novel = await loop.run_in_executor(executor, fetch_meta, query, engine)
+                return [SearchResultData(title=novel.title, author=novel.author,
+                                         url=novel.url, description=novel.description)]
+            except Exception as e:
+                raise HTTPException(500, str(e))
+
+    if query.isdigit():
+        fetcher_cls = get_fetcher_for_id(query)
+        if fetcher_cls:
+            try:
+                novel = await loop.run_in_executor(
+                    executor, partial(fetcher_cls().fetch_novel_info, url=query, engine=engine))
+                return [SearchResultData(title=novel.title, author=novel.author,
+                                         url=novel.url, description=novel.description)]
+            except Exception as e:
+                raise HTTPException(500, str(e))
+
     try:
-        if query.startswith("http://") or query.startswith("https://"):
-            fetcher_cls = get_fetcher_for_url(query)
-            if fetcher_cls:
-                try:
-                    novel = fetch_meta(query, engine)
-                    return [SearchResultData(title=novel.title, author=novel.author,
-                                             url=novel.url, description=novel.description)]
-                except Exception as e:
-                    raise HTTPException(500, str(e))
-
-        if query.isdigit():
-            fetcher_cls = get_fetcher_for_id(query)
-            if fetcher_cls:
-                try:
-                    novel = fetcher_cls().fetch_novel_info(url=query, engine=engine)
-                    return [SearchResultData(title=novel.title, author=novel.author,
-                                             url=novel.url, description=novel.description)]
-                except Exception as e:
-                    raise HTTPException(500, str(e))
-
-        try:
-            results = search(platform, query, engine, page=page)
-        except Exception as e:
-            raise HTTPException(500, str(e))
-        return [SearchResultData(title=r.title, author=r.author, url=r.url,
-                                 description=r.description) for r in results]
-    finally:
-        engine.close()
+        results = await loop.run_in_executor(executor, search, platform, query, engine, page)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return [SearchResultData(title=r.title, author=r.author, url=r.url,
+                             description=r.description) for r in results]
 
 
 @router.post("/novel")
 async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
                      provider: str | None = Query(None)):
     platform = _platform_from_url(body.url)
-    engine = create_engine_for_request(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, provider=provider)
+    executor = _pick_executor(mode)
+    loop = asyncio.get_event_loop()
     try:
-        novel = fetch_meta(body.url, engine)
+        novel = await loop.run_in_executor(executor, fetch_meta, body.url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
-    finally:
-        engine.close()
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
             "author": novel.author, "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count,
@@ -79,13 +87,13 @@ async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
 async def get_remote_novel(novel_id: str, url: str = Query(...),
                            mode: str = Query("browser"), provider: str | None = Query(None)):
     platform = _platform_from_url(url)
-    engine = create_engine_for_request(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, provider=provider)
+    executor = _pick_executor(mode)
+    loop = asyncio.get_event_loop()
     try:
-        novel = fetch_meta(url, engine)
+        novel = await loop.run_in_executor(executor, fetch_meta, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
-    finally:
-        engine.close()
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
             "author": novel.author, "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count}
@@ -95,13 +103,13 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 async def fetch_chapter_list_route(novel_id: str, url: str = Query(...),
                              mode: str = Query("browser"), provider: str | None = Query(None)):
     platform = _platform_from_url(url)
-    engine = create_engine_for_request(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, provider=provider)
+    executor = _pick_executor(mode)
+    loop = asyncio.get_event_loop()
     try:
-        chapters = fetch_chapter_list(url, engine)
+        chapters = await loop.run_in_executor(executor, fetch_chapter_list, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
-    finally:
-        engine.close()
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                          order=ch.order, volume=ch.volume, count=ch.count) for ch in chapters]
 

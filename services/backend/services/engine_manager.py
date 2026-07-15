@@ -4,11 +4,83 @@
 生命周期由调用方管理（用完必须 close）。
 """
 
+import json
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from services.backend.services.config_service import load_site_config, find_provider_options
 from novelbase import Options, create_engine
+
+
+# ── 引擎缓存（全局，request 级别复用）──
+_engine_cache: dict[str, object] = {}
+_browser_executor = ThreadPoolExecutor(max_workers=1)
+_requests_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _fingerprint(platform: str, mode: str, provider: str | None = None) -> str:
+    """生成缓存键。
+
+    BrowserEngine: (platform, mode, browser_type, user_data_dir, viewport, headless)
+    APIEngine:     (platform, mode, provider)
+    RequestsEngine:(platform, mode, "requests")
+    """
+    import hashlib
+    from novelbase.core.options import BrowserOptions
+
+    if mode == "browser":
+        site = load_site_config(platform)
+        mode_cfg = site.get(mode, {}) if isinstance(site, dict) else {}
+        vp = mode_cfg.get("viewport")
+        raw = (
+            f"{platform}|{mode}|{mode_cfg.get('browser_type','chromium')}|"
+            f"{mode_cfg.get('user_data_dir','')}|"
+            f"{json.dumps(vp, sort_keys=True) if vp else ''}|"
+            f"{mode_cfg.get('headless', True)}"
+        )
+    elif mode == "api" and provider:
+        raw = f"{platform}|{mode}|{provider}"
+    else:
+        raw = f"{platform}|{mode}|requests"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def get_cached_engine(platform: str,
+                      mode: str = "browser",
+                      provider: str | None = None):
+    """从缓存取引擎，缓存未命中则创建。
+
+    首次创建后复用，不再每次 close。调用方不再负责生命周期。
+    通过 invalidate_engine 或在 lifespan shutdown 时统一清理。
+    """
+    key = _fingerprint(platform, mode, provider)
+    if key in _engine_cache:
+        engine = _engine_cache[key]
+        return engine
+
+    engine = create_engine_for_request(platform, mode, provider)
+    _engine_cache[key] = engine
+    return engine
+
+
+def invalidate_engine(platform: str,
+                      mode: str = "browser",
+                      provider: str | None = None) -> bool:
+    """关闭并移除指定引擎（配置更新时调用）。"""
+    key = _fingerprint(platform, mode, provider)
+    engine = _engine_cache.pop(key, None)
+    if engine:
+        engine.close()
+        return True
+    return False
+
+
+def clear_engine_cache():
+    """关闭所有缓存引擎（shutdown 时调用）。"""
+    for key, engine in list(_engine_cache.items()):
+        engine.close()
+    _engine_cache.clear()
 
 
 # ── 显式引擎实例（手动创建，key 为 engine_id）──
@@ -98,7 +170,7 @@ def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
     opts = Options().set_mode(mode)
     if mode == "api" and api:
         a = api
-        opts.set_api_options(name=a.name, enabled=a.enabled, delay=a.delay, timeout=a.timeout,
+        opts.set_api_options(name=a.name, delay=a.delay, timeout=a.timeout,
                              retry_times=a.retry_times, backoff_factor=a.backoff_factor,
                              key=a.key, params=a.params)
     elif mode == "requests" and requests:
@@ -119,7 +191,7 @@ def _build_sub_options(mode: str, api=None, requests=None, browser=None):
     from novelbase.core.options import APIOptions, RequestsOptions, BrowserOptions
     if mode == "api" and api:
         a = api
-        return APIOptions(name=a.name, enabled=a.enabled, delay=a.delay, timeout=a.timeout,
+        return APIOptions(name=a.name, delay=a.delay, timeout=a.timeout,
                           retry_times=a.retry_times, backoff_factor=a.backoff_factor,
                           key=a.key, params=a.params)
     elif mode == "requests" and requests:

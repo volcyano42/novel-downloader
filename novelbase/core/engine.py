@@ -198,12 +198,31 @@ class BrowserEngine(Engine):
     def update_options(self, options: BrowserOptions) -> None:
         """热更新 delay/timeout/retry 等参数，不重建浏览器。
 
-        headless / viewport / user_data_dir 变更需重启浏览器（调用 _init_browser）。
+        browser_type / headless / user_data_dir / viewport 变更才重建浏览器。
         """
+        needs_rebuild = False
+        for hard_attr in ("browser_type", "headless"):
+            new_val = getattr(options, hard_attr, None)
+            if new_val is not None and new_val != getattr(self.options, hard_attr, None):
+                setattr(self.options, hard_attr, new_val)
+                needs_rebuild = True
+        # user_data_dir 比较时忽略 None vs "" 差异
+        new_ud = getattr(options, "user_data_dir", None)
+        old_ud = getattr(self.options, "user_data_dir", None)
+        if str(new_ud or "") != str(old_ud or ""):
+            self.options.user_data_dir = options.user_data_dir
+            needs_rebuild = True
+        new_vp = getattr(options, "viewport", None)
+        if new_vp is not None and new_vp != getattr(self.options, "viewport", None):
+            self.options.viewport = new_vp
+            needs_rebuild = True
+
         for attr in ("delay", "timeout", "retry_times", "backoff_factor"):
             if hasattr(options, attr):
                 setattr(self.options, attr, getattr(options, attr))
-        self._init_browser()
+
+        if needs_rebuild:
+            self._init_browser()
 
     def _init_browser(self) -> None:
         from DrissionPage import Chromium, ChromiumOptions

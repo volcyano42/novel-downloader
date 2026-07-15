@@ -263,7 +263,7 @@ class FanqieHTMLParser:
 
         separator = "\n\n"
         img_counter = 0
-        img_items: list[Illustration] = []
+        img_tasks: list[dict] = []  # 收集图片下载任务，后面批量并发
         text_paragraphs: list[str] = []
 
         # 按直接子元素顺序遍历，同时提取文本和图片位置
@@ -312,17 +312,11 @@ class FanqieHTMLParser:
                             if isinstance(img_url, list):
                                 img_url = img_url[0] if img_url else None
                             if isinstance(img_url, str) and img_url.strip():
-                                try:
-                                    img_data = requests.get(img_url, timeout=10).content
-                                except requests.RequestException:
-                                    img_data = b""
                                 prefix = separator.join(text_paragraphs)
                                 insert_pos = len(prefix) if text_paragraphs else 0
-                                chapter_img = Illustration(
-                                    alt=picture_desc, raw_data=img_data,
-                                    insert=insert_pos, url=img_url
-                                )
-                                img_items.append(chapter_img)
+                                img_tasks.append(dict(
+                                    url=img_url, alt=picture_desc, insert=insert_pos
+                                ))
                         continue
 
                     text = element.get_text(strip=True)
@@ -345,17 +339,36 @@ class FanqieHTMLParser:
                         if isinstance(img_url, list):
                             img_url = img_url[0] if img_url else None
                         if isinstance(img_url, str) and img_url.strip():
-                            try:
-                                img_data = requests.get(img_url, timeout=10).content
-                            except requests.RequestException:
-                                img_data = b""
                             prefix = separator.join(text_paragraphs)
                             insert_pos = len(prefix) if text_paragraphs else 0
-                            chapter_img = Illustration(
-                                alt=picture_desc, raw_data=img_data,
-                                insert=insert_pos, url=img_url
-                            )
-                            img_items.append(chapter_img)
+                            img_tasks.append(dict(
+                                url=img_url, alt=picture_desc, insert=insert_pos
+                            ))
+
+        # 并发下载所有图片
+        img_items: list[Illustration] = []
+        if img_tasks:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                def _download_one(task: dict) -> tuple[int, bytes]:
+                    try:
+                        return (task.get("_idx", 0), requests.get(task["url"], timeout=10).content)
+                    except requests.RequestException:
+                        return (task.get("_idx", 0), b"")
+                # 标记原始顺序
+                for i, t in enumerate(img_tasks):
+                    t["_idx"] = i
+                results: dict[int, bytes] = {}
+                for fut in as_completed([pool.submit(_download_one, t) for t in img_tasks]):
+                    idx, data = fut.result()
+                    results[idx] = data
+            # 按原始顺序构造 Illustration
+            for i, t in enumerate(img_tasks):
+                img_data = results.get(i, b"")
+                img_items.append(Illustration(
+                    alt=t["alt"], raw_data=img_data,
+                    insert=t["insert"], url=t["url"]
+                ))
 
         novel_content = separator.join(text_paragraphs)
         if '已经是最新一章' in novel_content:

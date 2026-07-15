@@ -1,5 +1,6 @@
 """Novel Downloader — FastAPI 后端入口。"""
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -8,8 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from services.backend.routers import storage, download, export, engine, config
+from services.backend.services.engine_manager import clear_engine_cache
 
-app = FastAPI(title="Novel Downloader API", version="2.0.0", docs_url="/docs")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    yield
+    # shutdown — 清理所有缓存引擎
+    clear_engine_cache()
+
+
+app = FastAPI(title="Novel Downloader API", version="2.0.0", docs_url="/docs", lifespan=lifespan)
 
 # ── v2 response wrapper — { ok, message, data } ──
 class V2ResponseMiddleware(BaseHTTPMiddleware):
@@ -65,5 +76,5 @@ async def health():
     return {"ok": True, "message": "success", "data": {"status": "ok"}}
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn, os
     uvicorn.run("services.backend.main:app", host="0.0.0.0", port=8000, reload=True)

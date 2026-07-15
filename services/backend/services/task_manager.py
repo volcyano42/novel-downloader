@@ -3,7 +3,7 @@ import threading
 import uuid
 
 from services.backend.services.config_service import load_config
-from services.backend.services.engine_manager import create_engine_for_request
+from services.backend.services.engine_manager import get_cached_engine
 
 
 _tasks: dict[str, dict] = {}
@@ -18,9 +18,8 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
 
-    engine = None
+    engine = get_cached_engine(platform, mode, provider=provider)
     try:
-        engine = create_engine_for_request(platform, mode, provider=provider)
         store = create_storage(StorageOptions(
             backend="sqlite",
             database_url="sqlite:///app_data/storage/novels.db",
@@ -82,9 +81,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     except Exception as e:
         task["status"] = "failed"
         task["error"] = str(e)
-    finally:
-        if engine:
-            engine.close()
+
 
 
 def create_task(novel_id: str, chapters: list[dict], title: str,
