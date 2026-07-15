@@ -123,18 +123,26 @@ def standardize_id(ref: str | Novel | Chapter) -> str:
 
 
 def resolve_changdunovel(url: str) -> str:
-    """解析 changdunovel.com 短链，提取 book_id 返回标准 fanqienovel URL。"""
+    """解析 changdunovel.com URL，提取 book_id 返回标准 fanqienovel URL。
+
+    优先直接从输入 URL 的 query params 提取 book_id（分享长链已包含）；
+    兜底发请求跟随重定向。
+    """
     if "changdunovel.com" not in url:
         return url
+    # 优先直接从 URL query 提取（免网络请求）
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(url).query)
+    bid = qs.get("book_id", [None])[0]
+    if bid and bid.isdigit():
+        return f"https://fanqienovel.com/page/{bid}"
+    # 兜底：发请求跟随重定向提取 /t/ 短链
     try:
         r = requests.get(url, allow_redirects=True, timeout=10)
-        # 优先从 query params 提取 book_id（/t/ 短链不会重定向到 fanqienovel）
-        from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(r.url).query)
         bid = qs.get("book_id", [None])[0]
         if bid and bid.isdigit():
             return f"https://fanqienovel.com/page/{bid}"
-        # 兜底：从重定向后的 URL 提取
         book_id = standardize_id(r.url)
         return f"https://fanqienovel.com/page/{book_id}"
     except (requests.RequestException, ValueError):
