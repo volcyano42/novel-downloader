@@ -3,10 +3,11 @@ import { cn } from "@/lib/utils";
 
 interface SearchResultCardProps {
   title: string; author: string; description: string | null;
+  rating?: number;
   loading?: boolean; onClick?: () => void; className?: string;
 }
 
-export function SearchResultCard({ title, author, description, loading, onClick, className }: SearchResultCardProps) {
+export function SearchResultCard({ title, author, description, rating, loading, onClick, className }: SearchResultCardProps) {
   return (
     <div
       onClick={loading ? undefined : onClick}
@@ -23,7 +24,7 @@ export function SearchResultCard({ title, author, description, loading, onClick,
           {loading ? <Loader2 className="h-[18px] w-[18px] animate-spin" strokeWidth={2} /> : <Search className="h-[18px] w-[18px]" strokeWidth={1.5} />}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold text-slate-800">{title}</h3>
+          <h3 className="truncate text-base font-semibold text-slate-800">{title}{rating != null && <span className="ml-2 inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-pink-500 ring-1 ring-inset ring-purple-200">{rating}</span>}</h3>
           <p className="text-sm text-slate-500">{author}</p>
         </div>
       </div>

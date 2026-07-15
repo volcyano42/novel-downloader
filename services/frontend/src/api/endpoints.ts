@@ -9,6 +9,7 @@ export interface NovelMeta {
   author: string; description: string;
   tags: string[] | null; count: number | null;
   cover: { raw_data: string | null; alt: string | null; url: string | null; format: string | null } | null;
+  extras?: { rating?: number } | null;
 }
 
 export interface ChapterBrief {
@@ -23,6 +24,7 @@ export interface ChapterData extends ChapterBrief {
 
 export interface SearchResult {
   title: string; author: string; url: string; description: string | null;
+  extras?: { rating?: number } | null;
 }
 
 export interface TaskInfo {

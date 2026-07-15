@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image } from "lucide-react";
+import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
 import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, useGlobalConfig, compareChapters } from "@/hooks/index";
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
@@ -47,9 +47,9 @@ export default function DetailPage() {
   const [loading, setLoading] = useState(isRemote);
   const [coverZoom, setCoverZoom] = useState(false);
   const [coverScale, setCoverScale] = useState(1);
+  const [nearBottom, setNearBottom] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
   const [checkMerged, setCheckMerged] = useState<MergedChapter[] | null>(null);
 
   // SSE 流式加载本地章节（本地展示 + 远程对比都需要）
@@ -156,31 +156,51 @@ export default function DetailPage() {
 
   const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
 
+  useEffect(() => {
+    const el = document.querySelector("#scroll-area");
+    if (!el) return;
+    const onScroll = () => {
+      setNearBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 200);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    onScroll(); // initial check
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToEdge = () => {
+    const el = document.querySelector("#scroll-area");
+    if (!el) return;
+    if (nearBottom) {
+      setNearBottom(false);
+      el.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setNearBottom(true);
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  };
+
   const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
   const [savedMode, setSavedMode] = useState("");
   const [savedProvider, setSavedProvider] = useState("");
 
   const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
-    setCheckResult(null);
     try {
       const remote = await fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
-      const localAll = await listChapters(novelId!, { size: 20000 }).catch(() => [] as ChapterBrief[]);
+      if (!remote.length) { toast("远端无章节数据"); return; }
+      let localAll: ChapterBrief[];
+      try {
+        localAll = await listChapters(novelId!, { size: 20000 });
+      } catch { toast("获取本地章节失败"); return; }
       const localMap = new Map(localAll.map(c => [c.id, c]));
       const m: MergedChapter[] = remote.map(r => ({ remote: r, local: localMap.get(r.id) ?? null }));
-      const needsUpdate = m.some(mc => !mc.local || !mc.local.downloaded);
-      if (needsUpdate) {
-        const preSelected = new Set<string>();
-        for (const mc of m) {
-          if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
-        }
-        setCompareMode(true);
-        setCheckMerged(m);
-        setSelectedIds(preSelected);
-      } else {
-        setCheckResult("latest");
-        setTimeout(() => setCheckResult(null), 2000);
+      const preSelected = new Set<string>();
+      for (const mc of m) {
+        if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
       }
+      setCompareMode(true);
+      setCheckMerged(m);
+      setSelectedIds(preSelected);
     } catch (e: unknown) { toast((e as Error).message || "检查更新失败"); }
     finally { setChecking(false); }
   }, [novelId, remoteUrl, novel?.url, toast]);
@@ -255,6 +275,7 @@ export default function DetailPage() {
               <p className="text-sm text-slate-500">{novel.author}</p>
               <p className="text-xs text-slate-400 font-mono">{novel.id}</p>
               <p className="text-sm text-slate-500">共 {novel.serial} 章 · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
+              {novel.extras?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.extras.rating} 分</p>}
               {novel.tags && novel.tags.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{novel.tags.map(t => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{t}</span>)}</div>}
             </div>
           </div>
@@ -285,7 +306,7 @@ export default function DetailPage() {
                 <div className="flex-1" />
                 <button onClick={handleCheckUpdate} disabled={checking} className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1 disabled:opacity-50">
                   <RefreshCw className={`h-3 w-3 ${checking ? "animate-spin" : ""}`} strokeWidth={2} />
-                  {checking ? "检查中..." : checkResult === "latest" ? "已是最新 ✓" : "检查更新"}
+                  {checking ? "检查中..." : "检查更新"}
                 </button>
               </>
             )}
@@ -329,9 +350,9 @@ export default function DetailPage() {
             <div className="space-y-1">
               {chapters.map(ch => (
                 <div key={ch.id} className="flex items-center gap-2">
-                  <span className={`shrink-0 text-xs w-10 text-right ${ch.downloaded ? "text-emerald-500" : "text-red-400"}`}>{ch.downloaded ? "✓" : "✗"}</span>
-                  <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <span className="truncate text-slate-700 flex-1">{ch.title}</span>
+                  <span className={`shrink-0 text-xs w-12 text-right tabular-nums ${ch.downloaded ? "text-emerald-500" : "text-slate-300"}`}>{ch.order}</span>
+                  <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 min-w-0 flex items-center rounded-xl px-3 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <span className="truncate text-slate-700">{ch.title}</span>
                     {(ch.image_count ?? 0) > 0 && (
                       <span className="ml-1.5 shrink-0 inline-flex items-center gap-0.5 text-amber-500">
                         <Image className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -355,6 +376,14 @@ export default function DetailPage() {
           <button onClick={closeCover} className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition-colors z-10"><X className="h-5 w-5" strokeWidth={1.5} /></button>
           <img src={cover} alt={novel?.title} className="rounded-2xl object-contain shadow-2xl transition-transform duration-75" style={{ transform: `scale(${coverScale})`, maxHeight: "90vh", maxWidth: "90vw" }} onClick={e => e.stopPropagation()} />
         </div>
+      )}
+
+      {!loading && (
+      <button onClick={scrollToEdge}
+        className="fixed bottom-20 right-4 md:bottom-6 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg border border-slate-200 p-2.5 text-slate-400 hover:text-indigo-500 hover:border-indigo-200 transition-all active:scale-95"
+        aria-label={nearBottom ? "回到顶部" : "滚动到底部"}>
+        <ChevronDown className={`h-5 w-5 transition-transform duration-300 ${nearBottom ? "rotate-180" : ""}`} strokeWidth={2} />
+      </button>
       )}
 
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
