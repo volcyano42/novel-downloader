@@ -22,15 +22,32 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [provider, setProvider] = useState(initialProvider ?? "");
   const [loading, setLoading] = useState(false);
+  const [shakeProvider, setShakeProvider] = useState(false);
 
-  useEffect(() => { if (open) { setMode(initialMode ?? "browser"); setProvider(initialProvider ?? ""); setLoading(false); } }, [open, initialMode, initialProvider]);
+  useEffect(() => {
+    if (open) {
+      const defaultMode = initialMode ?? "browser";
+      const safeMode = (defaultMode === "api" && providers.length === 0) ? "browser" : defaultMode;
+      setMode(safeMode);
+      setProvider(initialProvider ?? "");
+      setLoading(false);
+      setShakeProvider(false);
+    }
+  }, [open, initialMode, initialProvider, providers.length]);
 
   const handleStart = () => {
+    if (mode === "api" && !provider && providers.length > 0) {
+      setShakeProvider(true);
+      setTimeout(() => setShakeProvider(false), 400);
+      return;
+    }
     setLoading(true);
     onStart(mode, mode === "api" && provider ? provider : undefined);
   };
 
   if (!open) return null;
+
+  const availableModes = providers.length > 0 ? MODES : MODES.filter(m => m.id !== "api");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -40,7 +57,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
         <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
         <div className="space-y-2 mb-4">
-          {MODES.map(({ id, label, icon: Icon, desc }) => (
+          {availableModes.map(({ id, label, icon: Icon, desc }) => (
             <button key={id} onClick={() => { setMode(id); if (id !== "api") setProvider(""); }}
               className={cn(
                 "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
@@ -53,22 +70,32 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
                 <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
                 <p className="text-[11px] text-slate-400">{desc}</p>
               </div>
-              {id === "api" && mode === "api" && providers.length > 0 && (
-                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                  {providers.map(p => (
-                    <span key={p} onClick={() => setProvider(prev => prev === p ? "" : p)}
-                      className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] font-medium cursor-pointer transition-colors",
-                        provider === p
-                          ? "bg-indigo-500 text-white"
-                          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                      )}>{p}</span>
-                  ))}
-                </div>
-              )}
+
             </button>
           ))}
         </div>
+
+      {mode === "api" && providers.length > 0 && (
+        <div className={cn(
+          "mb-4 rounded-xl border px-4 py-3 transition-colors",
+          shakeProvider
+            ? "border-red-300 bg-red-50 animate-shake"
+            : "border-indigo-200 bg-indigo-50/50"
+        )}>
+          <p className="text-[11px] text-slate-400 mb-2">选择接口提供商</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {providers.map(p => (
+              <span key={p} onClick={() => { setProvider(prev => prev === p ? "" : p); }}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors",
+                  provider === p
+                    ? "bg-indigo-500 text-white"
+                    : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
+                )}>{p}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
         <div className="flex gap-2">
           <button onClick={onClose}

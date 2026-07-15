@@ -51,9 +51,15 @@ export default {
           "0%, 100%": { backgroundColor: "rgb(255,255,255,0.8)" },
           "50%": { backgroundColor: "rgba(16,185,129,0.15)" },
         },
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "10%, 30%, 50%, 70%, 90%": { transform: "translateX(-4px)" },
+          "20%, 40%, 60%, 80%": { transform: "translateX(4px)" },
+        },
       },
       animation: {
         shimmer: "shimmer 1.5s ease-in-out infinite",
+        shake: "shake 0.4s ease-in-out",
       },
     },
   },
