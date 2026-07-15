@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image } from "lucide-react";
-import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, compareChapters } from "@/hooks/index";
+import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, useGlobalConfig, compareChapters } from "@/hooks/index";
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
@@ -34,17 +34,17 @@ export default function DetailPage() {
   const isRemote = !!remoteUrl;
   const toast = useToast();
 
-  const plat = platformFromUrl(st?.meta?.url ?? remoteUrl);
   const { data: localMeta } = useNovelMeta(isRemote ? undefined : novelId);
+  const plat = platformFromUrl(st?.meta?.url ?? remoteUrl ?? localMeta?.url);
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, remoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
   const { data: siteCfg } = useSiteConfig(plat);
+  const { data: globalConfig } = useGlobalConfig();
 
   const novel = st?.meta ?? localMeta ?? null;
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(isRemote);
-  const [closing, setClosing] = useState(false);
   const [coverZoom, setCoverZoom] = useState(false);
   const [coverScale, setCoverScale] = useState(1);
   const [compareMode, setCompareMode] = useState(false);
@@ -52,14 +52,17 @@ export default function DetailPage() {
   const [checkResult, setCheckResult] = useState<"none" | "latest" | null>(null);
   const [checkMerged, setCheckMerged] = useState<MergedChapter[] | null>(null);
 
-  // SSE 流式加载本地章节
+  // SSE 流式加载本地章节（本地展示 + 远程对比都需要）
   const [localChapters, setLocalChapters] = useState<ChapterBrief[]>([]);
   const [streaming, setStreaming] = useState(false);
   const cacheHydratedRef = useRef(false);
   const showLocal = !isRemote && !compareMode;
 
+  // 远程模式下也加载本地章节用于对比，但仅在流完成后再预选
   useEffect(() => {
-    if (!novelId || !showLocal) return;
+    if (!novelId) return;
+    const needsLocal = showLocal || isRemote;
+    if (!needsLocal) return;
     cacheHydratedRef.current = false;
 
     const cached = getCachedChapters(novelId);
@@ -110,8 +113,9 @@ export default function DetailPage() {
   const chapters = isRemote ? [] : localChapters;
   const showCompare = isRemote || compareMode;
 
+  // 等待本地章节流加载完成后再预选，防止 SSE 未到时的错误全选
   useEffect(() => {
-    if (remoteMerged.length > 0 && isRemote) {
+    if (remoteMerged.length > 0 && isRemote && !streaming) {
       const preSelected = new Set<string>();
       for (const mc of remoteMerged) {
         if (!mc.local || !mc.local.downloaded) preSelected.add(mc.remote.id);
@@ -119,7 +123,7 @@ export default function DetailPage() {
       setSelectedIds(preSelected);
       setLoading(false);
     }
-  }, [remoteMerged, isRemote]);
+  }, [remoteMerged, isRemote, streaming]);
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
 
@@ -136,7 +140,7 @@ export default function DetailPage() {
     });
   }, []);
 
-  const handleBack = () => { setClosing(true); setTimeout(() => navigate("/"), 150); };
+  const handleBack = () => navigate(-1);
 
   const handleCoverWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -200,20 +204,19 @@ export default function DetailPage() {
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate, downloadMut]);
 
   const handleCheckUpdate = useCallback(() => {
-    setSavedMode(SessionCache.getMode());
-    setSavedProvider(SessionCache.getProvider() ?? "");
+    // 优先用本 session 选过的模式，兜底用 Settings 中的全局配置
+    const mode = sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser";
+    const provider = sessionStorage.getItem("nd:provider") ?? undefined;
+    setSavedMode(mode);
+    setSavedProvider(provider ?? "");
     setDialogVariant("check");
-  }, []);
+  }, [globalConfig?.mode]);
 
   const handleDownloadClick = useCallback(() => {
-    const mode = savedMode || SessionCache.getMode();
-    const provider = savedProvider || SessionCache.getProvider();
-    if (mode) {
-      runDownload(mode, provider);
-    } else {
-      setDialogVariant("download");
-    }
-  }, [savedMode, savedProvider, runDownload]);
+    setSavedMode(sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser");
+    setSavedProvider(sessionStorage.getItem("nd:provider") ?? "");
+    setDialogVariant("download");
+  }, [globalConfig?.mode]);
 
   const handleDialogConfirm = useCallback((mode: string, provider?: string) => {
     setSavedMode(mode);
@@ -233,7 +236,7 @@ export default function DetailPage() {
 
   const cover = coverToUrl(novel?.cover ?? null);
   return (
-    <div className={`min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 animate-in fade-in duration-200 ${closing ? "animate-out fade-out duration-150" : ""}`}>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 animate-in fade-in duration-200">
       <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
         <button onClick={handleBack} className="rounded-full p-1 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>
         <span className="truncate text-sm font-medium text-slate-600">书籍详情</span>
