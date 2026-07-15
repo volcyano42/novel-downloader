@@ -131,7 +131,10 @@ async def stream_chapters(novel_id: str):
     def generate():
         for ch in store.iter_chapters(novel_id, include_images=True):
             brief = _chapter_to_brief(ch)
-            data = brief.model_dump_json()
+            if hasattr(brief, "model_dump_json"):
+                data = brief.model_dump_json()
+            else:
+                data = brief.json()
             yield f"data: {data}\n\n"
         yield "data: [DONE]\n\n"
 
