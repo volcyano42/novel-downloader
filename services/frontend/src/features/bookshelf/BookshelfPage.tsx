@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { BookCard, BookCardSkeleton } from "./BookCard";
@@ -57,8 +57,6 @@ export default function BookshelfPage() {
   const [saved, setSaved] = useState(false);
   const searchModeRef = useRef(SessionCache.getMode());
   const searchProviderRef = useRef<string | undefined>(SessionCache.getProvider());
-  const lastDownloadModeRef = useRef(SessionCache.getMode());
-  const lastDownloadProviderRef = useRef<string | undefined>(SessionCache.getProvider());
   const navigatingRef = useRef(false);
   const navigate = useNavigate();
 
@@ -67,6 +65,18 @@ export default function BookshelfPage() {
     platform: string; query: string; mode?: string; provider?: string;
   } | null>(null);
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
+
+  // 切回搜索 tab 时恢复上次搜索
+  useEffect(() => {
+    if (activeNav !== "search") return;
+    const q = SessionCache.getSearchQuery();
+    const p = SessionCache.getSearchPlatform();
+    if (q) {
+      const mode = searchModeRef.current;
+      const provider = searchProviderRef.current;
+      setSearchParams({ platform: p, query: q, mode, provider });
+    }
+  }, [activeNav]);
 
   // tasks notification
   const prevTaskRef = useRef<Record<string, string>>({});
@@ -89,7 +99,7 @@ export default function BookshelfPage() {
   const handleLocalSearch = useCallback((query: string) => setSearchQuery(query.trim()), []);
 
   const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; provider?: string }) => {
-    if (!query.trim()) { setSearchParams(null); return; }
+    if (!query.trim()) { setSearchParams(null); SessionCache.clearSearch(); return; }
     const platform = filters?.platform || searchPlatform;
     const mode = filters?.mode ?? "browser";
     const provider = filters?.provider;
@@ -97,6 +107,7 @@ export default function BookshelfPage() {
     searchProviderRef.current = provider;
     SessionCache.setMode(mode);
     SessionCache.setProvider(provider);
+    SessionCache.saveSearch(query, platform);
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
@@ -145,14 +156,6 @@ export default function BookshelfPage() {
   const handleDeleteNovel = useCallback((novelId: string) => {
     deleteNovelMut.mutate(novelId);
   }, [deleteNovelMut]);
-
-  const handleDownloadAll = useCallback((novelId: string, mode: string, provider?: string) => {
-    lastDownloadModeRef.current = mode;
-    lastDownloadProviderRef.current = provider;
-    const novel = novels.find(n => n.id === novelId);
-    if (!novel) return;
-    navigate(`/search/${novelId}`, { state: { remoteUrl: novel.url, searchMode: mode, searchProvider: provider } });
-  }, [novels, navigate]);
 
   const toPath: Record<string, string> = { bookshelf: "/bookshelf", search: "/search-tab", downloads: "/downloads", settings: "/settings" };
 
@@ -203,11 +206,7 @@ export default function BookshelfPage() {
                             groups={groupNames}
                             currentGroup={tag === "未分类" ? undefined : tag}
                             onDelete={handleDeleteNovel}
-                            onDownloadAll={handleDownloadAll}
-                            serial={novel.serial}
                             cover={coverToUrl(novel.cover)}
-                            defaultMode={lastDownloadModeRef.current}
-                            defaultProvider={lastDownloadProviderRef.current}
                           />
                         ))}
                       </div>
@@ -245,7 +244,7 @@ export default function BookshelfPage() {
           {searchResults.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
               {searchResults.map((r, i) => (
-                <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
+                <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.extras?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
               ))}
             </div>
           )}

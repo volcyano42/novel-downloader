@@ -47,7 +47,7 @@
     @apply bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-200;
     font-family: "Inter", system-ui, sans-serif;
   }
-  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar { width: 10px; }
   ::-webkit-scrollbar-track { @apply bg-transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-slate-200 dark:bg-slate-700 rounded-full; }
 }

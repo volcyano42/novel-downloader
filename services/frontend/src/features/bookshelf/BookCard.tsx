@@ -1,9 +1,8 @@
 ﻿import { useState, useCallback } from "react";
-import { BookOpen, Download, FileDown, MoreHorizontal, Loader2, Trash2, FolderPlus, Folder } from "lucide-react";
+import { BookOpen, FileDown, MoreHorizontal, Trash2, FolderPlus, Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDeleteNovel, useExport, useGroups, useSaveGroups } from "@/hooks/index";
 import { ExportDialog } from "@/features/download/ExportDialog";
-import { DownloadDialog } from "@/features/download/DownloadDialog";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -22,15 +21,10 @@ interface BookCardProps {
   groups?: string[];
   currentGroup?: string;
   onDelete?: (novelId: string) => void;
-  onDownloadAll?: (novelId: string, mode: string, provider?: string) => void;
-  serial?: number;
-  defaultMode?: string;
-  defaultProvider?: string;
 }
 
-export function BookCard({ title, author, novelId, cover, progress = 0, onRead, className, groups = [], currentGroup, onDelete, onDownloadAll, serial, defaultMode, defaultProvider }: BookCardProps) {
+export function BookCard({ title, author, novelId, cover, progress = 0, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
   const [showExport, setShowExport] = useState(false);
-  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [inlineNewGroup, setInlineNewGroup] = useState(false);
@@ -73,11 +67,6 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
   const handleNewGroup = useCallback((novelId: string, name: string) => {
     handleMoveToGroup(novelId, name);
   }, [handleMoveToGroup]);
-
-  const handleExportClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowExport(true);
-  }, []);
 
   const handleStartExport = useCallback(async (formats: string[]) => {
     if (!novelId || exporting) return;
@@ -126,15 +115,7 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
               <BookOpen className="h-10 w-10 text-slate-300" strokeWidth={1.5} />
             </div>
           )}
-          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200">
-            <button onClick={e => { e.stopPropagation(); setShowDownloadDialog(true); }}
-              className="rounded-lg bg-white/80 p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-white transition-colors shadow-sm">
-              <Download className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-            <button onClick={handleExportClick}
-              className="rounded-lg bg-white/80 p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-white transition-colors shadow-sm">
-              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} /> : <FileDown className="h-3.5 w-3.5" strokeWidth={2} />}
-            </button>
+          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button onClick={e => e.stopPropagation()}
@@ -143,6 +124,12 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent onClick={e => e.stopPropagation()} align="end" className="w-40 !max-h-none !overflow-y-visible rounded-xl border-white/20 bg-white/95 backdrop-blur-xl shadow-xl py-1.5">
+                <DropdownMenuItem onSelect={() => setShowExport(true)}
+                  className="rounded-lg">
+                  <FileDown className="mr-2 h-3.5 w-3.5" />
+                  导出
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="rounded-lg">
                     <FolderPlus className="mr-2 h-3.5 w-3.5" />
@@ -230,11 +217,6 @@ export function BookCard({ title, author, novelId, cover, progress = 0, onRead, 
       </AlertDialog>
 
       <ExportDialog open={showExport} onClose={() => setShowExport(false)} novelTitle={title} onExport={handleStartExport} />
-      <DownloadDialog open={showDownloadDialog} onClose={() => setShowDownloadDialog(false)}
-        novelTitle={title} chapterCount={serial ?? 0} variant="download"
-        initialMode={defaultMode} initialProvider={defaultProvider}
-        onStart={(mode, provider) => { setShowDownloadDialog(false); onDownloadAll?.(novelId!, mode, provider); }}
-      />
     </>
   );
 }
