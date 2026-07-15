@@ -366,77 +366,65 @@ class QimaoRainFetcher(BaseFetcher):
         page = kwargs.pop("page", 1)
         results: list[SearchResult] = []
         offset = (page - 1) * 10
-        url = QimaoRainFetcher._api_url(engine, type=1, keywords=query, page=offset)
+        url = QimaoRainFetcher._api_url(engine, type=1, wd=query, page=offset)
         content = engine.fetch_json(url, **kwargs)
 
-        if content.get("code") != 0 and str(content.get("code")) != "0":
+        code = content.get("code")
+        if code is not None and code != 0 and str(code) != "0":
+            _log.warning("qimao Rain API search error: code=%s msg=%s",
+                         content.get("code"), content.get("message", ""))
             return ()
 
         books = None
-        if "search_tabs" in content:
-            for tab in content["search_tabs"]:
-                if tab.get("data") is not None:
-                    books = tab["data"]
-                    break
-        if books is None:
-            books = content.get("data")
+        data = content.get("data")
+        if isinstance(data, dict):
+            books = data.get("books")
+        if not books and isinstance(data, list):
+            books = data
 
         if not books or not isinstance(books, list):
             return ()
 
         for item in books:
-            if "book_data" in item and isinstance(item["book_data"], list) and len(item["book_data"]) > 0:
-                book = item["book_data"][0]
-            else:
-                book = item
+            book_name = item.get("original_title") or item.get("book_name") or ""
+            book_id = str(item.get("id") or item.get("book_id") or "")
+            author = item.get("original_author") or item.get("author") or ""
+            description = item.get("intro") or item.get("abstract") or ""
 
-            book_id = book.get("book_id")
             book_url = f"https://www.qimao.com/shuku/{book_id}/"
-            book_name = book.get("book_name")
-            author = book.get("author")
-            description = book.get("abstract")
 
             results.append(SearchResult(
                 title=book_name,
                 author=author,
                 url=book_url,
                 description=description,
-                extras=Box(rating=book.get('score'))
+                extras=Box(rating=item.get('score'))
             ))
         return tuple(results)
 
     def fetch_novel_info(self, url, engine, **kwargs) -> Novel:
 
         novel_id = standardize_id(url)
-        url = QimaoRainFetcher._api_url(engine, type=2, bookid=novel_id)
-        json_data = engine.fetch_json(url, **kwargs)
+        api_url = QimaoRainFetcher._api_url(engine, type=2, id=novel_id)
+        json_data = engine.fetch_json(api_url, **kwargs)
 
-        if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
+        code = json_data.get("code")
+        if code is not None and code != 0 and str(code) != "0":
             raise NovelNotFoundError()
 
-        data = json_data.get("data")
-        if not data:
+        book = json_data.get("data", {}).get("book")
+        if not book:
             raise NovelNotFoundError()
 
-        book_url = f"https://www.qimao.com/shuku/{data.get('book_id')}/"
-        name = data.get("book_name")
+        book_url = f"https://www.qimao.com/shuku/{novel_id}/"
+        name = book.get("title") or ""
 
-        author = ""
-        author_info = data.get("author_info")
-        if author_info and isinstance(author_info, dict):
-            author = author_info.get("user_name", "")
-        if not author:
-            try:
-                original_authors = json.loads(data.get("original_authors", "[]"))
-                if original_authors:
-                    author = original_authors[0].get("AuthorName", "")
-            except (json.JSONDecodeError, IndexError):
-                pass
+        author = book.get("author") or ""
 
-        serial = int(data.get("serial_count", 0))
-        word_number = int(data.get("word_number", 0))
+        serial = int(book.get("chapters", 0))
+        word_number = int(book.get("words_num", 0))
 
-        cover_url = data.get("thumb_url", "")
+        cover_url = book.get("image_link", "")
         try:
             book_cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
         except requests.RequestException:
@@ -444,25 +432,23 @@ class QimaoRainFetcher(BaseFetcher):
         novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 
         tags: list[str] = []
-        status = data.get("status", "0")
-        tags.append("连载中" if status == "0" else "已完结")
-        try:
-            category_v2 = json.loads(data.get("category_v2", "[]"))
-            for cat in category_v2:
-                cat_name = cat.get("Name")
-                if cat_name:
-                    tags.append(cat_name)
-        except json.JSONDecodeError:
-            pass
+        if book.get("is_over") == "1":
+            tags.append("已完结")
+        else:
+            tags.append("连载中")
+        for key in ("category1_name", "category2_name"):
+            v = book.get(key)
+            if v:
+                tags.append(v)
 
-        extras = Box(rating=data.get('score'))
+        extras = Box(rating=book.get('score'))
         novel = Novel(url=book_url,
                       id=novel_id,
                       title=name,
                       serial=serial,
                       author=author,
                       count=word_number,
-                      description=data.get("abstract", ""),
+                      description=book.get("intro", ""),
                       cover=novel_image,
                       tags=tuple(tags),
                       extras=extras,
@@ -472,52 +458,52 @@ class QimaoRainFetcher(BaseFetcher):
     def fetch_chapter_list(self, url, engine, **kwargs) -> Chapters:
 
         novel_id = standardize_id(url)
-        url = QimaoRainFetcher._api_url(engine, type=3, bookid=novel_id)
-        json_data = engine.fetch_json(url, **kwargs)
+        api_url = QimaoRainFetcher._api_url(engine, type=3, id=novel_id)
+        json_data = engine.fetch_json(api_url, **kwargs)
 
-        if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
-            raise ChapterNotFoundError(f"Rain API returned error code: {json_data.get('code')}")
+        code = json_data.get("code")
+        if code is not None and code != 0 and str(code) != "0":
+            raise ChapterNotFoundError(f"Rain API returned error code: {code}")
 
-        item_data_list = json_data.get("data", {}).get("item_data_list")
-        if not item_data_list:
+        chapter_lists = json_data.get("data", {}).get("chapter_lists")
+        if not chapter_lists:
             raise ChapterNotFoundError("Rain API returned empty chapter list")
 
         results: list[Chapter] = []
-        for idx, chapter_item in enumerate(item_data_list, start=1):
-            item_id = chapter_item.get("item_id")
-            chapter_url = f"https://www.qimao.com/shuku/{novel_id}-{item_id}/"
-            title: str = chapter_item.get("title", "")
-            volume_name = chapter_item.get("volume_name", "")
-            first_pass_time: float = chapter_item.get("first_pass_time", 0)
+        for chapter_item in chapter_lists:
+            ch_id = chapter_item.get("id")
+            chapter_url = f"https://www.qimao.com/shuku/{novel_id}-{ch_id}/"
+            title = chapter_item.get("title", "")
+            index = int(chapter_item.get("index", "0"))
             chapter = Chapter(
                 title=title,
                 url=chapter_url,
-                id=str(item_id),
-                order=idx,
+                id=str(ch_id),
+                order=index,
                 novel_id=novel_id,
-                volume=volume_name,
-                time=first_pass_time,
             )
             results.append(chapter)
         return Chapters(results)
 
     def fetch_chapter_content(self, chapter: Chapter, engine, **kwargs) -> Chapter | None:
         """解析并填充content, count, (True)"""
-        item_id = standardize_id(chapter)
-        url = QimaoRainFetcher._api_url(engine, type=4, itemid=item_id)
-        response = engine.fetch_json(url, **kwargs)
+        # chapter.id from Rain API is the chapter ID directly (e.g. "17061706560001")
+        api_url = QimaoRainFetcher._api_url(engine, type=4, id=chapter.novel_id, chapterid=chapter.id)
+        response = engine.fetch_json(api_url, **kwargs)
 
-        if response.get("code") != 0 and str(response.get("code")) != "0":
-            err_msg = response.get("data", {}).get("content", "Unknown error")
-            raise ChapterNotFoundError(message=f"Chapter content error: {err_msg}")
+        code = response.get("code")
+        if code is not None and code != 0 and str(code) != "0":
+            raise ChapterNotFoundError(message=f"Chapter content error: code={code}")
 
         data = response.get("data", {})
-        title = data.get("title", "")
         raw_content = data.get("content", "")
         content = raw_content.strip()
-        content = content.replace("</p>", "\n\n")
-        if content.startswith(title):
-            content = content[len(title):].strip()
+        # Unescape HTML entities in content
+        content = content.replace("&#8722;", "−").replace("&#9450;", "ⓚ")
+        # Replace <br/> tags with double newlines to create proper paragraph breaks
+        content = content.replace("<br/>", "\n\n").replace("<br />", "\n\n")
+        if not content:
+            raise ChapterNotFoundError("Rain API returned empty chapter content")
 
         chapter.content = content
         chapter.count = len(content)
