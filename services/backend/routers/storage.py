@@ -1,12 +1,13 @@
 """Storage 路由。"""
 import json
-from base64 import b64encode
+from base64 import b64decode, b64encode
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from services.backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
 from novelbase.core.storage import create_storage
 from novelbase.core.options import StorageOptions
+from novelbase.models.novel import Novel, Illustration
 
 router = APIRouter(prefix="/api/v2/storage", tags=["storage"])
 
@@ -102,7 +103,22 @@ async def get_meta(novel_id: str):
     return _novel_to_meta(novel)
 
 @router.put("/novel/{novel_id}/meta")
-async def save_meta(novel_id: str, body: NovelMeta): return {"status": "ok", "novel_id": novel_id}
+async def save_meta(novel_id: str, body: NovelMeta):
+    store = _get_storage()
+    cover = None
+    if body.cover and body.cover.raw_data:
+        cover = Illustration(
+            raw_data=b64decode(body.cover.raw_data),
+            alt=body.cover.alt,
+            url=body.cover.url,
+        )
+    novel = Novel(
+        title=body.title, url=body.url, id=novel_id,
+        serial=body.serial, author=body.author, description=body.description,
+        tags=body.tags, count=body.count, cover=cover,
+    )
+    store.save_meta(novel)
+    return {"status": "ok", "novel_id": novel_id}
 
 @router.delete("/novel/{novel_id}")
 async def delete_novel(novel_id: str):
@@ -127,6 +143,8 @@ async def list_chapters(novel_id: str, order: str | None = Query(None), volume: 
 async def stream_chapters(novel_id: str):
     """SSE 流式返回章节，include_images=True。前端逐行渲染，首屏即见。"""
     store = _get_storage()
+    if not store.load_meta(novel_id):
+        raise HTTPException(404, "小说不存在")
 
     def generate():
         for ch in store.iter_chapters(novel_id, include_images=True):

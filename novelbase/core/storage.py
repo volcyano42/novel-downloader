@@ -286,8 +286,10 @@ class SQLiteStorage(BaseStorage):
     def _novel_path(self, novel_id: str) -> str:
         return str(self.base_dir / f"{novel_id}.db")
 
-    def _connect_novel(self, novel_id: str) -> sqlite3.Connection:
+    def _connect_novel(self, novel_id: str, *, write: bool = False) -> sqlite3.Connection:
         path = self._novel_path(novel_id)
+        if not write and not os.path.exists(path):
+            raise FileNotFoundError(f"小说数据库不存在: {path}")
         conn = sqlite3.connect(path, timeout=15)
         try:
             try:
@@ -349,7 +351,7 @@ class SQLiteStorage(BaseStorage):
     def save_meta(self, novel: Novel) -> str:
         _log.debug("save_meta sqlite: id=%s", novel.id)
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
-        with self._connect_novel(novel.id) as conn:
+        with self._connect_novel(novel.id, write=True) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO meta (id, title, url, author, serial,
                     description, tags, count)
@@ -360,6 +362,8 @@ class SQLiteStorage(BaseStorage):
         return novel.id
 
     def load_meta(self, novel_id: str) -> Novel | None:
+        if not os.path.exists(self._novel_path(novel_id)):
+            return None
         with self._connect_novel(novel_id) as conn:
             row = conn.execute(
                 "SELECT id, title, url, author, serial, description, tags, count "
@@ -452,7 +456,7 @@ class SQLiteStorage(BaseStorage):
         if isinstance(chapters, Chapter):
             chapters = [chapters]
         saved = []
-        with self._connect_novel(novel.id) as conn:
+        with self._connect_novel(novel.id, write=True) as conn:
             for ch in chapters:
                 conn.execute("""
                     INSERT OR REPLACE INTO chapters
@@ -466,6 +470,8 @@ class SQLiteStorage(BaseStorage):
         return saved
 
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
+        if not os.path.exists(self._novel_path(novel_id)):
+            return None
         with self._connect_novel(novel_id) as conn:
             row = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
@@ -480,6 +486,8 @@ class SQLiteStorage(BaseStorage):
         return Chapters(self.iter_chapters(novel_id, include_images))
 
     def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+        if not os.path.exists(self._novel_path(novel_id)):
+            return
         with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
                 "SELECT id, url, title, \"order\", volume, content, time, count "
