@@ -87,7 +87,7 @@ export default function BookshelfPage() {
     const prev = prevTaskRef.current;
     for (const t of tasks) {
       const wasDownloading = prev[t.task_id] === "downloading";
-      if (t.status === "completed" && wasDownloading) {
+      if ((t.status === "completed" || t.status === "partial") && wasDownloading) {
         toast(`「${t.title}」下载完成`, "success");
         refetchNovels();
       } else if (t.status === "failed" && wasDownloading) {
@@ -224,7 +224,7 @@ export default function BookshelfPage() {
           {tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
             : tasks.map(task => {
               const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
-              const status = task.status as "downloading" | "paused" | "completed" | "failed";
+              const status = task.status as "downloading" | "paused" | "completed" | "failed" | "partial";
               return (
                 <DownloadTask key={task.task_id} title={task.title}
                   status={status} progress={pct} errorMessage={task.error ?? undefined}

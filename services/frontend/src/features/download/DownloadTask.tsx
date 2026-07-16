@@ -1,8 +1,8 @@
-import { CheckCircle, Loader2, X, XCircle, RefreshCw, Pause, Play } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, X, XCircle, RefreshCw, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-type TaskStatus = "downloading" | "paused" | "completed" | "failed";
+type TaskStatus = "downloading" | "paused" | "completed" | "failed" | "partial";
 
 interface DownloadTaskProps {
   title: string; status: TaskStatus; progress?: number; errorMessage?: string; currentTitle?: string;
@@ -14,13 +14,14 @@ const statusConfig: Record<TaskStatus, { label: string; className: string; icon:
   paused:     { label: "已暂停", className: "bg-amber-50 text-amber-600", icon: Pause },
   completed:  { label: "完成",   className: "bg-emerald-50 text-emerald-600", icon: CheckCircle },
   failed:     { label: "失败",   className: "bg-red-50 text-red-500", icon: XCircle },
+  partial:    { label: "部分完成", className: "bg-amber-50 text-amber-600", icon: AlertTriangle },
 };
 
 export function DownloadTask({ title, status, progress = 0, errorMessage, currentTitle, onPause, onResume, onCancel, onRetry, className }: DownloadTaskProps) {
   const cfg = statusConfig[status]; const Icon = cfg.icon;
   const showProgress = status === "downloading" || status === "paused";
   return (
-    <div className={cn("flex items-center gap-3 rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 shadow-card", status === "completed" && "animate-[complete-flash_0.5s_ease-out]", className)}>
+    <div className={cn("flex items-center gap-3 rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 shadow-card", (status === "completed" || status === "partial") && "animate-[complete-flash_0.5s_ease-out]", className)}>
       <div className="min-w-0 flex-1">
         <span className="truncate block text-sm font-medium text-slate-800">{title}</span>
         {currentTitle && (

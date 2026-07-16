@@ -1,8 +1,10 @@
 """下载任务管理器 — 后台线程池、暂停/恢复、进度跟踪。"""
 import logging
 import threading
+import time
 import uuid
 
+from novelbase.core.exceptions import ChapterNotFoundError
 from services.backend.services.config_service import load_config
 from services.backend.services.engine_manager import get_cached_engine
 
@@ -55,21 +57,34 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
             ch = Chapter(id=ch_data["id"], url=ch_data["url"], novel_id=task["novel_id"],
                          title=ch_data["title"], order=ch_data["order"],
                          volume=ch_data.get("volume"))
-            try:
-                downloaded = resolve_chapter(ch, engine)
-                if downloaded is not None:
-                    store.save_chapter(novel, Chapters(chapters=[downloaded]))
+            max_retries = 3
+            for attempt in range(max_retries + 1):
+                if attempt > 0:
+                    time.sleep(2 * attempt)
+                try:
+                    downloaded = resolve_chapter(ch, engine)
+                except ChapterNotFoundError:
+                    if attempt < max_retries:
+                        continue
                     with _tasks_lock:
-                        task["current_title"] = downloaded.title
+                        task["errors"].append(f"{ch.title}: 内容为空(已重试{max_retries}次)")
+                    break
+                except Exception as e:
+                    with _tasks_lock:
+                        task["errors"].append(f"{ch.title}: {e}")
+                    break
                 else:
-                    with _tasks_lock:
-                        task["errors"].append(f"章节不可获取: {ch.title}")
-            except Exception as e:
-                with _tasks_lock:
-                    task["errors"].append(f"{ch.title}: {e}")
-            finally:
-                with _tasks_lock:
-                    task["progress"] += 1
+                    if downloaded is not None:
+                        store.save_chapter(novel, Chapters(chapters=[downloaded]))
+                        with _tasks_lock:
+                            task["current_title"] = downloaded.title
+                    else:
+                        with _tasks_lock:
+                            task["errors"].append(f"章节不可获取: {ch.title}")
+                    break
+
+            with _tasks_lock:
+                task["progress"] += 1
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_download_one, ch) for ch in task["chapters"]]
@@ -79,9 +94,11 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                 except Exception:
                     _log.warning("future.result() failed in download task", exc_info=True)
 
-        task["status"] = "completed"
         if task["errors"]:
-            task["error"] = "; ".join(task["errors"][:3])
+            task["status"] = "partial"
+            task["error"] = f"部分章节下载失败 ({len(task['errors'])}/{task['total']})"
+        else:
+            task["status"] = "completed"
     except Exception as e:
         task["status"] = "failed"
         task["error"] = str(e)
