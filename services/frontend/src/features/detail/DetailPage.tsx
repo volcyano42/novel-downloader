@@ -126,6 +126,7 @@ export default function DetailPage() {
   }, [remoteMerged, isRemote, streaming]);
 
   const allSelected = merged.length > 0 && selectedIds.size === merged.length;
+  const localAllSelected = !showCompare && localChapters.length > 0 && selectedIds.size === localChapters.length;
 
   const toggleAll = useCallback(() => {
     if (allSelected) setSelectedIds(new Set());
@@ -139,6 +140,11 @@ export default function DetailPage() {
       return next;
     });
   }, []);
+
+  const toggleAllLocal = useCallback(() => {
+    if (localAllSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(localChapters.map(c => c.id)));
+  }, [localAllSelected, localChapters]);
 
   const handleBack = () => navigate(-1);
 
@@ -205,6 +211,24 @@ export default function DetailPage() {
     finally { setChecking(false); }
   }, [novelId, remoteUrl, novel?.url, toast]);
 
+  const runDownloadLocal = useCallback((mode: string, provider?: string) => {
+    if (!novelId || selectedIds.size === 0) return;
+    const selected = localChapters
+      .filter(c => selectedIds.has(c.id))
+      .map(c => ({ id: c.id, url: c.url, novel_id: novelId, title: c.title, order: c.order, volume: c.volume }));
+    downloadMut.mutate({
+      novelId,
+      chapters: selected,
+      title: novel?.title ?? novelId,
+      mode,
+      provider,
+      novelUrl: novel?.url,
+      platform: platformFromUrl(novel?.url),
+    });
+    setSelectedIds(new Set());
+    navigate("/downloads");
+  }, [novelId, selectedIds, localChapters, novel?.title, novel?.url, navigate, downloadMut]);
+
   const runDownload = useCallback((mode: string, provider?: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = merged
@@ -247,10 +271,12 @@ export default function DetailPage() {
     setDialogVariant(null);
     if (v === "check") {
       runCheckUpdate(mode, provider);
-    } else {
+    } else if (showCompare) {
       runDownload(mode, provider);
+    } else {
+      runDownloadLocal(mode, provider);
     }
-  }, [dialogVariant, runCheckUpdate, runDownload]);
+  }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
 
   if (!novel && !loading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
 
@@ -303,7 +329,16 @@ export default function DetailPage() {
             )}
             {!isRemote && !compareMode && (
               <>
+                <button onClick={toggleAllLocal} className="text-xs text-slate-400 hover:text-indigo-500 transition-colors">{localAllSelected ? "全不选" : "全选"}</button>
+                <span className="text-xs text-slate-500">已选择 <span className="font-medium text-indigo-500">{selectedIds.size}</span> 章</span>
                 <div className="flex-1" />
+                {selectedIds.size > 0 && (
+                  <button onClick={handleDownloadClick}
+                    className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
+                    <Download className="h-3 w-3" strokeWidth={2} />
+                    下载选中 ({selectedIds.size})
+                  </button>
+                )}
                 <button onClick={handleCheckUpdate} disabled={checking} className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1 disabled:opacity-50">
                   <RefreshCw className={`h-3 w-3 ${checking ? "animate-spin" : ""}`} strokeWidth={2} />
                   {checking ? "检查中..." : "检查更新"}
@@ -348,9 +383,17 @@ export default function DetailPage() {
             </div>
           ) : (
             <div className="space-y-1">
-              {chapters.map(ch => (
+              {chapters.map(ch => {
+                const checked = selectedIds.has(ch.id);
+                return (
                 <div key={ch.id} className="flex items-center gap-2">
-                  <span className={`shrink-0 text-xs w-12 text-right tabular-nums ${ch.downloaded ? "text-emerald-500" : "text-slate-300"}`}>{ch.order}</span>
+                  <label className="shrink-0 flex items-center cursor-pointer">
+                    <input type="checkbox" checked={checked} onChange={() => toggleSelect(ch.id)} className="sr-only peer" />
+                    <div className="h-4 w-4 rounded border-2 border-slate-300 peer-checked:border-indigo-500 peer-checked:bg-indigo-500 flex items-center justify-center transition-colors">
+                      {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                  </label>
+                  <span className={`shrink-0 text-xs w-10 text-right tabular-nums ${ch.downloaded ? "text-emerald-500" : "text-slate-300"}`}>{ch.order}</span>
                   <button onClick={() => navigate(`/novel/${novelId}/${ch.id}`)} className="group/ch flex-1 min-w-0 flex items-center rounded-xl px-3 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <span className="truncate text-slate-700">{ch.title}</span>
                     {(ch.image_count ?? 0) > 0 && (
@@ -364,7 +407,8 @@ export default function DetailPage() {
                     <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </a>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           <p className="mt-12 text-center text-xs text-slate-300"><span>仅供个人阅读使用 · 版权归 <span className="font-medium text-slate-400">{novel?.author ?? "原作者"}</span> 所有</span></p>
