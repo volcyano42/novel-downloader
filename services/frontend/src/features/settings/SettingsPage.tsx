@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useGlobalConfig, useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig } from "@/hooks/index";
+import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig } from "@/hooks/index";
 import type { GlobalConfig, SiteConfig } from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -116,7 +116,7 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
 };
 
 function EngineSection({ mode }: { mode: string }) {
-  const [platform, setPlatform] = useState(PLATFORMS[0].id);
+  const [platform, setPlatform] = useState<"fanqie" | "qidian" | "qimao">(PLATFORMS[0].id);
   const [engineOpen, setEngineOpen] = useState(false);
   const { data: siteCfg } = useSiteConfig(platform);
   const saveSite = useSaveSiteConfig(platform);
