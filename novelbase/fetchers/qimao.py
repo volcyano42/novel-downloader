@@ -94,7 +94,7 @@ class QimaoHTMLParser:
         soup = BeautifulSoup(html, "lxml")
 
         # 检测小说不存在：meta description 中出现 "undefined"
-        meta_desc = soup.find("meta", attrs={"data-hid": "description"})
+        meta_desc = soup.select_one('meta[data-hid="description"]')
         if meta_desc and 'content="《undefined》' in str(meta_desc):
             raise NovelNotFoundError("七猫小说不存在（meta 含 undefined）")
 
@@ -107,7 +107,7 @@ class QimaoHTMLParser:
         # URL：优先传入的 url，其次 canonical
         book_url = url
         if not book_url:
-            canonical = soup.find("link", rel="canonical")
+            canonical = soup.select_one('link[rel="canonical"]')
             if canonical:
                 book_url = canonical.get("href", "")
 
@@ -118,7 +118,7 @@ class QimaoHTMLParser:
             author = author_tag.get_text(strip=True)
         else:
             # fallback：meta author
-            meta_author = soup.find("meta", attrs={"name": "author"})
+            meta_author = soup.select_one('meta[name="author"]')
             if meta_author:
                 author = meta_author.get("content", "")
 
@@ -204,7 +204,7 @@ class QimaoHTMLParser:
         soup = BeautifulSoup(html, "lxml")
 
         # 检测页面是否有效
-        meta_desc = soup.find("meta", attrs={"data-hid": "description"})
+        meta_desc = soup.select_one('meta[data-hid="description"]')
         if meta_desc and 'content="《undefined》' in str(meta_desc):
             raise ChapterNotFoundError("七猫小说不存在，无法获取目录")
 

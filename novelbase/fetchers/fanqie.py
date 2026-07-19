@@ -175,7 +175,7 @@ class FanqieHTMLParser:
     @staticmethod
     def parse_novel_info(html: str) -> Novel:
 
-        if BeautifulSoup(html, 'lxml').find("div", class_="no-content"):
+        if BeautifulSoup(html, 'lxml').select_one("div.no-content"):
             raise NovelNotFoundError()
 
         json_data = extract_json(html)
@@ -225,7 +225,7 @@ class FanqieHTMLParser:
     @staticmethod
     def parse_chapter_list(html: str) -> Chapters:
 
-        if BeautifulSoup(html, 'lxml').find("div", class_="no-content"):
+        if BeautifulSoup(html, 'lxml').select_one("div.no-content"):
             raise ChapterNotFoundError("Chapter list page shows no-content div")
         json_data = extract_json(html)
         if not json_data:
@@ -257,7 +257,7 @@ class FanqieHTMLParser:
     def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
         """解析并填充content, count, images, """
 
-        if BeautifulSoup(html, 'lxml').find("div", class_="no-content"):
+        if BeautifulSoup(html, 'lxml').select_one("div.no-content"):
             raise ChapterNotFoundError("Chapter page shows no-content div")
         if "window.__INITIAL_STATE__=" not in html:
             raise ParseError("Chapter page missing __INITIAL_STATE__")
@@ -267,15 +267,15 @@ class FanqieHTMLParser:
             raise ChapterNotFoundError("Chapter JSON extraction returned empty")
         count = json_data.get("reader", {}).get("chapterData", {}).get("chapterWordNumber")
         parent_soup = BeautifulSoup(html, 'lxml')
-        if parent_soup.find('div', class_='muye-to-fanqie'):
+        if parent_soup.select_one('div.muye-to-fanqie'):
             return None
 
-        html_content = str(parent_soup.find('div', class_='muye-reader-content noselect'))
+        html_content = str(parent_soup.select_one('div.muye-reader-content.noselect'))
         soup = BeautifulSoup(translate(html_content), 'lxml')
 
-        content_div = soup.find('div', class_='muye-reader-content noselect')
+        content_div = soup.select_one('div.muye-reader-content.noselect')
         if not content_div:
-            content_div = soup.find('div', class_='muye-reader-content')
+            content_div = soup.select_one('div.muye-reader-content')
 
         separator = "\n\n"
         img_counter = 0
@@ -284,7 +284,7 @@ class FanqieHTMLParser:
 
         # 按直接子元素顺序遍历，同时提取文本和图片位置
         if content_div:
-            inner = content_div.find('div')
+            inner = content_div.select_one('div')
             target = inner if inner else content_div
 
             for element in target.children:
@@ -299,7 +299,7 @@ class FanqieHTMLParser:
 
                     if 'picture' in cls:
                         # 图片段落
-                        img_tag = element.find('img')
+                        img_tag = element.select_one('img')
                         if img_tag:
                             img_counter += 1
                             group_id = img_counter
@@ -311,7 +311,7 @@ class FanqieHTMLParser:
                                 parent = element.parent
                                 while parent and isinstance(parent, Tag):
                                     if parent.name == 'div' and parent.get('data-fanqie-type') == 'image':
-                                        pic_desc_tag = parent.find('p', class_='pictureDesc')
+                                        pic_desc_tag = parent.select_one('p.pictureDesc')
                                         if pic_desc_tag and isinstance(pic_desc_tag, Tag):
                                             if pic_desc_tag.get('group-id') == str(group_id):
                                                 picture_desc = pic_desc_tag.get_text(strip=True)
@@ -340,13 +340,13 @@ class FanqieHTMLParser:
                         text_paragraphs.append(text)
 
                 elif element.name == 'div' and element.get('data-fanqie-type') == 'image':
-                    img_tag = element.find('img')
+                    img_tag = element.select_one('img')
                     if img_tag:
                         img_counter += 1
                         group_id = img_counter
 
                         picture_desc = ""
-                        pic_desc_tag = element.find('p', class_='pictureDesc')
+                        pic_desc_tag = element.select_one('p.pictureDesc')
                         if pic_desc_tag and isinstance(pic_desc_tag, Tag):
                             if pic_desc_tag.get('group-id') == str(group_id):
                                 picture_desc = pic_desc_tag.get_text(strip=True)
@@ -463,7 +463,7 @@ class FanqieBrowserFetcher(BaseFetcher):
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter)}"
         html = engine.fetch_text(url=url, **kwargs)
 
-        if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
+        if BeautifulSoup(html, "lxml").select_one("div.no-content"):
             raise ChapterNotFoundError("Chapter page shows no-content div")
 
         result = FanqieHTMLParser.parse_chapter_content(html, chapter)
@@ -825,7 +825,7 @@ class FanqieRequestsFetcher(BaseFetcher):
             **kwargs) -> Chapter | None:
         url = f"https://fanqienovel.com/reader/{standardize_id(chapter)}"
         html = engine.fetch_text(url=url, **kwargs)
-        if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
+        if BeautifulSoup(html, "lxml").select_one("div.no-content"):
             raise ChapterNotFoundError("Chapter page shows no-content div")
         result = FanqieHTMLParser.parse_chapter_content(html, chapter)
         return result

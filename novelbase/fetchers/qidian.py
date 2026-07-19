@@ -31,7 +31,7 @@ class QidianHTMLParser:
     @staticmethod
     def parse_search_result(html: str) -> tuple[SearchResult, ...]:
         soup = BeautifulSoup(html, 'lxml')
-        script_list = soup.find_all('script')
+        script_list = soup.select('script')
         results: list[SearchResult] = []
         for script in script_list:
             if "g_data.listInfo=" in str(script):
@@ -58,11 +58,11 @@ class QidianHTMLParser:
 
         soup = BeautifulSoup(html, "lxml")
 
-        title_tag = soup.find("title")
+        title_tag = soup.select_one("title")
         if title_tag and title_tag.get_text() == "WAF拦截页面":
             raise AntiCrawlError()
 
-        h1_tag = soup.find("h1")
+        h1_tag = soup.select_one("h1")
         if h1_tag and h1_tag.get_text() == "抱歉，页面无法访问...":
             return False
         return True
@@ -75,30 +75,31 @@ class QidianHTMLParser:
             raise NovelNotFoundError()
 
         try:
-            serial = len(soup.find("div", class_="catalog-all").find_all("li"))
+            serial = len(soup.select("div.catalog-all li"))
 
-            name = soup.find('h1', id='bookName').get_text()
+            name = soup.select_one('h1#bookName').get_text()
 
-            intro = soup.find("p", class_="book-desc").get_text() if soup.find("p", class_="book-desc") else None
-            if soup.find('div', class_='author-information'):
-                author = soup.find('a', class_='writer-name').get_text()
-                attribute_str = soup.find('p', class_='book-attribute').text
+            intro_tag = soup.select_one("p.book-desc")
+            intro = intro_tag.get_text() if intro_tag else None
+            if soup.select_one('div.author-information'):
+                author = soup.select_one('a.writer-name').get_text()
+                attribute_str = soup.select_one('p.book-attribute').text
                 attribute = attribute_str.split('·')
                 all_label = attribute
             else:
                 all_label = []
-                author = soup.find('span', class_='author').get_text()
+                author = soup.select_one('span.author').get_text()
 
-            count_word_str = soup.find('p', class_='count').find('em').get_text()
+            count_word_str = soup.select_one('p.count em').get_text()
             if count_word_str.endswith("万"):
                 count_word = int(float(count_word_str[:-1]) * 10000)
             else:
                 count_word = int(count_word_str)
 
-            intro_detail = soup.find('p', id='book-intro-detail').get_text()
+            intro_detail = soup.select_one('p#book-intro-detail').get_text()
             abstract = f'{intro}\n{intro_detail}' if intro else intro_detail
 
-            book_cover_url = 'https:' + soup.find('a', id='bookImg').find('img').get('src')
+            book_cover_url = 'https:' + soup.select_one('a#bookImg img').get('src')
         except AttributeError as exc:
             raise ParseError("Qidian novel info page missing expected element", detail=str(exc))
         try:
@@ -129,7 +130,7 @@ class QidianHTMLParser:
         if not QidianHTMLParser.content_is_exist(html):
             raise ChapterNotFoundError("Qidian chapter list page blocked or unavailable")
 
-        chapters_div = soup.find('div', class_='catalog-all')
+        chapters_div = soup.select_one('div.catalog-all')
         if not chapters_div:
             return Chapters()
 
@@ -138,11 +139,11 @@ class QidianHTMLParser:
         for chapters_item in chapters_div:
             if not isinstance(chapters_item, Tag):
                 continue
-            volume_tag = chapters_item.find('h3', class_='volume-name')
+            volume_tag = chapters_item.select_one('h3.volume-name')
             volume = volume_tag.get_text().split("·")[0] if volume_tag else ""
 
-            title_list = [item.text for item in chapters_item.find_all("a", class_="chapter-name")]
-            url_list = ["https:" + item.get("href") for item in chapters_item.find_all("a", class_="chapter-name")]
+            title_list = [item.text for item in chapters_item.select("a.chapter-name")]
+            url_list = ["https:" + item.get("href") for item in chapters_item.select("a.chapter-name")]
             for title, chapter_url in zip(title_list, url_list):
                 chapter_id = standardize_id(chapter_url)
                 results.append(Chapter(
@@ -164,19 +165,19 @@ class QidianHTMLParser:
         if not QidianHTMLParser.content_is_exist(html):
             raise ChapterNotFoundError("Qidian chapter page blocked or unavailable")
 
-        json_data = parent_soup.find("script", id = "vite-plugin-ssr_pageContext")
+        json_data = parent_soup.select_one("script#vite-plugin-ssr_pageContext")
         if json_data:
             script_str = json_data.get_text()
             json_data = json.loads(script_str)
             chapter_info = json_data["pageContext"]["pageProps"]["pageData"]["chapterInfo"]
             word_count = chapter_info.get("wordsCount", 0)
             update_time_stamp = chapter_info.get("updateTimestamp", 0)
-            novel_content_soup = parent_soup.find('main')
-            if parent_soup.find(name='input', attrs = {"type": "checkbox"}):
+            novel_content_soup = parent_soup.select_one('main')
+            if parent_soup.select_one('input[type="checkbox"]'):
                 # 章节不完整，但内容仍在页面中
                 novel_content = '\n\n'.join(i.get_text().strip() for i in novel_content_soup) if novel_content_soup else ""
             else:
-                spans = novel_content_soup.find_all("span", class_="content-text") if novel_content_soup else []
+                spans = novel_content_soup.select("span.content-text") if novel_content_soup else []
                 novel_content = '\n\n'.join(i.get_text().strip() for i in spans)
 
             chapter.content = novel_content
@@ -184,13 +185,13 @@ class QidianHTMLParser:
             chapter.time = update_time_stamp
             return chapter
 
-        title_tag = parent_soup.find('h1', class_='title')
+        title_tag = parent_soup.select_one('h1.title')
         title = title_tag.get_text() if title_tag else ""
 
         count_word = 0
-        relative_div = parent_soup.find("div", class_="relative")
+        relative_div = parent_soup.select_one("div.relative")
         if relative_div:
-            spans = relative_div.find_all("span", class_="group inline-flex items-center mr-16px")
+            spans = relative_div.select("span.group.inline-flex.items-center.mr-16px")
             if spans:
                 count_word_str = spans[-1].get_text().split()[-1]
                 digits = re.findall(r'\d+', count_word_str)
@@ -198,19 +199,19 @@ class QidianHTMLParser:
                     count_word = int(digits[0])
 
         update_time = 0
-        time_span = parent_soup.find('span', class_='chapter-date')
+        time_span = parent_soup.select_one('span.chapter-date')
         if time_span:
             try:
                 update_time = time.mktime(time.strptime(time_span.get_text(), "%Y年%m月%d日 %H:%M"))
             except (ValueError, OSError):
                 pass
 
-        novel_content_soup = parent_soup.find('main')
-        if parent_soup.find(name='input', attrs = {"type": "checkbox"}):
+        novel_content_soup = parent_soup.select_one('main')
+        if parent_soup.select_one('input[type="checkbox"]'):
             # 章节不完整，但内容仍在页面中
             novel_content = '\n\n'.join(i.get_text().strip() for i in novel_content_soup) if novel_content_soup else ""
         else:
-            spans = novel_content_soup.find_all("span", class_="content-text") if novel_content_soup else []
+            spans = novel_content_soup.select("span.content-text") if novel_content_soup else []
             novel_content = '\n\n'.join(i.get_text().strip() for i in spans)
 
         chapter.content = novel_content
@@ -287,7 +288,7 @@ class QidianBrowserFetcher(BaseFetcher):
             **kwargs) -> Chapter | None:
         url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
-        if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
+        if BeautifulSoup(html, "lxml").select_one("div.no-content"):
             raise ChapterNotFoundError("Qidian chapter page shows no-content div")
         result = QidianHTMLParser.parse_chapter_content(html, chapter)
         return result
@@ -317,7 +318,7 @@ class QidianRequestsFetcher(BaseFetcher):
             **kwargs) -> Chapter | None:
         url = chapter.url
         html = engine.fetch_text(url=url, **kwargs)
-        if BeautifulSoup(html, "lxml").find("div", class_="no-content"):
+        if BeautifulSoup(html, "lxml").select_one("div.no-content"):
             raise ChapterNotFoundError(f"Qidian chapter page shows no-content div: {chapter.url}")
         result = QidianHTMLParser.parse_chapter_content(html, chapter)
         return result
