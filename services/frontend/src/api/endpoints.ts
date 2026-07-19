@@ -24,6 +24,7 @@ export interface ChapterData extends ChapterBrief {
 
 export interface SearchResult {
   title: string; author: string; url: string; description: string | null;
+  platform: string;
   extras?: { rating?: number } | null;
 }
 
@@ -137,6 +138,8 @@ export function streamChapters(
       }
       if (done) { onDone(); return; }
     }
+  }).catch((e: Error) => {
+    if (e.name !== "AbortError") throw e;
   });
 }
 

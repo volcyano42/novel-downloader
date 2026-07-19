@@ -278,4 +278,5 @@ class SearchResult:
     author: str
     url: str | None = None
     description: str | None = None
+    platform: str = ""
     extras: Box = field(default_factory=Box)

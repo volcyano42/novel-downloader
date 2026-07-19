@@ -33,7 +33,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
                         provider: str | None = Query(None)):
     from novelbase.core.downloader import get_fetcher_for_url, get_fetcher_for_id
 
-    engine = get_cached_engine(platform, mode, provider=provider)
+    engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
 
@@ -66,6 +66,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
         raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
+                             platform=getattr(r, 'platform', ''),
                              extras=dict(r.extras) if getattr(r, 'extras', None) else None)
             for r in results]
 

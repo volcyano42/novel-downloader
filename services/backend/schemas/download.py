@@ -7,6 +7,7 @@ class SearchResultData(BaseModel):
     author: str
     url: str
     description: str | None = None
+    platform: str = ""
     extras: dict | None = None
 
 

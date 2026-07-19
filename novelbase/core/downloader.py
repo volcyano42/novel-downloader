@@ -62,25 +62,39 @@ def split_into_groups(target: Sequence[_T], group: int) -> tuple[Sequence[_T], .
 def search(platform: str,
            query: str,
            engine,
-           page: int = 1,
            skip_delay: bool = False,
            **kwargs) -> tuple[SearchResult, ...]:
     """搜索小说。
 
     Args:
-        platform: 平台标识（如 ``"fanqie"``）。
+        platform: 平台标识（如 ``"fanqie"``），传 ``"all"`` 时全平台搜索。
         query:    搜索关键词。
         engine:   下载引擎实例。
-        page:     页码，从 1 开始。
         skip_delay: 跳过请求间延迟。
     """
+    if platform == "all":
+        all_results: list[SearchResult] = []
+        for plat, fetcher_cls in get_fetchers().items():
+            try:
+                fetcher = fetcher_cls()
+                kwargs["skip_delay"] = skip_delay
+                results = fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
+                for r in results:
+                    r.platform = plat
+                all_results.extend(results)
+            except Exception:
+                pass
+        return tuple(all_results)
+
     fetcher_cls = get_fetchers().get(platform)
     if fetcher_cls is None:
         raise FetcherNotFoundError(f"fetcher not found: {platform}")
     fetcher = fetcher_cls()
-    kwargs["page"] = page
     kwargs["skip_delay"] = skip_delay
-    return fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
+    results = fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
+    for r in results:
+        r.platform = platform
+    return results
 
 
 def login(platform: str, engine: BrowserEngine) -> AuthCredential:
