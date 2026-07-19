@@ -16,8 +16,8 @@ api:
   rain:
     backoff_factor: 2
     delay:
-    - 1
     - 2
+    - 3
     enabled: false
     key: ''
     params: {}
