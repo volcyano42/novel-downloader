@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { BookCard, BookCardSkeleton } from "./BookCard";
 import { SearchBar } from "./SearchBar";
 import { SearchResultCard } from "./SearchResultCard";
@@ -57,8 +58,7 @@ export default function BookshelfPage() {
   const searchProviderRef = useRef<string | undefined>(SessionCache.getProvider());
   const navigatingRef = useRef(false);
   const [searchCachedQuery, setSearchCachedQuery] = useState("");
-  const [searchCachedPlatform, setSearchCachedPlatform] = useState("fanqie");
-  const [searchBarKey, setSearchBarKey] = useState(0);
+  const [resultTab, setResultTab] = useState<string>("all");
   const navigate = useNavigate();
 
   // search — using React Query
@@ -71,13 +71,10 @@ export default function BookshelfPage() {
   useEffect(() => {
     if (activeNav !== "search") return;
     const q = SessionCache.getSearchQuery();
-    const p = SessionCache.getSearchPlatform();
     if (q) {
       searchModeRef.current = SessionCache.getMode();
       searchProviderRef.current = SessionCache.getProvider();
       setSearchCachedQuery(q);
-      setSearchCachedPlatform(p);
-      setSearchBarKey(k => k + 1); // 强制 SearchBar 重新挂载以接收新 defaultQuery
     }
   }, [activeNav]);
 
@@ -114,7 +111,7 @@ export default function BookshelfPage() {
     if (isUrlOrId) {
       try {
         const meta = await fetchMetaMut.mutateAsync({ url: query, mode, provider });
-        navigate(`/search/${meta.id}`, { state: { meta } });
+        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, searchMode: mode, searchProvider: provider, meta } });
       } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); }
       return;
     }
@@ -240,7 +237,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar key={searchBarKey} onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} defaultQuery={searchCachedQuery} defaultPlatform={searchCachedPlatform} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} defaultQuery={searchCachedQuery} />
           {!searchParams && !searching && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-xs text-slate-400">
               <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">书籍ID</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono"># 1145141919810</span></div>
@@ -255,13 +252,44 @@ export default function BookshelfPage() {
               <p className="mt-1 text-xs text-slate-300">试试换个关键词或平台</p>
             </div>
           )}
-          {searchResults.length > 0 && (
-            <div className="grid grid-cols-1 gap-3">
-              {searchResults.map((r, i) => (
-                <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.extras?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
-              ))}
-            </div>
-          )}
+          {searchResults.length > 0 && (() => {
+            const isAllPlatform = searchParams?.platform === "all";
+            const PLATFORM_TABS = [
+              { id: "all", label: "全部" },
+              { id: "fanqie", label: "番茄" },
+              { id: "qidian", label: "起点" },
+              { id: "qimao", label: "七猫" },
+            ];
+            const grouped = isAllPlatform ? searchResults.filter(r => resultTab === "all" || r.platform === resultTab) : searchResults;
+            const counts: Record<string, number> | null = isAllPlatform
+              ? { all: searchResults.length, fanqie: searchResults.filter(r => r.platform === "fanqie").length, qidian: searchResults.filter(r => r.platform === "qidian").length, qimao: searchResults.filter(r => r.platform === "qimao").length }
+              : null;
+            const activeTab = isAllPlatform ? resultTab : "all";
+            return (
+              <>
+                {isAllPlatform && (
+                  <div className="flex gap-1 self-start rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+                    {PLATFORM_TABS.map(t => (
+                      <button key={t.id} onClick={() => setResultTab(t.id)}
+                        className={cn(
+                          "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                          activeTab === t.id
+                            ? "bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-slate-200"
+                            : "text-slate-500 hover:text-slate-700 dark:text-slate-400",
+                        )}>
+                        {t.label}{counts ? ` (${counts[t.id]})` : ""}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-3">
+                  {grouped.map((r, i) => (
+                    <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.extras?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
