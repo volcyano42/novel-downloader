@@ -31,12 +31,15 @@ export default function DetailPage() {
   const remoteUrl = st?.remoteUrl;
   const searchMode = st?.searchMode ?? "browser";
   const searchProvider = st?.searchProvider;
-  const isRemote = !!remoteUrl;
   const toast = useToast();
 
-  const { data: localMeta } = useNovelMeta(isRemote ? undefined : novelId);
-  const plat = platformFromUrl(st?.meta?.url ?? remoteUrl ?? localMeta?.url);
-  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, remoteUrl, searchMode, searchProvider);
+  const { data: localMeta, isLoading: metaLoading } = useNovelMeta(novelId);
+  // 有 state 中的 remoteUrl，或本地 meta 404（小说未下载）→ 远程模式
+  const isRemote = !!remoteUrl || (!metaLoading && !localMeta);
+  // 远程模式缺 URL 时从 novelId 推断（纯数字 ID → 番茄）
+  const effectiveRemoteUrl = remoteUrl || (isRemote && /^\d+$/.test(novelId!) ? `https://fanqienovel.com/page/${novelId}` : undefined);
+  const plat = platformFromUrl(st?.meta?.url ?? effectiveRemoteUrl ?? localMeta?.url);
+  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
   const { data: siteCfg } = useSiteConfig(plat);
   const { data: globalConfig } = useGlobalConfig();
@@ -192,7 +195,7 @@ export default function DetailPage() {
   const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
     setChecking(true);
     try {
-      const remote = await fetchChapterList(novelId!, remoteUrl ?? novel?.url ?? "", mode, provider);
+      const remote = await fetchChapterList(novelId!, effectiveRemoteUrl ?? novel?.url ?? "", mode, provider);
       if (!remote.length) { toast("远端无章节数据"); return; }
       let localAll: ChapterBrief[];
       try {
@@ -209,7 +212,7 @@ export default function DetailPage() {
       setSelectedIds(preSelected);
     } catch (e: unknown) { toast((e as Error).message || "检查更新失败"); }
     finally { setChecking(false); }
-  }, [novelId, remoteUrl, novel?.url, toast]);
+  }, [novelId, effectiveRemoteUrl, novel?.url, toast]);
 
   const runDownloadLocal = useCallback((mode: string, provider?: string) => {
     if (!novelId || selectedIds.size === 0) return;
@@ -278,11 +281,18 @@ export default function DetailPage() {
     }
   }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
 
-  if (!novel && !loading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
+  if (!novel && !loading && !metaLoading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
+
+  // meta 加载完成后发现是远程小说，开启 loading 等远程章节
+  useEffect(() => {
+    if (!metaLoading && isRemote && !remoteUrl && !loading) {
+      setLoading(true);
+    }
+  }, [metaLoading, isRemote, remoteUrl, loading]);
 
   const cover = coverToUrl(novel?.cover ?? null);
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 animate-in fade-in duration-200">
+    <div className="bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 animate-in fade-in duration-200">
       <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
         <button onClick={handleBack} className="rounded-full p-1 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>
         <span className="truncate text-sm font-medium text-slate-600">书籍详情</span>
@@ -310,14 +320,14 @@ export default function DetailPage() {
               <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{novel.description}</p>
             </div>
           )}
-          <div className="mt-8 mb-3 flex items-center gap-3">
+          <div className="mt-8 mb-3 flex items-center gap-3 overflow-x-hidden">
             <h3 className="text-base font-semibold text-slate-800">章节列表</h3>
             {streaming && <span className="text-xs text-amber-500">加载中...</span>}
             {showCompare && (
               <>
                 <button onClick={toggleAll} className="text-xs text-slate-400 hover:text-indigo-500 transition-colors">{allSelected ? "全不选" : "全选"}</button>
                 <span className="text-xs text-slate-500">已选择 <span className="font-medium text-indigo-500">{selectedIds.size}</span> 章</span>
-                <div className="flex-1" />
+                <div className="flex-1 min-w-0" />
                 {selectedIds.size > 0 && (
                   <button onClick={handleDownloadClick}
                     className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
@@ -331,7 +341,7 @@ export default function DetailPage() {
               <>
                 <button onClick={toggleAllLocal} className="text-xs text-slate-400 hover:text-indigo-500 transition-colors">{localAllSelected ? "全不选" : "全选"}</button>
                 <span className="text-xs text-slate-500">已选择 <span className="font-medium text-indigo-500">{selectedIds.size}</span> 章</span>
-                <div className="flex-1" />
+                <div className="flex-1 min-w-0" />
                 {selectedIds.size > 0 && (
                   <button onClick={handleDownloadClick}
                     className="rounded-full bg-indigo-500 text-white px-3 py-1 text-xs hover:bg-indigo-600 transition-colors flex items-center gap-1">
@@ -349,7 +359,7 @@ export default function DetailPage() {
           {loading ? (
             <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-10 animate-pulse rounded-xl bg-slate-200" />)}</div>
           ) : showCompare ? (
-            <div className="space-y-1">
+            <div className="max-h-[60vh] overflow-y-auto overscroll-contain space-y-1 border border-slate-200 rounded-xl px-2">
               {merged.map(mc => {
                 const checked = selectedIds.has(mc.remote.id);
                 const localOk = mc.local?.downloaded;
@@ -358,8 +368,8 @@ export default function DetailPage() {
                 const statusTip = localOk ? "已下载" : "未下载";
                 return (
                   <div key={mc.remote.id} className="flex items-center gap-2">
-                    <label className="shrink-0 flex items-center cursor-pointer">
-                      <input type="checkbox" checked={checked} onChange={() => toggleSelect(mc.remote.id)} className="sr-only peer" />
+                    <label className="shrink-0 flex items-center cursor-pointer" onClick={(e) => { e.preventDefault(); toggleSelect(mc.remote.id); }}>
+                      <input type="checkbox" checked={checked} readOnly className="sr-only peer" tabIndex={-1} />
                       <div className="h-4 w-4 rounded border-2 border-slate-300 peer-checked:border-indigo-500 peer-checked:bg-indigo-500 flex items-center justify-center transition-colors">
                         {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
                       </div>
@@ -382,13 +392,13 @@ export default function DetailPage() {
               })}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="max-h-[60vh] overflow-y-auto overscroll-contain space-y-1 border border-slate-200 rounded-xl px-2">
               {chapters.map(ch => {
                 const checked = selectedIds.has(ch.id);
                 return (
                 <div key={ch.id} className="flex items-center gap-2">
-                  <label className="shrink-0 flex items-center cursor-pointer">
-                    <input type="checkbox" checked={checked} onChange={() => toggleSelect(ch.id)} className="sr-only peer" />
+                  <label className="shrink-0 flex items-center cursor-pointer" onClick={(e) => { e.preventDefault(); toggleSelect(ch.id); }}>
+                    <input type="checkbox" checked={checked} readOnly className="sr-only peer" tabIndex={-1} />
                     <div className="h-4 w-4 rounded border-2 border-slate-300 peer-checked:border-indigo-500 peer-checked:bg-indigo-500 flex items-center justify-center transition-colors">
                       {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
                     </div>

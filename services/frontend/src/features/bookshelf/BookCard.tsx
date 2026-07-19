@@ -23,7 +23,7 @@ interface BookCardProps {
   onDelete?: (novelId: string) => void;
 }
 
-export function BookCard({ title, author, novelId, cover, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
+export function BookCard({ title, novelId, cover, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
   const [showExport, setShowExport] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -196,7 +196,6 @@ export function BookCard({ title, author, novelId, cover, onRead, className, gro
               <TooltipContent side="top" className="max-w-[280px] text-xs font-semibold">{title}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <p className="text-sm text-slate-500">{author}</p>
           {/* progress bar removed — always 0 */}
         </div>
       </div>
