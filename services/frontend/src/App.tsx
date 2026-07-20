@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { BookOpen, Download, Settings, User, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ export default function App() {
 
 function AppShell() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   const activeNav: NavItem = useMemo(() => {
     if (pathname === "/downloads") return "downloads";
@@ -43,7 +44,9 @@ function AppShell() {
   }, [pathname]);
 
   const [collapsed, setCollapsed] = useState(false);
-  const label = DESKTOP_ITEMS.find(i => i.id === activeNav)?.label ?? "Novel下载器";
+  const label = (pathname.startsWith("/novel/") || pathname.startsWith("/search/"))
+    ? "书籍详情"
+    : DESKTOP_ITEMS.find(i => i.id === activeNav)?.label ?? "Novel下载器";
 
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
@@ -77,12 +80,17 @@ function AppShell() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col min-h-0" style={{ minWidth: 0, width: 0 }}>
+      <main className="flex-1 flex flex-col min-h-0" style={{ minWidth: 0 }}>
         {/* Mobile header */}
-        <header className="flex md:hidden shrink-0 items-center border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
+        <header className="flex md:hidden shrink-0 items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
+          {(pathname.startsWith("/novel/") || pathname.startsWith("/search/")) && (
+            <button onClick={() => navigate(-1)} className="rounded-full p-1 text-slate-500 hover:bg-slate-100">
+              <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+            </button>
+          )}
           <h1 className="text-base font-semibold text-slate-800">{label}</h1>
         </header>
-        <div id="scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 overscroll-contain" style={{ minWidth: 0, width: 0 }}>
+        <div id="scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 overscroll-contain" style={{ minWidth: 0, width: "100%", maxWidth: "100%" }}>
           <Routes>
             <Route path="/" element={<Navigate to="/bookshelf" replace />} />
             <Route path="/bookshelf" element={<BookshelfPage />} />
