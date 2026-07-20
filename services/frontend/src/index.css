@@ -42,7 +42,8 @@
     --ring: 243 75% 65%;
   }
 
-  html { overflow: hidden; }
+  html, body { overflow-x: hidden; }
+  #scroll-area, #scroll-area > * { min-width: 0; max-width: 100%; }
   * { @apply border-slate-200 dark:border-white/10; }
   body {
     @apply bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-200;

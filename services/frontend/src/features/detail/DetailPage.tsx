@@ -292,13 +292,14 @@ export default function DetailPage() {
 
   const cover = coverToUrl(novel?.cover ?? null);
   return (
-    <div className="bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 animate-in fade-in duration-200">
-      <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
+    <div className="overflow-hidden" style={{ maxWidth: "100vw" }}>
+      {/* 非 sticky，正常文档流 — 不会随 scroll-area 偏移 */}
+      <div className="flex items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
         <button onClick={handleBack} className="rounded-full p-1 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>
         <span className="truncate text-sm font-medium text-slate-600">书籍详情</span>
       </div>
       {novel && (
-        <div className="mx-auto max-w-[720px] px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="px-4 py-8 overflow-hidden" style={{ width: "100%", maxWidth: "100%" }}>
           <div className="flex gap-6 relative">
             <div onClick={() => cover && setCoverZoom(true)} className={`w-28 shrink-0 aspect-[4/5] rounded-2xl bg-slate-100 overflow-hidden animate-in zoom-in-95 duration-300 ${cover ? "cursor-zoom-in" : ""}`}>
               {cover ? <img src={cover} alt={novel.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><BookOpen className="h-8 w-8 text-slate-300" strokeWidth={1.5} /></div>}
@@ -317,7 +318,7 @@ export default function DetailPage() {
           </div>
           {novel.description && (
             <div className="relative mt-6">
-              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{novel.description}</p>
+              <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line break-words">{novel.description}</p>
             </div>
           )}
           <div className="mt-8 mb-3 flex flex-wrap items-center gap-3">
