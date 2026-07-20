@@ -67,14 +67,18 @@ export default function BookshelfPage() {
   } | null>(null);
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
 
-  // 切回搜索 tab 时恢复上次搜索字符串（仅预填，不自动搜索）
+  // 切回搜索 tab 时恢复上次搜索参数并自动重新查询（React Query 缓存命中则即时返回）
   useEffect(() => {
     if (activeNav !== "search") return;
-    const q = SessionCache.getSearchQuery();
-    if (q) {
+    const cached = SessionCache.getSearchParams();
+    if (cached) {
       searchModeRef.current = SessionCache.getMode();
       searchProviderRef.current = SessionCache.getProvider();
-      setSearchCachedQuery(q);
+      setSearchCachedQuery(cached.query);
+      setSearchParams({ platform: cached.platform, query: cached.query, mode: cached.mode, provider: cached.provider });
+    } else {
+      const q = SessionCache.getSearchQuery();
+      if (q) setSearchCachedQuery(q);
     }
   }, [activeNav]);
 
@@ -105,7 +109,7 @@ export default function BookshelfPage() {
     searchProviderRef.current = provider;
     SessionCache.setMode(mode);
     SessionCache.setProvider(provider);
-    SessionCache.saveSearch(query, platform);
+    SessionCache.saveSearch(query, platform, mode, provider);
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
