@@ -272,7 +272,7 @@ export default function BookshelfPage() {
             return (
               <>
                 {isAllPlatform && (
-                  <div className="flex gap-1 self-start rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+                  <div className="flex flex-wrap gap-1 self-start rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
                     {PLATFORM_TABS.map(t => (
                       <button key={t.id} onClick={() => setResultTab(t.id)}
                         className={cn(

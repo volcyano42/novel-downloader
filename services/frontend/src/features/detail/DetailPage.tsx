@@ -320,7 +320,7 @@ export default function DetailPage() {
               <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{novel.description}</p>
             </div>
           )}
-          <div className="mt-8 mb-3 flex items-center gap-3 overflow-x-hidden">
+          <div className="mt-8 mb-3 flex flex-wrap items-center gap-3">
             <h3 className="text-base font-semibold text-slate-800">章节列表</h3>
             {streaming && <span className="text-xs text-amber-500">加载中...</span>}
             {showCompare && (
