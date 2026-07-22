@@ -27,7 +27,7 @@ def search(query: str, engine, **kwargs) -> list:
                 author=author,
                 url=book_url,
                 description=description,
-                cover_url=book_info.get("cover") or book_info.get("thumb") or None,
+                cover_url=book_info.get("thumb") or None,
             ))
 
     return results
