@@ -10,7 +10,7 @@ from app.config import (
 )
 from app.menus import do_settings, do_export_menu, do_delete
 from app.ui import (
-    _select, _text_input, _show_platforms, _platform_label,
+    _select, _text_input,
     _create_progress, _advance_progress, parse_order_string, _build_url_from_id,
     _display_width, _pad_right, _pad_center,
 )
@@ -22,23 +22,22 @@ from novelbase.utils.logger import get_logger
 
 _log = get_logger("app.core")
 
-PLATFORM = "fanqie"
+
+def _platform_from_url(url: str) -> str:
+    """从 URL 推断平台。"""
+    if "fanqienovel.com" in url or "changdunovel.com" in url:
+        return "fanqie"
+    if "qidian.com" in url:
+        return "qidian"
+    if "qimao.com" in url:
+        return "qimao"
+    return "fanqie"
 
 
-def _get_storage():
-    """Create storage from config — reads database_url from config.yaml."""
-    from novelbase.core.storage import create_storage
-    from novelbase.core.options import StorageOptions
-    cfg = load_main_config()
-    storage_cfg = cfg.get("storage", {})
-    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels.db"
-    return create_storage(StorageOptions(backend="sqlite", database_url=database_url))
-
-
-def _get_engine():
+def _get_engine(platform: str = "fanqie"):
     """Create a fresh engine from current config."""
     cfg = load_main_config()
-    site_cfg = load_site_config(PLATFORM)
+    site_cfg = load_site_config(platform)
     options = build_options(cfg, site_cfg)
     return create_engine(options)
 
@@ -48,15 +47,20 @@ def _get_engine():
 
 def do_login() -> None:
     """Open browser for user to log in, then save cookies to site config."""
-    site_cfg = load_site_config(PLATFORM)
+    platforms = list(load_main_config().get("sites", {}).keys()) or ["fanqie", "qidian", "qimao"]
+    labels = {p: p for p in platforms}
+    platform = _select("选择平台", [(labels.get(p, p), p) for p in platforms])
+    if not platform:
+        return
+    site_cfg = load_site_config(platform)
     cfg = load_main_config()
     options = build_options(cfg, site_cfg)
     engine = create_engine(options)
     try:
-        cred = login(PLATFORM, engine)
+        cred = login(platform, engine)
         if cred:
             site_cfg.setdefault("browser", {})["cookies"] = cred.model_dump()
-            save_site_config(PLATFORM, site_cfg)
+            save_site_config(platform, site_cfg)
             print("登录成功，cookies 已保存")
         else:
             print("登录失败：未获取到凭据")
@@ -67,28 +71,49 @@ def do_login() -> None:
 # ── Search ───────────────────────────────────────────
 
 
-def do_search(query: str) -> str | None:
-    """Search novels (no engine needed). Returns URL or None."""
-    engine = _get_engine()
+def do_search(query: str) -> tuple[str | None, str | None]:
+    """Search novels. Returns (url, platform) or (None, None)."""
+    # URL 输入 → 自动推断平台
+    if query.startswith("http://") or query.startswith("https://"):
+        platform = _platform_from_url(query)
+        engine = _get_engine(platform)
+        try:
+            novel = fetch_meta(query, engine=engine, skip_delay=True)
+            print(f"\n📖 {novel.title} — {novel.author}")
+            return novel.url, platform
+        except Exception as e:
+            print(f"获取小说信息失败: {e}")
+            return None, None
+        finally:
+            engine.close()
+
+    # 关键字搜索 → 让用户选平台
+    platforms = list(load_main_config().get("sites", {}).keys()) or ["fanqie", "qidian", "qimao"]
+    choices = [(p, p) for p in platforms]
+    platform = _select("选择平台", choices)
+    if not platform:
+        return None, None
+
+    engine = _get_engine(platform)
     try:
-        results = search(PLATFORM, query, engine=engine, skip_delay=True)
+        results = search(platform, query, engine=engine, skip_delay=True)
     finally:
         engine.close()
 
     if not results:
         print("未找到结果")
-        return None
+        return None, None
 
     print(f"\n搜索 '{query}' 的结果:")
     for i, r in enumerate(results, 1):
         print(f" {i}. {r.title} — {r.author}")
-    choices = [(f"{r.title} — {r.author}", i - 1) for i, r in enumerate(results, 1)]
-    sel = _select("选择小说", choices)
+    choices_list = [(f"{r.title} — {r.author}", i - 1) for i, r in enumerate(results, 1)]
+    sel = _select("选择小说", choices_list)
     if sel is None:
-        return None
+        return None, None
     if 0 <= sel < len(results):
-        return results[sel].url
-    return None
+        return results[sel].url, platform
+    return None, None
 
 
 # ── Download ─────────────────────────────────────────
@@ -99,8 +124,8 @@ def do_download(
     format_configs: dict, max_workers: int = 3,
 ) -> None:
     """Core download flow. Creates engine internally."""
-
-    engine = _get_engine()
+    platform = _platform_from_url(url)
+    engine = _get_engine(platform)
     try:
         _do_download_inner(engine, url, group, format_configs, max_workers, skip_delay=True)
     finally:
@@ -307,54 +332,53 @@ def do_update(format_configs: dict, max_workers: int = 3):
 
     targets = flat if selection == "all" else [selection]
 
-    # 选择完成后才创建引擎
-    engine = _get_engine()
-    try:
-        total = len(targets)
-        updated = 0
-        for i, novel in enumerate(targets, 1):
-            print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
-            try:
-                remote_chapters = fetch_chapter_list(novel.url, engine=engine)
-                if not remote_chapters:
-                    print("  无法获取远程章节")
-                    continue
+    total = len(targets)
+    updated = 0
+    for i, novel in enumerate(targets, 1):
+        print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
+        platform = _platform_from_url(novel.url)
+        engine = _get_engine(platform)
+        try:
+            remote_chapters = fetch_chapter_list(novel.url, engine=engine)
+            if not remote_chapters:
+                print("  无法获取远程章节")
+                continue
 
-                existing = list(storage.load_chapters(novel.id))
-                existing_set = {c.order for c in existing}
-                new_chapters = [c for c in remote_chapters if c.order not in existing_set]
+            existing = list(storage.load_chapters(novel.id))
+            existing_set = {c.order for c in existing}
+            new_chapters = [c for c in remote_chapters if c.order not in existing_set]
 
-                if not new_chapters:
-                    print("  没有新章节")
-                    continue
+            if not new_chapters:
+                print("  没有新章节")
+                continue
 
-                print(f"  发现 {len(new_chapters)} 个新章节")
+            print(f"  发现 {len(new_chapters)} 个新章节")
 
-                def _dl(ch):
-                    try:
-                        resolved = resolve_chapter(ch, engine=engine)
-                        if resolved:
-                            storage.save_chapter(novel, resolved)
-                            return True
-                    except Exception:
-                        pass
-                    return False
+            def _dl(ch):
+                try:
+                    resolved = resolve_chapter(ch, engine=engine)
+                    if resolved:
+                        storage.save_chapter(novel, resolved)
+                        return True
+                except Exception:
+                    pass
+                return False
 
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {executor.submit(_dl, ch): ch for ch in new_chapters}
-                    ok = 0
-                    for fut in as_completed(futures):
-                        if fut.result():
-                            ok += 1
-                print(f"  下载 {ok}/{len(new_chapters)} 章")
-                updated += ok
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_dl, ch): ch for ch in new_chapters}
+                ok = 0
+                for fut in as_completed(futures):
+                    if fut.result():
+                        ok += 1
+            print(f"  下载 {ok}/{len(new_chapters)} 章")
+            updated += ok
 
-            except Exception as e:
-                print(f"  更新失败: {e}")
+        except Exception as e:
+            print(f"  更新失败: {e}")
+        finally:
+            engine.close()
 
-        print(f"\n更新完成: 共更新 {updated} 章")
-    finally:
-        engine.close()
+    print(f"\n更新完成: 共更新 {updated} 章")
 
 
 # ── Main menu ────────────────────────────────────────
@@ -367,12 +391,8 @@ def main():
     while True:
         try:
             cfg = load_main_config()
-            site_cfg = load_site_config(PLATFORM)
             format_configs = load_format_configs()
-            labels = _show_platforms()
-            platform_label = _platform_label(labels, PLATFORM)
 
-            mode = site_cfg.get("mode", "browser")
             dl = cfg.get("download", {})
             group = dl.get("group", "default")
             max_workers = dl.get("max_workers", 3)
@@ -389,8 +409,7 @@ def main():
                 "0. 🚪 退出",
             ]
             print(f"\n┌{'─'*(BOX_W+2)}┐")
-            print(f"│ {_pad_center(platform_label, BOX_W)} │")
-            info_line = f"模式: {mode}    分组: {group}"
+            info_line = f"分组: {group}    并发: {max_workers}"
             print(f"│ {_pad_right(info_line, BOX_W)} │")
             print(f"├{'─'*(BOX_W+2)}┤")
             for item in items:
@@ -407,7 +426,7 @@ def main():
                 query = _text_input("搜索关键词或 URL")
                 if not query:
                     continue
-                url = do_search(query)
+                url, _platform = do_search(query)
                 if url:
                     if not (url.startswith("http://") or url.startswith("https://")):
                         url = _build_url_from_id(url)
@@ -426,7 +445,8 @@ def main():
                 do_delete()
 
             elif ch == "6":
-                cfg, site_cfg = do_settings(cfg, PLATFORM, site_cfg)
+                from app.config import load_site_config as _lsc
+                cfg, site_cfg = do_settings(cfg, "fanqie", _lsc("fanqie"))
 
             elif ch == "7":
                 do_login()
