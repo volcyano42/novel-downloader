@@ -41,7 +41,7 @@ def parse_search_result(html: str) -> tuple[SearchResult, ...]:
                     author=author_name,
                     url=book_url,
                     description=description,
-                    cover_url=book_data.get('imgUrl') or None,
+                    cover_url=("https:" + img) if (img := book_data.get('imgUrl')) and img.startswith("//") else (img or None),
                 ))
     return tuple(results)
 
