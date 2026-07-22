@@ -80,7 +80,7 @@ function AppShell() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col min-h-0" style={{ minWidth: 0 }}>
+      <main className="flex-1 flex flex-col min-h-0" style={{ minWidth: 0, width: "100%", maxWidth: "100%" }}>
         {/* Mobile header */}
         <header className="flex md:hidden shrink-0 items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
           {(pathname.startsWith("/novel/") || pathname.startsWith("/search/")) && (
