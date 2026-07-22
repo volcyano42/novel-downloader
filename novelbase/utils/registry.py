@@ -140,3 +140,91 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
             result = _hardcoded_export_options()
         _cache_export_opts = result  # type: ignore[assignment]
     return _cache_export_opts
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 3 — 能力发现 + 动态分发
+# ═══════════════════════════════════════════════════════════════════
+
+def capabilities(name: str) -> dict[str, list[str]]:
+    """扫描 fetchers/{name}/ 目录，返回可用能力矩阵。
+
+    >>> capabilities("fanqie")
+    {"api": ["oiapi", "rain"], "browser": [], "requests": []}
+
+    单 provider 的 mode 返回空列表；无该 mode 则不出现 key。
+    """
+    pkg_dir = Path(__file__).parent.parent / "fetchers" / name
+    if not pkg_dir.is_dir():
+        return {}
+
+    result: dict[str, list[str]] = {}
+    for mode_dir in sorted(pkg_dir.iterdir()):
+        if not mode_dir.is_dir() or mode_dir.name.startswith("_") or mode_dir.name == "__pycache__":
+            continue
+        mode = mode_dir.name
+        # 检查 mode 目录下是否有 provider 子目录
+        providers: list[str] = []
+        for sub in sorted(mode_dir.iterdir()):
+            if sub.is_dir() and not sub.name.startswith("_") and sub.name != "__pycache__":
+                # 确认里面有 .py 文件（不只是空壳）
+                if any(f.suffix == ".py" for f in sub.iterdir()):
+                    providers.append(sub.name)
+        # 检查 mode 目录自身是否有 .py 文件（单 provider 模式）
+        has_direct_functions = any(
+            f.suffix == ".py" and f.name != "__init__.py"
+            for f in mode_dir.iterdir()
+        )
+        if providers:
+            result[mode] = providers
+        elif has_direct_functions:
+            result[mode] = []
+    return result
+
+
+def resolve(name: str, mode: str, function: str, provider: str | None = None):
+    """动态 import 并返回同步 fetcher 函数。
+
+    >>> fn = resolve("fanqie", "api", "search", "oiapi")
+    >>> results = fn("关键词", engine)
+
+    单 provider 时 provider 可为 None，多 provider 时必须指定。
+    """
+    caps = capabilities(name)
+    if mode not in caps:
+        raise ValueError(f"mode {mode!r} not available for {name!r}. Available: {list(caps)}")
+
+    providers = caps[mode]
+    if providers:
+        # 多 provider：需要指定
+        if provider is None:
+            provider = providers[0]  # 默认第一个
+        elif provider not in providers:
+            raise ValueError(f"provider {provider!r} not available for {name}/{mode}. Available: {providers}")
+        module_path = f"novelbase.fetchers.{name}.{mode}.{provider}.{function}"
+    else:
+        if provider is not None:
+            raise ValueError(f"provider specified but {name}/{mode} has no sub-providers")
+        module_path = f"novelbase.fetchers.{name}.{mode}.{function}"
+
+    try:
+        module = import_module(module_path)
+        return getattr(module, function)
+    except (ImportError, AttributeError) as e:
+        raise ImportError(f"Failed to resolve {module_path}: {e}") from e
+
+
+def list_sources() -> list[str]:
+    """列出所有可用源名称。"""
+    pkg_dir = Path(__file__).parent.parent / "fetchers"
+    if not pkg_dir.exists():
+        return []
+    result: list[str] = []
+    for entry in sorted(pkg_dir.iterdir()):
+        if entry.name.startswith("_") or entry.name == "base.py":
+            continue
+        if (entry.is_dir() and (entry / "__init__.py").exists()) or \
+           (entry.suffix == ".py" and entry.name != "__init__.py"):
+            name = entry.stem if entry.is_file() else entry.name
+            result.append(name)
+    return result

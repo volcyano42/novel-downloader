@@ -37,6 +37,7 @@ from .core.storage import LocalStorage
 from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .fetchers.base import BaseFetcher
+from .utils.registry import capabilities, resolve, list_sources
 
 __version__ = "3.0.0"
 
@@ -79,4 +80,7 @@ __all__ = [
     "SearchResult",
     "BaseFetcher",
     "BASEExporter",
+    "capabilities",
+    "resolve",
+    "list_sources",
 ]
