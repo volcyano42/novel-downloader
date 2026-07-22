@@ -44,7 +44,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
                 novel = await loop.run_in_executor(executor, fetch_meta, query, engine)
                 return [SearchResultData(title=novel.title, author=novel.author,
                                          url=novel.url, description=novel.description,
-                                         meta=dict(novel.extra) if getattr(novel, "extra", None) else None)]
+                                         extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
             except Exception as e:
                 raise HTTPException(500, str(e))
 
@@ -56,7 +56,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
                     executor, partial(fetcher_cls().fetch_novel_info, url=query, engine=engine))
                 return [SearchResultData(title=novel.title, author=novel.author,
                                          url=novel.url, description=novel.description,
-                                         meta=dict(novel.extra) if getattr(novel, "extra", None) else None)]
+                                         extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
             except Exception as e:
                 raise HTTPException(500, str(e))
 
@@ -67,7 +67,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
                              platform=getattr(r, 'platform', ''),
-                             meta=dict(r.extra) if getattr(r, 'extra', None) else None)
+                             extra=dict(r.extra) if getattr(r, 'extra', None) else None)
             for r in results]
 
 
