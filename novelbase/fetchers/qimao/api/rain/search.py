@@ -42,7 +42,7 @@ def search(query: str, engine, **kwargs) -> list[SearchResult]:
             author=author,
             url=book_url,
             description=description,
-            cover_url=item.get("cover") or item.get("image_link") or None,
+            cover_url=item.get("image_link") or None,
             extra=Box(rating=item.get('score'))
         ))
     return results

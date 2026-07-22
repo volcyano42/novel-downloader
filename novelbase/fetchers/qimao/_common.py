@@ -49,7 +49,7 @@ def parse_search_result(html: str):
             author = author_a.get_text(strip=True)
         desc_span = item.select_one(".text-content .s-desc")
         description = desc_span.get_text(strip=True) if desc_span else ""
-        cover_img = item.select_one(".cover-img img, .qm-cover-img img, img.cover")
+        cover_img = item.select_one("img.book-cover-src, .cover-img img, img.cover")
         cover_url = cover_img.get("src") or cover_img.get("data-src") or "" if cover_img else ""
         results.append(SearchResult(
             title=title, author=author, url=url, description=description,
