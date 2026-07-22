@@ -23,7 +23,7 @@ class NovelMeta(BaseModel):
     tags: list[str] | None = None
     count: int | None = None
     cover: CoverData | None = None
-    meta: dict | None = None
+    extra: dict | None = None
 
 
 class ImageData(BaseModel):

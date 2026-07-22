@@ -50,7 +50,7 @@ def _novel_to_meta(novel) -> NovelMeta:
         title=novel.title, url=novel.url, id=novel.id, serial=novel.serial,
         author=novel.author, description=novel.description,
         tags=list(novel.tags) if novel.tags else None, count=novel.count, cover=cover_data,
-        meta=dict(novel.meta) if novel.meta else None,
+        meta=dict(novel.extra) if novel.extra else None,
     )
 
 def _chapter_to_brief(ch) -> ChapterBrief:

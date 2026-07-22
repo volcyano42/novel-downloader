@@ -311,7 +311,7 @@ export default function DetailPage() {
               <p className="text-sm text-slate-500">{novel.author}</p>
               <p className="text-xs text-slate-400 font-mono">{novel.id}</p>
               <p className="text-sm text-slate-500">共 {novel.serial} 章 · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
-              {novel.meta?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.meta.rating} 分</p>}
+              {novel.extra?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.extra.rating} 分</p>}
               {novel.tags && novel.tags.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{novel.tags.map(t => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{t}</span>)}</div>}
             </div>
           </div>

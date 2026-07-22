@@ -8,7 +8,7 @@ class SearchResultData(BaseModel):
     url: str
     description: str | None = None
     platform: str = ""
-    meta: dict | None = None
+    extra: dict | None = None
 
 
 class FetchMetaRequest(BaseModel):

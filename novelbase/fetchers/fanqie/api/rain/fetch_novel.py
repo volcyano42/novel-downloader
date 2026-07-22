@@ -59,7 +59,7 @@ def fetch_novel(url: str, engine, **kwargs):
     except json.JSONDecodeError:
         pass
 
-    meta = Box(rating=data.get("score"))
+    extra = Box(rating=data.get("score"))
 
     novel = Novel(url=book_url,
                   id=novel_id,
@@ -70,6 +70,6 @@ def fetch_novel(url: str, engine, **kwargs):
                   description=data.get("abstract", ""),
                   cover=novel_image,
                   tags=tuple(tags),
-                  meta=meta
+                  extra=extra
                   )
     return novel

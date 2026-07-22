@@ -42,6 +42,6 @@ def search(query: str, engine, **kwargs) -> list[SearchResult]:
             author=author,
             url=book_url,
             description=description,
-            meta=Box(rating=item.get('score'))
+            extra=Box(rating=item.get('score'))
         ))
     return results
