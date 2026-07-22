@@ -67,7 +67,7 @@ export default function BookshelfPage() {
   } | null>(null);
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
 
-  // 切回搜索 tab 时恢复上次搜索参数并自动重新查询（React Query 缓存命中则即时返回）
+  // 切回搜索 tab 时恢复上次搜索 UI 状态（不自动搜索）
   useEffect(() => {
     if (activeNav !== "search") return;
     const cached = SessionCache.getSearchParams();
@@ -75,7 +75,6 @@ export default function BookshelfPage() {
       searchModeRef.current = SessionCache.getMode();
       searchProviderRef.current = SessionCache.getProvider();
       setSearchCachedQuery(cached.query);
-      setSearchParams({ platform: cached.platform, query: cached.query, mode: cached.mode, provider: cached.provider });
     } else {
       const q = SessionCache.getSearchQuery();
       if (q) setSearchCachedQuery(q);
