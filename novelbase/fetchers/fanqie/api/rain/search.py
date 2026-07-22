@@ -46,6 +46,7 @@ def search(query: str, engine, **kwargs) -> list:
             author=author,
             url=book_url,
             description=description,
+            cover_url=book.get("thumb_url") or None,
             extra=extra
         ))
     return results

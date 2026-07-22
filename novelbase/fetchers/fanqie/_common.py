@@ -159,6 +159,7 @@ def parse_search_result(data: dict[str, Any]) -> tuple[SearchResult, ...]:
                 author=author,
                 url=book_url,
                 description=description,
+                cover_url=book_info.get("thumbUri") or None,
             ))
 
     return tuple(results)

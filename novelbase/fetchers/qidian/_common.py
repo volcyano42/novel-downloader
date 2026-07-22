@@ -41,6 +41,7 @@ def parse_search_result(html: str) -> tuple[SearchResult, ...]:
                     author=author_name,
                     url=book_url,
                     description=description,
+                    cover_url=book_data.get('bookCover') or book_data.get('coverUrl') or None,
                 ))
     return tuple(results)
 
