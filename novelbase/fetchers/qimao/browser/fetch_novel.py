@@ -1,4 +1,4 @@
-"""七猫 browser 模式 - 获取小说详情�?""
+"""qimao browser - fetch novel info."""
 
 from .._common import parse_novel_info, standardize_id
 from novelbase.models.novel import Novel

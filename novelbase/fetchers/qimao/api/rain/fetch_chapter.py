@@ -1,4 +1,4 @@
-"""七猫 API（Rain）模�?- 获取章节正文�?""
+"""qimao API (Rain) - fetch chapter content."""
 
 from ..._common import _api_url
 from novelbase.core.exceptions import ChapterNotFoundError
@@ -6,8 +6,7 @@ from novelbase.models.novel import Chapter
 
 
 def fetch_chapter(chapter: Chapter, engine, **kwargs) -> Chapter | None:
-    """解析并填�?content, count, (True)�?""
-    # chapter.id from Rain API is the chapter ID directly (e.g. "17061706560001")
+    """Parse and fill content, count."""
     api_url = _api_url(engine, type=4, id=chapter.novel_id, chapterid=chapter.id)
     response = engine.fetch_json(api_url, **kwargs)
 
@@ -18,9 +17,7 @@ def fetch_chapter(chapter: Chapter, engine, **kwargs) -> Chapter | None:
     data = response.get("data", {})
     raw_content = data.get("content", "")
     content = raw_content.strip()
-    # Unescape HTML entities in content
-    content = content.replace("&#8722;", "�?).replace("&#9450;", "�?)
-    # Replace <br/> tags with double newlines to create proper paragraph breaks
+    content = content.replace("&#8722;", "\u2212").replace("&#9450;", "\u24da")
     content = content.replace("<br/>", "\n\n").replace("<br />", "\n\n")
     if not content:
         raise ChapterNotFoundError("Rain API returned empty chapter content")

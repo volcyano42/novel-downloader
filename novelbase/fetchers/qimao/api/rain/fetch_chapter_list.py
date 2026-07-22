@@ -1,4 +1,4 @@
-"""七猫 API（Rain）模�?- 获取章节目录�?""
+"""qimao API (Rain) - fetch chapter list."""
 
 from ..._common import _api_url, standardize_id
 from novelbase.core.exceptions import ChapterNotFoundError

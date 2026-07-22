@@ -1,4 +1,4 @@
-"""七猫 API（Rain）模�?- 搜索�?""
+"""qimao API (Rain) - search."""
 
 from box import Box
 

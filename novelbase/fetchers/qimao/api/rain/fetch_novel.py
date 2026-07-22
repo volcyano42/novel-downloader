@@ -1,15 +1,13 @@
-"""七猫 API（Rain）模�?- 获取小说详情�?""
-
-import requests
-
-from box import Box
+"""qimao API (Rain) - fetch novel info."""
 
 from ..._common import _api_url, standardize_id
 from novelbase.core.exceptions import NovelNotFoundError
-from novelbase.models.novel import Illustration, Novel
+from novelbase.models.novel import Novel, Illustration
+import requests
+from box import Box
 
 
-def fetch_novel(url: str, engine, **kwargs) -> Novel:
+def fetch_novel(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     api_url = _api_url(engine, type=2, id=novel_id)
     json_data = engine.fetch_json(api_url, **kwargs)
@@ -38,10 +36,7 @@ def fetch_novel(url: str, engine, **kwargs) -> Novel:
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 
     tags: list[str] = []
-    if book.get("is_over") == "1":
-        tags.append("已完�?)
-    else:
-        tags.append("连载�?)
+    tags.append("\u5df2\u5b8c\u7ed3" if book.get("is_over") == "1" else "\u8fde\u8f7d\u4e2d")
     for key in ("category1_name", "category2_name"):
         v = book.get(key)
         if v:

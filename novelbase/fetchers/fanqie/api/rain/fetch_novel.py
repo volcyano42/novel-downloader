@@ -49,7 +49,7 @@ def fetch_novel(url: str, engine, **kwargs):
 
     tags: list[str] = []
     status = data.get("status", "0")
-    tags.append("连载�? if status == "0" else "已完�?)
+    tags.append("\u8fde\u8f7d\u4e2d" if status == "0" else "\u5df2\u5b8c\u7ed3")
     try:
         category_v2 = json.loads(data.get("category_v2", "[]"))
         for cat in category_v2:

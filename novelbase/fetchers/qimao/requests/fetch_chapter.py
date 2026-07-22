@@ -1,4 +1,4 @@
-"""七猫 requests 模式 - 获取章节正文�?""
+"""qimao requests - fetch chapter content."""
 
 from .._common import parse_chapter_content
 from novelbase.models.novel import Chapter

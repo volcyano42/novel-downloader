@@ -1,4 +1,4 @@
-"""七猫 browser 模式 - 获取章节正文�?""
+"""qimao browser - fetch chapter content."""
 
 from .._common import parse_chapter_content
 from novelbase.models.novel import Chapter
