@@ -18,6 +18,7 @@
     python scripts/cloud_sync.py push <novel_id>   # 上传指定小说
     python scripts/cloud_sync.py pull              # 下载全部小说
     python scripts/cloud_sync.py pull <novel_id>   # 下载指定小说
+    python scripts/cloud_sync.py pull --ahead      # 仅下载云端领先的小说
     python scripts/cloud_sync.py status            # 对比本地与云端
     python scripts/cloud_sync.py delete <novel_id> # 从云端删除备份
 """
@@ -311,31 +312,39 @@ def cmd_push(novel_id: Optional[str] = None, manifest_only: bool = False, ahead_
         except Exception as e:
             print(f"  ⚠ CDN 刷新失败: {e}")
 
-def cmd_pull(novel_id: Optional[str] = None):
+def cmd_pull(novel_id: Optional[str] = None, ahead_only: bool = False):
     """下载恢复：下载 → 完整性校验 → 原子替换。"""
     local_dir = _get_local_db_dir()
     local_dir.mkdir(parents=True, exist_ok=True)
-    remote_keys = [k for k in _qiniu_list("novels/") if k.endswith(".db")]
 
     if novel_id:
-        remote_key = f"novels/{novel_id}.db"
-        if remote_key not in remote_keys:
+        targets = [novel_id]
+        # 验证云端是否存在
+        remote_ids = {Path(k).stem for k in _qiniu_list("novels/") if k.endswith(".db")}
+        if novel_id not in remote_ids:
             print(f"  ✗ {novel_id} — 云端不存在")
             return
-        remote_keys = [remote_key]
+    elif ahead_only:
+        _, behind, _, _, _, only_remote = _diff_novels()
+        targets = [nid for nid, *_ in behind] + sorted(only_remote)
+        if not targets:
+            print("没有需要 pull 的小说（云端未领先）。")
+            return
+    else:
+        targets = [Path(k).stem for k in _qiniu_list("novels/") if k.endswith(".db")]
 
-    if not remote_keys:
+    if not targets:
         print("云端没有小说备份。")
         return
 
-    for key in remote_keys:
-        nid = Path(key).stem
+    for nid in targets:
         db_path = local_dir / f"{nid}.db"
+        remote_key = f"novels/{nid}.db"
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             download_path = tmp.name
 
         try:
-            _qiniu_download(key, download_path)
+            _qiniu_download(remote_key, download_path)
             if not _integrity_check(download_path):
                 print(f"  ✗ {nid} — 下载的文件损坏，跳过")
                 continue
@@ -491,6 +500,7 @@ def main():
 
     p_pull = sub.add_parser("pull", help="从七牛下载恢复")
     p_pull.add_argument("novel_id", nargs="?", help="小说 ID，不指定则下载全部")
+    p_pull.add_argument("--ahead", action="store_true", help="仅 pull 云端领先的小说（含仅云端）")
 
     p_delete = sub.add_parser("delete", help="从云端删除备份")
     p_delete.add_argument("novel_id", nargs="?", help="小说 ID（必填）")
@@ -510,7 +520,7 @@ def main():
     if args.cmd == "push":
         cmd_push(args.novel_id, manifest_only=args.manifest_only, ahead_only=args.ahead)
     elif args.cmd == "pull":
-        cmd_pull(args.novel_id)
+        cmd_pull(args.novel_id, ahead_only=args.ahead)
     elif args.cmd == "delete":
         cmd_delete(args.novel_id)
     elif args.cmd == "status":
