@@ -44,6 +44,21 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
         cfg = load_config()
         max_workers = cfg.get("download", {}).get("max_workers", 3)
 
+        # ETA: 最近 10 章的下载耗时（秒）移动平均
+        _eta_samples: list[float] = []
+        _eta_lock = threading.Lock()
+
+        def _update_eta(elapsed: float):
+            with _eta_lock:
+                _eta_samples.append(elapsed)
+                if len(_eta_samples) > 10:
+                    _eta_samples.pop(0)
+                avg = sum(_eta_samples) / len(_eta_samples)
+                remaining = task["total"] - task["progress"]
+                eta_seconds = avg * remaining / max(1, max_workers)
+                with _tasks_lock:
+                    task["eta"] = eta_seconds
+
         def _download_one(ch_data: dict):
             if task["_pause"].is_set():
                 with _tasks_lock:
@@ -58,6 +73,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                          title=ch_data["title"], order=ch_data["order"],
                          volume=ch_data.get("volume"))
             max_retries = 3
+            t0 = time.time()
             for attempt in range(max_retries + 1):
                 if attempt > 0:
                     time.sleep(2 * attempt)
@@ -83,6 +99,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
                             task["errors"].append(f"章节不可获取: {ch.title}")
                     break
 
+            _update_eta(time.time() - t0)
             with _tasks_lock:
                 task["progress"] += 1
 
@@ -132,7 +149,8 @@ def list_tasks() -> list[dict]:
             {"task_id": t["task_id"], "novel_id": t["novel_id"], "title": t["title"],
              "total": t["total"], "progress": t["progress"], "status": t["status"],
              "error": t.get("error"), "errors": t.get("errors", []),
-             "current_title": t.get("current_title", "")}
+             "current_title": t.get("current_title", ""),
+             "eta": t.get("eta")}
             for t in _tasks.values()
         ]
 

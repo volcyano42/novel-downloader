@@ -38,6 +38,7 @@ from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .fetchers.base import BaseFetcher
 from .utils.registry import capabilities, resolve, list_sources
+from .utils.hooks import SourceHooks
 
 __version__ = "3.0.0"
 
@@ -83,4 +84,5 @@ __all__ = [
     "capabilities",
     "resolve",
     "list_sources",
+    "SourceHooks",
 ]
