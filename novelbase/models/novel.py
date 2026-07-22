@@ -253,7 +253,7 @@ class Novel:
     count: int | None = None
     cover: Illustration | None = None
     chapters: Chapters = field(default_factory=Chapters)
-    extras: Box = field(default_factory=Box)
+    meta: Box = field(default_factory=Box)
 
     @staticmethod
     def loads(title: str, url: str, id: str, serial: int, author: str, description: str,
@@ -280,4 +280,4 @@ class SearchResult:
     description: str | None = None
     platform: str = ""
     cover_url: str | None = None
-    extras: Box = field(default_factory=Box)
+    meta: Box = field(default_factory=Box)

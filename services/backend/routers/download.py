@@ -44,7 +44,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
                 novel = await loop.run_in_executor(executor, fetch_meta, query, engine)
                 return [SearchResultData(title=novel.title, author=novel.author,
                                          url=novel.url, description=novel.description,
-                                         extras=dict(novel.extras) if getattr(novel, "extras", None) else None)]
+                                         meta=dict(novel.meta) if getattr(novel, "meta", None) else None)]
             except Exception as e:
                 raise HTTPException(500, str(e))
 
@@ -56,7 +56,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
                     executor, partial(fetcher_cls().fetch_novel_info, url=query, engine=engine))
                 return [SearchResultData(title=novel.title, author=novel.author,
                                          url=novel.url, description=novel.description,
-                                         extras=dict(novel.extras) if getattr(novel, "extras", None) else None)]
+                                         meta=dict(novel.meta) if getattr(novel, "meta", None) else None)]
             except Exception as e:
                 raise HTTPException(500, str(e))
 
@@ -67,7 +67,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
                              platform=getattr(r, 'platform', ''),
-                             extras=dict(r.extras) if getattr(r, 'extras', None) else None)
+                             meta=dict(r.meta) if getattr(r, 'meta', None) else None)
             for r in results]
 
 
@@ -86,7 +86,7 @@ async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
             "author": novel.author, "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count,
             "cover": encode_cover(novel.cover),
-            "extras": dict(novel.extras) if getattr(novel, "extras", None) else None}
+            "meta": dict(novel.meta) if getattr(novel, "meta", None) else None}
 
 
 @router.get("/novel/{novel_id}")
@@ -103,7 +103,7 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
             "author": novel.author, "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None, "count": novel.count,
-            "extras": dict(novel.extras) if getattr(novel, "extras", None) else None}
+            "meta": dict(novel.meta) if getattr(novel, "meta", None) else None}
 
 
 @router.get("/novel/{novel_id}/chapters")

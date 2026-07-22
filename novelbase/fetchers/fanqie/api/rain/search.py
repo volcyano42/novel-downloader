@@ -39,13 +39,13 @@ def search(query: str, engine, **kwargs) -> list:
         author = book.get("author")
         description = book.get("abstract")
 
-        extras = Box(rating=book.get('score'))
+        meta = Box(rating=book.get('score'))
 
         results.append(SearchResult(
             title=book_name,
             author=author,
             url=book_url,
             description=description,
-            extras=extras
+            meta=meta
         ))
     return results

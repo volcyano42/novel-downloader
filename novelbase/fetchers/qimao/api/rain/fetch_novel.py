@@ -42,7 +42,7 @@ def fetch_novel(url: str, engine, **kwargs):
         if v:
             tags.append(v)
 
-    extras = Box(rating=book.get('score'))
+    meta = Box(rating=book.get('score'))
     novel = Novel(url=book_url,
                   id=novel_id,
                   title=name,
@@ -52,6 +52,6 @@ def fetch_novel(url: str, engine, **kwargs):
                   description=book.get("intro", ""),
                   cover=novel_image,
                   tags=tuple(tags),
-                  extras=extras,
+                  meta=meta,
                   )
     return novel

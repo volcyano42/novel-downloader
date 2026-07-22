@@ -288,7 +288,7 @@ export default function BookshelfPage() {
                 )}
                 <div className="grid grid-cols-1 gap-3">
                   {grouped.map((r, i) => (
-                    <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.extras?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
+                    <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.meta?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
                   ))}
                 </div>
               </>
