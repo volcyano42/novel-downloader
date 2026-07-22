@@ -77,12 +77,12 @@ function AppShell() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col min-h-0" style={{ minWidth: 0, width: 0 }}>
+      <main className="flex-1 flex flex-col min-h-0">
         {/* Mobile header */}
         <header className="flex md:hidden shrink-0 items-center border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
           <h1 className="text-base font-semibold text-slate-800">{label}</h1>
         </header>
-        <div id="scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 overscroll-contain" style={{ minWidth: 0, width: 0 }}>
+        <div id="scroll-area" className="flex-1 overflow-y-auto pb-20 md:pb-0 overscroll-contain">
           <Routes>
             <Route path="/" element={<Navigate to="/bookshelf" replace />} />
             <Route path="/bookshelf" element={<BookshelfPage />} />
