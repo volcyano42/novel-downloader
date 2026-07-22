@@ -36,7 +36,8 @@ def cmd_list():
     for d in sorted(novel_dirs):
         meta = storage.load_meta(d.name)
         if meta:
-            print(f"  [{meta.id}] {meta.title}  — {meta.author}  ({meta.serial}章)")
+            chapters = storage.load_chapters(d.name, include_images=False)
+            print(f"  [{meta.id}] {meta.title}  — {meta.author}  ({len(chapters)}/{meta.serial}章)")
 
 
 def cmd_export(novel_id: str, fmt: str):

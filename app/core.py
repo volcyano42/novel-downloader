@@ -349,10 +349,10 @@ def do_update(format_configs: dict, max_workers: int = 3):
             new_chapters = [c for c in remote_chapters if c.order not in existing_set]
 
             if not new_chapters:
-                print("  没有新章节")
+                print(f"  {len(existing)}/{len(remote_chapters)}")
                 continue
 
-            print(f"  发现 {len(new_chapters)} 个新章节")
+            print(f"  {len(existing)}/{len(remote_chapters)} \033[1;32m+{len(new_chapters)}\033[0m")
 
             def _dl(ch):
                 try:

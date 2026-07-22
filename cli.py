@@ -188,7 +188,7 @@ def cmd_info(args):
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
         print(f"  ID：  {novel.id}")
-        print(f"  章节：{novel.serial} 章")
+        print(f"  章节：{len(novel.chapters)}/{novel.serial} 章")
         print(f"  字数：{novel.count or '未知'}")
         tags_str = "、".join(novel.tags) if novel.tags else ""
         print(f"  标签：{tags_str}")

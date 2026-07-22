@@ -88,7 +88,7 @@ class TXTExporter(BASEExporter):
             f"作者：{novel.author}\n"
             f"简介：{novel.description}\n"
             f"标签：{' '.join(novel.tags) if novel.tags else ''}\n"
-            f"章节数：{novel.serial}\n"
+            f"章节数：{len(novel.chapters)}/{novel.serial}\n"
             f"字数：{novel.count}\n"
             f"链接：{novel.url}\n\n"
         )
