@@ -69,6 +69,17 @@ def _parse_args() -> argparse.Namespace:
     ip.add_argument("--platform", "-p", default="fanqie", help="平台")
     ip.add_argument("--mode", "-m", default="requests", help="模式")
 
+    # ── dev ──
+    dv = sub.add_parser("dev", help="开发工具")
+    dv_sub = dv.add_subparsers(dest="dev_command")
+
+    ns = dv_sub.add_parser("new-source", help="创建新书源脚手架")
+    ns.add_argument("--name", required=True, help="书源名称")
+    ns.add_argument("--modes", default="requests", help="模式列表，逗号分隔 (requests,browser,api)")
+
+    ls = dv_sub.add_parser("list-sources", help="列出所有可用书源")
+    ls.add_argument("--json", action="store_true", help="仅列出 JSON 规则源")
+
     return p.parse_args()
 
 
@@ -150,7 +161,7 @@ def cmd_export(args):
 
 
 def cmd_info(args):
-    engine, _ = _get_engine(args.platform, args.engine)
+    engine, _ = _get_engine(args.platform, args.mode)
     try:
         print(f"正在获取: {args.url}")
         novel = fetch_meta(args.url, engine)
@@ -169,6 +180,62 @@ def cmd_info(args):
         engine.close()
 
 
+def cmd_dev(args):
+    """开发工具。"""
+    if args.dev_command == "list-sources":
+        from novelbase.utils.registry import list_sources as _ls_py
+        from novelbase.utils.json_loader import list_json_sources as _ls_json
+
+        if args.json:
+            sources = _ls_json()
+            print(f"JSON 规则源 ({len(sources)}):")
+        else:
+            py_sources = _ls_py()
+            json_sources = _ls_json()
+            print(f"Python 源 ({len(py_sources)}):")
+            for s in py_sources:
+                print(f"  - {s}")
+            print(f"\nJSON 规则源 ({len(json_sources)}):")
+            for s in json_sources:
+                print(f"  - {s}")
+            return
+
+        for s in sources:
+            print(f"  - {s}")
+
+    elif args.dev_command == "new-source":
+        _scaffold_source(args.name, args.modes.split(","))
+
+
+def _scaffold_source(name: str, modes: list[str]):
+    """生成新书源脚手架。"""
+    fetcher_dir = Path(__file__).parent / "novelbase" / "fetchers" / name
+    fetcher_dir.mkdir(parents=True, exist_ok=True)
+
+    (fetcher_dir / "__init__.py").write_text(
+        f'NAME = "{name}"\nBASE_URLS = ["example.com"]\n', encoding="utf-8")
+    (fetcher_dir / "_common.py").write_text(
+        '"""共享解析函数。"""\n', encoding="utf-8")
+
+    for mode in modes:
+        mode = mode.strip()
+        mode_dir = fetcher_dir / mode
+        mode_dir.mkdir(exist_ok=True)
+        (mode_dir / "__init__.py").touch()
+
+        for fn in ("search", "fetch_novel", "fetch_chapter_list", "fetch_chapter"):
+            (mode_dir / f"{fn}.py").write_text(
+                f'"""TODO: implement {fn} for {name}/{mode}."""\n'
+                f'from novelbase.core.exceptions import FeatureNotSupportedError\n\n'
+                f'def {fn}(*args, **kwargs):\n'
+                f'    raise FeatureNotSupportedError("TODO")\n',
+                encoding="utf-8")
+
+    print(f"书源脚手架已创建: novelbase/fetchers/{name}/")
+    for mode in modes:
+        print(f"  {mode}/  search.py, fetch_novel.py, fetch_chapter_list.py, fetch_chapter.py")
+
+
 def main():
     args = _parse_args()
     dispatch = {
@@ -177,6 +244,7 @@ def main():
         "update":   cmd_update,
         "export":   cmd_export,
         "info":     cmd_info,
+        "dev":      cmd_dev,
     }
     dispatch[args.command](args)
 
