@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { BookOpen, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
+import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
 import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, useGlobalConfig, compareChapters } from "@/hooks/index";
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
@@ -149,6 +149,8 @@ export default function DetailPage() {
     else setSelectedIds(new Set(localChapters.map(c => c.id)));
   }, [localAllSelected, localChapters]);
 
+  const handleBack = () => navigate(-1);
+
   const handleCoverWheel = (e: WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -290,7 +292,12 @@ export default function DetailPage() {
 
   const cover = coverToUrl(novel?.cover ?? null);
   return (
-    <div className="overflow-hidden">
+    <div className="overflow-hidden" style={{ maxWidth: "100vw" }}>
+      {/* 非 sticky，正常文档流 — 不会随 scroll-area 偏移 */}
+      <div className="flex items-center gap-2 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
+        <button onClick={handleBack} className="rounded-full p-1 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>
+        <span className="truncate text-sm font-medium text-slate-600">书籍详情</span>
+      </div>
       {novel && (
         <div className="px-4 py-8 overflow-hidden" style={{ width: "100%", maxWidth: "100%" }}>
           <div className="flex gap-6 relative">
