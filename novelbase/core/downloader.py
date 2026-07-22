@@ -6,7 +6,6 @@ from .options import ExportOptions
 from ..exporters.base import BASEExporter
 from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
-from ..fetchers.base import BaseFetcher
 from ..utils.logger import get_logger
 
 _T = TypeVar('_T')
@@ -37,7 +36,7 @@ def get_fetcher_for_id(novel_id: str):
     return None
 
 
-def get_fetchers() -> dict[str, type[BaseFetcher]]:
+def get_fetchers() -> dict[str, type]:
     """返回所有已注册的 Fetcher 类（{platform: FetcherCls}）。"""
     from ..utils.registry import register_fetcher
     return register_fetcher()

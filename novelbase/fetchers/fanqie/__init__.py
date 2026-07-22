@@ -6,7 +6,6 @@ from novelbase.models.auth import AuthCredential
 from novelbase.models.novel import SearchResult, Novel, Chapter, Chapters
 
 from ._common import resolve_changdunovel
-from novelbase.fetchers.base import BaseFetcher
 
 NAME = "fanqie"
 BASE_URLS = ["fanqienovel.com", "changdunovel.com"]
@@ -36,7 +35,7 @@ def _use_fetcher(engine):
         raise ValueError(f"Unknown engine: {engine.name}")
 
 
-class FanqieFetcher(BaseFetcher):
+class FanqieFetcher:
     host = ("fanqienovel.com", "changdunovel.com")
     id_pattern = re.compile(r"^(?:book_id=?)?(\d{19})$")
 

@@ -6,10 +6,9 @@ from typing import Any
 
 from ..core.options import ExportOptions
 from ..exporters.base import BASEExporter
-from ..fetchers.base import BaseFetcher
 
 _lock = threading.Lock()
-_cache_fetcher: dict[str, type[BaseFetcher]] | None = None
+_cache_fetcher: dict[str, type] | None = None
 _cache_exporter: dict[str, type[BASEExporter]] | None = None
 _cache_export_opts: dict[str, type[ExportOptions]] | None = None
 
@@ -76,7 +75,7 @@ def _scan_export_options() -> dict[str, Any]:
     return result
 
 
-def _hardcoded_fetchers() -> dict[str, type[BaseFetcher]]:
+def _hardcoded_fetchers() -> dict[str, type]:
     """exe 环境下 _scan_plugins 可能找不到模块，硬编码兜底。"""
     from ..fetchers.fanqie import FanqieFetcher
     from ..fetchers.qidian import QidianFetcher
@@ -84,7 +83,7 @@ def _hardcoded_fetchers() -> dict[str, type[BaseFetcher]]:
     return {"fanqie": FanqieFetcher, "qidian": QidianFetcher, "qimao": QimaoFetcher}
 
 
-def register_fetcher() -> dict[str, type[BaseFetcher]]:
+def register_fetcher() -> dict[str, type]:
     global _cache_fetcher
     if _cache_fetcher is not None:
         return _cache_fetcher

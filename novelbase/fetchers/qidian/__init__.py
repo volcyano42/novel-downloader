@@ -2,7 +2,6 @@ import re
 from typing import Any
 
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.fetchers.base import BaseFetcher
 from novelbase.models.auth import AuthCredential
 from novelbase.models.novel import SearchResult, Novel, Chapter, Chapters
 
@@ -23,7 +22,7 @@ def _use_fetcher(engine):
         raise ValueError(f"Unknown engine: {engine.name!r}")
 
 
-class QidianFetcher(BaseFetcher):
+class QidianFetcher:
     host = ("www.qidian.com", "book.qidian.com")
     id_pattern = re.compile(r"^(?:/(book|info)/?)?(\d{10})/?$")
 

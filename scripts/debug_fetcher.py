@@ -28,11 +28,10 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from novelbase.fetchers.base import BaseFetcher
 from novelbase.models.novel import Chapter
 from novelbase.utils.registry import register_fetcher
 
-def _get_fetcher_class(platform: str) -> type[BaseFetcher]:
+def _get_fetcher_class(platform: str) -> type:
     fetchers = register_fetcher()
     cls = fetchers.get(platform)
     if cls is None:

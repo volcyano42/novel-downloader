@@ -36,7 +36,6 @@ from .core.options import (
 from .core.storage import LocalStorage
 from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
-from .fetchers.base import BaseFetcher
 from .utils.registry import capabilities, resolve, list_sources
 from .utils.hooks import SourceHooks
 
@@ -79,7 +78,6 @@ __all__ = [
     "Chapters",
     "Illustration",
     "SearchResult",
-    "BaseFetcher",
     "BASEExporter",
     "capabilities",
     "resolve",

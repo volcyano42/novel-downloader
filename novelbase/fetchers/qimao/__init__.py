@@ -2,7 +2,6 @@ import re
 from typing import Any
 
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.fetchers.base import BaseFetcher
 from novelbase.models.auth import AuthCredential
 from novelbase.models.novel import SearchResult, Novel, Chapter, Chapters
 
@@ -27,7 +26,7 @@ def _use_fetcher(engine):
         raise ValueError(f"Unknown engine: {engine.name!r}")
 
 
-class QimaoFetcher(BaseFetcher):
+class QimaoFetcher:
     host = ("www.qimao.com", "qimao.com")
     id_pattern = re.compile(r"^(?:/shuku/?)?(\d+)$")
 
