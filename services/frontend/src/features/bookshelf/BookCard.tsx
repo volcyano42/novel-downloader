@@ -107,7 +107,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
     <>
       <div className={cn("group/card cursor-pointer flex flex-col rounded-2xl border border-white/20 bg-white/80 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-0.5 transition-all duration-300 ease-out", className)}
         onClick={onRead}>
-        <div className="aspect-[4/5] overflow-hidden rounded-t-2xl bg-slate-100 p-[12.5%] relative">
+        <div className="aspect-[4/5] overflow-hidden rounded-t-2xl bg-slate-100 p-[17.5%] relative">
           {cover ? (
             <img src={cover} alt={title} className="h-full w-full object-contain animate-in fade-in duration-300" loading="lazy" width="200" height="300" />
           ) : (
