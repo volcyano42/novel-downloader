@@ -279,4 +279,5 @@ class SearchResult:
     url: str | None = None
     description: str | None = None
     platform: str = ""
+    cover_url: str | None = None
     extras: Box = field(default_factory=Box)

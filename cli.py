@@ -40,13 +40,13 @@ def _parse_args() -> argparse.Namespace:
     sp = sub.add_parser("search", help="搜索小说")
     sp.add_argument("query", help="搜索关键词")
     sp.add_argument("--platform", "-p", default="fanqie", help="平台 (fanqie/qidian/qimao)")
-    sp.add_argument("--engine", "-e", default="requests", help="引擎 (requests/browser/api)")
+    sp.add_argument("--mode", "-m", default="requests", help="模式 (requests/browser/api)")
     sp.add_argument("--page", type=int, default=1, help="页码")
 
     # ── download ──
     dp = sub.add_parser("download", help="下载小说")
     dp.add_argument("--platform", "-p", default="fanqie", help="平台")
-    dp.add_argument("--engine", "-e", default="requests", help="引擎")
+    dp.add_argument("--mode", "-m", default="requests", help="模式")
     dp.add_argument("--url", "-u", required=True, help="小说页面 URL")
     dp.add_argument("--group", "-g", default="default", help="分组名")
     dp.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
@@ -54,7 +54,7 @@ def _parse_args() -> argparse.Namespace:
     # ── update ──
     up = sub.add_parser("update", help="更新已下载小说")
     up.add_argument("--platform", "-p", default="fanqie", help="平台")
-    up.add_argument("--engine", "-e", default="requests", help="引擎")
+    up.add_argument("--mode", "-m", default="requests", help="模式")
     up.add_argument("--group", "-g", default="default", help="分组名")
     up.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
 
@@ -67,15 +67,15 @@ def _parse_args() -> argparse.Namespace:
     ip = sub.add_parser("info", help="查看小说信息")
     ip.add_argument("--url", "-u", required=True, help="小说页面 URL")
     ip.add_argument("--platform", "-p", default="fanqie", help="平台")
-    ip.add_argument("--engine", "-e", default="requests", help="引擎")
+    ip.add_argument("--mode", "-m", default="requests", help="模式")
 
     return p.parse_args()
 
 
-def _get_engine(platform: str, engine_mode: str):
+def _get_engine(platform: str, mode: str):
     """根据平台和引擎模式创建 engine。"""
     cfg = load_main_config()
-    cfg["mode"] = engine_mode
+    cfg["mode"] = mode
     site_cfg = load_site_config(platform)
     options = build_options(cfg, site_cfg)
 
@@ -99,7 +99,7 @@ def _get_engine(platform: str, engine_mode: str):
 
 
 def cmd_search(args):
-    engine, format_configs = _get_engine(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.mode)
     try:
         from novelbase.core.downloader import search
         results = search(args.platform, args.query, engine, page=args.page)
@@ -120,7 +120,7 @@ def cmd_search(args):
 
 
 def cmd_download(args):
-    engine, format_configs = _get_engine(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.mode)
     try:
         from app.core import _do_download_inner
         _do_download_inner(engine, args.url, args.group, format_configs,
@@ -130,7 +130,7 @@ def cmd_download(args):
 
 
 def cmd_update(args):
-    engine, format_configs = _get_engine(args.platform, args.engine)
+    engine, format_configs = _get_engine(args.platform, args.mode)
     try:
         from app.core import do_update
         do_update(format_configs, max_workers=args.workers)

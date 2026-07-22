@@ -112,6 +112,11 @@ class BaseStorage(ABC):
         """逐条遍历章节。include_images=False 时 chapters.images 为空元组。"""
         ...
 
+    @abstractmethod
+    def list_downloaded_ids(self, novel_id: str) -> set[str]:
+        """返回已下载（content 非空）的章节 id 集合，用于断点续传。"""
+        ...
+
 
 class LocalStorage(BaseStorage):
     """本地 JSON 文件存储。
@@ -253,6 +258,20 @@ class LocalStorage(BaseStorage):
         chapter_dir = self._novel_dir(novel_id) / chapter_id
         if chapter_dir.exists():
             shutil.rmtree(chapter_dir)
+
+    def list_downloaded_ids(self, novel_id: str) -> set[str]:
+        chapters_dir = self._chapters_dir(novel_id)
+        if not chapters_dir.exists():
+            return set()
+        result: set[str] = set()
+        for file in chapters_dir.glob("*.json"):
+            try:
+                data = json.loads(file.read_text(encoding="utf-8"))
+                if data.get("content"):
+                    result.add(data["id"])
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -530,3 +549,12 @@ class SQLiteStorage(BaseStorage):
         with self._connect_novel(novel_id) as conn:
             conn.execute("DELETE FROM illustrations WHERE owner_type = ? AND owner_id = ?", ("chapter", chapter_id))
             conn.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+
+    def list_downloaded_ids(self, novel_id: str) -> set[str]:
+        if not os.path.exists(self._novel_path(novel_id)):
+            return set()
+        with self._connect_novel(novel_id) as conn:
+            rows = conn.execute(
+                "SELECT id FROM chapters WHERE content IS NOT NULL AND content != ''"
+            ).fetchall()
+        return {row[0] for row in rows}

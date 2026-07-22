@@ -17,6 +17,10 @@ _cache_export_opts: dict[str, type[ExportOptions]] | None = None
 def _scan_plugins(subpackage: str, *, capitalize: bool) -> dict[str, Any]:
     """扫描子包目录，发现命名符合约定的插件类。
 
+    支持两种形式：
+    - 单文件：fetchers/fanqie.py → FanqieFetcher
+    - 目录包：fetchers/fanqie/__init__.py → FanqieFetcher
+
     Args:
         subpackage: 相对子包名，如 ``"fetchers"`` / ``"exporters"``。
         capitalize: True 则类名用首字母大写（如 FanqieFetcher），
@@ -30,10 +34,16 @@ def _scan_plugins(subpackage: str, *, capitalize: bool) -> dict[str, Any]:
     if not pkg_dir.exists():
         return result
 
-    for file in sorted(os.listdir(pkg_dir)):
-        if not file.endswith(".py") or file in ("__init__.py", "base.py"):
+    for entry in sorted(os.listdir(pkg_dir)):
+        entry_path = pkg_dir / entry
+        # 单文件形式：fanqie.py
+        if entry.endswith(".py") and entry not in ("__init__.py", "base.py"):
+            module_name = entry[:-3]
+        # 目录包形式：fanqie/__init__.py
+        elif entry_path.is_dir() and (entry_path / "__init__.py").exists():
+            module_name = entry
+        else:
             continue
-        module_name = file[:-3]
         try:
             module = import_module(f"..{subpackage}.{module_name}", __package__)
             stem = module_name.capitalize() if capitalize else module_name.upper()
