@@ -109,7 +109,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
         onClick={onRead}>
         <div className="aspect-[4/5] overflow-hidden rounded-t-2xl bg-slate-100 p-[25%] relative">
           {cover ? (
-            <img src={cover} alt={title} className="h-full w-full object-contain animate-in fade-in duration-300" loading="lazy" width="200" height="300" />
+            <img src={cover} alt={title} className="h-full w-full object-contain scale-[0.8] animate-in fade-in duration-300" loading="lazy" width="200" height="300" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <BookOpen className="h-10 w-10 text-slate-300" strokeWidth={1.5} />
