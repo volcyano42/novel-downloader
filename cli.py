@@ -3,7 +3,7 @@
 
 用法:
     python cli.py search --platform qimao "关键词"
-    python cli.py download --platform qimao --engine requests --url "https://..."
+    python cli.py download --platform qimao --mode requests --url "https://..."
     python cli.py update --platform fanqie --group default
     python cli.py export --group default --format epub
     python cli.py info --url "https://www.qimao.com/shuku/195958/"
