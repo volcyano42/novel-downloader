@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes breathing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.breathing-badge {
+  animation: breathing 2s ease-in-out infinite;
+}
+
 @layer base {
   :root {
     --background: 240 20% 99%;

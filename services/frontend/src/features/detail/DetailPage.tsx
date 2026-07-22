@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type WheelEvent } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
 import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, useGlobalConfig, compareChapters } from "@/hooks/index";
@@ -115,6 +115,10 @@ export default function DetailPage() {
   const merged = compareMode && checkMerged ? checkMerged : remoteMerged;
   const chapters = isRemote ? [] : localChapters;
   const showCompare = isRemote || compareMode;
+  const newCount = useMemo(() => {
+    if (!compareMode || !checkMerged) return 0;
+    return checkMerged.filter(mc => !mc.local || !mc.local.downloaded).length;
+  }, [compareMode, checkMerged]);
 
   // 等待本地章节流加载完成后再预选，防止 SSE 未到时的错误全选
   useEffect(() => {
@@ -310,7 +314,7 @@ export default function DetailPage() {
               </a>
               <p className="text-sm text-slate-500">{novel.author}</p>
               <p className="text-xs text-slate-400 font-mono">{novel.id}</p>
-              <p className="text-sm text-slate-500">共 {novel.serial} 章 · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
+              <p className="text-sm text-slate-500">{localChapters.length}/{novel.serial} 章{newCount > 0 && <span className="ml-1.5 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-500 breathing-badge">+{newCount}</span>} · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
               {novel.extra?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.extra.rating} 分</p>}
               {novel.tags && novel.tags.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{novel.tags.map(t => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{t}</span>)}</div>}
             </div>
