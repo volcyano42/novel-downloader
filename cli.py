@@ -3,7 +3,7 @@
 
 用法:
     python cli.py search --platform qimao "关键词"
-    python cli.py download --platform qimao --mode requests --url "https://..."
+    python cli.py download --mode requests --url "https://..."
     python cli.py update --platform fanqie --group default
     python cli.py export --group default --format epub
     python cli.py info --url "https://www.qimao.com/shuku/195958/"
@@ -29,6 +29,25 @@ from novelbase.utils.logger import get_logger
 _log = get_logger("novelbase.cli")
 
 
+def _platform_from_url(url: str) -> str:
+    """从 URL 推断平台。"""
+    if "fanqienovel.com" in url or "changdunovel.com" in url:
+        return "fanqie"
+    if "qidian.com" in url:
+        return "qidian"
+    if "qimao.com" in url:
+        return "qimao"
+    return "fanqie"
+
+
+def _resolve_platform(args) -> str:
+    """解析平台：优先用 --platform，否则从 URL 推断。"""
+    if getattr(args, "platform", None):
+        return args.platform
+    url = getattr(args, "url", "")
+    return _platform_from_url(url) if url else "fanqie"
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="novelbase — 小说下载器命令行",
@@ -45,7 +64,7 @@ def _parse_args() -> argparse.Namespace:
 
     # ── download ──
     dp = sub.add_parser("download", help="下载小说")
-    dp.add_argument("--platform", "-p", default="fanqie", help="平台")
+    dp.add_argument("--platform", "-p", default=None, help="平台（可从 URL 自动推断）")
     dp.add_argument("--mode", "-m", default="requests", help="模式")
     dp.add_argument("--url", "-u", required=True, help="小说页面 URL")
     dp.add_argument("--group", "-g", default="default", help="分组名")
@@ -66,7 +85,7 @@ def _parse_args() -> argparse.Namespace:
     # ── info ──
     ip = sub.add_parser("info", help="查看小说信息")
     ip.add_argument("--url", "-u", required=True, help="小说页面 URL")
-    ip.add_argument("--platform", "-p", default="fanqie", help="平台")
+    ip.add_argument("--platform", "-p", default=None, help="平台（可从 URL 自动推断）")
     ip.add_argument("--mode", "-m", default="requests", help="模式")
 
     # ── dev ──
@@ -131,7 +150,7 @@ def cmd_search(args):
 
 
 def cmd_download(args):
-    engine, format_configs = _get_engine(args.platform, args.mode)
+    engine, format_configs = _get_engine(_resolve_platform(args), args.mode)
     try:
         from app.core import _do_download_inner
         _do_download_inner(engine, args.url, args.group, format_configs,
@@ -161,7 +180,7 @@ def cmd_export(args):
 
 
 def cmd_info(args):
-    engine, _ = _get_engine(args.platform, args.mode)
+    engine, _ = _get_engine(_resolve_platform(args), args.mode)
     try:
         print(f"正在获取: {args.url}")
         novel = fetch_meta(args.url, engine)
