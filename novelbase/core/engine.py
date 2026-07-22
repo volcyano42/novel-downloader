@@ -32,10 +32,6 @@ class Engine(ABC):
         Engine._registry_keys.append(key)
         self._registry_key = key
 
-    @classmethod
-    def get_engine(cls, engine_id: str) -> Engine | None:
-        return cls._instances.get(engine_id, None)
-
     @abstractmethod
     def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
         """GET/POST 请求返回纯文本。"""
@@ -58,10 +54,6 @@ class Engine(ABC):
     def update_options(self, options) -> None:
         """更新引擎选项（运行时热更新）。"""
         ...
-
-    def close_current(self) -> None:
-        """关闭当前线程持有的资源（page / session），线程退出前调用。"""
-        _log.debug("%s.close_current: no-op", type(self).__name__)
 
 class APIEngine(Engine):
 
@@ -169,20 +161,6 @@ class APIEngine(Engine):
                 session.close()
             except (OSError, AttributeError):
                 pass
-
-    def close_current(self) -> None:
-        if not hasattr(self._session_local, 'session'):
-            return
-        session = self._session_local.session
-        _log.debug("APIEngine.close_current: closing session")
-        try:
-            session.close()
-        except (OSError, AttributeError):
-            pass
-        with self._session_lock:
-            if session in self._sessions:
-                self._sessions.remove(session)
-        del self._session_local.session
 
 class BrowserEngine(Engine):
     def __init__(self, options: BrowserOptions) -> None:
@@ -319,20 +297,6 @@ class BrowserEngine(Engine):
                 self._browser.quit()
             except (OSError, AttributeError):
                 pass
-
-    def close_current(self) -> None:
-        if not hasattr(self._thread_local, 'page'):
-            return
-        page = self._thread_local.page
-        _log.debug("BrowserEngine.close_current: closing page")
-        try:
-            page.close()
-        except (OSError, AttributeError):
-            pass
-        with self._page_lock:
-            if page in self._page_pool:
-                self._page_pool.remove(page)
-        del self._thread_local.page
 
     @property
     def browser(self) -> Any:
