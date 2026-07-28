@@ -1,10 +1,14 @@
+# -*- coding: utf-8 -*-
 """CI 导入检查：运行在 github workflow 中"""
 import sys
 
 sys.path.insert(0, ".")
 
-from nldlder import (
-    NovelDownloader,
+from novelbase import (
+    fetch_meta,
+    fetch_chapter_list,
+    resolve_chapter,
+    export as do_export,
     Options,
     create_engine,
     get_fetchers,
@@ -19,11 +23,10 @@ from nldlder import (
     Chapter,
     Chapters,
     NovelDownloaderError,
-    configure_logging,
-    LogOptions,
+    get_logger,
 )
-import nldlder
+import novelbase
 
-print("✓ nldlder v" + nldlder.__version__ + " 导入成功")
+print("✓ novelbase v" + novelbase.__version__ + " 导入成功")
 print("  注册的 Fetcher: " + str(list(get_fetchers().keys())))
 print("  注册的导出器: " + str(list(get_exporters().keys())))

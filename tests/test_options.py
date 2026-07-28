@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from nldlder.core.options import (
+from novelbase.core.options import (
     Options, APIOptions, RequestsOptions, BrowserOptions,
     ExportOptions,
 )
-from nldlder.utils.logger import LogOptions
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -22,16 +21,14 @@ class TestAPIOptions:
         assert o.delay == (3, 5)
         assert o.timeout == 30
         assert o.retry_times == 3
-        assert o.batch_size == 1
         assert o.backoff_factor == 2
         assert o.key is None
         assert o.params is None
 
     def test_custom(self):
-        o = APIOptions(name="myapi", key="sk-xxx", batch_size=5, params={"site": "fanqie"})
+        o = APIOptions(name="myapi", key="sk-xxx", params={"site": "fanqie"})
         assert o.name == "myapi"
         assert o.key == "sk-xxx"
-        assert o.batch_size == 5
         assert o.params == {"site": "fanqie"}
 
 
@@ -107,10 +104,9 @@ class TestOptions:
         assert o.mode == "invalid"
 
     def test_set_api_options(self):
-        o = Options().set_api_options(name="test", key="sk-xxx", batch_size=10)
+        o = Options().set_api_options(name="test", key="sk-xxx")
         assert o.api.name == "test"
         assert o.api.key == "sk-xxx"
-        assert o.api.batch_size == 10
 
     def test_set_requests_options(self):
         o = Options().set_requests_options(timeout=60, cookies={"a": "b"})
@@ -132,25 +128,20 @@ class TestOptions:
         assert o.log.level == "INFO"
         assert o.log.output_dir == "/tmp/logs"
 
-    def test_log_options_default(self):
+    def test_set_export(self):
+        opt = ExportOptions(format="txt", output_path="/tmp/out")
+        o = Options().set_export(opt)
+        assert o.export is opt
+        assert o.export.format == "txt"
+
+    def test_enable_export(self):
+        opt = ExportOptions(format="txt", output_path="/tmp/out")
+        o = Options().set_export(opt)
+        o.enable_export(False)
+        assert o.export.enabled is False
+        o.enable_export(True)
+        assert o.export.enabled is True
+
+    def test_export_none_by_default(self):
         o = Options()
-        assert isinstance(o.log, LogOptions)
-
-    def test_set_export_options(self):
-        opt = ExportOptions(output_path="/tmp/out")
-        opt.format = "txt"  # set_export_options 需要 format 属性
-        o = Options().set_export_options(opt)
-        assert "txt" in o.exports
-
-    def test_enable_format(self):
-        opt = ExportOptions(output_path="/tmp/out")
-        opt.format = "txt"
-        o = Options().set_export_options(opt)
-        o.enable_format("txt", enabled=False)
-        assert o.exports["txt"].enabled is False
-
-    def test_enable_format_missing_key(self):
-        """enable_format 未注册的格式抛出 KeyError"""
-        o = Options()
-        with pytest.raises(KeyError):
-            o.enable_format("ghost")
+        assert o.export is None

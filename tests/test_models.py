@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from nldlder.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
-
+from novelbase.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
 
 # ═══════════════════════════════════════════════════════════════
 # Illustration
@@ -53,7 +52,6 @@ class TestIllustration:
         img = Illustration.loads(raw_data=img_bytes, extra_field="hello")
         assert img.extra_field == "hello"  # noqa
 
-
 # ═══════════════════════════════════════════════════════════════
 # Chapter
 # ═══════════════════════════════════════════════════════════════
@@ -63,34 +61,33 @@ class TestChapter:
         assert chapter_1.id == "ch1"
         assert chapter_1.title == "第一章 开端"
         assert chapter_1.order == 1
-        assert chapter_1.is_complete is True
         assert chapter_1.content == "这是第一章的内容。"
 
     def test_eq_by_id_only(self):
-        a = Chapter(id="x", url="a", index_url="i", title="t", order=1, content="aaa")
-        b = Chapter(id="x", url="b", index_url="i", title="t", order=2, content="bbb")
+        a = Chapter(id="x", url="a", novel_id="i", title="t", order=1, content="aaa")
+        b = Chapter(id="x", url="b", novel_id="i", title="t", order=2, content="bbb")
         assert a == b
 
     def test_ne_different_id(self):
-        a = Chapter(id="x", url="a", index_url="i", title="t", order=1)
-        b = Chapter(id="y", url="a", index_url="i", title="t", order=1)
+        a = Chapter(id="x", url="a", novel_id="i", title="t", order=1)
+        b = Chapter(id="y", url="a", novel_id="i", title="t", order=1)
         assert a != b
 
     def test_eq_with_non_chapter(self):
-        c = Chapter(id="x", url="a", index_url="i", title="t", order=1)
+        c = Chapter(id="x", url="a", novel_id="i", title="t", order=1)
         assert c.__eq__("not a chapter") is NotImplemented
 
     def test_hash_by_id(self):
-        a = Chapter(id="same", url="a", index_url="i", title="t", order=1)
-        b = Chapter(id="same", url="b", index_url="i", title="t", order=2)
+        a = Chapter(id="same", url="a", novel_id="i", title="t", order=1)
+        b = Chapter(id="same", url="b", novel_id="i", title="t", order=2)
         assert hash(a) == hash(b)
 
     def test_loads_full(self):
         ch = Chapter.loads(
-            id="ch99", url="http://x.com/99", index_url="http://x.com",
+            id="ch99", url="http://x.com/99", novel_id="http://x.com",
             title="第99章", order=99, volume="终卷",
             content="终章内容", time=999.0, count=5000,
-            is_complete=True, images=[],
+             images=[],
         )
         assert ch.id == "ch99"
         assert ch.volume == "终卷"
@@ -100,24 +97,19 @@ class TestChapter:
         import base64
         b64 = base64.b64encode(img_bytes).decode()
         ch = Chapter.loads(
-            id="ch_img", url="u", index_url="i", title="t", order=1,
+            id="ch_img", url="u", novel_id="i", title="t", order=1,
             images=[{"raw_data": b64, "alt": "插图1"}],
         )
         assert len(ch.images) == 1
         assert ch.images[0].raw_data == img_bytes
 
     def test_loads_extra_kwargs(self):
-        ch = Chapter.loads(id="x", url="u", index_url="i", title="t", order=1, custom="val")
+        ch = Chapter.loads(id="x", url="u", novel_id="i", title="t", order=1, custom="val")
         assert ch.custom == "val"  # noqa
 
-    def test_default_is_complete_false(self):
-        ch = Chapter(id="x", url="u", index_url="i", title="t", order=1)
-        assert ch.is_complete is False
-
     def test_images_default_empty_tuple(self):
-        ch = Chapter(id="x", url="u", index_url="i", title="t", order=1)
+        ch = Chapter(id="x", url="u", novel_id="i", title="t", order=1)
         assert ch.images == ()
-
 
 # ═══════════════════════════════════════════════════════════════
 # Chapters (Sequence[Chapter])
@@ -191,40 +183,64 @@ class TestChapters:
         assert chapters.get_chapter_by_order(999) is None
 
     def test_get_incompleted_chapters(self, chapters: Chapters):
-        inc = chapters.incompleted_chapters
-        assert inc is not None
+        inc = [ch for ch in chapters if ch.content is None]
         assert len(inc) == 1
         assert inc[0].id == "ch3"
 
     def test_get_incompleted_chapters_all_complete(self, chapter_1, chapter_2):
         c = Chapters([chapter_1, chapter_2])
-        assert c.incompleted_chapters is None
+        inc = [ch for ch in c if ch.content is None]
+        assert len(inc) == 0
 
     def test_merge_with_chapter(self, chapters: Chapters):
-        new_ch = Chapter(id="ch4", url="u4", index_url="i", title="第四章", order=4)
+        new_ch = Chapter(id="ch4", url="u4", novel_id="i", title="第四章", order=4)
         merged = chapters.merge(new_ch)
         assert len(merged) == 4
         assert merged.get_chapter_by_id("ch4") is not None
 
     def test_merge_overwrite_by_id(self, chapters: Chapters):
-        updated = Chapter(id="ch1", url="u1_new", index_url="i", title="第一章 改", order=1, content="新内容")
+        updated = Chapter(id="ch1", url="u1_new", novel_id="i", title="第一章 改", order=1, content="新内容")
         merged = chapters.merge(updated)
         assert merged.get_chapter_by_id("ch1").title == "第一章 改"
         assert len(merged) == 3  # 不增加数量
 
     def test_merge_preserves_original(self, chapters: Chapters):
         """merge 返回新对象，原对象不变"""
-        new_ch = Chapter(id="ch4", url="u4", index_url="i", title="第四章", order=4)
+        new_ch = Chapter(id="ch4", url="u4", novel_id="i", title="第四章", order=4)
         merged = chapters.merge(new_ch)
         assert len(chapters) == 3
         assert len(merged) == 4
+
+    def test_merge_keeps_new_images_when_both_have_same_count(self, illustration):
+        """新旧图片数相同时保留新的"""
+        old_img = illustration
+        new_img = Illustration(raw_data=b"\x89PNG\r\n\x1a\n" + b"\x01" * 20,
+                               alt="新图", insert=0, url="http://new.com/img.png")
+        old = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(old_img,))
+        new = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(new_img,))
+        merged = Chapters([old]).merge(new)
+        result = merged.get_chapter_by_id("ch1")
+        assert result.images[0] is new_img
+
+    def test_merge_keeps_new_images_when_both_have_images(self, illustration):
+        """新旧都有 images → 保留新的（无论数量是否相同）"""
+        new_img = Illustration(raw_data=b"\x89PNG\r\n\x1a\n" + b"\x02" * 20,
+                               alt="新图", insert=0, url="http://new.com/img.png")
+        old = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(illustration,))
+        new = Chapter(id="ch1", url="u1", novel_id="n1", title="第一章", order=1,
+                      images=(new_img,))
+        merged = Chapters([old]).merge(new)
+        result = merged.get_chapter_by_id("ch1")
+        assert result.images[0] is new_img
 
     def test_total_property(self, chapters: Chapters):
         assert chapters.total == 3
 
     def test_chapters_property_returns_tuple(self, chapters: Chapters):
         assert isinstance(chapters._chapters, tuple)
-
 
 # ═══════════════════════════════════════════════════════════════
 # Novel
@@ -265,8 +281,8 @@ class TestNovel:
             author="a", description="d",
             tags=[], count=0,
             chapters=[
-                {"id": "c1", "url": "u1", "index_url": "u", "title": "章1", "order": 1},
-                {"id": "c2", "url": "u2", "index_url": "u", "title": "章2", "order": 2},
+                {"id": "c1", "url": "u1", "novel_id": "u", "title": "章1", "order": 1},
+                {"id": "c2", "url": "u2", "novel_id": "u", "title": "章2", "order": 2},
             ],
         )
         assert len(n.chapters) == 2
@@ -280,25 +296,24 @@ class TestNovel:
         assert n.cover is None
 
     def test_update_chapter_add(self, novel: Novel):
-        new = Chapter(id="ch_new", url="u", index_url="i", title="新章", order=99)
+        new = Chapter(id="ch_new", url="u", novel_id="i", title="新章", order=99)
         novel.update_chapter(new)
         assert len(novel.chapters) == 4
         assert novel.chapters.get_chapter_by_id("ch_new") is not None
 
     def test_update_chapter_overwrite(self, novel: Novel):
-        updated = Chapter(id="ch1", url="u", index_url="i", title="第一章 已修改", order=1)
+        updated = Chapter(id="ch1", url="u", novel_id="i", title="第一章 已修改", order=1)
         novel.update_chapter(updated)
         assert novel.chapters.get_chapter_by_id("ch1").title == "第一章 已修改"
         assert len(novel.chapters) == 3  # 数量不变
 
     def test_update_chapter_batch(self, novel: Novel):
         batch = [
-            Chapter(id="c_a", url="u", index_url="i", title="A", order=10),
-            Chapter(id="c_b", url="u", index_url="i", title="B", order=11),
+            Chapter(id="c_a", url="u", novel_id="i", title="A", order=10),
+            Chapter(id="c_b", url="u", novel_id="i", title="B", order=11),
         ]
         novel.update_chapter(batch)
         assert len(novel.chapters) == 5
-
 
 # ═══════════════════════════════════════════════════════════════
 # SearchResult

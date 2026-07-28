@@ -1,27 +1,32 @@
+api:
+  backoff_factor: 2
+  delay:
+  - 3
+  - 5
+  retry_times: 3
+  timeout: 30
 browser:
   backoff_factor: 2
   browser_type: chromium
   delay:
-  - 3.0
-  - 5.0                  # 操作间隔（秒）
-  headless: false         # 是否无头模式
+  - 3
+  - 5
+  headless: false
   retry_times: 3
   timeout: 30
-  user_data_dir: app_data/browser/Chromium/User Data
+  user_data_dir: app_data\browser\Chromium\User Data
   viewport:
     height: 720
     width: 1280
-
-
 requests:
   backoff_factor: 2
-  cookies: {}           # cookies 可以由登录流程自动填充
+  cookies: {}
   delay:
   - 3
   - 5
   headers:
     User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
       like Gecko) Chrome/148.0.0.0 Safari/537.36
-  proxies: {}            # 代理设置，如 http://127.0.0.1:7890
+  proxies: {}
   retry_times: 3
   timeout: 30

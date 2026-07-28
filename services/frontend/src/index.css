@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes breathing {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.breathing-badge {
+  animation: breathing 2s ease-in-out infinite;
+}
+
+@layer base {
+  :root {
+    --background: 240 20% 99%;
+    --foreground: 217 33% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 33% 17%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 14% 46%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 14% 92%;
+    --muted-foreground: 215 14% 46%;
+    --accent: 238 75% 95%;
+    --accent-foreground: 243 75% 59%;
+    --border: 215 14% 90%;
+    --ring: 243 75% 59%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 20% 85%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 20% 85%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 20% 85%;
+    --primary: 243 75% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 10% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 10% 20%;
+    --muted-foreground: 215 10% 55%;
+    --accent: 238 30% 18%;
+    --accent-foreground: 243 75% 65%;
+    --border: 215 20% 25%;
+    --ring: 243 75% 65%;
+  }
+
+  html { overflow: hidden; }
+  * { @apply border-slate-200 dark:border-white/10; }
+  body {
+    @apply bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-200;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-200 dark:bg-slate-700 rounded-full; }
+}

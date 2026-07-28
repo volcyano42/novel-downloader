@@ -42,5 +42,4 @@ jobs:
         run: python tests/check_imports.py
 
       - name: 运行测试
-        run: |
-          python -m pytest tests/ -v --tb=short 2>&1 || echo "tests/ 为空或不存在，跳过"
+        run: python -m pytest tests/ -v --tb=short

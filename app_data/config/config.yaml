@@ -1,24 +1,15 @@
-# ── 下载设置 ──
 download:
-  max_workers: 5       # 下载章节的并发线程数
-
-# ── 启用导出的格式 ──
-formats:
-- txt
-- epub
-- img
-
-# ── 分组名称（用于导出路径中的 {group} 占位符） ──
-group: default
-
-# ── 日志设置 ──
+  max_workers: 3
+  notify:
+    on_complete: true
+    on_incomplete: true
+    sound: bell
 log:
-  enabled: true         # 是否启用日志
-  level: INFO           # 日志级别 DEBUG/INFO/WARNING/ERROR
-  output_dir: app_data/logs
-
-# ── 下载模式 browser / api / requests ──
+  level: DEBUG
 mode: api
-
-# ── 目标平台 ──
-platform: fanqie
+name: Novel下载器
+storage:
+  backend: sqlite
+  database_url: sqlite:///app_data/storage/novels.db
+export:
+  formats: [epub]

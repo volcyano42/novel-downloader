@@ -1,9 +1,12 @@
 beautifulsoup4
 drissionpage
+fastapi
 Pillow
 pillow-heif
 PyYAML
+qiniu
 Requests
 rich
 urllib3
+uvicorn
 yarl
