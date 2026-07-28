@@ -307,7 +307,7 @@ export default function DetailPage() {
             <div onClick={() => cover && setCoverZoom(true)} className={`w-28 shrink-0 aspect-[4/5] rounded-2xl bg-slate-100 overflow-hidden animate-in zoom-in-95 duration-300 ${cover ? "cursor-zoom-in" : ""}`}>
               {cover ? <img src={cover} alt={novel.title} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><BookOpen className="h-8 w-8 text-slate-300" strokeWidth={1.5} /></div>}
             </div>
-            <div className="min-w-0 space-y-1">
+            <div className="min-w-0 space-y-1 overflow-hidden">
               <a href={novel.url} target="_blank" rel="noopener noreferrer" className="group/title inline-flex items-center gap-1.5 text-xl font-semibold text-slate-800 hover:text-indigo-500 transition-colors">
                 <span>{novel.title}</span>
                 <ExternalLink className="h-4 w-4 opacity-0 group-hover/title:opacity-30 transition-opacity shrink-0" strokeWidth={1.5} />
