@@ -77,7 +77,7 @@ function AppShell() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col min-h-0">
+      <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Mobile header */}
         <header className="flex md:hidden shrink-0 items-center border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
           <h1 className="text-base font-semibold text-slate-800">{label}</h1>
