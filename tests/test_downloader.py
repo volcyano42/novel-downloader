@@ -41,7 +41,7 @@ class TestResolveChapter:
 
         assert result is ch
         fetcher.fetch_chapter_content.assert_called_once_with(
-            chapter=ch, engine=engine,
+            chapter=ch, engine=engine, skip_delay=False,
         )
 
     def test_returns_none_when_chapter_unavailable(self):
@@ -88,5 +88,5 @@ class TestFetchMeta:
 
         assert result is expected
         mock_fetcher.fetch_novel_info.assert_called_once_with(
-            url="https://example.com/novel", engine=engine,
+            url="https://example.com/novel", engine=engine, skip_delay=False,
         )

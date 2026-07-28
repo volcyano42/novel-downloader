@@ -533,15 +533,25 @@ class SQLiteStorage(BaseStorage):
     def delete_novel(self, novel_id: str) -> None:
         _log.info("delete_novel sqlite: id=%s", novel_id)
         novel_path = self._novel_path(novel_id)
+        # 先尝试 truncate WAL 以释放 Windows 文件锁
         try:
-            os.remove(novel_path)
-        except FileNotFoundError:
+            conn = sqlite3.connect(novel_path, timeout=5)
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.close()
+        except sqlite3.OperationalError:
             pass
-        for ext in ("-wal", "-shm"):
+        for suffix in ("", "-wal", "-shm"):
             try:
-                os.remove(novel_path + ext)
+                os.remove(novel_path + suffix)
             except FileNotFoundError:
                 pass
+            except PermissionError:
+                import time
+                time.sleep(0.05)
+                try:
+                    os.remove(novel_path + suffix)
+                except FileNotFoundError:
+                    pass
 
 
     def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
