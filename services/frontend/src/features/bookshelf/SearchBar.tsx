@@ -141,120 +141,130 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
 
       {/* URL 模式 */}
       {tab === "url" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            {loading
-              ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-indigo-500 animate-spin" strokeWidth={1.5} />
-              : <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />
-            }
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="输入小说链接或 ID…"
-              className={cn(
-                "w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30",
-                loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400",
-              )}
-            />
-            {!loading && query && (
-              <button onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
-          {urlModes.length > 0 && (
-            <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
-          )}
-          {urlEffectiveMode === "api" && urlProviders.length > 0 && (
-            <div className="flex items-center gap-1">
-              {urlProviders.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setProvider(provider === p ? undefined : p)}
-                  className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                    provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                  )}
-                >
-                  {p}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              {loading
+                ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-indigo-500 animate-spin" strokeWidth={1.5} />
+                : <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />
+              }
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="输入小说链接或 ID…"
+                className={cn(
+                  "w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30",
+                  loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400",
+                )}
+              />
+              {!loading && query && (
+                <button onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
                 </button>
-              ))}
+              )}
+            </div>
+            <button
+              onClick={trigger}
+              disabled={loading || !query.trim()}
+              className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50 shrink-0"
+            >
+              搜索
+            </button>
+          </div>
+          {(urlModes.length > 0 || (urlEffectiveMode === "api" && urlProviders.length > 0)) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {urlModes.length > 0 && (
+                <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
+              )}
+              {urlEffectiveMode === "api" && urlProviders.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {urlProviders.map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setProvider(provider === p ? undefined : p)}
+                      className={cn(
+                        "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                        provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          <button
-            onClick={trigger}
-            disabled={loading || !query.trim()}
-            className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50 shrink-0"
-          >
-            搜索
-          </button>
         </div>
       )}
 
       {/* 标题模式 */}
       {tab === "title" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            {loading
-              ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-indigo-500 animate-spin" strokeWidth={1.5} />
-              : <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />
-            }
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="搜索书名、作者…"
-              className={cn(
-                "w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30",
-                loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400",
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              {loading
+                ? <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-indigo-500 animate-spin" strokeWidth={1.5} />
+                : <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-slate-400" strokeWidth={1.5} />
+              }
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="搜索书名、作者…"
+                className={cn(
+                  "w-full rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl py-2.5 pl-10 pr-10 text-sm outline-none transition-shadow focus:ring-2 focus:ring-indigo-500/30",
+                  loading ? "text-slate-400" : "text-slate-800 placeholder:text-slate-400",
+                )}
+              />
+              {!loading && query && (
+                <button onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                </button>
               )}
-            />
-            {!loading && query && (
-              <button onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              </button>
+            </div>
+            <button
+              onClick={trigger}
+              disabled={loading || !query.trim()}
+              className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50 shrink-0"
+            >
+              搜索
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 平台选择 */}
+            <Select value={currentPlatform} onValueChange={v => { setPlatform(v); setProvider(undefined); }}>
+              <SelectTrigger className="w-[100px] shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allPlatforms.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {availableModes.length > 0 && (
+              <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
+            )}
+            {effectiveMode === "api" && platformProviders.length > 0 && (
+              <div className="flex items-center gap-1">
+                {platformProviders.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setProvider(provider === p ? undefined : p)}
+                    className={cn(
+                      "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                      provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
-          {/* 平台选择 */}
-          <Select value={currentPlatform} onValueChange={v => { setPlatform(v); setProvider(undefined); }}>
-            <SelectTrigger className="w-[100px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {allPlatforms.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {availableModes.length > 0 && (
-            <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
-          )}
-          {effectiveMode === "api" && platformProviders.length > 0 && (
-            <div className="flex items-center gap-1">
-              {platformProviders.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setProvider(provider === p ? undefined : p)}
-                  className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                    provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            onClick={trigger}
-            disabled={loading || !query.trim()}
-            className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50 shrink-0"
-          >
-            搜索
-          </button>
         </div>
       )}
     </div>
