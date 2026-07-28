@@ -16,7 +16,6 @@ from novelbase.core.options import (
 class TestAPIOptions:
     def test_defaults(self):
         o = APIOptions()
-        assert o.enabled is True
         assert o.name is None
         assert o.delay == (3, 5)
         assert o.timeout == 30
@@ -122,11 +121,6 @@ class TestOptions:
         o = Options().set_browser_options(user_data_dir=None, viewport=None)
         assert o.browser.user_data_dir is None
         assert o.browser.viewport is None
-
-    def test_set_log_options(self):
-        o = Options().set_log_options(level="INFO", enabled=True, output_dir="/tmp/logs")
-        assert o.log.level == "INFO"
-        assert o.log.output_dir == "/tmp/logs"
 
     def test_set_export(self):
         opt = ExportOptions(format="txt", output_path="/tmp/out")

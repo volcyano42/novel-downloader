@@ -1,6 +1,7 @@
 """Storage 层测试：SQLiteStorage CRUD + 级联删除"""
 from __future__ import annotations
 
+import gc
 import tempfile
 from pathlib import Path
 
@@ -14,10 +15,10 @@ from novelbase.models.novel import Novel, Chapter, Chapters
 # ── 辅助函数 ───────────────────────────────────────────────────
 
 def _make_storage() -> SQLiteStorage:
-    """创建临时文件 SQLite storage（每次 connect 共享同一个文件）"""
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    return SQLiteStorage(StorageOptions(database_url=f"sqlite:///{tmp.name}"))
+    """创建临时目录中的 SQLite storage（目录隔离，互不干扰）"""
+    tmp_dir = tempfile.mkdtemp(prefix="novel_test_")
+    db_path = Path(tmp_dir) / "novels.db"
+    return SQLiteStorage(StorageOptions(database_url=f"sqlite:///{db_path}"))
 
 
 def _make_novel(novel_id: str = "n1") -> Novel:
@@ -158,6 +159,7 @@ class TestDelete:
         store.save_chapter(novel, [
             _make_chapter("ch1", 1), _make_chapter("ch2", 2),
         ])
+        gc.collect()  # Windows: 强制释放 SQLite WAL 文件句柄
         store.delete_novel("n1")
         assert store.load_meta("n1") is None
         assert store.load_chapter("n1", "ch1") is None
