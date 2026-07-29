@@ -23,6 +23,24 @@ def _platform_from_url(url: str) -> str:
     return "fanqie"  # 默认
 
 
+def _resolve_url(raw: str) -> str:
+    """将 URL 或纯数字 ID 转为完整 URL。"""
+    raw = raw.strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    # 纯数字 ID → 通过 id_pattern 匹配平台，构建 URL
+    from novelbase.core.downloader import get_source_for_id
+    name = get_source_for_id(raw)
+    if name == "fanqie":
+        return f"https://fanqienovel.com/page/{raw}"
+    if name == "qidian":
+        return f"https://www.qidian.com/book/{raw}/"
+    if name == "qimao":
+        return f"https://www.qimao.com/shuku/{raw}/"
+    # 无法识别，原样返回让下游报错
+    return raw
+
+
 def _pick_executor(mode: str):
     return _browser_executor if mode == "browser" else _requests_executor
 
@@ -37,18 +55,10 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
 
-    if query.startswith("http://") or query.startswith("https://"):
+    if query.startswith("http://") or query.startswith("https://") or query.isdigit():
         try:
-            novel = await loop.run_in_executor(executor, resolve_meta, query, engine)
-            return [SearchResultData(title=novel.title, author=novel.author,
-                                     url=novel.url, description=novel.description,
-                                     extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
-        except Exception as e:
-            raise HTTPException(500, str(e))
-
-    if query.isdigit():
-        try:
-            novel = await loop.run_in_executor(executor, resolve_meta, query, engine)
+            url = _resolve_url(query)
+            novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
             return [SearchResultData(title=novel.title, author=novel.author,
                                      url=novel.url, description=novel.description,
                                      extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
@@ -69,12 +79,13 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 @router.post("/novel")
 async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
                      provider: str | None = Query(None)):
-    platform = _platform_from_url(body.url)
+    url = _resolve_url(body.url)
+    platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
-        novel = await loop.run_in_executor(executor, resolve_meta, body.url, engine)
+        novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -87,6 +98,7 @@ async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"
 @router.get("/novel/{novel_id}")
 async def get_remote_novel(novel_id: str, url: str = Query(...),
                            mode: str = Query("browser"), provider: str | None = Query(None)):
+    url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
@@ -104,6 +116,7 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 @router.get("/novel/{novel_id}/chapters")
 async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
                              mode: str = Query("browser"), provider: str | None = Query(None)):
+    url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
