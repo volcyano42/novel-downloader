@@ -29,12 +29,12 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from novelbase.models.novel import Chapter
-from novelbase.utils.registry import register_fetcher
+from novelbase.utils.registry import register_source
 
 def _get_fetcher_class(platform: str) -> type:
-    fetchers = register_fetcher()
-    cls = fetchers.get(platform)
-    if cls is None:
+    fetchers = register_source()
+    info = fetchers.get(platform)
+    if info is None:
         print(f"✗ 未知平台: {platform}")
         print(f"  可用: {list(fetchers.keys())}")
         sys.exit(1)
