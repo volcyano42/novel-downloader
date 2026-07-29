@@ -96,7 +96,7 @@ def _input_float(prompt: str, default: float) -> float:
 def _show_platforms() -> dict[str, str]:
     """Return {display_label: internal_name} of available platforms.
 
-    Dynamically discovers registered fetchers, falls back to hardcoded list.
+    Dynamically discovers registered sources, falls back to hardcoded list.
     """
     try:
         from novelbase import list_sources

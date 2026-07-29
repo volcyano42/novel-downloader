@@ -3,19 +3,19 @@
 
 用法:
     # 本地 HTML 文件解析
-    python scripts/debug_fetcher.py --platform qimao --action search --html qimao_html/search_result
-    python scripts/debug_fetcher.py --platform qimao --action novel --html qimao_html/novel_success
-    python scripts/debug_fetcher.py --platform qimao --action chapters --html qimao_html/chapter_list
-    python scripts/debug_fetcher.py --platform qimao --action content --html qimao_html/chapter_success --chapter-id "195958-499610"
+    python scripts/debug_source.py --platform qimao --action search --html qimao_html/search_result
+    python scripts/debug_source.py --platform qimao --action novel --html qimao_html/novel_success
+    python scripts/debug_source.py --platform qimao --action chapters --html qimao_html/chapter_list
+    python scripts/debug_source.py --platform qimao --action content --html qimao_html/chapter_success --chapter-id "195958-499610"
 
     # 实时请求
-    python scripts/debug_fetcher.py --platform qimao --action search --live "盖世神医"
-    python scripts/debug_fetcher.py --platform qimao --action novel --live 195958
-    python scripts/debug_fetcher.py --platform qimao --action chapters --live 195958
-    python scripts/debug_fetcher.py --platform qimao --action content --live "195958-499610"
+    python scripts/debug_source.py --platform qimao --action search --live "盖世神医"
+    python scripts/debug_source.py --platform qimao --action novel --live 195958
+    python scripts/debug_source.py --platform qimao --action chapters --live 195958
+    python scripts/debug_source.py --platform qimao --action content --live "195958-499610"
 
     # 指定引擎
-    python scripts/debug_fetcher.py --platform qimao --action novel --live 195958 --engine browser
+    python scripts/debug_source.py --platform qimao --action novel --live 195958 --engine browser
 """
 
 import argparse
@@ -29,16 +29,19 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from novelbase.models.novel import Chapter
-from novelbase.utils.registry import register_source
+from novelbase.utils.registry import register_source, resolve
 
-def _get_fetcher_class(platform: str) -> type:
-    fetchers = register_source()
-    info = fetchers.get(platform)
+
+def _get_source_info(platform: str) -> dict:
+    """获取平台 source 信息。"""
+    sources = register_source()
+    info = sources.get(platform)
     if info is None:
         print(f"✗ 未知平台: {platform}")
-        print(f"  可用: {list(fetchers.keys())}")
+        print(f"  可用: {list(sources.keys())}")
         sys.exit(1)
-    return cls
+    return info
+
 
 def _get_parser_class(platform: str):
     """尝试导入 {Platform}HTMLParser。"""
@@ -51,6 +54,7 @@ def _get_parser_class(platform: str):
         print(f"✗ 无法加载 {class_name}: {e}")
         sys.exit(1)
 
+
 def _get_standardize_id(platform: str):
     """尝试导入 standardize_id 函数。"""
     module_name = f"novelbase.sources.{platform}"
@@ -59,6 +63,7 @@ def _get_standardize_id(platform: str):
         return getattr(mod, "standardize_id", None)
     except ImportError:
         return None
+
 
 def cmd_search_html(parser_cls, html_path: str):
     html = Path(html_path).read_text(encoding="utf-8")
@@ -71,6 +76,7 @@ def cmd_search_html(parser_cls, html_path: str):
         print(f"      URL:  {r.url}")
         print(f"      简介: {desc}")
         print()
+
 
 def cmd_novel_html(parser_cls, html_path: str, url: str = ""):
     html = Path(html_path).read_text(encoding="utf-8")
@@ -88,6 +94,7 @@ def cmd_novel_html(parser_cls, html_path: str, url: str = ""):
         print(f"  封面: {novel.cover.image_format or '未知'} "
               f"({len(novel.cover.raw_data)} bytes)")
 
+
 def cmd_chapters_html(parser_cls, html_path: str, novel_id: str = ""):
     html = Path(html_path).read_text(encoding="utf-8")
     chapters = parser_cls.parse_chapter_list(html, novel_id=novel_id)
@@ -98,10 +105,10 @@ def cmd_chapters_html(parser_cls, html_path: str, novel_id: str = ""):
         print(f"           ID:  {ch.id}")
     if len(chapters) > 10:
         print(f"  ... (共 {len(chapters)} 章，仅显示前 10)")
-        # 显示最后 3 章
         print(f"\n  末尾:")
         for ch in list(chapters)[-3:]:
             print(f"  [{ch.order:4d}] {ch.title}")
+
 
 def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
                      chapter_title: str = "", chapter_url: str = ""):
@@ -117,7 +124,6 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
     print(f"\n章节正文:")
     print(f"  标题: {result.title}")
     print(f"  字数: {result.count}")
-    # is_complete removed
     content = result.content or ""
     if len(content) > 300:
         print(f"  正文预览 (前 300 字):")
@@ -125,6 +131,7 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
     else:
         print(f"  正文:")
         print(f"  {content}")
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 实时请求
@@ -140,10 +147,10 @@ def _build_engine(platform: str, engine_mode: str):
     options = build_options(cfg, site_cfg)
     return create_engine(options)
 
+
 def cmd_live_search(platform: str, engine_mode: str, query: str):
     engine = _build_engine(platform, engine_mode)
     try:
-        from main import load_main_config, load_site_config, build_options
         from novelbase.core.downloader import search
         results = search(platform, query, engine)
         if not results:
@@ -160,6 +167,7 @@ def cmd_live_search(platform: str, engine_mode: str, query: str):
     finally:
         engine.close()
 
+
 def cmd_live_novel(platform: str, engine_mode: str, novel_id: str):
     s_id = _get_standardize_id(platform)
     if s_id:
@@ -167,9 +175,8 @@ def cmd_live_novel(platform: str, engine_mode: str, novel_id: str):
 
     engine = _build_engine(platform, engine_mode)
     try:
-        fetcher_cls = _get_fetcher_class(platform)
-        fetcher = fetcher_cls()
-        novel = fetcher.fetch_novel_info(novel_id, engine)
+        fn = resolve(platform, engine_mode, "novel_info")
+        novel = fn(novel_id, engine)
         print(f"\n小说信息:")
         print(f"  书名: {novel.title}")
         print(f"  作者: {novel.author}")
@@ -185,6 +192,7 @@ def cmd_live_novel(platform: str, engine_mode: str, novel_id: str):
     finally:
         engine.close()
 
+
 def cmd_live_chapters(platform: str, engine_mode: str, novel_id: str):
     s_id = _get_standardize_id(platform)
     if s_id:
@@ -192,9 +200,8 @@ def cmd_live_chapters(platform: str, engine_mode: str, novel_id: str):
 
     engine = _build_engine(platform, engine_mode)
     try:
-        fetcher_cls = _get_fetcher_class(platform)
-        fetcher = fetcher_cls()
-        chapters = fetcher.fetch_chapter_list(novel_id, engine)
+        fn = resolve(platform, engine_mode, "chapter_list")
+        chapters = fn(novel_id, engine)
         print(f"\n章节目录: {len(chapters)} 章\n")
         for ch in list(chapters)[:10]:
             print(f"  [{ch.order:4d}] {ch.title}")
@@ -207,6 +214,7 @@ def cmd_live_chapters(platform: str, engine_mode: str, novel_id: str):
     finally:
         engine.close()
 
+
 def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
     s_id = _get_standardize_id(platform)
     if s_id:
@@ -214,8 +222,7 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
 
     engine = _build_engine(platform, engine_mode)
     try:
-        fetcher_cls = _get_fetcher_class(platform)
-        fetcher = fetcher_cls()
+        fn = resolve(platform, engine_mode, "chapter_content")
 
         # 构造一个临时 Chapter 用于传递
         if "-" in chapter_id:
@@ -226,12 +233,11 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
             chapter_url = chapter_id
 
         ch = Chapter(id=chapter_id, url=chapter_url, novel_id="", title="", order=1)
-        result = fetcher.fetch_chapter_content(ch, engine)
+        result = fn(ch, engine)
         ch = result[0]
         print(f"\n章节正文:")
         print(f"  标题: {ch.title}")
         print(f"  字数: {ch.count}")
-        # is_complete removed
         content = ch.content or ""
         if len(content) > 300:
             print(f"  正文预览 (前 300 字):")
@@ -241,6 +247,7 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
             print(f"  {content}")
     finally:
         engine.close()
+
 
 # ═══════════════════════════════════════════════════════════════════
 
@@ -291,6 +298,7 @@ def main():
 
     else:
         print("请指定 --html 或 --live")
+
 
 if __name__ == "__main__":
     main()
