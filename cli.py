@@ -219,17 +219,17 @@ def cmd_dev(args):
 
 def _scaffold_source(name: str, modes: list[str]):
     """生成新书源脚手架。"""
-    fetcher_dir = Path(__file__).parent / "novelbase" / "fetchers" / name
-    fetcher_dir.mkdir(parents=True, exist_ok=True)
+    source_dir = Path(__file__).parent / "novelbase" / "sources" / name
+    source_dir.mkdir(parents=True, exist_ok=True)
 
-    (fetcher_dir / "__init__.py").write_text(
+    (source_dir / "__init__.py").write_text(
         f'NAME = "{name}"\nBASE_URLS = ["example.com"]\n', encoding="utf-8")
-    (fetcher_dir / "_common.py").write_text(
+    (source_dir / "_common.py").write_text(
         '"""共享解析函数。"""\n', encoding="utf-8")
 
     for mode in modes:
         mode = mode.strip()
-        mode_dir = fetcher_dir / mode
+        mode_dir = source_dir / mode
         mode_dir.mkdir(exist_ok=True)
         (mode_dir / "__init__.py").touch()
 
@@ -241,7 +241,7 @@ def _scaffold_source(name: str, modes: list[str]):
                 f'    raise FeatureNotSupportedError("TODO")\n',
                 encoding="utf-8")
 
-    print(f"书源脚手架已创建: novelbase/fetchers/{name}/")
+    print(f"书源脚手架已创建: novelbase/sources/{name}/")
     for mode in modes:
         print(f"  {mode}/  search.py, novel_info.py, chapter_list.py, chapter_content.py")
 
