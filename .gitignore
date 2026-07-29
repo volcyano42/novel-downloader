@@ -13,10 +13,7 @@ build/
 venv/
 env/
 
-app_data/config/
-app_data/storage/
-app_data/exports/
-app_data/browser/
+app_data/
 
 # 测试缓存
 .pytest_cache/
