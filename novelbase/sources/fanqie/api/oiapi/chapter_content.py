@@ -3,7 +3,7 @@ from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
 from ..._common import standardize_id
 
 
-def fetch_chapter(chapter, engine, **kwargs):
+def chapter_content(chapter, engine, **kwargs):
     """解析并填充content, count"""
     novel_id = standardize_id(chapter.novel_id)
     post_data = {
@@ -20,7 +20,7 @@ def fetch_chapter(chapter, engine, **kwargs):
         message = response.get('message', "")
         if message == "请检测章节选择是否正确":
             raise ChapterNotFoundError(message=f"Invalid chapter order: {chapter.order}")
-        elif message == "实例化失败: Trying to access array offset on value of type bool line 197in api.php":
+        elif message == "实例化失�? Trying to access array offset on value of type bool line 197in api.php":
             raise AntiCrawlError("OIAPI request frequency too high, PHP backend rejected")
         else:
             raise ChapterNotFoundError(message=f"OIAPI unexpected response: {message}")

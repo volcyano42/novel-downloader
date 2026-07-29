@@ -5,7 +5,7 @@ from .._common import parse_chapter_list, standardize_id
 from novelbase.models.novel import Chapter
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
+def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
     novel_id = standardize_id(url)
     url = f"https://www.qimao.com/shuku/{novel_id}/"
     # Browser: click catalog tab to trigger chapter loading

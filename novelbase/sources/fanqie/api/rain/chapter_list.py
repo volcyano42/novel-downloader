@@ -5,7 +5,7 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> list:
+def chapter_list(url: str, engine, **kwargs) -> list:
     novel_id = standardize_id(url)
     url = _api_url(engine, type=3, bookid=novel_id)
     json_data = engine.fetch_json(url, **kwargs)

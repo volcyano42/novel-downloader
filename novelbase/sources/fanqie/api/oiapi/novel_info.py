@@ -6,7 +6,7 @@ from novelbase.models.novel import Novel, Illustration
 from ..._common import standardize_id
 
 
-def fetch_novel(url: str, engine, **kwargs):
+def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     post_data = {
         "id": novel_id,

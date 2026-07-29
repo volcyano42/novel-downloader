@@ -5,7 +5,7 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from .._common import standardize_id, parse_chapter_content
 
 
-def fetch_chapter(chapter, engine, **kwargs):
+def chapter_content(chapter, engine, **kwargs):
     url = f"https://fanqienovel.com/reader/{standardize_id(chapter)}"
     html = engine.fetch_text(url=url, **kwargs)
 

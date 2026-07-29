@@ -8,7 +8,7 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
+def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
     novel_id = standardize_id(url)
     url = f"https://www.qimao.com/shuku/{novel_id}/"
     html = engine.fetch_text(url=url, **kwargs)

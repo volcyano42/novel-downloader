@@ -7,7 +7,7 @@ import requests
 from box import Box
 
 
-def fetch_novel(url: str, engine, **kwargs):
+def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     api_url = _api_url(engine, type=2, id=novel_id)
     json_data = engine.fetch_json(api_url, **kwargs)

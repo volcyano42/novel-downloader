@@ -4,7 +4,7 @@ from novelbase.models.novel import Chapter, Chapters
 from ..._common import standardize_id
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> list:
+def chapter_list(url: str, engine, **kwargs) -> list:
     novel_id = standardize_id(url)
     post_data = {
         "id": novel_id,

@@ -10,7 +10,7 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def fetch_novel(url: str, engine, **kwargs):
+def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     url = _api_url(engine, type=2, bookid=novel_id)
     json_data = engine.fetch_json(url, **kwargs)

@@ -4,7 +4,7 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def fetch_chapter(chapter, engine, **kwargs):
+def chapter_content(chapter, engine, **kwargs):
     """解析并填充content, count"""
     item_id = standardize_id(chapter)
     url = _api_url(engine, type=4, itemid=item_id)

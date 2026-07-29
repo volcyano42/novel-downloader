@@ -5,7 +5,7 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 
 
-def fetch_chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
+def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
     novel_id = standardize_id(url)
     api_url = _api_url(engine, type=3, id=novel_id)
     json_data = engine.fetch_json(api_url, **kwargs)
