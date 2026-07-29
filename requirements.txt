@@ -4,7 +4,6 @@ fastapi
 Pillow
 pillow-heif
 PyYAML
-qiniu
 Requests
 rich
 urllib3
