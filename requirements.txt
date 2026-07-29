@@ -3,6 +3,7 @@ drissionpage
 fastapi
 Pillow
 pillow-heif
+python-box
 PyYAML
 Requests
 rich
