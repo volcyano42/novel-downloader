@@ -169,15 +169,18 @@ def parse_order_string(s: str, total: int) -> list[int]:
 
 
 def _build_url_from_id(novel_id: str) -> str:
-    """novel_id -> platform URL."""
-    from novelbase.fetchers.fanqie import FanqieFetcher
-    from novelbase.fetchers.qidian import QidianFetcher
-    from novelbase.fetchers.qimao import QimaoFetcher
-    for fetcher_cls in (FanqieFetcher, QidianFetcher, QimaoFetcher):
-        fetcher = fetcher_cls()
-        url = fetcher.resolve_url_from_id(novel_id)
-        if url:
-            return url
+    """novel_id -> platform URL（通过 ID_PATTERN 匹配平台）。"""
+    from novelbase.utils.registry import register_source
+    sources = register_source()
+    for name, info in sources.items():
+        pattern = info.get("id_pattern")
+        if pattern and pattern.match(novel_id):
+            if name == "fanqie":
+                return f"https://fanqienovel.com/page/{novel_id}"
+            elif name == "qidian":
+                return f"https://www.qidian.com/book/{novel_id}/"
+            elif name == "qimao":
+                return f"https://www.qimao.com/shuku/{novel_id}/"
     return ""
 
 

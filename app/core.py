@@ -17,10 +17,25 @@ from app.ui import (
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, export,
     create_engine, search, login,
+    StorageOptions,
 )
+from novelbase.core.storage import create_storage
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("app.core")
+
+_storage = None
+
+
+def _get_storage():
+    """获取或创建全局存储实例。"""
+    global _storage
+    if _storage is None:
+        _storage = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
+    return _storage
 
 
 def _platform_from_url(url: str) -> str:
@@ -259,10 +274,12 @@ def _do_download_inner(
             if not fmt_cfg:
                 continue
             from novelbase.utils.registry import register_export_options
-            opts = register_export_options(fmt, fmt_cfg)
-            if opts is None:
+            opt_cls_map = register_export_options()
+            opt_cls = opt_cls_map.get(fmt)
+            if opt_cls is None:
                 print(f"  {fmt}: 跳过（无配置）")
                 continue
+            opts = opt_cls(**fmt_cfg)
             try:
                 result = export(novel, opts, fmt)
                 print(f"  {fmt}: {result}")

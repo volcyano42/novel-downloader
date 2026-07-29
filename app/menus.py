@@ -301,7 +301,13 @@ def do_export_menu(group: str, format_configs: dict):
     fmt = fmt_names[fidx]
 
     from novelbase.utils.registry import register_export_options
-    opts = register_export_options(fmt, format_configs.get(fmt, {}))
+    opt_cls_map = register_export_options()
+    opt_cls = opt_cls_map.get(fmt)
+    if opt_cls is None:
+        print("无法获取导出选项")
+        return
+    fmt_cfg = format_configs.get(fmt, {})
+    opts = opt_cls(**fmt_cfg)
     if opts is None:
         print("无法获取导出选项")
         return
