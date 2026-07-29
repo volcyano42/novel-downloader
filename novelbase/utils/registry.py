@@ -190,6 +190,16 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
 # 能力发现 + 动态分发
 # ═══════════════════════════════════════════════════════════════════
 
+# 逻辑功能名 → 文件名 stem（也是实际函数名）
+FUNC_FILE_MAP = {
+    "search": "search",
+    "novel_info": "fetch_novel",
+    "chapter_list": "fetch_chapter_list",
+    "chapter_content": "fetch_chapter",
+    "login": "login",
+}
+
+
 def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     """扫描 fetchers/{name}/ 目录，返回可用能力矩阵。
 
@@ -206,15 +216,6 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     pkg_dir = Path(__file__).parent.parent / "fetchers" / name
     if not pkg_dir.is_dir():
         return {}
-
-    # 功能名 → 文件名 stem
-    FUNC_FILE_MAP = {
-        "search": "search",
-        "novel_info": "novel_info",
-        "chapter_list": "chapter_list",
-        "chapter_content": "chapter_content",
-        "login": "login",
-    }
 
     result: dict[str, list[str] | dict[str, list[str]]] = {}
     for mode_dir in sorted(pkg_dir.iterdir()):
@@ -266,15 +267,17 @@ def resolve(name: str, mode: str, function: str, provider: str | None = None):
             provider = providers[0]  # 默认第一个
         elif provider not in providers:
             raise ValueError(f"provider {provider!r} not available for {name}/{mode}. Available: {providers}")
-        module_path = f"novelbase.fetchers.{name}.{mode}.{provider}.{function}"
+        file_stem = FUNC_FILE_MAP.get(function, function)
+        module_path = f"novelbase.fetchers.{name}.{mode}.{provider}.{file_stem}"
     else:
         if provider is not None:
             raise ValueError(f"provider specified but {name}/{mode} has no sub-providers")
-        module_path = f"novelbase.fetchers.{name}.{mode}.{function}"
+        file_stem = FUNC_FILE_MAP.get(function, function)
+        module_path = f"novelbase.fetchers.{name}.{mode}.{file_stem}"
 
     try:
         module = import_module(module_path)
-        return getattr(module, function)
+        return getattr(module, file_stem)
     except (ImportError, AttributeError) as e:
         raise ImportError(f"Failed to resolve {module_path}: {e}") from e
 
