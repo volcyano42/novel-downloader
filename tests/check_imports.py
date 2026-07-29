@@ -23,7 +23,6 @@ from novelbase import (
     Chapter,
     Chapters,
     NovelDownloaderError,
-    get_logger,
 )
 import novelbase
 
