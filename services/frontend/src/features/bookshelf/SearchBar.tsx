@@ -94,6 +94,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
     if (query.includes("fanqienovel.com") || query.includes("changdunovel.com")) return "fanqie";
     if (query.includes("qidian.com")) return "qidian";
     if (query.includes("qimao.com")) return "qimao";
+    // 纯数字 ID → 按位数推断平台（与后端 id_pattern 一致）
+    const trimmed = query.trim();
+    if (/^\d+$/.test(trimmed)) {
+      if (trimmed.length === 19) return "fanqie";
+      if (trimmed.length === 10) return "qidian";
+      return "qimao";
+    }
     return null;
   })();
   const urlProviders = urlPlatform ? (apiProviders[urlPlatform] ?? []) : [];
