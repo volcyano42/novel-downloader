@@ -44,3 +44,4 @@ class ExportTaskStatus(BaseModel):
     progress: float = 0.0
     formats: list[str] | None = None
     path: str | None = None
+    error: str | None = None

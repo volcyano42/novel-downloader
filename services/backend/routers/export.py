@@ -117,6 +117,7 @@ async def get_task_status(task_id: str):
         task_id=task_id,
         status=task["status"],
         progress=task.get("progress", 0.0),
+        error=task.get("error"),
     )
 
 @router.get("/download/{task_id}")
