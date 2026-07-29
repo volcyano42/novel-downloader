@@ -126,7 +126,7 @@ def _hardcoded_export_options() -> dict[str, type[ExportOptions]]:
     return {"txt": TXTExportOptions, "epub": EPUBExportOptions, "img": IMGExportOptions}
 
 
-def _scan_exporter_functions() -> dict[str, Callable]:
+def _scan_exporters() -> dict[str, Callable]:
     """扫描 exporters/ 目录，发现 export() 函数。"""
     result: dict[str, Callable] = {}
     pkg_dir = Path(__file__).parent.parent / "exporters"
@@ -150,42 +150,11 @@ def register_exporter() -> dict[str, Callable]:
     with _lock:
         if _cache_exporter is not None:
             return _cache_exporter
-        result = _scan_exporter_functions()
+        result = _scan_exporters()
         if not result:
             result = _hardcoded_exporters()
         _cache_exporter = result  # type: ignore[assignment]
     return _cache_exporter
-
-
-def _scan_plugins(subpackage: str, *, capitalize: bool) -> dict[str, Any]:
-    """扫描子包目录，发现命名符合约定的插件类。
-
-    Args:
-        subpackage: 相对子包名，如 ``"exporters"``。
-        capitalize: True 则类名用首字母大写，False 则全大写。
-    """
-    result = {}
-    pkg_dir = Path(__file__).parent.parent / subpackage
-    if not pkg_dir.exists():
-        return result
-
-    for entry in sorted(os.listdir(pkg_dir)):
-        entry_path = pkg_dir / entry
-        if entry.endswith(".py") and entry not in ("__init__.py", "base.py"):
-            module_name = entry[:-3]
-        elif entry_path.is_dir() and (entry_path / "__init__.py").exists():
-            module_name = entry
-        else:
-            continue
-        try:
-            module = import_module(f"..{subpackage}.{module_name}", __package__)
-            stem = module_name.capitalize() if capitalize else module_name.upper()
-            cls_name = stem + subpackage.rstrip("s").capitalize()
-            result[module_name] = getattr(module, cls_name)
-        except (ImportError, AttributeError) as e:
-            print(f"load {subpackage} failed {module_name} reason: {e}")
-
-    return result
 
 
 def register_export_options() -> dict[str, type[ExportOptions]]:

@@ -594,18 +594,3 @@ def export(
     return file_path
 
 
-# 向后兼容 wrapper
-class EPUBExporter:
-    """Deprecated: use export() instead."""
-
-    def __init__(self, *, options=None):
-        import warnings
-        warnings.warn(
-            "EPUBExporter is deprecated, use export()",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.options = options
-
-    def export(self, chapters, novel, **kw):
-        return export(chapters, novel, self.options, **kw)

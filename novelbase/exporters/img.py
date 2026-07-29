@@ -140,18 +140,3 @@ def export(
     return output_base
 
 
-# 向后兼容 wrapper
-class IMGExporter:
-    """Deprecated: use export() instead."""
-
-    def __init__(self, *, options=None):
-        import warnings
-        warnings.warn(
-            "IMGExporter is deprecated, use export()",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.options = options
-
-    def export(self, chapters, novel, **kw):
-        return export(chapters, novel, self.options, **kw)
