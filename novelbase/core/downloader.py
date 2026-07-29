@@ -1,9 +1,8 @@
-from typing import Sequence, TypeVar
+from typing import Sequence, TypeVar, Callable
 
 from .engine import BrowserEngine
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
-from ..exporters.base import BASEExporter
 from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
 from ..utils.logger import get_logger
@@ -54,8 +53,8 @@ def list_sources() -> list[str]:
     return sorted(register_source().keys())
 
 
-def get_exporters() -> dict[str, type[BASEExporter]]:
-    """返回所有已注册的 Exporter 类（{format: ExporterCls}）。"""
+def get_exporters() -> dict[str, Callable]:
+    """返回所有已注册的导出函数（{format: export_func}）。"""
     from ..utils.registry import register_exporter
     return register_exporter()
 
@@ -220,9 +219,8 @@ def export(novel: Novel, options: ExportOptions | None = None, format: str | Non
     if not fmt:
         return
 
-    exporter_cls = register_exporter().get(fmt)
-    if exporter_cls is None:
+    export_func = register_exporter().get(fmt)
+    if export_func is None:
         return
 
-    exporter = exporter_cls(options=opt)
-    exporter.export(novel.chapters, novel, **kwargs)
+    return export_func(novel.chapters, novel, options=opt, **kwargs)

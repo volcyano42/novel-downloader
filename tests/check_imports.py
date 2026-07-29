@@ -5,8 +5,8 @@ import sys
 sys.path.insert(0, ".")
 
 from novelbase import (
-    fetch_meta,
-    fetch_chapter_list,
+    resolve_meta,
+    resolve_chapter_list,
     resolve_chapter,
     export as do_export,
     Options,

@@ -3,14 +3,13 @@ import re
 import threading
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..core.options import ExportOptions
-from ..exporters.base import BASEExporter
 
 _lock = threading.Lock()
 _cache_source: dict[str, dict] | None = None
-_cache_exporter: dict[str, type[BASEExporter]] | None = None
+_cache_exporter: dict[str, Callable] | None = None
 _cache_export_opts: dict[str, type[ExportOptions]] | None = None
 
 
@@ -111,12 +110,12 @@ def register_source() -> dict[str, dict]:
     return _cache_source
 
 
-def _hardcoded_exporters() -> dict[str, type[BASEExporter]]:
-    """exe 环境下 _scan_plugins 可能找不到模块，硬编码兜底。"""
-    from ..exporters.txt import TXTExporter
-    from ..exporters.epub import EPUBExporter
-    from ..exporters.img import IMGExporter
-    return {"txt": TXTExporter, "epub": EPUBExporter, "img": IMGExporter}
+def _hardcoded_exporters() -> dict[str, Callable]:
+    """exe 环境下扫描可能找不到模块，硬编码兜底。"""
+    from ..exporters.txt import export as _txt_export
+    from ..exporters.epub import export as _epub_export
+    from ..exporters.img import export as _img_export
+    return {"txt": _txt_export, "epub": _epub_export, "img": _img_export}
 
 
 def _hardcoded_export_options() -> dict[str, type[ExportOptions]]:
@@ -127,14 +126,31 @@ def _hardcoded_export_options() -> dict[str, type[ExportOptions]]:
     return {"txt": TXTExportOptions, "epub": EPUBExportOptions, "img": IMGExportOptions}
 
 
-def register_exporter() -> dict[str, type[BASEExporter]]:
+def _scan_exporter_functions() -> dict[str, Callable]:
+    """扫描 exporters/ 目录，发现 export() 函数。"""
+    result: dict[str, Callable] = {}
+    pkg_dir = Path(__file__).parent.parent / "exporters"
+    if not pkg_dir.exists():
+        return result
+    for entry in sorted(os.listdir(pkg_dir)):
+        if entry.endswith(".py") and entry not in ("__init__.py", "base.py"):
+            module_name = entry[:-3]
+            try:
+                module = import_module(f"..exporters.{module_name}", __package__)
+                result[module_name] = module.export
+            except (ImportError, AttributeError):
+                pass
+    return result
+
+
+def register_exporter() -> dict[str, Callable]:
     global _cache_exporter
     if _cache_exporter is not None:
         return _cache_exporter
     with _lock:
         if _cache_exporter is not None:
             return _cache_exporter
-        result = _scan_plugins("exporters", capitalize=False)
+        result = _scan_exporter_functions()
         if not result:
             result = _hardcoded_exporters()
         _cache_exporter = result  # type: ignore[assignment]

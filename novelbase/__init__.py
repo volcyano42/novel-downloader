@@ -33,7 +33,6 @@ from .core.options import (
     ExportOptions,
 )
 from .core.storage import LocalStorage
-from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .utils.registry import capabilities, resolve, list_sources as _list_registry_sources
 from .utils.hooks import SourceHooks
@@ -85,7 +84,6 @@ __all__ = [
     "Chapters",
     "Illustration",
     "SearchResult",
-    "BASEExporter",
     # Registry
     "capabilities",
     "resolve",
