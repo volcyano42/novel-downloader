@@ -128,14 +128,15 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML
 
 ## 插件
 
-此项目预留了两个接口：fetchers(抓取器)、exporters(导出器)，它们将会被 `registry.py`发现并自动注册，让您轻松满足您的需求。
+此项目预留了两个接口：sources(数据源)、exporters(导出器)，它们将会被 `registry.py`发现并自动注册，让您轻松满足您的需求。
 
-### 新解析器
+### 新数据源
 
-1. 在 `novelbase/fetchers/` 下新建文件 `{name}.py`
-2. 继承 `BaseFetcher`，实现抽象方法
-3. 必须有`{Name}Fetcher`
-4. 在 `app_data/config/sites/` 下添加对应的 `{name}.yaml`,模板可以复制其他的
+1. 在 `novelbase/sources/` 下新建目录 `{name}/`
+2. 在 `{name}/__init__.py` 中定义 `NAME`、`HOSTS`、`ID_PATTERN` 常量
+3. 按引擎模式创建子目录：`browser/`、`requests/`、`api/`
+4. 在每个模式目录下实现函数：`search.py`、`novel_info.py`、`chapter_list.py`、`chapter_content.py`
+5. 在 `app_data/config/sites/` 下添加对应的 `{name}.yaml`,模板可以复制其他的
 
 ### 新导出器
 

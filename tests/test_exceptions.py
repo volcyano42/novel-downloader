@@ -8,7 +8,7 @@ from novelbase.core.exceptions import (
     NovelNotFoundError,
     ChapterNotFoundError,
     ParseError,
-    FetcherNotFoundError,
+    SourceNotFoundError,
     FeatureNotSupportedError,
     StorageError,
     AntiCrawlError,
@@ -82,13 +82,13 @@ class TestParseError:
         assert e.detail == "HTML 结构异常"
 
 
-class TestFetcherNotFoundError:
+class TestSourceNotFoundError:
     def test_default(self):
-        e = FetcherNotFoundError()
-        assert str(e) == "Fetcher not found"
+        e = SourceNotFoundError()
+        assert str(e) == "Source not found"
 
     def test_custom(self):
-        e = FetcherNotFoundError("未找到解析器")
+        e = SourceNotFoundError("未找到解析器")
         assert "未找到解析器" in str(e)
 
 

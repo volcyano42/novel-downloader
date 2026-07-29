@@ -4,7 +4,7 @@
 - 网络层: ``NetworkError``
 - 认证层: ``AuthenticationError``
 - 资源层: ``NovelNotFoundError``, ``ChapterNotFoundError``
-- 解析层: ``ParseError``, ``FetcherNotFoundError``
+- 解析层: ``ParseError``, ``SourceNotFoundError``
 - 功能层: ``FeatureNotSupportedError``
 - 存储层: ``StorageError``
 - 反爬层: ``AntiCrawlError``
@@ -63,10 +63,10 @@ class ParseError(NovelDownloaderError):
         super().__init__(msg)
 
 
-class FetcherNotFoundError(NovelDownloaderError):
-    """未找到抓取器。"""
+class SourceNotFoundError(NovelDownloaderError):
+    """未找到数据源。"""
 
-    def __init__(self, message: str = "Fetcher not found"):
+    def __init__(self, message: str = "Source not found"):
         super().__init__(message)
 
 

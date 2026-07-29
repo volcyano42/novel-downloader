@@ -23,7 +23,7 @@ from app.config import (
     load_main_config, load_site_config, load_format_configs, load_groups,
     build_options, add_novel_to_group, ensure_novel_in_group,
 )
-from novelbase import create_engine, fetch_meta, get_fetcher_for_url
+from novelbase import create_engine, resolve_meta, get_source
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("novelbase.cli")
@@ -183,7 +183,7 @@ def cmd_info(args):
     engine, _ = _get_engine(_resolve_platform(args), args.mode)
     try:
         print(f"正在获取: {args.url}")
-        novel = fetch_meta(args.url, engine)
+        novel = resolve_meta(args.url, engine)
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
@@ -203,23 +203,14 @@ def cmd_dev(args):
     """开发工具。"""
     if args.dev_command == "list-sources":
         from novelbase.utils.registry import list_sources as _ls_py
-        from novelbase.utils.json_loader import list_json_sources as _ls_json
 
         if args.json:
-            sources = _ls_json()
-            print(f"JSON 规则源 ({len(sources)}):")
-        else:
-            py_sources = _ls_py()
-            json_sources = _ls_json()
-            print(f"Python 源 ({len(py_sources)}):")
-            for s in py_sources:
-                print(f"  - {s}")
-            print(f"\nJSON 规则源 ({len(json_sources)}):")
-            for s in json_sources:
-                print(f"  - {s}")
+            print("JSON 规则源已移除")
             return
 
-        for s in sources:
+        py_sources = _ls_py()
+        print(f"Python 源 ({len(py_sources)}):")
+        for s in py_sources:
             print(f"  - {s}")
 
     elif args.dev_command == "new-source":
@@ -228,21 +219,21 @@ def cmd_dev(args):
 
 def _scaffold_source(name: str, modes: list[str]):
     """生成新书源脚手架。"""
-    fetcher_dir = Path(__file__).parent / "novelbase" / "fetchers" / name
-    fetcher_dir.mkdir(parents=True, exist_ok=True)
+    source_dir = Path(__file__).parent / "novelbase" / "sources" / name
+    source_dir.mkdir(parents=True, exist_ok=True)
 
-    (fetcher_dir / "__init__.py").write_text(
+    (source_dir / "__init__.py").write_text(
         f'NAME = "{name}"\nBASE_URLS = ["example.com"]\n', encoding="utf-8")
-    (fetcher_dir / "_common.py").write_text(
+    (source_dir / "_common.py").write_text(
         '"""共享解析函数。"""\n', encoding="utf-8")
 
     for mode in modes:
         mode = mode.strip()
-        mode_dir = fetcher_dir / mode
+        mode_dir = source_dir / mode
         mode_dir.mkdir(exist_ok=True)
         (mode_dir / "__init__.py").touch()
 
-        for fn in ("search", "fetch_novel", "fetch_chapter_list", "fetch_chapter"):
+        for fn in ("search", "novel_info", "chapter_list", "chapter_content"):
             (mode_dir / f"{fn}.py").write_text(
                 f'"""TODO: implement {fn} for {name}/{mode}."""\n'
                 f'from novelbase.core.exceptions import FeatureNotSupportedError\n\n'
@@ -250,9 +241,9 @@ def _scaffold_source(name: str, modes: list[str]):
                 f'    raise FeatureNotSupportedError("TODO")\n',
                 encoding="utf-8")
 
-    print(f"书源脚手架已创建: novelbase/fetchers/{name}/")
+    print(f"书源脚手架已创建: novelbase/sources/{name}/")
     for mode in modes:
-        print(f"  {mode}/  search.py, fetch_novel.py, fetch_chapter_list.py, fetch_chapter.py")
+        print(f"  {mode}/  search.py, novel_info.py, chapter_list.py, chapter_content.py")
 
 
 def main():

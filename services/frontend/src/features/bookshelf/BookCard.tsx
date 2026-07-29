@@ -3,6 +3,7 @@ import { BookOpen, FileDown, MoreHorizontal, Trash2, FolderPlus, Folder } from "
 import { cn } from "@/lib/utils";
 import { useExport, useGroups, useSaveGroups } from "@/hooks/index";
 import { ExportDialog } from "@/features/download/ExportDialog";
+import { useToast } from "@/components/Toast";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -30,6 +31,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
   const [inlineNewGroup, setInlineNewGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const exportMut = useExport();
+  const toast = useToast();
   const { data: groupsData = {} } = useGroups();
   const saveGroupsMut = useSaveGroups();
 
@@ -78,16 +80,16 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
       if (formats.includes("img")) body.img = { enabled: true };
       const task = await exportMut.mutateAsync(body);
       if (task.status === "completed" && task.task_id) {
-        const a = document.createElement("a");
-        a.href = `/api/v2/export/download/${task.task_id}`;
-        a.download = "";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        toast("导出成功，正在下载…", "success");
+        window.open(`/api/v2/export/download/${task.task_id}`, "_self");
+      } else {
+        toast(`导出失败：${task.error || "未知错误"}`, "error");
       }
-    } catch { console.warn("export failed", novelId); }
+    } catch (e: unknown) {
+      toast(`导出失败：${(e as Error).message || "网络错误"}`, "error");
+    }
     finally { setExporting(false); setShowExport(false); }
-  }, [novelId, exporting, exportMut]);
+  }, [novelId, exporting, exportMut, toast]);
 
   const handleDelete = useCallback(() => {
     if (!novelId) return;

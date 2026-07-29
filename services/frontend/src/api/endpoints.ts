@@ -74,7 +74,7 @@ export type GroupsConfig = Record<string, Record<string, object>>;
 
 export interface ExportTaskResult {
   task_id: string; status: string; progress: number;
-  formats?: string[]; path?: string | null;
+  formats?: string[]; path?: string | null; error?: string | null;
 }
 
 export interface EngineInfo {

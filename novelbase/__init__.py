@@ -1,11 +1,10 @@
 from .core.downloader import (
-    fetch_meta,
-    fetch_chapter_list,
+    resolve_meta,
+    resolve_chapter_list,
     resolve_chapter,
     export,
-    get_fetcher_for_url,
-    get_fetcher_for_id,
-    get_fetchers,
+    get_source,
+    get_source_for_id,
     get_exporters,
     get_exporter_options,
     split_into_groups,
@@ -20,7 +19,7 @@ from .core.exceptions import (
     NovelNotFoundError,
     ChapterNotFoundError,
     ParseError,
-    FetcherNotFoundError,
+    SourceNotFoundError,
     FeatureNotSupportedError,
     StorageError,
     AntiCrawlError,
@@ -34,28 +33,33 @@ from .core.options import (
     ExportOptions,
 )
 from .core.storage import LocalStorage
-from .exporters.base import BASEExporter
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
-from .utils.registry import capabilities, resolve, list_sources
+from .utils.registry import capabilities, resolve, list_sources as _list_registry_sources
 from .utils.hooks import SourceHooks
 
 __version__ = "3.0.0"
 
+def list_sources():
+    """列出所有可用 source 名称。"""
+    from .core.downloader import list_sources as _ls
+    return _ls()
+
 
 __all__ = [
-    "fetch_meta",
-    "fetch_chapter_list",
+    "resolve_meta",
+    "resolve_chapter_list",
     "resolve_chapter",
     "export",
     "create_engine",
-    "get_fetcher_for_url",
-    "get_fetcher_for_id",
-    "get_fetchers",
+    "get_source",
+    "get_source_for_id",
     "get_exporters",
     "get_exporter_options",
     "split_into_groups",
     "search",
     "login",
+    "list_sources",
+    # 选项
     "Options",
     "APIOptions",
     "BrowserOptions",
@@ -63,24 +67,25 @@ __all__ = [
     "StorageOptions",
     "ExportOptions",
     "LocalStorage",
+    # 异常
     "NovelDownloaderError",
     "NetworkError",
     "AuthenticationError",
     "NovelNotFoundError",
     "ChapterNotFoundError",
     "ParseError",
-    "FetcherNotFoundError",
+    "SourceNotFoundError",
     "FeatureNotSupportedError",
     "StorageError",
     "AntiCrawlError",
+    # 模型
     "Novel",
     "Chapter",
     "Chapters",
     "Illustration",
     "SearchResult",
-    "BASEExporter",
+    # Registry
     "capabilities",
     "resolve",
-    "list_sources",
     "SourceHooks",
 ]

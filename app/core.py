@@ -15,12 +15,27 @@ from app.ui import (
     _display_width, _pad_right, _pad_center,
 )
 from novelbase import (
-    fetch_meta, fetch_chapter_list, resolve_chapter, export,
+    resolve_meta, resolve_chapter_list, resolve_chapter, export,
     create_engine, search, login,
+    StorageOptions,
 )
+from novelbase.core.storage import create_storage
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("app.core")
+
+_storage = None
+
+
+def _get_storage():
+    """获取或创建全局存储实例。"""
+    global _storage
+    if _storage is None:
+        _storage = create_storage(StorageOptions(
+            backend="sqlite",
+            database_url="sqlite:///app_data/storage/novels.db",
+        ))
+    return _storage
 
 
 def _platform_from_url(url: str) -> str:
@@ -59,7 +74,8 @@ def do_login() -> None:
     try:
         cred = login(platform, engine)
         if cred:
-            site_cfg.setdefault("browser", {})["cookies"] = cred.model_dump()
+            import dataclasses
+            site_cfg.setdefault("browser", {})["cookies"] = dataclasses.asdict(cred)
             save_site_config(platform, site_cfg)
             print("登录成功，cookies 已保存")
         else:
@@ -78,7 +94,7 @@ def do_search(query: str) -> tuple[str | None, str | None]:
         platform = _platform_from_url(query)
         engine = _get_engine(platform)
         try:
-            novel = fetch_meta(query, engine=engine, skip_delay=True)
+            novel = resolve_meta(query, engine=engine, skip_delay=True)
             print(f"\n📖 {novel.title} — {novel.author}")
             return novel.url, platform
         except Exception as e:
@@ -142,7 +158,7 @@ def _do_download_inner(
     # 1. Get metadata
     print("正在获取小说信息...")
     try:
-        novel = fetch_meta(url, engine=engine, skip_delay=skip_delay)
+        novel = resolve_meta(url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取小说信息失败: {e}")
         return
@@ -151,7 +167,7 @@ def _do_download_inner(
     # 2. Get chapter list
     print("正在获取章节列表...")
     try:
-        chapters = fetch_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
+        chapters = resolve_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取章节列表失败: {e}")
         return
@@ -259,10 +275,12 @@ def _do_download_inner(
             if not fmt_cfg:
                 continue
             from novelbase.utils.registry import register_export_options
-            opts = register_export_options(fmt, fmt_cfg)
-            if opts is None:
+            opt_cls_map = register_export_options()
+            opt_cls = opt_cls_map.get(fmt)
+            if opt_cls is None:
                 print(f"  {fmt}: 跳过（无配置）")
                 continue
+            opts = opt_cls(**fmt_cfg)
             try:
                 result = export(novel, opts, fmt)
                 print(f"  {fmt}: {result}")
@@ -339,7 +357,7 @@ def do_update(format_configs: dict, max_workers: int = 3):
         platform = _platform_from_url(novel.url)
         engine = _get_engine(platform)
         try:
-            remote_chapters = fetch_chapter_list(novel.url, engine=engine)
+            remote_chapters = resolve_chapter_list(novel.url, engine=engine)
             if not remote_chapters:
                 print("  无法获取远程章节")
                 continue

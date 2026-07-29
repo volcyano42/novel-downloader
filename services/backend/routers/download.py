@@ -1,4 +1,4 @@
-"""Download 路由 — 对接 search + fetch_meta/fetch_chapter_list + 后台下载任务管理。"""
+"""Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。"""
 import asyncio
 from functools import partial
 
@@ -7,7 +7,7 @@ from services.backend.schemas import FetchMetaRequest, DownloadChapterRequest, S
 from services.backend.services.engine_manager import get_cached_engine, _browser_executor, _requests_executor
 from services.backend.services import task_manager
 from services.backend.routers.storage import _cover_to_response as encode_cover
-from novelbase import fetch_meta, fetch_chapter_list, get_fetchers, search
+from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -23,6 +23,24 @@ def _platform_from_url(url: str) -> str:
     return "fanqie"  # 默认
 
 
+def _resolve_url(raw: str) -> str:
+    """将 URL 或纯数字 ID 转为完整 URL。"""
+    raw = raw.strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    # 纯数字 ID → 通过 id_pattern 匹配平台，构建 URL
+    from novelbase.core.downloader import get_source_for_id
+    name = get_source_for_id(raw)
+    if name == "fanqie":
+        return f"https://fanqienovel.com/page/{raw}"
+    if name == "qidian":
+        return f"https://www.qidian.com/book/{raw}/"
+    if name == "qimao":
+        return f"https://www.qimao.com/shuku/{raw}/"
+    # 无法识别，原样返回让下游报错
+    return raw
+
+
 def _pick_executor(mode: str):
     return _browser_executor if mode == "browser" else _requests_executor
 
@@ -31,34 +49,21 @@ def _pick_executor(mode: str):
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         page: int = Query(1), mode: str = Query("browser"),
                         provider: str | None = Query(None)):
-    from novelbase.core.downloader import get_fetcher_for_url, get_fetcher_for_id
+    from novelbase.core.downloader import get_source
 
     engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
 
-    if query.startswith("http://") or query.startswith("https://"):
-        fetcher_cls = get_fetcher_for_url(query)
-        if fetcher_cls:
-            try:
-                novel = await loop.run_in_executor(executor, fetch_meta, query, engine)
-                return [SearchResultData(title=novel.title, author=novel.author,
-                                         url=novel.url, description=novel.description,
-                                         extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
-            except Exception as e:
-                raise HTTPException(500, str(e))
-
-    if query.isdigit():
-        fetcher_cls = get_fetcher_for_id(query)
-        if fetcher_cls:
-            try:
-                novel = await loop.run_in_executor(
-                    executor, partial(fetcher_cls().fetch_novel_info, url=query, engine=engine))
-                return [SearchResultData(title=novel.title, author=novel.author,
-                                         url=novel.url, description=novel.description,
-                                         extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
-            except Exception as e:
-                raise HTTPException(500, str(e))
+    if query.startswith("http://") or query.startswith("https://") or query.isdigit():
+        try:
+            url = _resolve_url(query)
+            novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
+            return [SearchResultData(title=novel.title, author=novel.author,
+                                     url=novel.url, description=novel.description,
+                                     extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
+        except Exception as e:
+            raise HTTPException(500, str(e))
 
     try:
         results = await loop.run_in_executor(executor, search, platform, query, engine, page)
@@ -72,14 +77,15 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
 
 @router.post("/novel")
-async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
+async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
                      provider: str | None = Query(None)):
-    platform = _platform_from_url(body.url)
+    url = _resolve_url(body.url)
+    platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
-        novel = await loop.run_in_executor(executor, fetch_meta, body.url, engine)
+        novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -92,12 +98,13 @@ async def fetch_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
 @router.get("/novel/{novel_id}")
 async def get_remote_novel(novel_id: str, url: str = Query(...),
                            mode: str = Query("browser"), provider: str | None = Query(None)):
+    url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
-        novel = await loop.run_in_executor(executor, fetch_meta, url, engine)
+        novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -107,14 +114,15 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 
 
 @router.get("/novel/{novel_id}/chapters")
-async def fetch_chapter_list_route(novel_id: str, url: str = Query(...),
+async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
                              mode: str = Query("browser"), provider: str | None = Query(None)):
+    url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, provider=provider)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
-        chapters = await loop.run_in_executor(executor, fetch_chapter_list, url, engine)
+        chapters = await loop.run_in_executor(executor, resolve_chapter_list, url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
@@ -161,5 +169,21 @@ async def delete_task(task_id: str):
 
 @router.get("/platform")
 async def list_platforms():
-    return [{"id": name, "label": cls.__name__ if hasattr(cls, "__name__") else name}
-            for name, cls in get_fetchers().items()]
+    return [{"id": name, "label": name} for name in list_sources()]
+
+
+@router.get("/sources")
+async def list_all_sources():
+    """返回所有 source 及其完整能力矩阵。"""
+    from novelbase.utils.registry import register_source, capabilities as _caps
+    sources = register_source()
+    result = {}
+    for name, info in sources.items():
+        caps = _caps(name)
+        id_pat = info.get("id_pattern")
+        result[name] = {
+            "hosts": list(info.get("hosts", ())),
+            "id_pattern": id_pat.pattern if id_pat else None,
+            "capabilities": caps,
+        }
+    return result

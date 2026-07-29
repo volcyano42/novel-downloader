@@ -28,3 +28,12 @@ app_data/browser/
 # IDE
 .idea/
 .vscode/
+
+# 工具/技能元数据（不提交）
+.codegraph/
+.reasonix/
+.refer/
+.superpowers/
+docs/
+node_modules/
+

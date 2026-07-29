@@ -18,7 +18,7 @@ _tasks_lock = threading.Lock()
 def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     """后台线程：创建 engine → 并发下载章节 → close engine，支持暂停/恢复。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from novelbase import fetch_meta, resolve_chapter
+    from novelbase import resolve_meta, resolve_chapter
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
@@ -33,7 +33,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
         novel_url = task.get("novel_url", "")
         if novel_url:
             try:
-                meta = fetch_meta(novel_url, engine)
+                meta = resolve_meta(novel_url, engine)
                 store.save_meta(meta)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)

@@ -1,9 +1,8 @@
-from typing import Sequence, TypeVar
+from typing import Sequence, TypeVar, Callable
 
 from .engine import BrowserEngine
-from .exceptions import FetcherNotFoundError
+from .exceptions import SourceNotFoundError
 from .options import ExportOptions
-from ..exporters.base import BASEExporter
 from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
 from ..utils.logger import get_logger
@@ -12,38 +11,50 @@ _T = TypeVar('_T')
 
 _log = get_logger("novelbase.core.downloader")
 
-def get_fetcher_for_url(url: str):
-    """根据 URL 查找匹配的 Fetcher 类。"""
-    from ..utils.registry import register_fetcher
+
+def _normalize_mode(engine) -> str:
+    """从 engine 获取标准化的 mode 名（小写）。"""
+    return (engine.mode if hasattr(engine, 'mode') else engine.name).lower()
+
+
+def _provider_for(engine) -> str | None:
+    """获取 API engine 的 provider 名，非 API 返回 None。"""
+    if _normalize_mode(engine) == "api":
+        opts = getattr(engine, 'options', None)
+        if opts is not None:
+            return getattr(opts, 'name', None)
+    return None
+
+
+def get_source(url: str) -> str | None:
+    """根据 URL 查找匹配的 source 名称。"""
+    from ..utils.registry import register_source
     from yarl import URL
     parsed = URL(url)
-    for fetcher_cls in register_fetcher().values():
-        if parsed.host in fetcher_cls.host:
-            return fetcher_cls
+    for name, info in register_source().items():
+        if parsed.host in info["hosts"]:
+            return name
     return None
 
 
-def get_fetcher_for_id(novel_id: str):
-    """根据裸 novel_id 查找匹配的 Fetcher 类。
-
-    遍历所有已注册 Fetcher 的 ``id_pattern``，命中则返回该类。
-    ``id_pattern`` 须包含一个捕获组，调用方通过 ``.group(1)`` 提取纯净 ID。
-    """
-    from ..utils.registry import register_fetcher
-    for fetcher_cls in register_fetcher().values():
-        if fetcher_cls.id_pattern and fetcher_cls.id_pattern.match(novel_id):
-            return fetcher_cls
+def get_source_for_id(novel_id: str) -> str | None:
+    """根据裸 novel_id 查找匹配的 source 名称。"""
+    from ..utils.registry import register_source
+    for name, info in register_source().items():
+        pat = info.get("id_pattern")
+        if pat and pat.match(novel_id):
+            return name
     return None
 
 
-def get_fetchers() -> dict[str, type]:
-    """返回所有已注册的 Fetcher 类（{platform: FetcherCls}）。"""
-    from ..utils.registry import register_fetcher
-    return register_fetcher()
+def list_sources() -> list[str]:
+    """返回所有已注册的 source 名称。"""
+    from ..utils.registry import register_source
+    return sorted(register_source().keys())
 
 
-def get_exporters() -> dict[str, type[BASEExporter]]:
-    """返回所有已注册的 Exporter 类（{format: ExporterCls}）。"""
+def get_exporters() -> dict[str, Callable]:
+    """返回所有已注册的导出函数（{format: export_func}）。"""
     from ..utils.registry import register_exporter
     return register_exporter()
 
@@ -71,26 +82,31 @@ def search(platform: str,
         engine:   下载引擎实例。
         skip_delay: 跳过请求间延迟。
     """
+    from ..utils.registry import resolve as _resolve
+
+    mode = _normalize_mode(engine)
+    provider = _provider_for(engine)
+
     if platform == "all":
         all_results: list[SearchResult] = []
-        for plat, fetcher_cls in get_fetchers().items():
+        for name in list_sources():
             try:
-                fetcher = fetcher_cls()
+                fn = _resolve(name, mode, "search", provider=provider)
                 kwargs["skip_delay"] = skip_delay
-                results = fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
+                results = fn(query=query, engine=engine, **kwargs)
                 for r in results:
-                    r.platform = plat
+                    r.platform = name
                 all_results.extend(results)
             except Exception:
                 pass
         return tuple(all_results)
 
-    fetcher_cls = get_fetchers().get(platform)
-    if fetcher_cls is None:
-        raise FetcherNotFoundError(f"fetcher not found: {platform}")
-    fetcher = fetcher_cls()
+    try:
+        fn = _resolve(platform, mode, "search", provider=provider)
+    except (ValueError, ImportError):
+        raise SourceNotFoundError(f"source not found: {platform}")
     kwargs["skip_delay"] = skip_delay
-    results = fetcher.fetch_search_result(query=query, engine=engine, **kwargs)
+    results = fn(query=query, engine=engine, **kwargs)
     for r in results:
         r.platform = platform
     return results
@@ -103,13 +119,17 @@ def login(platform: str, engine: BrowserEngine) -> AuthCredential:
         platform: 平台标识。
         engine:   下载引擎实例。
     """
-    fetcher_cls = get_fetchers().get(platform)
-    if fetcher_cls is None:
-        raise FetcherNotFoundError(f"fetcher not found: {platform}")
-    fetcher = fetcher_cls()
-    return fetcher.login(engine=engine)
+    from ..utils.registry import resolve as _resolve
 
-def fetch_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
+    mode = _normalize_mode(engine)
+    try:
+        fn = _resolve(platform, mode, "login")
+    except (ValueError, ImportError):
+        raise SourceNotFoundError(f"source not found: {platform}")
+    return fn(engine=engine)
+
+
+def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     """获取小说元数据。
 
     Args:
@@ -120,14 +140,20 @@ def fetch_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     Returns:
         包含书名、作者、简介、封面等信息的 Novel 对象。
     """
-    fetcher_cls = get_fetcher_for_url(url)
-    if fetcher_cls is None:
-        raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    from ..utils.registry import resolve as _resolve
+
+    name = get_source(url)
+    if name is None:
+        raise SourceNotFoundError(f"source not found for: {url}")
+
+    mode = _normalize_mode(engine)
+    provider = _provider_for(engine)
     kwargs["skip_delay"] = skip_delay
-    return fetcher_cls().fetch_novel_info(url=url, engine=engine, **kwargs)
+    fn = _resolve(name, mode, "novel_info", provider=provider)
+    return fn(url=url, engine=engine, **kwargs)
 
 
-def fetch_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> Chapters:
+def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> Chapters:
     """获取章节列表。
 
     Args:
@@ -138,32 +164,41 @@ def fetch_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> 
     Returns:
         按 order 排序的章节列表。
     """
-    fetcher_cls = get_fetcher_for_url(url)
-    if fetcher_cls is None:
-        raise FetcherNotFoundError(f"fetcher not found for: {url}")
+    from ..utils.registry import resolve as _resolve
+
+    name = get_source(url)
+    if name is None:
+        raise SourceNotFoundError(f"source not found for: {url}")
+
+    mode = _normalize_mode(engine)
+    provider = _provider_for(engine)
     kwargs["skip_delay"] = skip_delay
-    return fetcher_cls().fetch_chapter_list(url=url, engine=engine, **kwargs)
+    fn = _resolve(name, mode, "chapter_list", provider=provider)
+    return fn(url=url, engine=engine, **kwargs)
 
 
-def resolve_chapter(chapter: Chapter, engine, fetcher=None, skip_delay: bool = False, **kwargs) -> Chapter | None:
+def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs) -> Chapter | None:
     """下载单个章节。
 
     Args:
         chapter: 要下载的章节。
         engine:  下载引擎实例。
-        fetcher: 可选抓取器实例。为 None 时自动从章节 novel_id 解析。
         skip_delay: 跳过请求间延迟。
 
     Returns:
         已填充的 Chapter，章节不可获取时返回 None。
     """
-    if fetcher is None:
-        fetcher_cls = get_fetcher_for_id(chapter.novel_id)
-        if fetcher_cls is None:
-            raise FetcherNotFoundError(f"fetcher not found for novel_id: {chapter.novel_id}")
-        fetcher = fetcher_cls()
+    from ..utils.registry import resolve as _resolve
+
+    name = get_source_for_id(chapter.novel_id)
+    if name is None:
+        raise SourceNotFoundError(f"source not found for novel_id: {chapter.novel_id}")
+
+    mode = _normalize_mode(engine)
+    provider = _provider_for(engine)
     kwargs["skip_delay"] = skip_delay
-    return fetcher.fetch_chapter_content(chapter=chapter, engine=engine, **kwargs)
+    fn = _resolve(name, mode, "chapter_content", provider=provider)
+    return fn(chapter=chapter, engine=engine, **kwargs)
 
 
 def export(novel: Novel, options: ExportOptions | None = None, format: str | None = None, **kwargs):
@@ -184,9 +219,8 @@ def export(novel: Novel, options: ExportOptions | None = None, format: str | Non
     if not fmt:
         return
 
-    exporter_cls = register_exporter().get(fmt)
-    if exporter_cls is None:
+    export_func = register_exporter().get(fmt)
+    if export_func is None:
         return
 
-    exporter = exporter_cls(options=opt)
-    exporter.export(novel.chapters, novel, **kwargs)
+    return export_func(novel.chapters, novel, options=opt, **kwargs)
