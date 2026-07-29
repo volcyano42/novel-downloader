@@ -178,13 +178,12 @@ def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -
     return fn(url=url, engine=engine, **kwargs)
 
 
-def resolve_chapter(chapter: Chapter, engine, fetcher=None, skip_delay: bool = False, **kwargs) -> Chapter | None:
+def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs) -> Chapter | None:
     """下载单个章节。
 
     Args:
         chapter: 要下载的章节。
         engine:  下载引擎实例。
-        fetcher: DEPRECATED — 保留兼容，实际不使用。
         skip_delay: 跳过请求间延迟。
 
     Returns:
@@ -227,9 +226,3 @@ def export(novel: Novel, options: ExportOptions | None = None, format: str | Non
 
     exporter = exporter_cls(options=opt)
     exporter.export(novel.chapters, novel, **kwargs)
-
-
-# ── 向后兼容别名 ──────────────────────────────────────────────
-
-fetch_meta = resolve_meta
-fetch_chapter_list = resolve_chapter_list
