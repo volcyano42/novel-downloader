@@ -1,4 +1,4 @@
-﻿from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
+from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
 
 from ..._common import standardize_id
 
