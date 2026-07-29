@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetcher 调试工具 — 本地 HTML 文件解析 / 实时请求测试。
+"""Source 调试工具 — 本地 HTML 文件解析 / 实时请求测试。
 
 用法:
     # 本地 HTML 文件解析
@@ -42,7 +42,7 @@ def _get_fetcher_class(platform: str) -> type:
 
 def _get_parser_class(platform: str):
     """尝试导入 {Platform}HTMLParser。"""
-    module_name = f"novelbase.fetchers.{platform}"
+    module_name = f"novelbase.sources.{platform}"
     class_name = f"{platform.capitalize()}HTMLParser"
     try:
         mod = importlib.import_module(module_name)
@@ -53,7 +53,7 @@ def _get_parser_class(platform: str):
 
 def _get_standardize_id(platform: str):
     """尝试导入 standardize_id 函数。"""
-    module_name = f"novelbase.fetchers.{platform}"
+    module_name = f"novelbase.sources.{platform}"
     try:
         mod = importlib.import_module(module_name)
         return getattr(mod, "standardize_id", None)
@@ -246,7 +246,7 @@ def cmd_live_content(platform: str, engine_mode: str, chapter_id: str):
 
 def main():
     p = argparse.ArgumentParser(
-        description="Fetcher 调试工具",
+        description="Source 调试工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
