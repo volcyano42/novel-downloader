@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup, Tag
 from novelbase.core.exceptions import ChapterNotFoundError, NovelNotFoundError, ParseError
 from novelbase.models.novel import Novel, Chapter, SearchResult, Illustration, Chapters
 
-_log = logging.getLogger("novelbase.fetchers.qimao")
+_log = logging.getLogger("novelbase.sources.qimao")
 
 
 def _api_url(engine, **params) -> str:

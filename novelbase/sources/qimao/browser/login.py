@@ -5,7 +5,7 @@ from novelbase.core.engine import BrowserEngine
 from novelbase.models.auth import AuthCredential
 from novelbase.utils.logger import get_logger
 
-_log = get_logger("novelbase.fetchers.qimao")
+_log = get_logger("novelbase.sources.qimao")
 
 
 def login(engine: BrowserEngine, **kwargs) -> AuthCredential:
