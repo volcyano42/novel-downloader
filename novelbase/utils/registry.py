@@ -15,17 +15,17 @@ _cache_export_opts: dict[str, type[ExportOptions]] | None = None
 
 
 def _scan_sources() -> dict[str, dict]:
-    """扫描 fetchers/ 目录，收集每个 source 的 NAME / HOSTS / ID_PATTERN。
+    """扫描 sources/ 目录，收集每个 source 的 NAME / HOSTS / ID_PATTERN。
 
     支持两种形式：
-    - 单文件：fetchers/fanqie.py
-    - 目录包：fetchers/fanqie/__init__.py
+    - 单文件：sources/fanqie.py
+    - 目录包：sources/fanqie/__init__.py
 
     Returns:
         {module_name: {"name": ..., "hosts": ..., "id_pattern": ...}}
     """
     result = {}
-    pkg_dir = Path(__file__).parent.parent / "fetchers"
+    pkg_dir = Path(__file__).parent.parent / "sources"
     if not pkg_dir.exists():
         return result
 
@@ -42,7 +42,7 @@ def _scan_sources() -> dict[str, dict]:
         else:
             continue
         try:
-            module = import_module(f"..fetchers.{module_name}", __package__)
+            module = import_module(f"..sources.{module_name}", __package__)
             result[module_name] = {
                 "name": getattr(module, "NAME", module_name),
                 "hosts": getattr(module, "HOSTS", ()),
@@ -193,15 +193,15 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
 # 逻辑功能名 → 文件名 stem（也是实际函数名）
 FUNC_FILE_MAP = {
     "search": "search",
-    "novel_info": "fetch_novel",
-    "chapter_list": "fetch_chapter_list",
-    "chapter_content": "fetch_chapter",
+    "novel_info": "novel_info",
+    "chapter_list": "chapter_list",
+    "chapter_content": "chapter_content",
     "login": "login",
 }
 
 
 def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
-    """扫描 fetchers/{name}/ 目录，返回可用能力矩阵。
+    """扫描 sources/{name}/ 目录，返回可用能力矩阵。
 
     >>> capabilities("fanqie")
     {"api": {"oiapi": ["search", "novel_info", "chapter_list", "chapter_content"],
@@ -213,7 +213,7 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     单 provider 的 mode 返回 [functions]；
     无该 mode 则不出现 key。
     """
-    pkg_dir = Path(__file__).parent.parent / "fetchers" / name
+    pkg_dir = Path(__file__).parent.parent / "sources" / name
     if not pkg_dir.is_dir():
         return {}
 
@@ -268,12 +268,12 @@ def resolve(name: str, mode: str, function: str, provider: str | None = None):
         elif provider not in providers:
             raise ValueError(f"provider {provider!r} not available for {name}/{mode}. Available: {providers}")
         file_stem = FUNC_FILE_MAP.get(function, function)
-        module_path = f"novelbase.fetchers.{name}.{mode}.{provider}.{file_stem}"
+        module_path = f"novelbase.sources.{name}.{mode}.{provider}.{file_stem}"
     else:
         if provider is not None:
             raise ValueError(f"provider specified but {name}/{mode} has no sub-providers")
         file_stem = FUNC_FILE_MAP.get(function, function)
-        module_path = f"novelbase.fetchers.{name}.{mode}.{file_stem}"
+        module_path = f"novelbase.sources.{name}.{mode}.{file_stem}"
 
     try:
         module = import_module(module_path)
@@ -284,7 +284,7 @@ def resolve(name: str, mode: str, function: str, provider: str | None = None):
 
 def list_sources() -> list[str]:
     """列出所有可用源名称。"""
-    pkg_dir = Path(__file__).parent.parent / "fetchers"
+    pkg_dir = Path(__file__).parent.parent / "sources"
     if not pkg_dir.exists():
         return []
     result: list[str] = []
