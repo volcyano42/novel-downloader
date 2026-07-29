@@ -74,7 +74,8 @@ def do_login() -> None:
     try:
         cred = login(platform, engine)
         if cred:
-            site_cfg.setdefault("browser", {})["cookies"] = cred.model_dump()
+            import dataclasses
+            site_cfg.setdefault("browser", {})["cookies"] = dataclasses.asdict(cred)
             save_site_config(platform, site_cfg)
             print("登录成功，cookies 已保存")
         else:
