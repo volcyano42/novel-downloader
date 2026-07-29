@@ -15,7 +15,7 @@ from app.ui import (
     _display_width, _pad_right, _pad_center,
 )
 from novelbase import (
-    fetch_meta, fetch_chapter_list, resolve_chapter, export,
+    resolve_meta, resolve_chapter_list, resolve_chapter, export,
     create_engine, search, login,
 )
 from novelbase.utils.logger import get_logger
@@ -78,7 +78,7 @@ def do_search(query: str) -> tuple[str | None, str | None]:
         platform = _platform_from_url(query)
         engine = _get_engine(platform)
         try:
-            novel = fetch_meta(query, engine=engine, skip_delay=True)
+            novel = resolve_meta(query, engine=engine, skip_delay=True)
             print(f"\n📖 {novel.title} — {novel.author}")
             return novel.url, platform
         except Exception as e:
@@ -142,7 +142,7 @@ def _do_download_inner(
     # 1. Get metadata
     print("正在获取小说信息...")
     try:
-        novel = fetch_meta(url, engine=engine, skip_delay=skip_delay)
+        novel = resolve_meta(url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取小说信息失败: {e}")
         return
@@ -151,7 +151,7 @@ def _do_download_inner(
     # 2. Get chapter list
     print("正在获取章节列表...")
     try:
-        chapters = fetch_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
+        chapters = resolve_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取章节列表失败: {e}")
         return
@@ -339,7 +339,7 @@ def do_update(format_configs: dict, max_workers: int = 3):
         platform = _platform_from_url(novel.url)
         engine = _get_engine(platform)
         try:
-            remote_chapters = fetch_chapter_list(novel.url, engine=engine)
+            remote_chapters = resolve_chapter_list(novel.url, engine=engine)
             if not remote_chapters:
                 print("  无法获取远程章节")
                 continue

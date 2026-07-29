@@ -99,14 +99,14 @@ def _show_platforms() -> dict[str, str]:
     Dynamically discovers registered fetchers, falls back to hardcoded list.
     """
     try:
-        from novelbase import get_fetchers
-        fetchers = get_fetchers()
+        from novelbase import list_sources
+        sources = list_sources()
         labels = {
             "fanqie": "番茄小说 (fanqie)",
             "qidian": "起点中文网 (qidian)",
             "qimao":  "七猫小说 (qimao)",
         }
-        return {labels.get(k, k): k for k in fetchers}
+        return {labels.get(k, k): k for k in sources}
     except Exception:
         # Fallback
         return {
