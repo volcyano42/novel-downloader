@@ -11,7 +11,7 @@ from novelbase import (
     export as do_export,
     Options,
     create_engine,
-    get_fetchers,
+    list_sources,
     get_exporters,
     get_exporter_options,
     search,
@@ -28,5 +28,5 @@ from novelbase import (
 import novelbase
 
 print("✓ novelbase v" + novelbase.__version__ + " 导入成功")
-print("  注册的 Fetcher: " + str(list(get_fetchers().keys())))
+print("  注册的 Source: " + str(list_sources()))
 print("  注册的导出器: " + str(list(get_exporters().keys())))
