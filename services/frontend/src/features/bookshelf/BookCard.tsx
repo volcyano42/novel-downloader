@@ -81,12 +81,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
       const task = await exportMut.mutateAsync(body);
       if (task.status === "completed" && task.task_id) {
         toast("导出成功，正在下载…", "success");
-        const a = document.createElement("a");
-        a.href = `/api/v2/export/download/${task.task_id}`;
-        a.download = "";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        window.open(`/api/v2/export/download/${task.task_id}`, "_self");
       } else {
         toast(`导出失败：${task.error || "未知错误"}`, "error");
       }
