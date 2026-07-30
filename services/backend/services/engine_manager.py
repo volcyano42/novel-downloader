@@ -149,14 +149,7 @@ def create_engine_for_request(platform: str,
             backoff_factor=_cfg("backoff_factor", 2),
         )
     elif mode == "api":
-        # API 模式无 provider → 兜底（极少使用）
-        opts = opts.set_api_options(
-            name=_cfg("name", "default"),
-            delay=tuple(_cfg("delay", [3, 5])),
-            timeout=_cfg("timeout", 30),
-            retry_times=_cfg("retry_times", 3),
-            backoff_factor=_cfg("backoff_factor", 2),
-        )
+        raise ValueError(f"平台 {platform} 的 API 模式没有可用的 provider，请在站点配置中启用一个")
 
     return create_engine(opts)
 

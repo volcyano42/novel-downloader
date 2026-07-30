@@ -29,12 +29,7 @@ ENGINE_DEFAULTS = {
         "retry_times": 3,
         "backoff_factor": 2.0,
     },
-    "api": {
-        "delay": [3.0, 5.0],
-        "timeout": 30.0,
-        "retry_times": 3,
-        "backoff_factor": 2.0,
-    },
+    "api": {},
 }
 
 GLOBAL_DEFAULTS = {
@@ -109,10 +104,12 @@ def load_platform_configs() -> dict[str, dict]:
         platform = p.stem
         raw = load_yaml(p)
         entry: dict = {}
-        for mode in ("browser", "requests", "api"):
+        for mode in ("browser", "requests"):
             entry[mode] = deep_merge(ENGINE_DEFAULTS[mode], raw.get(mode, {}))
+        # api 是 provider 容器，不是模式配置
         api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
-        entry["api_providers"] = [k for k, v in api_section.items() if isinstance(v, dict)]
+        entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
+        entry["api_providers"] = list(entry["api"].keys())
         result[platform] = entry
     return result
 

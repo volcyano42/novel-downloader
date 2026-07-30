@@ -1,8 +1,4 @@
 api:
-  backoff_factor: 2
-  delay:
-  - 3
-  - 5
   rain:
     backoff_factor: 2
     delay:
@@ -13,8 +9,6 @@ api:
     params: {}
     retry_times: 3
     timeout: 30
-  retry_times: 3
-  timeout: 30
 browser:
   backoff_factor: 2
   browser_type: chromium

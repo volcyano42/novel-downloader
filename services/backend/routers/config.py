@@ -68,23 +68,32 @@ async def save_groups(body: dict):
 async def get_site(website: str):
     raw = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
     entry: dict = {}
-    for mode in ("browser", "requests", "api"):
+    for mode in ("browser", "requests"):
         entry[mode] = config_service.deep_merge(
             config_service.ENGINE_DEFAULTS[mode], raw.get(mode, {}),
         )
+    # api 是 provider 容器，不是模式配置
     api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
-    entry["api_providers"] = [k for k, v in api_section.items() if isinstance(v, dict)]
+    entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
+    entry["api_providers"] = list(entry["api"].keys())
     return entry
 
 
 @router.put("/sites/{website}")
 async def save_site(website: str, body: dict):
     existing = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
-    for mode in ("browser", "requests", "api"):
+    for mode in ("browser", "requests"):
         if mode in body and isinstance(body[mode], dict):
             existing[mode] = config_service.deep_merge(
                 existing.get(mode, {}), body[mode],
             )
+    # api mode 只保留 provider 子 dict，过滤标量字段
+    if "api" in body and isinstance(body["api"], dict):
+        api_existing = existing.get("api", {}) if isinstance(existing.get("api"), dict) else {}
+        for k, v in body["api"].items():
+            if isinstance(v, dict):
+                api_existing[k] = config_service.deep_merge(api_existing.get(k, {}), v)
+        existing["api"] = {k: v for k, v in api_existing.items() if isinstance(v, dict)}
     config_service.save_yaml(_cfg_dir / "sites" / f"{website}.yaml", existing)
     return {"status": "ok"}
 
