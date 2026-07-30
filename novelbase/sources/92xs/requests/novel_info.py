@@ -40,7 +40,14 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
     if cover_img:
         cover_url = cover_img.get("src", "")
         if cover_url:
-            cover = Illustration(raw_data=b"", url=cover_url, alt=title)
+            # 相对路径 → 绝对 URL
+            if cover_url.startswith("/"):
+                cover_url = f"http://www.92xs.info{cover_url}"
+            try:
+                cover_data = __import__("requests").get(cover_url, timeout=10).content
+            except Exception:
+                cover_data = b""
+            cover = Illustration(raw_data=cover_data, url=cover_url, alt=title)
 
     # 提取 book_id
     import re
