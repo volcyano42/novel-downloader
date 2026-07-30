@@ -1,0 +1,9 @@
+txt:
+  # 输出文件夹路径
+  # 可用占位符: {group} {title} {author} {novel_id} {total_chapters} {date} {file_name_template}
+  output_path: app_data/exports/{group}/{title}/{file_name_template}
+  # 文件名模板
+  # 可用占位符: {title} {author} {date}
+  file_name_template: '{title}'
+  # 输出文件编码
+  encoding: utf-8

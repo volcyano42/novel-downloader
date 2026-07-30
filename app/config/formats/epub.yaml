@@ -1,0 +1,19 @@
+epub:
+  # 输出文件夹路径
+  # 可用占位符: {group} {title} {author} {novel_id} {total_chapters} {date} {file_name_template}
+  output_path: app_data/exports/{group}/{title}/{file_name_template}
+  # 文件名模板
+  # 可用占位符: {title} {author} {date}
+  file_name_template: '{title}'
+  encoding: utf-8
+  include_toc: true
+  css_style: default
+  # 压缩算法 deflate(标准), bzip2（压缩率更高）, stored(不压缩)
+  compression: deflate
+  # 压缩水平( 1-9 )
+  compresslevel: 9
+  # 压缩内嵌图片
+  optimize_images: true
+  jpeg_quality: 85
+  # 图片最大宽度（0 = 不缩放）
+  max_image_width: 0

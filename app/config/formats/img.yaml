@@ -1,0 +1,10 @@
+img:
+  # 输出路径
+  # 可用占位符: {group} {title} {author} {novel_id} {total_chapters} {date}
+  output_path: app_data/exports/{group}/{title}/img
+  # 文件名模板
+  # {n} = 图片序号（0=封面，1=第1张插图……）
+  file_name_template: '{n}'
+  # 输出格式 original / jpeg / png / webp
+  # original = 保持原格式
+  output_format: 'original'

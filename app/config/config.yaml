@@ -1,0 +1,15 @@
+download:
+  max_workers: 3
+  notify:
+    on_complete: true
+    on_incomplete: true
+    sound: bell
+log:
+  level: DEBUG
+mode: api
+name: Novel下载器
+storage:
+  backend: sqlite
+  database_url: sqlite:///app_data/storage/novels.db
+export:
+  formats: [epub]
