@@ -1,3 +1,32 @@
+# 更新日志
+
+## v4.1.0
+
+### 新增
+
+1. **92xs 书源** — 新增 92xs.net 平台支持
+2. **novel_id 加平台前缀** — 消除多平台 ID 冲突，统一格式 `{platform}_{id}`
+3. **app/config 默认配置模板** — 新增 `init_config.py` 初始化脚本，自动生成 `app_data/config/` 下缺失的 YAML
+4. **pyproject.toml** — 支持 `pip install -e .` 可编辑安装
+
+### 变更
+
+1. **统一 api 配置结构** — 去除 site YAML 中 `api` 下的冗余标量字段，后端统一将 `api` 视为 provider 容器
+
+### 修复
+
+1. download 只保存 db 不导出，避免导出失败阻塞下载
+2. 修复 `serial` 空字符串及 hooks 顺序错误
+3. 修复前端封面无法显示（92xs 相对路径图片）
+4. CI 修复系列：移除未导出的 `get_logger`、修复 oiapi `chapter_content` UTF-8 编码、添加缺失的 `python-box` 依赖、清理废弃 `qiniu` 依赖
+
+### 其他
+
+1. 停止追踪 `groups.yaml`，转为本地配置
+2. 完善 `.gitignore` 规则，`docs/` 不再纳入版本控制
+
+---
+
 # v4.0.0 更新日志
 
 ## 破坏性变更

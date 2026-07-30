@@ -200,7 +200,7 @@ def add_novel_to_group(novel_id: str, group: str) -> bool:
 def build_options(cfg: dict, site_cfg: dict) -> Options:
     """Build Options from config dict — mode-specific branching like the original."""
     options = Options()
-    mode = site_cfg.get("mode", "browser")
+    mode = cfg.get("mode") or site_cfg.get("mode", "browser")
     options.set_mode(mode)
 
     if mode == "browser":

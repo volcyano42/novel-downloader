@@ -28,29 +28,6 @@ npm run build            # 生产构建
 npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 ```
 
-## Architecture
-
-```
-novelbase/              ← 核心库（source 驱动）
-  core/                   engine.py, downloader.py, storage.py, options.py, exceptions.py
-  sources/                fanqie/, qidian/, qimao/（每平台三个 mode：browser/requests/api）
-  exporters/              epub, txt, img
-  models/                 Novel, Chapter, Chapters, SearchResult, Illustration
-  utils/                  registry.py（动态分发）, logger.py, hooks.py
-
-app/                    ← CLI 应用层
-  core.py, config.py, menus.py, ui.py, notify.py
-
-services/
-  backend/                FastAPI (main.py) → routers/ + services/（task_manager, engine_manager）
-  frontend/               React SPA (Vite + Tailwind + shadcn/ui + @tanstack/react-query)
-
-app_data/               ← 运行时数据（gitignored）
-  config/                 config.yaml, sites/*.yaml, groups.yaml, formats/*.yaml
-  storage/                novels.db（每本小说独立 .db 文件）
-  exports/                导出输出
-```
-
 ## Key Conventions
 
 - **API v2** 响应格式 `{ok, message, data}`，无分页
