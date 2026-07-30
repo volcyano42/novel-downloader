@@ -15,9 +15,12 @@ env/
 
 app_data/
 
-# 测试缓存
+# 测试 & 覆盖率
 .pytest_cache/
 .cache
+.coverage
+coverage/
+htmlcov/
 
 # 环境变量
 .env
@@ -26,11 +29,35 @@ app_data/
 .idea/
 .vscode/
 
+# 操作系统
+Thumbs.db
+.DS_Store
+
+# 日志 & 临时文件
+*.log
+*.tmp
+*.temp
+*.bak
+
+# 临时测试脚本
+_*.py
+
+# 类型检查缓存
+.mypy_cache/
+.ruff_cache/
+
 # 工具/技能元数据（不提交）
 .codegraph/
 .reasonix/
 .refer/
 .superpowers/
+reasonix.toml
+
+# 文档（不提交）
 docs/
+
+# Node
 node_modules/
 
+# 前端构建产物
+services/frontend/dist/
