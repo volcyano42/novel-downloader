@@ -65,5 +65,5 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
         tags=tuple(tags),
         count=word_count,
         cover=cover,
-        serial="",  # 暂无可靠来源
+        serial=0,  # 暂无可靠来源
     )

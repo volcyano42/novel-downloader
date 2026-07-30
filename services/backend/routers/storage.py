@@ -46,8 +46,11 @@ def _cover_to_response(cover) -> dict | None:
 
 def _novel_to_meta(novel) -> NovelMeta:
     cover_data = _cover_to_response(novel.cover)
+    serial = novel.serial
+    if not isinstance(serial, int):
+        serial = int(serial) if serial else 0
     return NovelMeta(
-        title=novel.title, url=novel.url, id=novel.id, serial=novel.serial,
+        title=novel.title, url=novel.url, id=novel.id, serial=serial,
         author=novel.author, description=novel.description,
         tags=list(novel.tags) if novel.tags else None, count=novel.count, cover=cover_data,
         extra=dict(novel.extra) if novel.extra else None,

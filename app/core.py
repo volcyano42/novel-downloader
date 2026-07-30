@@ -138,19 +138,21 @@ def do_search(query: str) -> tuple[str | None, str | None]:
 def do_download(
     url: str, group: str,
     format_configs: dict, max_workers: int = 3,
+    skip_export: bool = True,
 ) -> None:
-    """Core download flow. Creates engine internally."""
+    """Core download flow. Creates engine internally. Downloads to DB only by default."""
     platform = _platform_from_url(url)
     engine = _get_engine(platform)
     try:
-        _do_download_inner(engine, url, group, format_configs, max_workers, skip_delay=True)
+        _do_download_inner(engine, url, group, format_configs, max_workers, skip_delay=True, skip_export=skip_export)
     finally:
         engine.close()
 
 
 def _do_download_inner(
     engine, url: str, group: str,
-    format_configs: dict, max_workers: int = 3, skip_delay: bool=False
+    format_configs: dict, max_workers: int = 3, skip_delay: bool=False,
+    skip_export: bool = True,
 ) -> None:
     """Core download flow (engine provided)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -179,7 +181,10 @@ def _do_download_inner(
     print(f"共 {len(chapters)} 章")
 
     # Chapter selection
-    show_detail = input("是否选择要下载的章节? (y/n): ").strip().lower()
+    try:
+        show_detail = input("是否选择要下载的章节? (y/n): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        show_detail = "n"
     if show_detail == "y":
         print(f"共 {len(chapters)} 章，输入范围 (如 1-10,20,30-): ", end="")
         try:
@@ -208,7 +213,10 @@ def _do_download_inner(
     if is_new:
         all_groups = list(existing_groups.keys()) or ["default"]
         print(f"\n新小说归入哪个分组？可选: {', '.join(all_groups)}")
-        group_input = input(f"分组名称 [default]: ").strip()
+        try:
+            group_input = input(f"分组名称 [default]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            group_input = ""
         if group_input:
             group = group_input
         else:
@@ -265,29 +273,30 @@ def _do_download_inner(
         if len(errors) > 10:
             print(f"  ... 还有 {len(errors) - 10} 个错误")
 
-    # 5. Export
-    dl = load_main_config().get("download", {})
-    enabled_formats = dl.get("formats", [])
-    if enabled_formats:
-        print("正在导出...")
-        for fmt in enabled_formats:
-            fmt_cfg = format_configs.get(fmt, {})
-            if not fmt_cfg:
-                continue
-            from novelbase.utils.registry import register_export_options
-            opt_cls_map = register_export_options()
-            opt_cls = opt_cls_map.get(fmt)
-            if opt_cls is None:
-                print(f"  {fmt}: 跳过（无配置）")
-                continue
-            opts = opt_cls(**fmt_cfg)
-            try:
-                result = export(novel, opts, fmt)
-                print(f"  {fmt}: {result}")
-            except Exception as e:
-                print(f"  {fmt}: 导出失败 — {e}")
-    else:
-        print("未设置导出格式，跳过导出")
+    # 5. Export (skipped by default — use `cli.py export` or GUI export menu instead)
+    if not skip_export:
+        dl = load_main_config().get("download", {})
+        enabled_formats = dl.get("formats", [])
+        if enabled_formats:
+            print("正在导出...")
+            for fmt in enabled_formats:
+                fmt_cfg = format_configs.get(fmt, {})
+                if not fmt_cfg:
+                    continue
+                from novelbase.utils.registry import register_export_options
+                opt_cls_map = register_export_options()
+                opt_cls = opt_cls_map.get(fmt)
+                if opt_cls is None:
+                    print(f"  {fmt}: 跳过（无配置）")
+                    continue
+                opts = opt_cls(**fmt_cfg)
+                try:
+                    result = export(novel, opts, fmt)
+                    print(f"  {fmt}: {result}")
+                except Exception as e:
+                    print(f"  {fmt}: 导出失败 — {e}")
+        else:
+            print("未设置导出格式，跳过导出")
 
     # 6. Notify
     from app.notify import notify

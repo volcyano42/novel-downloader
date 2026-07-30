@@ -285,14 +285,14 @@ export default function DetailPage() {
     }
   }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
 
-  if (!novel && !loading && !metaLoading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
-
   // meta 加载完成后发现是远程小说，开启 loading 等远程章节
   useEffect(() => {
     if (!metaLoading && isRemote && !remoteUrl && !loading) {
       setLoading(true);
     }
   }, [metaLoading, isRemote, remoteUrl, loading]);
+
+  if (!novel && !loading && !metaLoading) return <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900" />;
 
   const cover = coverToUrl(novel?.cover ?? null);
   return (

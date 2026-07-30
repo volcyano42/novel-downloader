@@ -413,9 +413,12 @@ class SQLiteStorage(BaseStorage):
     @staticmethod
     def _row_to_novel(row: tuple, cover=None) -> Novel:
         tags = json.loads(row[6]) if row[6] else []
+        serial = row[4]
+        if not isinstance(serial, int):
+            serial = int(serial) if serial else 0
         return Novel(
             id=row[0], title=row[1], url=row[2], author=row[3],
-            serial=row[4], description=row[5], tags=tuple(tags),
+            serial=serial, description=row[5], tags=tuple(tags),
             count=row[7], cover=cover,
         )
 
