@@ -204,7 +204,7 @@ def parse_novel_info(html: str) -> Novel:
         serial += len(chapters_list)
 
     novel = Novel(url=book_url,
-                  id=standardize_id(book_url),
+                  id=f"fanqie_{standardize_id(book_url)}",
                   title=name,
                   author=author,
                   serial=serial,

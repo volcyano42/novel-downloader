@@ -24,19 +24,25 @@ def _platform_from_url(url: str) -> str:
 
 
 def _resolve_url(raw: str) -> str:
-    """将 URL 或纯数字 ID 转为完整 URL。"""
+    """将 URL 或带前缀 ID 转为完整 URL。"""
     raw = raw.strip()
     if raw.startswith("http://") or raw.startswith("https://"):
         return raw
-    # 纯数字 ID → 通过 id_pattern 匹配平台，构建 URL
+    # 带前缀 ID → 通过 id_pattern 匹配平台，构建 URL
     from novelbase.core.downloader import get_source_for_id
     name = get_source_for_id(raw)
     if name == "fanqie":
-        return f"https://fanqienovel.com/page/{raw}"
+        num = raw.split("_", 1)[-1]
+        return f"https://fanqienovel.com/page/{num}"
     if name == "qidian":
-        return f"https://www.qidian.com/book/{raw}/"
+        num = raw.split("_", 1)[-1]
+        return f"https://www.qidian.com/book/{num}/"
     if name == "qimao":
-        return f"https://www.qimao.com/shuku/{raw}/"
+        num = raw.split("_", 1)[-1]
+        return f"https://www.qimao.com/shuku/{num}/"
+    if name == "92xs":
+        num = raw.split("_", 1)[-1]
+        return f"http://www.92xs.info/book/{num}.html"
     # 无法识别，原样返回让下游报错
     return raw
 

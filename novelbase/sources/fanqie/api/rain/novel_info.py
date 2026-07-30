@@ -62,7 +62,7 @@ def novel_info(url: str, engine, **kwargs):
     extra = Box(rating=data.get("score"))
 
     novel = Novel(url=book_url,
-                  id=novel_id,
+                  id=f"fanqie_{novel_id}",
                   title=name,
                   serial=serial,
                   author=author,

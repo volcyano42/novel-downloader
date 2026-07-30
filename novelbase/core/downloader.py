@@ -191,6 +191,9 @@ def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs
     from ..utils.registry import resolve as _resolve
 
     name = get_source_for_id(chapter.novel_id)
+    # 回退：novel_id 不带前缀时用 chapter.url 查找
+    if name is None:
+        name = get_source(chapter.url)
     if name is None:
         raise SourceNotFoundError(f"source not found for novel_id: {chapter.novel_id}")
 

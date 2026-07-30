@@ -45,7 +45,7 @@ def novel_info(url: str, engine, **kwargs):
     serial = sum(len(vol) for vol in chapter_items_volume)
 
     novel = Novel(url=url,
-                  id=novel_id,
+                  id=f"fanqie_{novel_id}",
                   title=name,
                   serial=serial,
                   author=author,

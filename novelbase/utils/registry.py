@@ -80,17 +80,22 @@ def _hardcoded_sources() -> dict[str, dict]:
         "fanqie": {
             "name": "fanqie",
             "hosts": ("fanqienovel.com", "changdunovel.com"),
-            "id_pattern": re.compile(r"^(?:book_id=?)?(\d{19})$"),
+            "id_pattern": re.compile(r"^fanqie_(\d{19})$"),
         },
         "qidian": {
             "name": "qidian",
             "hosts": ("www.qidian.com", "book.qidian.com"),
-            "id_pattern": re.compile(r"^(?:/(book|info)/?)?(\d{10})/?$"),
+            "id_pattern": re.compile(r"^qidian_(\d{10})$"),
         },
         "qimao": {
             "name": "qimao",
             "hosts": ("www.qimao.com", "qimao.com"),
-            "id_pattern": re.compile(r"^(?:/shuku/?)?(\d+)$"),
+            "id_pattern": re.compile(r"^qimao_(\d+)$"),
+        },
+        "92xs": {
+            "name": "92xs",
+            "hosts": ("www.92xs.info", "92xs.info"),
+            "id_pattern": re.compile(r"^92xs_(\d+)$"),
         },
     }
 

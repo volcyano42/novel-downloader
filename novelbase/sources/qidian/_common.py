@@ -104,7 +104,7 @@ def parse_novel_info(html: str, url) -> Novel:
 
     return Novel(
         url=url,
-        id=novel_id,
+        id=f"qidian_{novel_id}",
         title=name,
         serial=serial,
         author=author,
