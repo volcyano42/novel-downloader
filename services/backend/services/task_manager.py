@@ -5,7 +5,7 @@ import time
 import uuid
 
 from novelbase.core.exceptions import ChapterNotFoundError
-from services.backend.services.config_service import load_config
+from services.backend.services.config_service import load_config, get_database_url
 from services.backend.services.engine_manager import get_cached_engine
 
 _log = logging.getLogger("services.backend.task_manager")
@@ -27,7 +27,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     try:
         store = create_storage(StorageOptions(
             backend="sqlite",
-            database_url="sqlite:///app_data/storage/novels.db",
+            database_url=get_database_url(),
         ))
 
         novel_url = task.get("novel_url", "")
