@@ -63,7 +63,7 @@ private suspend fun okhttp3.Call.await(): okhttp3.Response {
     return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         enqueue(object : okhttp3.Callback {
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                cont.resume(response, null)
+                cont.resume(response)
             }
             override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                 cont.resumeWithException(e)
