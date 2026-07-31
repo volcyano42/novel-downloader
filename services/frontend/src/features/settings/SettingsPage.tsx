@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig } from "@/hooks/index";
+import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig, usePlatforms } from "@/hooks/index";
 import type { GlobalConfig, SiteConfig } from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -84,11 +84,7 @@ function Section({ icon: Icon, title, children }: { icon: typeof Settings; title
   );
 }
 
-const PLATFORMS = [
-  { id: "fanqie", label: "番茄" },
-  { id: "qidian", label: "起点" },
-  { id: "qimao", label: "七猫" },
-] as const;
+
 
 const ENGINES = [
   { id: "browser", label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
@@ -116,7 +112,8 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
 };
 
 function EngineSection({ mode }: { mode: string }) {
-  const [platform, setPlatform] = useState<"fanqie" | "qidian" | "qimao">(PLATFORMS[0].id);
+  const { data: platforms = [] } = usePlatforms();
+  const [platform, setPlatform] = useState<string>(platforms[0]?.id ?? "fanqie");
   const [engineOpen, setEngineOpen] = useState(false);
   const { data: siteCfg } = useSiteConfig(platform);
   const saveSite = useSaveSiteConfig(platform);
@@ -157,7 +154,7 @@ function EngineSection({ mode }: { mode: string }) {
   return (
     <Section icon={Layers} title="平台引擎设置">
       <div className="flex gap-1.5 py-2.5">
-        {PLATFORMS.map(({ id, label }) => (
+        {platforms.map(({ id, label }) => (
           <button key={id} onClick={() => setPlatform(id)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${platform === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
             {label}
@@ -167,7 +164,7 @@ function EngineSection({ mode }: { mode: string }) {
       <div>
         <button onClick={() => setEngineOpen(!engineOpen)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${engineOpen ? "" : "-rotate-90"}`} strokeWidth={1.5} />
-          {PLATFORMS.find(p => p.id === platform)?.label} · {ENGINES.find(e => e.id === mode)?.label} 选项
+          {platforms.find(p => p.id === platform)?.label} · {ENGINES.find(e => e.id === mode)?.label} 选项
         </button>
         {engineOpen && fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(f)}</Row>)}
         {engineOpen && hasProviders && (

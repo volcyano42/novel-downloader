@@ -8,7 +8,7 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useTasks, useSearch, useDeleteNovel, useFetchMeta, useSiteConfig } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import { SessionCache } from "@/utils/sessionCache";
@@ -35,17 +35,32 @@ export default function BookshelfPage() {
   const saveGlobalConfigMut = useSaveGlobalConfig();
   const fetchMetaMut = useFetchMeta();
 
-  // apiProviders for SearchBar
-  const { data: fanqieCfg } = useSiteConfig("fanqie");
-  const { data: qidianCfg } = useSiteConfig("qidian");
-  const { data: qimaoCfg } = useSiteConfig("qimao");
+  // sources capabilities for SearchBar
+  const { data: sources } = useSources();
   const apiProviders = useMemo(() => {
     const map: Record<string, string[]> = {};
-    if (fanqieCfg?.api_providers) map.fanqie = fanqieCfg.api_providers;
-    if (qidianCfg?.api_providers) map.qidian = qidianCfg.api_providers;
-    if (qimaoCfg?.api_providers) map.qimao = qimaoCfg.api_providers;
+    if (sources) {
+      for (const [name, info] of Object.entries(sources)) {
+        const caps = info.capabilities;
+        if (caps.api && typeof caps.api === "object" && !Array.isArray(caps.api)) {
+          map[name] = Object.keys(caps.api);
+        }
+      }
+    }
     return map;
-  }, [fanqieCfg, qidianCfg, qimaoCfg]);
+  }, [sources]);
+
+  // all modes union for "all" platform
+  const platformModes = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (sources) {
+      for (const [name, info] of Object.entries(sources)) {
+        map[name] = Object.keys(info.capabilities);
+      }
+    }
+    return map;
+  }, [sources]);
+  const allEngineModes = useMemo(() => Object.values(platformModes).flat().filter((m, i, a) => a.indexOf(m) === i), [platformModes]);
 
   // local state
   const searchQuery = "";
@@ -240,7 +255,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={["browser", "requests", "api"]} apiProviders={apiProviders} loading={searching} defaultQuery={searchCachedQuery} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiProviders={apiProviders} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} />
           {!searchParams && !searching && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-xs text-slate-400">
               <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">书籍ID</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono"># 1145141919810</span></div>
@@ -259,13 +274,11 @@ export default function BookshelfPage() {
             const isAllPlatform = searchParams?.platform === "all";
             const PLATFORM_TABS = [
               { id: "all", label: "全部" },
-              { id: "fanqie", label: "番茄" },
-              { id: "qidian", label: "起点" },
-              { id: "qimao", label: "七猫" },
+              ...platforms.map(p => ({ id: p.id, label: p.label })),
             ];
             const grouped = isAllPlatform ? searchResults.filter(r => resultTab === "all" || r.platform === resultTab) : searchResults;
             const counts: Record<string, number> | null = isAllPlatform
-              ? { all: searchResults.length, fanqie: searchResults.filter(r => r.platform === "fanqie").length, qidian: searchResults.filter(r => r.platform === "qidian").length, qimao: searchResults.filter(r => r.platform === "qimao").length }
+              ? { all: searchResults.length, ...Object.fromEntries(platforms.map(p => [p.id, searchResults.filter(r => r.platform === p.id).length])) }
               : null;
             const activeTab = isAllPlatform ? resultTab : "all";
             return (

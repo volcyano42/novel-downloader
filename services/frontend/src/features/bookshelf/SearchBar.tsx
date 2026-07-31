@@ -8,6 +8,7 @@ interface SearchBarProps {
   platforms?: { id: string; label: string }[];
   engineModes?: string[];
   apiProviders?: Record<string, string[]>;
+  platformModes?: Record<string, string[]>;
   loading?: boolean;
   defaultQuery?: string;
 }
@@ -19,8 +20,6 @@ export interface SearchFilters {
 type SearchTab = "url" | "title";
 
 const MODE_LABELS: Record<string, string> = { browser: "Browser", requests: "Requests", api: "API" };
-
-const PLATFORM_LABELS: Record<string, string> = { fanqie: "番茄", qidian: "起点", qimao: "七猫" };
 
 function ModeSelect({ modes, selected, onSelect, className }: {
   modes: string[]; selected: string; onSelect: (m: string) => void; className?: string;
@@ -39,16 +38,27 @@ function ModeSelect({ modes, selected, onSelect, className }: {
   );
 }
 
-export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProviders = {}, loading, defaultQuery = "" }: SearchBarProps) {
+export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProviders = {}, platformModes = {}, loading, defaultQuery = "" }: SearchBarProps) {
   const [tab, setTab] = useState<SearchTab>("title");
   const [query, setQuery] = useState(defaultQuery);
   const [platform, setPlatform] = useState("all");
   const [mode, setMode] = useState(engineModes[0] ?? "browser");
   const [provider, setProvider] = useState<string | undefined>();
 
-  // 标题搜索 + 全部/起点时去掉 API 模式（起点无 API provider）
-  const hideApiMode = tab === "title" && (platform === "all" || platform === "qidian");
-  const availableModes = hideApiMode ? engineModes.filter(m => m !== "api") : engineModes;
+  // 平台切换时自动切换到支持的模式
+  useEffect(() => {
+    if (!availableModes.includes(mode)) {
+      setMode(availableModes[0] ?? "browser");
+      setProvider(undefined);
+    }
+  }, [platform, tab]);
+
+  // 平台选择后，使用该平台支持的模式；全平台用全局列表
+  const platModes = platform !== "all" ? (platformModes[platform] ?? engineModes) : engineModes;
+  // 标题搜索 + 全部/起点时去掉 API 模式（无 API provider 的平台）
+  const hasApiProvider = platform !== "all" ? (apiProviders[platform]?.length ?? 0) > 0 : Object.keys(apiProviders).length > 0;
+  const hideApiMode = tab === "title" && !hasApiProvider;
+  const availableModes = hideApiMode ? platModes.filter(m => m !== "api") : platModes;
   const effectiveMode = availableModes.includes(mode) ? mode : availableModes[0] ?? "browser";
 
   const trigger = () => {
@@ -83,7 +93,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
     setQuery("");
   };
 
-  const allPlatforms = [{ id: "all", label: "全平台" } as const, ...platforms.map(p => ({ id: p.id, label: PLATFORM_LABELS[p.id] ?? p.label }))];
+  const allPlatforms = [{ id: "all", label: "全平台" } as const, ...platforms.map(p => ({ id: p.id, label: p.label }))];
 
   const currentPlatform = platform || "all";
   const platformProviders = apiProviders[platform] ?? [];
@@ -94,6 +104,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
     if (query.includes("fanqienovel.com") || query.includes("changdunovel.com")) return "fanqie";
     if (query.includes("qidian.com")) return "qidian";
     if (query.includes("qimao.com")) return "qimao";
+    if (query.includes("92xs.info")) return "92xs";
     return null;
   })();
   // 纯数字 ID → 按位数推断平台（与后端 id_pattern 一致）
@@ -107,13 +118,15 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
   })();
   const effectiveUrlPlatform = urlPlatform || urlIdPlatform;
   const urlProviders = effectiveUrlPlatform ? (apiProviders[effectiveUrlPlatform] ?? []) : [];
-  const urlHideApi = effectiveUrlPlatform === "qidian";
-  const urlModes = urlHideApi ? engineModes.filter(m => m !== "api") : engineModes;
+  const urlPlatModes = effectiveUrlPlatform ? (platformModes[effectiveUrlPlatform] ?? engineModes) : engineModes;
+  const urlHasApi = urlProviders.length > 0;
+  const urlHideApi = !urlHasApi;
+  const urlModes = urlHideApi ? urlPlatModes.filter(m => m !== "api") : urlPlatModes;
   const urlEffectiveMode = urlModes.includes(mode) ? mode : urlModes[0] ?? "browser";
 
-  // URL 模式 qidian 自动切到 browser
+  // URL 模式无 API 时自动切 browser
   useEffect(() => {
-    if (tab === "url" && effectiveUrlPlatform === "qidian" && mode === "api") {
+    if (tab === "url" && urlHideApi && mode === "api") {
       setMode("browser");
       setProvider(undefined);
     }

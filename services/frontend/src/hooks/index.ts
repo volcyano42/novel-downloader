@@ -9,7 +9,7 @@ import {
   getGroups, saveGroups,
   getSiteConfig, saveSiteConfig,
   getFormatConfig, saveFormatConfig,
-  downloadPlatforms,
+  downloadPlatforms, fetchSources,
   triggerExport, exportTaskStatus,
 } from "@/api/endpoints";
 import type { ChapterBrief } from "@/api/endpoints";
@@ -88,6 +88,14 @@ export function usePlatforms() {
   return useQuery({
     queryKey: ["platforms"],
     queryFn: downloadPlatforms,
+    staleTime: Infinity,
+  });
+}
+
+export function useSources() {
+  return useQuery({
+    queryKey: ["sources"],
+    queryFn: fetchSources,
     staleTime: Infinity,
   });
 }

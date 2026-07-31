@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type WheelEvent } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
-import { useNovelMeta, useRemoteChapters, useDownloadMutation, useSiteConfig, useGlobalConfig, compareChapters } from "@/hooks/index";
+import { useNovelMeta, useRemoteChapters, useDownloadMutation, useGlobalConfig, compareChapters, useSources } from "@/hooks/index";
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
@@ -12,9 +12,10 @@ import { getCachedChapters, setCachedChapters } from "@/utils/chapterCache";
 
 function platformFromUrl(url?: string): string {
   if (!url) return "fanqie";
-  if (url.includes("fanqienovel.com")) return "fanqie";
+  if (url.includes("fanqienovel.com") || url.includes("changdunovel.com")) return "fanqie";
   if (url.includes("qidian.com")) return "qidian";
   if (url.includes("qimao.com")) return "qimao";
+  if (url.includes("92xs.info")) return "92xs";
   return "fanqie";
 }
 
@@ -39,9 +40,12 @@ export default function DetailPage() {
   // 远程模式缺 URL 时从 novelId 推断（纯数字 ID → 番茄）
   const effectiveRemoteUrl = remoteUrl || (isRemote && /^\d+$/.test(novelId!) ? `https://fanqienovel.com/page/${novelId}` : undefined);
   const plat = platformFromUrl(st?.meta?.url ?? effectiveRemoteUrl ?? localMeta?.url);
+  const { data: sources } = useSources();
+  const sourceCaps = sources?.[plat]?.capabilities ?? {};
+  const platModes = Object.keys(sourceCaps);
+  const platProviders = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api) : [];
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
-  const { data: siteCfg } = useSiteConfig(plat);
   const { data: globalConfig } = useGlobalConfig();
 
   const novel = st?.meta ?? localMeta ?? null;
@@ -447,7 +451,7 @@ export default function DetailPage() {
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
         initialMode={savedMode} initialProvider={savedProvider}
-        providers={siteCfg?.api_providers ?? []}
+        availableModes={platModes} providers={platProviders}
         onStart={handleDialogConfirm} />
     </div>
   );

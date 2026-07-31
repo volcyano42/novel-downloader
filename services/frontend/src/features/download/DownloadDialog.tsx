@@ -8,27 +8,33 @@ interface DownloadDialogProps {
   variant?: "download" | "check";
   initialMode?: string;
   initialProvider?: string;
+  availableModes?: string[];
   providers?: string[];
   onStart: (mode: string, provider?: string) => void;
 }
 
-const MODES = [
-  { id: "browser", label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
-  { id: "requests", label: "Requests", icon: Globe, desc: "直接 HTTP 请求，最快" },
-  { id: "api", label: "API", icon: Zap, desc: "第三方接口" },
-] as const;
+const MODE_ICONS: Record<string, typeof Monitor> = { browser: Monitor, requests: Globe, api: Zap };
+const MODE_LABELS: Record<string, string> = { browser: "Browser", requests: "Requests", api: "API" };
+const MODE_DESCS: Record<string, string> = {
+  browser: "模拟浏览器，最稳定",
+  requests: "直接 HTTP 请求，最快",
+  api: "第三方接口",
+};
 
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, providers = [], onStart }: DownloadDialogProps) {
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, availableModes, providers = [], onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [provider, setProvider] = useState(initialProvider ?? "");
   const [loading, setLoading] = useState(false);
   const [shakeProvider, setShakeProvider] = useState(false);
 
+  const modes = (availableModes && availableModes.length > 0) ? availableModes : ["browser", "requests", "api"];
+  const hasApiProviders = providers.length > 0;
+  const visibleModes = hasApiProviders ? modes : modes.filter(m => m !== "api");
+
   useEffect(() => {
     if (open) {
-      const defaultMode = initialMode ?? "browser";
-      const safeMode = (defaultMode === "api" && providers.length === 0) ? "browser" : defaultMode;
-      setMode(safeMode);
+      const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
+      setMode(defaultMode);
       setProvider(initialProvider ?? "");
       setLoading(false);
       setShakeProvider(false);
@@ -47,8 +53,6 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
 
   if (!open) return null;
 
-  const availableModes = providers.length > 0 ? MODES : MODES.filter(m => m.id !== "api");
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
@@ -57,22 +61,24 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
         <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
         <div className="space-y-2 mb-4">
-          {availableModes.map(({ id, label, icon: Icon, desc }) => (
-            <button key={id} onClick={() => { setMode(id); if (id !== "api") setProvider(""); }}
-              className={cn(
-                "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                mode === id
-                  ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
-                  : "border-white/20 bg-white/60 hover:border-slate-200"
-              )}>
-              <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
-              <div className="min-w-0 flex-1">
-                <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{label}</span>
-                <p className="text-[11px] text-slate-400">{desc}</p>
-              </div>
-
-            </button>
-          ))}
+          {visibleModes.map(id => {
+            const Icon = MODE_ICONS[id] ?? Globe;
+            return (
+              <button key={id} onClick={() => { setMode(id); if (id !== "api") setProvider(""); }}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                  mode === id
+                    ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
+                    : "border-white/20 bg-white/60 hover:border-slate-200"
+                )}>
+                <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
+                <div className="min-w-0 flex-1">
+                  <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{MODE_LABELS[id] ?? id}</span>
+                  <p className="text-[11px] text-slate-400">{MODE_DESCS[id] ?? ""}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
       {mode === "api" && providers.length > 0 && (

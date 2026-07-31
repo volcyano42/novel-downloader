@@ -209,6 +209,12 @@ export function downloadPlatforms() {
   return apiGet<{ id: string; label: string }[]>("/download/platform");
 }
 
+export type SourceCapabilities = Record<string, Record<string, string[] | Record<string, string[]>>>;
+
+export function fetchSources() {
+  return apiGet<Record<string, { hosts: string[]; show_name: string; id_pattern: string; capabilities: Record<string, string[] | Record<string, string[]>> }>>("/download/sources");
+}
+
 // ── Config ─────────────────────────────────────────
 
 export function getGlobalConfig() {
