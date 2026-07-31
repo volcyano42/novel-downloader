@@ -1,8 +1,50 @@
 """配置服务 — YAML 读写、默认值、深合并、平台/格式配置加载。"""
+import os
+import shutil
+import sys
+
 from pathlib import Path
 import yaml
 
-_config_dir = Path(__file__).parent.parent.parent.parent / "app_data" / "config"
+def _copy_dir(src: Path, dst: Path) -> None:
+    """递归复制目录，保留已有文件（不覆盖）。"""
+    dst.mkdir(parents=True, exist_ok=True)
+    for item in src.iterdir():
+        target = dst / item.name
+        if item.is_dir():
+            _copy_dir(item, target)
+        elif not target.exists():
+            shutil.copy2(item, target)
+
+
+def _get_app_data_dir() -> Path:
+    """获取 app_data 目录。
+    
+    Priority: NLD_APP_DATA env > executable dir (frozen) > __file__ relative (dev).
+    """
+    env = os.environ.get("NLD_APP_DATA")
+    if env:
+        return Path(env).resolve()
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).parent
+        app_data = exe_dir / "app_data"
+        if not app_data.exists():
+            # 首次运行，从 _MEIPASS 复制默认配置
+            meipass = Path(sys._MEIPASS)
+            src = meipass / "app_data"
+            if src.exists():
+                _copy_dir(src, app_data)
+            else:
+                app_data.mkdir(parents=True, exist_ok=True)
+        return app_data
+    # 开发模式
+    return Path(__file__).parent.parent.parent.parent / "app_data"
+
+
+APP_DATA = _get_app_data_dir()
+CONFIG_DIR = APP_DATA / "config"
+# CONFIG_DIR 已在上面通过 _get_app_data_dir() 初始化（支持 frozen 模式）
+_config_dir = CONFIG_DIR  # 向后兼容别名
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -13,7 +55,7 @@ ENGINE_DEFAULTS = {
     "browser": {
         "headless": False,
         "browser_type": "chromium",
-        "user_data_dir": "app_data/browser/Chromium/User Data",
+        "user_data_dir": str(APP_DATA / "browser" / "Chromium" / "User Data"),
         "viewport": {"width": 1280, "height": 720},
         "delay": [3.0, 5.0],
         "timeout": 30.0,
@@ -87,7 +129,7 @@ def save_yaml(path: Path, data: dict):
 
 
 def load_config() -> dict:
-    return load_yaml(_config_dir / "config.yaml")
+    return load_yaml(CONFIG_DIR / "config.yaml")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -97,7 +139,7 @@ def load_config() -> dict:
 def load_platform_configs() -> dict[str, dict]:
     """读取所有 sites/{platform}.yaml，返回 {platform: {browser, requests, api}}。"""
     result: dict[str, dict] = {}
-    sites_dir = _config_dir / "sites"
+    sites_dir = CONFIG_DIR / "sites"
     if not sites_dir.is_dir():
         return result
     for p in sites_dir.glob("*.yaml"):
@@ -116,7 +158,7 @@ def load_platform_configs() -> dict[str, dict]:
 
 def load_platform_raw(platform: str) -> dict:
     """读取单个平台的原始 YAML 配置（用于合并写入）。"""
-    return load_yaml(_config_dir / "sites" / f"{platform}.yaml")
+    return load_yaml(CONFIG_DIR / "sites" / f"{platform}.yaml")
 
 
 def load_site_config(platform: str) -> dict:
@@ -126,7 +168,7 @@ def load_site_config(platform: str) -> dict:
 
 def find_provider_options(provider: str) -> dict | None:
     """在所有站点配置中查找指定 API provider 的选项（返回第一个启用的）。"""
-    sites_dir = _config_dir / "sites"
+    sites_dir = CONFIG_DIR / "sites"
     if not sites_dir.is_dir():
         return None
     for p in sites_dir.glob("*.yaml"):
@@ -147,7 +189,7 @@ def load_format_configs() -> dict[str, dict]:
     """读取 formats/{fmt}.yaml，合并默认值。"""
     result: dict[str, dict] = {}
     for fmt_key, defaults in FMT_DEFAULTS.items():
-        raw = load_yaml(_config_dir / "formats" / f"{fmt_key}.yaml")
+        raw = load_yaml(CONFIG_DIR / "formats" / f"{fmt_key}.yaml")
         fmt_data = raw.get(fmt_key, {}) if isinstance(raw, dict) else {}
         result[fmt_key] = deep_merge(defaults, fmt_data)
     return result
@@ -155,4 +197,9 @@ def load_format_configs() -> dict[str, dict]:
 
 def save_format_config(fmt_key: str, data: dict):
     """保存格式配置到 formats/{fmt}.yaml。"""
-    save_yaml(_config_dir / "formats" / f"{fmt_key}.yaml", {fmt_key: data})
+    save_yaml(CONFIG_DIR / "formats" / f"{fmt_key}.yaml", {fmt_key: data})
+
+
+def get_database_url() -> str:
+    """返回 SQLite 数据库连接 URL（基于 APP_DATA 解析的绝对路径）。"""
+    return f"sqlite:///{APP_DATA / 'storage' / 'novels.db'}"
