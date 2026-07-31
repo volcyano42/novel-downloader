@@ -1,5 +1,31 @@
 # 更新日志
 
+## v4.2.0
+
+### 新增
+
+1. **Android 版（WebView 套壳）** — 新增 `android/` 子项目：WebView 加载完整 WebUI（React 前端 100% 复用）+ NanoHTTPd 内嵌 HTTP 服务 + Kotlin 后端（4 平台书源 / 搜索 / 下载 / 书架 / TXT+EPUB 导出），APK 限定 arm64-v8a
+2. **发行版 CI** — `build-dist.yml` 手动触发构建 Windows x64 exe / Linux x64+arm64 / APK 四产物；`release.yml` 发布版本：自动创建 tag、以 CHANGELOG 段落为 Release 内容、附构建产物
+3. **构建脚本** — build-web / build-main / build-cli / build-android（PowerShell + Shell 双版本），Nuitka 打包参数统一，`.build.lock` 并行锁防 dist/ 互删
+4. **init_config 重构** — `app/config/` → `template/config/`（跨 CLI/WebUI 共用默认配置），根目录 `init_config.py` 检查+初始化分离，frozen 感知路径解析，CLI/WebUI 启动自动初始化缺失配置
+5. **Web 后端 frozen 配置修复** — `config_service` 支持 `NLD_APP_DATA` → exe 目录 → `__file__` 路径解析，首次运行自动复制默认配置，`database_url` 统一走 `get_database_url()`
+6. **cloud_sync delete --all** — 一键全删云端备份
+
+### 变更
+
+1. **删除登录功能** — `login.py`、`AuthCredential`、`do_login` 菜单项移除
+2. **前端动态平台** — 平台 / 模式 / provider 从 `sources` API 动态获取，不再硬编码
+3. 移除 `soupsieve<2.8` 版本锁定
+4. `pyproject.toml` 新增 CLI/Web entry points，支持 `pip install -e .`
+
+### 修复
+
+1. `build-android.ps1` — local.properties 写入 BOM 导致 Gradle 解析失败（改无 BOM UTF-8），签名调用消除 `Invoke-Expression` 注入风险
+2. `fetch_text` 支持 `encoding` 参数，92xs GBK 编码自动检测
+3. `build-dist.yml` arm64 runner 预装 `libheif-dev`（pillow-heif 无 arm64 wheel）
+
+---
+
 ## v4.1.0
 
 ### 新增
