@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from services.backend.schemas import ExportRequest, ExportTaskStatus
+from services.backend.services.config_service import get_database_url
 from novelbase import export as do_export, get_exporters
 
 router = APIRouter(prefix="/api/v2/export", tags=["export"])
@@ -34,7 +35,7 @@ async def trigger_export(body: ExportRequest):
         from novelbase.core.options import StorageOptions
         store = create_storage(StorageOptions(
             backend="sqlite",
-            database_url="sqlite:///app_data/storage/novels.db",
+            database_url=get_database_url(),
         ))
         novel = store.load_meta(body.novel_id)
         if not novel:
