@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # Build Web UI: novel-downloader-web (backend + frontend)
-# Usage: ./build-web.sh [--skip-frontend]   # --skip-frontend: 跳过前端构建（dist 已存在时用）
+# Usage: ./build-web.sh [--musl] [--skip-frontend]
+#   --musl          Nuitka musl 静态编译（Termux/bionic 环境产物）
+#   --skip-frontend 跳过前端构建（dist 已存在时用）
 set -e
 cd "$(dirname "$0")"
 
+MUSL=false
 SKIP_FRONTEND=false
-if [[ "$1" == "--skip-frontend" ]]; then SKIP_FRONTEND=true; fi
+for arg in "$@"; do
+    case "$arg" in
+        --musl)         MUSL=true ;;
+        --skip-frontend) SKIP_FRONTEND=true ;;
+        *) echo "未知参数: $arg"; exit 1 ;;
+    esac
+done
 
 # ── 并行构建锁（防止多个 Nuitka 脚本同时运行互删 dist/）──
 LOCK_DIR="$(dirname "$0")/.build.lock"
@@ -29,7 +38,8 @@ fi
 
 echo -e "\033[36m--- Nuitka: web backend (5-10 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
-python -m nuitka --standalone --onefile --static-libpython=yes --jobs=$(nproc) \
+# shellcheck disable=SC2086
+python -m nuitka --standalone --onefile --static-libpython=yes $([ "$MUSL" = true ] && echo --musl) --jobs=$(nproc) \
     --include-package=novelbase \
     --include-package=novelbase.sources.fanqie \
     --include-package=novelbase.sources.fanqie.browser \

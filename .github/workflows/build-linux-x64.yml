@@ -1,0 +1,43 @@
+name: Build Linux x64
+
+# 手动触发或作为可复用 workflow 被 build-dist.yml 调用
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build-linux-x64:
+    name: Linux x64
+    runs-on: ubuntu-22.04   # glibc 2.35，比 24.04 兼容更多旧发行版
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+          pip install -r requirements.txt nuitka
+
+      - name: Build (引用 build-web.sh)
+        run: |
+          chmod +x build-web.sh
+          ./build-web.sh
+
+      - name: 读取版本号并重命名
+        id: ver
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          mv dist/novel-downloader-web "dist/novel-downloader-web-linux-x64-$VERSION"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: novel-downloader-web-linux-x64-${{ steps.ver.outputs.version }}
+          path: dist/novel-downloader-web-linux-x64-${{ steps.ver.outputs.version }}
