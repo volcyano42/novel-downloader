@@ -95,8 +95,10 @@ if [ "$DO_SIGN" = true ]; then
     if [ ! -f "$KEYSTORE" ]; then
         echo -e "\033[36m--- 生成签名密钥库 ---\033[0m"
         if [ -z "$KEY_ALIAS" ]; then KEY_ALIAS="novel-downloader"; fi
-        read -rsp "密钥库密码（至少 6 位）: " KS_PASS
-        echo
+        if [ -z "${KS_PASS:-}" ]; then
+            read -rsp "密钥库密码（至少 6 位）: " KS_PASS
+            echo
+        fi
         keytool -genkey -v \
             -keystore "$KEYSTORE" \
             -alias "$KEY_ALIAS" \
@@ -110,8 +112,10 @@ if [ "$DO_SIGN" = true ]; then
         echo -e "\033[31mERROR: --sign 需要 --key-alias\033[0m"
         exit 1
     fi
-    read -rsp "密钥库密码: " KS_PASS
-    echo
+    if [ -z "${KS_PASS:-}" ]; then
+        read -rsp "密钥库密码: " KS_PASS
+        echo
+    fi
     SIGNING_ARGS="-Pandroid.injected.signing.store.file=$KEYSTORE -Pandroid.injected.signing.store.password=$KS_PASS -Pandroid.injected.signing.key.alias=$KEY_ALIAS -Pandroid.injected.signing.key.password=$KS_PASS"
 fi
 
