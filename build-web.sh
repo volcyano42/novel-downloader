@@ -4,6 +4,14 @@
 set -e
 cd "$(dirname "$0")"
 
+# ── 并行构建锁（防止多个 Nuitka 脚本同时运行互删 dist/）──
+LOCK_DIR="$(dirname "$0")/.build.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo -e "\033[31mERROR: 另一个构建正在进行（$LOCK_DIR 存在），请等待其完成\033[0m"
+    exit 1
+fi
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 echo -e "\033[36m--- Building frontend ---\033[0m"
 cd services/frontend
 if [ ! -d "node_modules" ]; then
