@@ -5,6 +5,7 @@ from base64 import b64decode, b64encode
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from services.backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief
+from services.backend.services.config_service import get_database_url
 from novelbase.core.storage import create_storage
 from novelbase.core.options import StorageOptions
 from novelbase.models.novel import Novel, Illustration
@@ -18,7 +19,7 @@ def _get_storage():
     if _storage is None:
         _storage = create_storage(StorageOptions(
             backend="sqlite",
-            database_url="sqlite:///app_data/storage/novels.db",
+            database_url=get_database_url(),
         ))
     return _storage
 
