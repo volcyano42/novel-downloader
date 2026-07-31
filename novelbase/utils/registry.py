@@ -44,6 +44,7 @@ def _scan_sources() -> dict[str, dict]:
             module = import_module(f"..sources.{module_name}", __package__)
             result[module_name] = {
                 "name": getattr(module, "NAME", module_name),
+                "show_name": getattr(module, "SHOW_NAME", module_name),
                 "hosts": getattr(module, "HOSTS", ()),
                 "id_pattern": getattr(module, "ID_PATTERN", None),
             }
@@ -79,21 +80,25 @@ def _hardcoded_sources() -> dict[str, dict]:
     return {
         "fanqie": {
             "name": "fanqie",
+            "show_name": "番茄",
             "hosts": ("fanqienovel.com", "changdunovel.com"),
             "id_pattern": re.compile(r"^fanqie_(\d{19})$"),
         },
         "qidian": {
             "name": "qidian",
+            "show_name": "起点",
             "hosts": ("www.qidian.com", "book.qidian.com"),
             "id_pattern": re.compile(r"^qidian_(\d{10})$"),
         },
         "qimao": {
             "name": "qimao",
+            "show_name": "七猫",
             "hosts": ("www.qimao.com", "qimao.com"),
             "id_pattern": re.compile(r"^qimao_(\d+)$"),
         },
         "92xs": {
             "name": "92xs",
+            "show_name": "就爱文学",
             "hosts": ("www.92xs.info", "92xs.info"),
             "id_pattern": re.compile(r"^92xs_(\d+)$"),
         },
@@ -186,8 +191,39 @@ FUNC_FILE_MAP = {
     "novel_info": "novel_info",
     "chapter_list": "chapter_list",
     "chapter_content": "chapter_content",
-    "login": "login",
 }
+
+
+def _probe_capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
+    """exe 环境下文件系统扫描失败，通过 import 探测 capabilities。"""
+    result: dict[str, list[str] | dict[str, list[str]]] = {}
+    _MODES = ["browser", "requests"]
+    _PROVIDERS = {"api": ["oiapi", "rain"]}
+    for mode in _MODES:
+        funcs: list[str] = []
+        for func_name, file_stem in FUNC_FILE_MAP.items():
+            try:
+                import_module(f"..sources.{name}.{mode}.{file_stem}", __package__)
+                funcs.append(func_name)
+            except (ImportError, ModuleNotFoundError):
+                pass
+        if funcs:
+            result[mode] = funcs
+    for mode, providers in _PROVIDERS.items():
+        prov_dict: dict[str, list[str]] = {}
+        for prov in providers:
+            funcs = []
+            for func_name, file_stem in FUNC_FILE_MAP.items():
+                try:
+                    import_module(f"..sources.{name}.{mode}.{prov}.{file_stem}", __package__)
+                    funcs.append(func_name)
+                except (ImportError, ModuleNotFoundError):
+                    pass
+            if funcs:
+                prov_dict[prov] = funcs
+        if prov_dict:
+            result[mode] = prov_dict
+    return result
 
 
 def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
@@ -196,7 +232,7 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     >>> capabilities("fanqie")
     {"api": {"oiapi": ["search", "novel_info", "chapter_list", "chapter_content"],
              "rain": ["search", "novel_info", "chapter_list", "chapter_content"]},
-     "browser": ["search", "novel_info", "chapter_list", "chapter_content", "login"],
+     "browser": ["search", "novel_info", "chapter_list", "chapter_content"],
      "requests": ["search", "novel_info", "chapter_list", "chapter_content"]}
 
     多 provider 的 mode 返回 {provider: [functions]}；
@@ -205,7 +241,7 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     """
     pkg_dir = Path(__file__).parent.parent / "sources" / name
     if not pkg_dir.is_dir():
-        return {}
+        return _probe_capabilities(name)
 
     result: dict[str, list[str] | dict[str, list[str]]] = {}
     for mode_dir in sorted(pkg_dir.iterdir()):

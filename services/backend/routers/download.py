@@ -175,7 +175,9 @@ async def delete_task(task_id: str):
 
 @router.get("/platform")
 async def list_platforms():
-    return [{"id": name, "label": name} for name in list_sources()]
+    from novelbase.utils.registry import register_source
+    sources = register_source()
+    return [{"id": name, "label": info.get("show_name", name)} for name, info in sources.items()]
 
 
 @router.get("/sources")
@@ -189,6 +191,7 @@ async def list_all_sources():
         id_pat = info.get("id_pattern")
         result[name] = {
             "hosts": list(info.get("hosts", ())),
+            "show_name": info.get("show_name", name),
             "id_pattern": id_pat.pattern if id_pat else None,
             "capabilities": caps,
         }

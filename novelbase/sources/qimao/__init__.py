@@ -1,5 +1,6 @@
 import re
 
 NAME = "qimao"
-HOSTS = ("www.qimao.com", "qimao.com")
+SHOW_NAME = "七猫"
+HOSTS = ("www.qimao.com",)
 ID_PATTERN = re.compile(r"^qimao_(\d+)$")
