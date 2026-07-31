@@ -37,7 +37,7 @@ jobs:
   # ═══════════════ Linux x64 ═══════════════
   build-linux-x64:
     name: Linux x64
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04   # glibc 2.35，比 24.04 兼容更多旧发行版
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,7 +67,7 @@ jobs:
   # ═══════════════ Linux arm64（Termux） ═══════════════
   build-linux-arm64:
     name: Linux arm64 (Termux)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-22.04-arm   # glibc 2.35，原生 arm64 runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
