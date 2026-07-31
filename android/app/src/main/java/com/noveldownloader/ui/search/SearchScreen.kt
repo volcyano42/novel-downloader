@@ -67,7 +67,7 @@ fun SearchScreen(
                         modifier = Modifier.padding(padding),
                     )
                 } else {
-                    LazyColumn(contentPadding = PaddingValues(padding)) {
+                    LazyColumn(contentPadding = padding) {
                         results.forEach { (platform, items) ->
                             item {
                                 Text(

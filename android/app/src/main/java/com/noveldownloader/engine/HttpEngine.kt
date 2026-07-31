@@ -38,7 +38,7 @@ class HttpEngine @Inject constructor() {
         val body = resp.body?.bytes() ?: throw AppError.NetworkError(url)
         // 有 BOM 的 UTF-8 需要跳过前3字节
         val offset = if (body.size >= 3 && body[0] == 0xEF.toByte() && body[1] == 0xBB.toByte() && body[2] == 0xBF.toByte()) 3 else 0
-        body.toString(charset(charset), offset, body.size - offset)
+        String(body, offset, body.size - offset, charset(charset))
     }
 
     /** POST JSON，返回响应字符串。 */
@@ -63,7 +63,7 @@ private suspend fun okhttp3.Call.await(): okhttp3.Response {
     return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         enqueue(object : okhttp3.Callback {
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                cont.resume(response)
+                cont.resume(response, onCancellation = {})
             }
             override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                 cont.cancel(e)

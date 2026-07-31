@@ -25,7 +25,7 @@ class Xs92Source @Inject constructor(
         return doc.select(".grid tr").drop(1).mapNotNull { row ->
             val cells = row.select("td")
             if (cells.size < 3) return@mapNotNull null
-            val link = cells[0].select_first("a") ?: return@mapNotNull null
+            val link = cells[0].selectFirst("a") ?: return@mapNotNull null
             val href = link.attr("href")
             val bookId = extractNovelId(href) ?: return@mapNotNull null
             SearchResult(
@@ -46,10 +46,10 @@ class Xs92Source @Inject constructor(
         val doc = Jsoup.parse(html)
         return NovelInfo(
             novelId = extractNovelId(url) ?: "92xs_unknown",
-            name = doc.select_first("#info h1")?.text() ?: "",
-            author = doc.select_first("#info p")?.text()?.replace("作者：", "") ?: "",
-            coverUrl = doc.select_first("#fmimg img")?.attr("src") ?: "",
-            description = doc.select_first("#intro")?.text() ?: "",
+            name = doc.selectFirst("#info h1")?.text() ?: "",
+            author = doc.selectFirst("#info p")?.text()?.replace("作者：", "") ?: "",
+            coverUrl = doc.selectFirst("#fmimg img")?.attr("src") ?: "",
+            description = doc.selectFirst("#intro")?.text() ?: "",
             status = "",
             totalChapters = 0,
         )
@@ -71,7 +71,7 @@ class Xs92Source @Inject constructor(
     override suspend fun chapterContent(url: String): String {
         val html = http.get(url, charset = "GBK")
         val doc = Jsoup.parse(html)
-        return doc.select_first("#content")?.html()
+        return doc.selectFirst("#content")?.html()
             ?.replace("&nbsp;", " ")
             ?.replace("<br>", "\n")
             ?.replace("<br/>", "\n")

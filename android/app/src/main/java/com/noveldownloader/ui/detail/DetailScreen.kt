@@ -86,7 +86,7 @@ fun DetailScreen(
             }
             is UiState.Success -> {
                 val detail = s.data
-                LazyColumn(contentPadding = PaddingValues(padding)) {
+                LazyColumn(contentPadding = padding) {
                     // 小说信息
                     item {
                         Column(Modifier.padding(16.dp)) {
