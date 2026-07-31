@@ -8,7 +8,8 @@
     <script>
       (function() {
         var theme = localStorage.getItem('reader-theme');
-        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        // 默认亮色，不跟随系统暗色（APK / WebUI 一致）；仅尊重手动选择
+        if (theme === 'dark') {
           document.documentElement.classList.add('dark');
         }
       })();

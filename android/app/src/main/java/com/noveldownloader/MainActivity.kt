@@ -1,7 +1,9 @@
 package com.noveldownloader
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 
@@ -21,6 +23,11 @@ class MainActivity : Activity() {
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
             settings.setSupportZoom(false)
+            // 不跟随系统暗色：关闭 WebView 算法暗色渲染（API 33+），前端默认亮色
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                settings.setForceDark(WebSettings.FORCE_DARK_OFF)
+                settings.setAlgorithmicDarkeningAllowed(false)
+            }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
                     // Hide any loading overlay

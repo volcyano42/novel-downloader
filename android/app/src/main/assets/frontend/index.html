@@ -8,12 +8,13 @@
     <script>
       (function() {
         var theme = localStorage.getItem('reader-theme');
-        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        // 默认亮色，不跟随系统暗色（APK / WebUI 一致）；仅尊重手动选择
+        if (theme === 'dark') {
           document.documentElement.classList.add('dark');
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-BRyH9x0V.js"></script>
+    <script type="module" crossorigin src="/assets/index-BvDlYD6X.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-0vOb_vUP.css">
   </head>
   <body>
