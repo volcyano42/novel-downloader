@@ -28,6 +28,7 @@ python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
     @SOURCE_PKGS `
     --include-package=app `
     --include-data-dir=app_data/config=app_data/config `
+    --include-data-dir=template/config=template/config `
     --output-dir=dist `
     --output-filename=novel-downloader `
     main.py

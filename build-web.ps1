@@ -39,6 +39,7 @@ python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
     --include-package=app `
     --include-package=services `
     --include-data-dir=app_data/config=app_data/config `
+    --include-data-dir=template/config=template/config `
     --include-data-dir=services/frontend/dist=services/frontend/dist `
     --output-dir=dist `
     --output-filename=novel-downloader-web `
