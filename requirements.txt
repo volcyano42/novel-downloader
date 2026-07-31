@@ -1,5 +1,4 @@
 beautifulsoup4
-soupsieve<2.8
 drissionpage
 fastapi
 Pillow
