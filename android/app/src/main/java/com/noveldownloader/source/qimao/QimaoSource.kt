@@ -48,11 +48,11 @@ class QimaoSource @Inject constructor(
         val doc = Jsoup.parse(html)
         return NovelInfo(
             novelId = extractNovelId(url) ?: "qimao_unknown",
-            name = doc.select_first("h1")?.text() ?: "",
-            author = doc.select_first(".author")?.text()?.replace("作者：", "") ?: "",
-            coverUrl = doc.select_first(".cover-img img")?.attr("src") ?: "",
-            description = doc.select_first(".intro")?.text() ?: "",
-            status = doc.select_first(".status")?.text() ?: "",
+            name = doc.selectFirst("h1")?.text() ?: "",
+            author = doc.selectFirst(".author")?.text()?.replace("作者：", "") ?: "",
+            coverUrl = doc.selectFirst(".cover-img img")?.attr("src") ?: "",
+            description = doc.selectFirst(".intro")?.text() ?: "",
+            status = doc.selectFirst(".status")?.text() ?: "",
             totalChapters = 0,
         )
     }
@@ -65,7 +65,7 @@ class QimaoSource @Inject constructor(
     override suspend fun chapterContent(url: String): String {
         val html = http.get(url)
         val doc = Jsoup.parse(html)
-        return doc.select_first(".article")?.html()
+        return doc.selectFirst(".article")?.html()
             ?.replace("<br>", "\n")
             ?.replace("<br/>", "\n")
             ?: ""

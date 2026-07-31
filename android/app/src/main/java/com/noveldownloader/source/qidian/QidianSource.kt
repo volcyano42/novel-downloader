@@ -23,16 +23,16 @@ class QidianSource @Inject constructor(
         val html = http.get("https://www.qidian.com/search?kw=$encoded")
         val doc = Jsoup.parse(html)
         return doc.select("#result-list .book-mid-info").map { el ->
-            val link = el.select_first("h2 a") ?: return@map null
+            val link = el.selectFirst("h2 a") ?: return@map null
             val href = link.attr("href")
             val bookId = extractNovelId(href) ?: return@map null
             SearchResult(
                 novelId = "qidian_$bookId",
                 name = link.text(),
-                author = el.select_first(".author a.name")?.text() ?: "",
+                author = el.selectFirst(".author a.name")?.text() ?: "",
                 coverUrl = "https:$href",  // placeholder
                 url = "https:$href",
-                description = el.select_first(".intro")?.text() ?: "",
+                description = el.selectFirst(".intro")?.text() ?: "",
                 platform = name,
                 status = "",
             )
@@ -44,11 +44,11 @@ class QidianSource @Inject constructor(
         val doc = Jsoup.parse(html)
         return NovelInfo(
             novelId = extractNovelId(url) ?: "qidian_unknown",
-            name = doc.select_first(".book-info h1 em")?.text()
-                ?: doc.select_first("h1")?.text() ?: "",
-            author = doc.select_first(".book-info .writer")?.text() ?: "",
-            coverUrl = doc.select_first(".book-img img")?.attr("src") ?: "",
-            description = doc.select_first(".book-info .book-intro p")?.text() ?: "",
+            name = doc.selectFirst(".book-info h1 em")?.text()
+                ?: doc.selectFirst("h1")?.text() ?: "",
+            author = doc.selectFirst(".book-info .writer")?.text() ?: "",
+            coverUrl = doc.selectFirst(".book-img img")?.attr("src") ?: "",
+            description = doc.selectFirst(".book-info .book-intro p")?.text() ?: "",
             status = "",
             totalChapters = 0,
         )
@@ -63,7 +63,7 @@ class QidianSource @Inject constructor(
     override suspend fun chapterContent(url: String): String {
         val html = http.get(url)
         val doc = Jsoup.parse(html)
-        return doc.select_first(".read-content")?.text()
+        return doc.selectFirst(".read-content")?.text()
             ?.replace("\u3000\u3000", "\n\u3000\u3000")
             ?: ""
     }

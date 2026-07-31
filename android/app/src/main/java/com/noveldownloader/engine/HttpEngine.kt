@@ -66,7 +66,7 @@ private suspend fun okhttp3.Call.await(): okhttp3.Response {
                 cont.resume(response)
             }
             override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                cont.resumeWithException(e)
+                cont.cancel(e)
             }
         })
         cont.invokeOnCancellation { cancel() }
