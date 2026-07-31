@@ -2,11 +2,16 @@
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# dev mode: ensure project root is on path
+_project_root = Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from services.backend.routers import storage, download, export, engine, config
 from services.backend.services.engine_manager import clear_engine_cache
@@ -75,6 +80,50 @@ app.include_router(config.router)
 async def health():
     return {"ok": True, "message": "success", "data": {"status": "ok"}}
 
+# ── 前端静态文件 ──
+def _find_frontend_dist() -> Path | None:
+    """定位前端构建产物目录。"""
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys._MEIPASS) / "services" / "frontend" / "dist")
+    candidates.extend([
+        _project_root / "services" / "frontend" / "dist",
+        Path.cwd() / "services" / "frontend" / "dist",
+    ])
+    for p in candidates:
+        if (p / "index.html").exists():
+            return p
+    return None
+
+_frontend = _find_frontend_dist()
+if _frontend:
+    app.mount("/assets", StaticFiles(directory=str(_frontend / "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """SPA fallback：非 API 路由返回 index.html。"""
+        path = _frontend / (full_path or "index.html")
+        if path.is_file():
+            return FileResponse(str(path))
+        return FileResponse(str(_frontend / "index.html"))
+
+def main():
+    """启动 Web 后端服务。"""
+    import uvicorn, webbrowser, threading
+    frozen = getattr(sys, "frozen", False)
+
+    # 1 秒后自动打开浏览器
+    def _open_browser():
+        import time
+        time.sleep(1)
+        webbrowser.open("http://localhost:8000")
+
+    threading.Thread(target=_open_browser, daemon=True).start()
+
+    if frozen:
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    else:
+        uvicorn.run("services.backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
 if __name__ == "__main__":
-    import uvicorn, os
-    uvicorn.run("services.backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    main()

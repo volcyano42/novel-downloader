@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,14 +24,33 @@ def _get_app_data_dir() -> Path:
     """Get app_data directory.
 
     Priority: NLD_APP_DATA env > executable dir (frozen) > script dir.
-    Uses Path(__file__).parent (not cwd) so PyInstaller works.
     """
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve()
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent / "app_data"
+        exe_dir = Path(sys.executable).parent
+        app_data = exe_dir / "app_data"
+        if not app_data.exists():
+            # 首次运行，从 _MEIPASS 复制默认配置
+            _meipass = Path(sys._MEIPASS)
+            if (_meipass / "app_data").exists():
+                _copy_dir(_meipass / "app_data", app_data)
+            else:
+                app_data.mkdir(parents=True, exist_ok=True)
+        return app_data
     return Path(__file__).parent.parent / "app_data"
+
+
+def _copy_dir(src: Path, dst: Path) -> None:
+    """Recursively copy directory. Preserves existing files."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for item in src.iterdir():
+        target = dst / item.name
+        if item.is_dir():
+            _copy_dir(item, target)
+        elif not target.exists():
+            shutil.copy2(item, target)
 
 
 def _resolve_paths(value: Any) -> Any:
