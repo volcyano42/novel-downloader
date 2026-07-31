@@ -26,17 +26,21 @@ jobs:
 
       - name: 读取版本号并重命名
         id: ver
-        shell: bash
+        shell: pwsh
         run: |
-          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # Windows Defender 可能短暂锁定刚编译的 exe，重试几次
-          for i in 1 2 3 4 5; do
-            mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-x64-$VERSION.exe" && break
-            echo "重命名被锁定（第 $i 次），等待 10s..."
-            sleep 10
-          done
-          test -f "dist/novel-downloader-web-windows-x64-$VERSION.exe" || { echo "重命名最终失败"; ls -la dist/; exit 1; }
+          $VERSION = python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))"
+          Write-Output "version=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "dist 内容:"
+          Get-ChildItem dist | Format-Table Name, Length -AutoSize
+          $src = "dist\novel-downloader-web.exe"
+          $dst = "dist\novel-downloader-web-windows-x64-$VERSION.exe"
+          if (-not (Test-Path $src)) { Write-Error "未找到产物: $src"; exit 1 }
+          for ($i = 1; $i -le 5; $i++) {
+            try { Copy-Item $src $dst -Force -ErrorAction Stop; break }
+            catch { Write-Host "复制被锁定（第 $i 次），等待 10s..."; Start-Sleep 10 }
+          }
+          if (-not (Test-Path $dst)) { Write-Error "重命名最终失败"; Get-ChildItem dist | Format-Table Name, Length -AutoSize; exit 1 }
+          Write-Host "OK: $dst"
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
