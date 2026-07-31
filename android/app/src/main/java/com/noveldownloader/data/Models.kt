@@ -12,6 +12,7 @@ data class Novel(
     val downloadedChapters: Int = 0,
     val status: String = "",
     val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
 )
 
 data class Chapter(

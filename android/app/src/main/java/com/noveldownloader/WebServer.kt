@@ -234,7 +234,7 @@ class WebServer(
             method == Method.GET && path == "config/groups" ->
                 json(200, okData(config.loadGroups()))
             method == Method.PUT && path == "config/groups" -> {
-                val groups = gson.fromJson(bodyStr, Map::class.java)
+                val groups: Map<String, Any> = gson.fromJson(bodyStr, Map::class.java) as Map<String, Any>
                 config.saveGroups(groups)
                 json(200, mapOf("ok" to true, "message" to "ok"))
             }

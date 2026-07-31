@@ -29,7 +29,7 @@ class HttpEngine {
                 override fun onFailure(call: Call, e: java.io.IOException) = cont.resumeWithException(e)
             })
         }
-        resp.use { r ->
+        return resp.use { r ->
             if (!r.isSuccessful) throw RuntimeException("HTTP ${r.code}: $url")
             val body = r.body?.bytes() ?: throw RuntimeException("empty body: $url")
             val offset = if (body.size >= 3 && body[0] == 0xEF.toByte() && body[1] == 0xBB.toByte() && body[2] == 0xBF.toByte()) 3 else 0
@@ -47,7 +47,7 @@ class HttpEngine {
                 override fun onFailure(call: Call, e: java.io.IOException) = cont.resumeWithException(e)
             })
         }
-        resp.use { r ->
+        return resp.use { r ->
             if (!r.isSuccessful) throw RuntimeException("HTTP ${r.code}: $url")
             r.body?.string() ?: throw RuntimeException("empty body: $url")
         }
