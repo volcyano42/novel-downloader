@@ -6,7 +6,7 @@ from services.backend.services import config_service
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
-_cfg_dir = config_service._config_dir  # noqa: SLF001
+_cfg_dir = config_service.CONFIG_DIR
 
 # ── config.yaml ────────────────────────────────────
 
