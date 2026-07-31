@@ -13,11 +13,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "1.0.0"
-
-        // 仅构建 arm64-v8a（WebView 套壳，无 native 代码，标记目标 ABI）
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
+        // WebView 套壳无 native 代码 → universal APK，兼容任意 ABI 设备
     }
 
     buildTypes {
