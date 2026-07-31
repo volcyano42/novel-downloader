@@ -1,18 +1,20 @@
 name: Build Distributables
 
 # 手动触发：构建发行产物
-#   - novel-downloader-web.exe      Windows x64（Nuitka 打包，引用 build-web.ps1）
-#   - novel-downloader-web          Linux x64（Nuitka 打包，引用 build-web.sh）
-#   - novel-downloader-web          Linux arm64（Nuitka 打包，引用 build-web.sh，供 Termux/arm64 环境）
-#   - novel-downloader-v1.0.0.apk   Android arm64-v8a（引用 build-android.sh，KS_PASS 非交互签名）
+#   - novel-downloader-web.exe      Windows x64 / x86（Nuitka 打包，引用 build-web.ps1）
+#   - novel-downloader-web          Linux x64 / arm64 / x86（Nuitka 打包，引用 build-web.sh）
+#   - novel-downloader-v1.0.0.apk   Android universal APK（引用 build-android.sh，KS_PASS 非交互签名）
 on:
   workflow_dispatch:
 
 jobs:
-  # ═══════════════ Windows x64 exe ═══════════════
+  # ═══════════════ Windows x64 / x86 exe ═══════════════
   build-windows:
-    name: Windows x64 exe
+    name: Windows ${{ matrix.arch }} exe
     runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +23,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          architecture: ${{ matrix.arch }}
 
       - name: Install dependencies
         run: pip install -r requirements.txt nuitka
@@ -31,43 +34,20 @@ jobs:
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-windows-x64
+          name: novel-downloader-web-windows-${{ matrix.arch }}
           path: dist/novel-downloader-web.exe
 
-  # ═══════════════ Linux x64 ═══════════════
-  build-linux-x64:
-    name: Linux x64
-    runs-on: ubuntu-22.04   # glibc 2.35，比 24.04 兼容更多旧发行版
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y patchelf
-          pip install -r requirements.txt nuitka
-
-      - name: Build (引用 build-web.sh)
-        run: |
-          chmod +x build-web.sh
-          ./build-web.sh
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: novel-downloader-web-linux-x64
-          path: dist/novel-downloader-web
-
-  # ═══════════════ Linux arm64（Termux） ═══════════════
-  build-linux-arm64:
-    name: Linux arm64 (Termux)
-    runs-on: ubuntu-22.04-arm   # glibc 2.35，原生 arm64 runner
+  # ═══════════════ Linux x64 / arm64 ═══════════════
+  build-linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04   # glibc 2.35，比 24.04 兼容更多旧发行版
+          - arch: arm64
+            runner: ubuntu-22.04-arm   # 原生 arm64 runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,12 +72,48 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-linux-arm64
+          name: novel-downloader-web-linux-${{ matrix.arch }}
           path: dist/novel-downloader-web
 
-  # ═══════════════ Android APK arm64-v8a ═══════════════
+  # ═══════════════ Linux x86 (i386) ═══════════════
+  build-linux-x86:
+    name: Linux x86 (i386)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # i386 docker 内无现代 node → 先在 host 构建前端，docker 里跳过前端
+      - name: Build frontend (host)
+        run: |
+          cd services/frontend
+          npm ci
+          npm run build
+
+      - name: Build in i386 docker (引用 build-web.sh --skip-frontend)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/src -w /src \
+            i386/ubuntu:22.04 bash -c "
+              set -e
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y python3 python3-dev python3-pip gcc patchelf \
+                libheif-dev libjpeg-dev zlib1g-dev libffi-dev libssl-dev pkg-config
+              pip3 install -r requirements.txt nuitka
+              chmod +x build-web.sh
+              ./build-web.sh --skip-frontend
+            "
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: novel-downloader-web-linux-x86
+          path: dist/novel-downloader-web
+
+  # ═══════════════ Android universal APK ═══════════════
   build-apk:
-    name: Android APK (arm64-v8a)
+    name: Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -133,5 +149,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-apk-arm64
+          name: novel-downloader-apk
           path: android/dist/*.apk

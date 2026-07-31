@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Build Web UI: novel-downloader-web (backend + frontend)
-# Usage: ./build-web.sh
+# Usage: ./build-web.sh [--skip-frontend]   # --skip-frontend: 跳过前端构建（dist 已存在时用）
 set -e
 cd "$(dirname "$0")"
+
+SKIP_FRONTEND=false
+if [[ "$1" == "--skip-frontend" ]]; then SKIP_FRONTEND=true; fi
 
 # ── 并行构建锁（防止多个 Nuitka 脚本同时运行互删 dist/）──
 LOCK_DIR="$(dirname "$0")/.build.lock"
@@ -12,15 +15,17 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT
 
-echo -e "\033[36m--- Building frontend ---\033[0m"
-cd services/frontend
-if [ ! -d "node_modules" ]; then
-    echo -e "\033[33mnpm install...\033[0m"
-    npm install
+if [ "$SKIP_FRONTEND" != true ]; then
+    echo -e "\033[36m--- Building frontend ---\033[0m"
+    cd services/frontend
+    if [ ! -d "node_modules" ]; then
+        echo -e "\033[33mnpm install...\033[0m"
+        npm install
+    fi
+    echo "npm run build..."
+    npm run build
+    cd ../..
 fi
-echo "npm run build..."
-npm run build
-cd ../..
 
 echo -e "\033[36m--- Nuitka: web backend (5-10 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
