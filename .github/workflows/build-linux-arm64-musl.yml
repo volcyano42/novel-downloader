@@ -37,6 +37,8 @@ jobs:
               pip3 install --break-system-packages -r requirements.txt nuitka
               chmod +x build-web.sh
               ./build-web.sh --musl --skip-frontend
+              # 容器内 root 创建的 dist/ 属主是 root，host runner 无写权限，放开权限供后续 mv
+              chmod -R a+rwX /src/dist
             "
 
       - name: 读取版本号并重命名
