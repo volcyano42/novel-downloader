@@ -32,7 +32,7 @@ jobs:
 
       - name: Build APK
         working-directory: android
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Verify APK
         run: ls -la android/app/build/outputs/apk/debug/
