@@ -89,7 +89,8 @@ if (Test-Path $localProps) {
 if ($needProps) {
     Write-Host "  写入 local.properties（sdk.dir）..." -ForegroundColor Yellow
     $sdkDir = $sdkRoot -replace '\\', '\\'
-    "sdk.dir=$sdkDir" | Out-File -FilePath $localProps -Encoding utf8
+    # 无 BOM UTF-8（PowerShell 5.1 的 Out-File utf8 带 BOM，会导致 Gradle Properties 解析失败）
+    [System.IO.File]::WriteAllText($localProps, "sdk.dir=$sdkDir`n", [System.Text.UTF8Encoding]::new($false))
 }
 
 # ── 签名配置 ────────────────────────────────────────────
@@ -133,13 +134,11 @@ Push-Location $ProjectPath
 # Windows: gradlew.bat
 $gradleCmd = if ($IsWindows -or (-not (Test-Path variable:IsWindows))) { ".\gradlew.bat" } else { "./gradlew" }
 
-$args = @("assembleRelease")
+$apkArgs = @("assembleRelease")
 if ($signingArgs) {
-    $fullCmd = "$gradleCmd assembleRelease $signingArgs"
-    Invoke-Expression $fullCmd
-} else {
-    & $gradleCmd assembleRelease
+    $signingArgs.Split(' ') | ForEach-Object { $apkArgs += $_ }
 }
+& $gradleCmd @apkArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: 构建失败" -ForegroundColor Red
