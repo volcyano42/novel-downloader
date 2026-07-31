@@ -18,7 +18,7 @@ def search(query: str, engine, **kwargs) -> list[SearchResult]:
             },
             timeout=15,
         )
-        resp.encoding = "gbk"
+        resp.encoding = resp.apparent_encoding or "utf-8"
     except requests.RequestException:
         return []
 

@@ -33,8 +33,8 @@ class Engine(ABC):
         self._registry_key = key
 
     @abstractmethod
-    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
-        """GET/POST 请求返回纯文本。"""
+    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        """GET/POST 请求返回纯文本。encoding 为空时自动检测。"""
         ...
 
     @abstractmethod
@@ -135,13 +135,15 @@ class APIEngine(Engine):
             time.sleep(random.uniform(*self.options.delay))
         return response
 
-    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
         post_data = kwargs.pop('post_data', None)
         _log.debug("API fetch_text: url=%s", mask_key(url[:120]))
         if post_data is not None:
             response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
         else:
             response = self._requests_get(url, skip_delay=skip_delay, **kwargs)
+        if encoding:
+            response.encoding = encoding
         _log.debug("API fetch_text ok: len=%s", len(response.text))
         return response.text
 
@@ -253,7 +255,7 @@ class BrowserEngine(Engine):
     def new_page(self):
         return self._browser.new_tab()
 
-    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
         _log.debug("fetch_text start: url=%s", mask_key(url[:120]))
         page = self.get_page()
 
@@ -345,7 +347,7 @@ class RequestsEngine(Engine):
 
     # ── 请求 ─────────────────────────────────────────────────────
 
-    def fetch_text(self, url: str, skip_delay: bool = False, **kwargs) -> str:
+    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
         _log.debug("Requests fetch_text: url=%s", mask_key(url[:120]))
         session = self._get_session()
         try:
@@ -357,7 +359,7 @@ class RequestsEngine(Engine):
         except requests.RequestException as e:
             raise NetworkError(f"GET failed: {e}", url=url) from e
 
-        response.encoding = 'utf-8'
+        response.encoding = encoding or response.apparent_encoding or 'utf-8'
         if not skip_delay:
             time.sleep(random.uniform(*self.options.delay))
         _log.debug("Requests fetch_text ok: len=%s", len(response.text))
