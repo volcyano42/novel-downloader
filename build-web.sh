@@ -39,7 +39,7 @@ fi
 echo -e "\033[36m--- Nuitka: web backend (5-10 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
 # shellcheck disable=SC2086
-python -m nuitka --standalone --onefile --static-libpython=yes $([ "$MUSL" = true ] && echo --musl) --jobs=$(nproc) \
+python -m nuitka --standalone --onefile --static-libpython=yes --assume-yes-for-downloads $([ "$MUSL" = true ] && echo --musl) --jobs=$(nproc) \
     --include-package=novelbase \
     --include-package=novelbase.sources.fanqie \
     --include-package=novelbase.sources.fanqie.browser \

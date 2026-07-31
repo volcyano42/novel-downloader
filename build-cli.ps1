@@ -34,7 +34,7 @@ $SOURCE_PKGS = @(
 
 Write-Host "--- Nuitka: non-interactive CLI (3-5 min) ---" -ForegroundColor Cyan
 Get-ChildItem dist\*.build, dist\*.dist -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-python -m nuitka --standalone --onefile --experimental=force-dependencies-pefile --jobs=$env:NUMBER_OF_PROCESSORS `
+python -m nuitka --standalone --onefile --msvc=latest --assume-yes-for-downloads --experimental=force-dependencies-pefile --jobs=$env:NUMBER_OF_PROCESSORS `
     @SOURCE_PKGS `
     --include-package=app `
     --include-data-dir=app_data/config=app_data/config `
