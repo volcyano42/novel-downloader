@@ -1,0 +1,3 @@
+-keep class com.noveldownloader.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
