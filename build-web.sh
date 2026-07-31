@@ -38,8 +38,8 @@ fi
 
 echo -e "\033[36m--- Nuitka: web backend (5-10 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
-# Nuitka 4.x 已移除 --musl：在 musl 环境（alpine/Termux）编译自动为 musl 链接，
-# --static-libpython 需要静态库（alpine 需 apk add python3-static）
+# Nuitka 4.x 已移除 --musl：在 musl 环境（alpine/Termux）编译自动为 musl 链接；
+# alpine 无静态 libpython（无 python3-static 包），--static-libpython 会让 Nuitka 自动从源码编译
 # shellcheck disable=SC2086
 python -m nuitka --standalone --onefile --static-libpython=yes --assume-yes-for-downloads --jobs=$(nproc) \
     --include-package=novelbase \
