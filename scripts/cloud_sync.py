@@ -21,6 +21,7 @@
     python scripts/cloud_sync.py pull --ahead      # 仅下载云端领先的小说
     python scripts/cloud_sync.py status            # 对比本地与云端
     python scripts/cloud_sync.py delete <novel_id> # 从云端删除备份
+    python scripts/cloud_sync.py delete --all       # 一键删除云端全部备份
 """
 
 import argparse
@@ -365,10 +366,44 @@ def cmd_pull(novel_id: Optional[str] = None, ahead_only: bool = False):
             except FileNotFoundError:
                 pass
 
-def cmd_delete(novel_id: Optional[str] = None):
+def cmd_delete(novel_id: Optional[str] = None, delete_all: bool = False):
     """从云端删除备份（.db + .manifest.json + CDN 缓存刷新）。"""
+    if delete_all:
+        all_keys = _qiniu_list("novels/")
+        db_keys = [k for k in all_keys if k.endswith(".db")]
+        manifest_keys = [k for k in all_keys if k.endswith(".manifest.json")]
+        if not db_keys and not manifest_keys:
+            print("云端没有备份。")
+            return
+        n = len(db_keys)
+        print(f"将删除云端全部 {n} 本小说的备份（含 .db 和 .manifest.json）。")
+        confirm = input("确认？输入 YES 继续: ").strip()
+        if confirm != "YES":
+            print("已取消。")
+            return
+        refresh_urls: list[str] = []
+        for key in db_keys:
+            try:
+                _qiniu_delete(key)
+                print(f"  ✓ {key} 已删除")
+                refresh_urls.append(f"{_base_url()}/{key}")
+            except Exception as e:
+                print(f"  ✗ {key} — {e}")
+        for key in manifest_keys:
+            try:
+                _qiniu_delete(key)
+                refresh_urls.append(f"{_base_url()}/{key}")
+            except Exception:
+                pass  # manifest 可能已被 db 删除连带清理
+        if refresh_urls:
+            try:
+                _cdn_refresh(refresh_urls)
+            except Exception as e:
+                print(f"  ⚠ CDN 刷新失败: {e}")
+        return
+
     if not novel_id:
-        print("错误: delete 必须指定 novel_id，不支持一键全删。")
+        print("错误: delete 必须指定 novel_id，或使用 --all 一键全删。")
         sys.exit(1)
 
     remote_key = f"novels/{novel_id}.db"
@@ -503,7 +538,8 @@ def main():
     p_pull.add_argument("--ahead", action="store_true", help="仅 pull 云端领先的小说（含仅云端）")
 
     p_delete = sub.add_parser("delete", help="从云端删除备份")
-    p_delete.add_argument("novel_id", nargs="?", help="小说 ID（必填）")
+    p_delete.add_argument("novel_id", nargs="?", help="小说 ID")
+    p_delete.add_argument("--all", action="store_true", dest="delete_all", help="一键删除云端全部备份")
 
     sub.add_parser("status", help="对比本地与云端")
 
@@ -522,7 +558,7 @@ def main():
     elif args.cmd == "pull":
         cmd_pull(args.novel_id, ahead_only=args.ahead)
     elif args.cmd == "delete":
-        cmd_delete(args.novel_id)
+        cmd_delete(args.novel_id, delete_all=args.delete_all)
     elif args.cmd == "status":
         cmd_status()
     else:
