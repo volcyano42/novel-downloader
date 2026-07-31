@@ -31,6 +31,9 @@ jobs:
               # python3-dev 提供头文件；alpine 无 libpython 静态库，Nuitka --static-libpython 会自动从源码编译
               apk add --no-cache bash python3 python3-dev py3-pip gcc musl-dev make patchelf \
                 libheif-dev zlib-dev libjpeg-turbo-dev libffi-dev openssl-dev
+              # alpine 自带 patchelf 0.18.0 被 Nuitka 判为 buggy，用 PyPI musllinux wheel 0.17.2.4 覆盖
+              pip3 install --break-system-packages patchelf==0.17.2.4
+              patchelf --version
               pip3 install --break-system-packages -r requirements.txt nuitka
               chmod +x build-web.sh
               ./build-web.sh --musl --skip-frontend
