@@ -424,6 +424,14 @@ def main():
         pass
     print("Novel下载器 启动中...")
 
+    from init_config import check_config, init_all_config
+    result = check_config()
+    if result["missing"]:
+        if result["all_missing"]:
+            print("首次运行，正在从默认模板初始化配置...")
+        init_all_config()
+        print(f"已初始化 {len(result['missing'])} 个配置文件")
+
     while True:
         try:
             cfg = load_main_config()
