@@ -31,11 +31,19 @@ jobs:
       - name: Build (引用 build-web.ps1)
         run: powershell -ExecutionPolicy Bypass -File ./build-web.ps1
 
+      - name: 读取版本号并重命名
+        id: ver
+        shell: bash
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-${{ matrix.arch }}-$VERSION.exe"
+
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-windows-${{ matrix.arch }}
-          path: dist/novel-downloader-web.exe
+          name: novel-downloader-web-windows-${{ matrix.arch }}-${{ steps.ver.outputs.version }}
+          path: dist/novel-downloader-web-windows-${{ matrix.arch }}-${{ steps.ver.outputs.version }}.exe
 
   # ═══════════════ Linux x64 / arm64 ═══════════════
   build-linux:
@@ -69,11 +77,18 @@ jobs:
           chmod +x build-web.sh
           ./build-web.sh
 
+      - name: 读取版本号并重命名
+        id: ver
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          mv dist/novel-downloader-web "dist/novel-downloader-web-linux-${{ matrix.arch }}-$VERSION"
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-linux-${{ matrix.arch }}
-          path: dist/novel-downloader-web
+          name: novel-downloader-web-linux-${{ matrix.arch }}-${{ steps.ver.outputs.version }}
+          path: dist/novel-downloader-web-linux-${{ matrix.arch }}-${{ steps.ver.outputs.version }}
 
   # ═══════════════ Linux x86 (i386) ═══════════════
   build-linux-x86:
@@ -105,11 +120,18 @@ jobs:
               ./build-web.sh --skip-frontend
             "
 
+      - name: 读取版本号并重命名
+        id: ver
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          mv dist/novel-downloader-web "dist/novel-downloader-web-linux-x86-$VERSION"
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-linux-x86
-          path: dist/novel-downloader-web
+          name: novel-downloader-web-linux-x86-${{ steps.ver.outputs.version }}
+          path: dist/novel-downloader-web-linux-x86-${{ steps.ver.outputs.version }}
 
   # ═══════════════ Android universal APK ═══════════════
   build-apk:
@@ -146,8 +168,14 @@ jobs:
           chmod +x build-android.sh
           ./build-android.sh --sign --key-alias novel-downloader
 
+      - name: 读取版本号
+        id: ver
+        run: |
+          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-apk
+          name: novel-downloader-apk-${{ steps.ver.outputs.version }}
           path: android/dist/*.apk

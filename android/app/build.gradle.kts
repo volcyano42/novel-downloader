@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "1.0.0"
+        versionName = "4.2.0"
         // WebView 套壳无 native 代码 → universal APK，兼容任意 ABI 设备
     }
 
