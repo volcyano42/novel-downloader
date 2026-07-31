@@ -9,7 +9,6 @@ from .core.downloader import (
     get_exporter_options,
     split_into_groups,
     search,
-    login,
 )
 from .core.engine import create_engine
 from .core.exceptions import (
@@ -57,7 +56,6 @@ __all__ = [
     "get_exporter_options",
     "split_into_groups",
     "search",
-    "login",
     "list_sources",
     # 选项
     "Options",

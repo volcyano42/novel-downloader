@@ -15,7 +15,6 @@ from novelbase import (
     get_exporters,
     get_exporter_options,
     search,
-    login,
     split_into_groups,
     LocalStorage,
     AntiCrawlError,

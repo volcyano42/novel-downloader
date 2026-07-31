@@ -99,20 +99,14 @@ def _show_platforms() -> dict[str, str]:
     Dynamically discovers registered sources, falls back to hardcoded list.
     """
     try:
-        from novelbase import list_sources
-        sources = list_sources()
-        labels = {
-            "fanqie": "番茄小说 (fanqie)",
-            "qidian": "起点中文网 (qidian)",
-            "qimao":  "七猫小说 (qimao)",
-        }
-        return {labels.get(k, k): k for k in sources}
+        from novelbase.utils.registry import register_source
+        sources = register_source()
+        return {f"{info.get('show_name', k)} ({k})": k for k, info in sources.items()}
     except Exception:
-        # Fallback
         return {
-            "番茄小说 (fanqie)": "fanqie",
-            "起点中文网 (qidian)": "qidian",
-            "七猫小说 (qimao)":  "qimao",
+            "番茄 (fanqie)": "fanqie",
+            "起点 (qidian)": "qidian",
+            "七猫 (qimao)":  "qimao",
         }
 
 

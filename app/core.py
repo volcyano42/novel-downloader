@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Core operations: login, search, download, update, main menu loop."""
+"""Core operations: search, download, update, main menu loop."""
 
 from __future__ import annotations
 
@@ -16,11 +16,12 @@ from app.ui import (
 )
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, export,
-    create_engine, search, login,
+    create_engine, search,
     StorageOptions,
 )
 from novelbase.core.storage import create_storage
 from novelbase.utils.logger import get_logger
+from novelbase.utils.registry import register_source
 
 _log = get_logger("app.core")
 
@@ -60,26 +61,28 @@ def _get_engine(platform: str = "fanqie"):
 # ── Login ────────────────────────────────────────────
 
 
-def do_login() -> None:
-    """Open browser for user to log in, then save cookies to site config."""
-    platforms = list(load_main_config().get("sites", {}).keys()) or ["fanqie", "qidian", "qimao"]
-    labels = {p: p for p in platforms}
-    platform = _select("选择平台", [(labels.get(p, p), p) for p in platforms])
+def do_visit_site() -> None:
+    """用 BrowserEngine 打开所选平台网站。"""
+    sources = register_source()
+    labels = {k: v.get("show_name", k) for k, v in sources.items()}
+    platform = _select("选择平台", [(labels.get(k, k), k) for k in sources.keys()])
     if not platform:
         return
-    site_cfg = load_site_config(platform)
+    hosts = sources[platform].get("hosts", ())
+    if not hosts:
+        print(f"平台 {labels.get(platform, platform)} 没有配置网址")
+        return
+    url = f"https://{hosts[0]}"
+
     cfg = load_main_config()
+    site_cfg = load_site_config(platform)
     options = build_options(cfg, site_cfg)
+    options.set_mode("browser")
     engine = create_engine(options)
     try:
-        cred = login(platform, engine)
-        if cred:
-            import dataclasses
-            site_cfg.setdefault("browser", {})["cookies"] = dataclasses.asdict(cred)
-            save_site_config(platform, site_cfg)
-            print("登录成功，cookies 已保存")
-        else:
-            print("登录失败：未获取到凭据")
+        page = engine.get_page()
+        page.get(url)
+        input(f"\n已打开 {url}，按回车关闭浏览器...")
     finally:
         engine.close()
 
@@ -104,8 +107,9 @@ def do_search(query: str) -> tuple[str | None, str | None]:
             engine.close()
 
     # 关键字搜索 → 让用户选平台
-    platforms = list(load_main_config().get("sites", {}).keys()) or ["fanqie", "qidian", "qimao"]
-    choices = [(p, p) for p in platforms]
+    platforms = list(load_main_config().get("sites", {}).keys()) or list(register_source().keys())
+    labels = {k: v.get("show_name", k) for k, v in register_source().items()}
+    choices = [(labels.get(p, p), p) for p in platforms]
     platform = _select("选择平台", choices)
     if not platform:
         return None, None
@@ -413,6 +417,11 @@ def do_update(format_configs: dict, max_workers: int = 3):
 
 def main():
     """Main menu loop."""
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     print("Novel下载器 启动中...")
 
     while True:
@@ -432,7 +441,7 @@ def main():
                 "4. 🔁 重新导出",
                 "5. 🗑️  删除小说",
                 "6. ⚙️  设置",
-                "7. 🔑 登录",
+                "7. 🌐 访问网站",
                 "0. 🚪 退出",
             ]
             print(f"\n┌{'─'*(BOX_W+2)}┐")
@@ -476,7 +485,7 @@ def main():
                 cfg, site_cfg = do_settings(cfg, "fanqie", _lsc("fanqie"))
 
             elif ch == "7":
-                do_login()
+                do_visit_site()
 
             elif ch == "0":
                 break

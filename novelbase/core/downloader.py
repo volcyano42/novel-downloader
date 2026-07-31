@@ -1,9 +1,7 @@
 from typing import Sequence, TypeVar, Callable
 
-from .engine import BrowserEngine
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
-from ..models.auth import AuthCredential
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
 from ..utils.logger import get_logger
 
@@ -110,23 +108,6 @@ def search(platform: str,
     for r in results:
         r.platform = platform
     return results
-
-
-def login(platform: str, engine: BrowserEngine) -> AuthCredential:
-    """登录指定平台。
-
-    Args:
-        platform: 平台标识。
-        engine:   下载引擎实例。
-    """
-    from ..utils.registry import resolve as _resolve
-
-    mode = _normalize_mode(engine)
-    try:
-        fn = _resolve(platform, mode, "login")
-    except (ValueError, ImportError):
-        raise SourceNotFoundError(f"source not found: {platform}")
-    return fn(engine=engine)
 
 
 def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
