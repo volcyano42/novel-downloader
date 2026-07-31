@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig, usePlatforms } from "@/hooks/index";
+import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig, usePlatforms, useSources } from "@/hooks/index";
 import type { GlobalConfig, SiteConfig } from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -86,11 +86,12 @@ function Section({ icon: Icon, title, children }: { icon: typeof Settings; title
 
 
 
-const ENGINES = [
-  { id: "browser", label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
-  { id: "requests", label: "Requests", icon: Globe, desc: "直接 HTTP，最快" },
-  { id: "api", label: "API", icon: Zap, desc: "第三方接口" },
-] as const;
+const MODE_META: Record<string, { label: string; icon: typeof Settings; desc: string }> = {
+  browser: { label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
+  requests: { label: "Requests", icon: Globe, desc: "直接 HTTP，最快" },
+  api: { label: "API", icon: Zap, desc: "第三方接口" },
+};
+const KNOWN_MODE_ORDER = ["browser", "requests", "api"] as const;
 
 const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggle" | "num" | "select" | "range-delay" | "text"; key: string; opts?: { value: string; label: string }[]; min?: number; max?: number; unit?: string }[]> = {
   browser: [
@@ -113,14 +114,36 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
 
 function EngineSection({ mode }: { mode: string }) {
   const { data: platforms = [] } = usePlatforms();
-  const [platform, setPlatform] = useState<string>(platforms[0]?.id ?? "fanqie");
+  const { data: sources } = useSources();
+  // 只显示支持当前 mode 的平台（不支持的 mode 在 capabilities 中没有 key）
+  const supported = useMemo(() => {
+    if (!sources) return platforms;
+    return platforms.filter(p => {
+      const caps = sources[p.id]?.capabilities;
+      return caps ? caps[mode] !== undefined : false;
+    });
+  }, [platforms, sources, mode]);
+
+  const [platform, setPlatform] = useState<string>(supported[0]?.id ?? "fanqie");
   const [engineOpen, setEngineOpen] = useState(false);
+
+  // mode 或数据变化后，若当前平台不支持该 mode，自动切到第一个支持的平台
+  useEffect(() => {
+    if (supported.length > 0 && !supported.some(p => p.id === platform)) {
+      setPlatform(supported[0].id);
+    }
+  }, [supported, platform]);
+
   const { data: siteCfg } = useSiteConfig(platform);
   const saveSite = useSaveSiteConfig(platform);
 
   const engineCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
   const fields = ENGINE_FIELDS[mode] ?? [];
-  const hasProviders = mode === "api" && (siteCfg?.api_providers?.length ?? 0) > 0;
+  const caps = sources?.[platform]?.capabilities;
+  const apiProviders = caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)
+    ? Object.keys(caps.api)
+    : [];
+  const hasProviders = mode === "api" && apiProviders.length > 0;
 
   const updateField = useCallback((key: string, value: unknown) => {
     saveSite.mutate({ [mode]: { [key]: value } });
@@ -154,21 +177,24 @@ function EngineSection({ mode }: { mode: string }) {
   return (
     <Section icon={Layers} title="平台引擎设置">
       <div className="flex gap-1.5 py-2.5">
-        {platforms.map(({ id, label }) => (
+        {supported.map(({ id, label }) => (
           <button key={id} onClick={() => setPlatform(id)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${platform === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
             {label}
           </button>
         ))}
+        {supported.length === 0 && (
+          <span className="py-2 text-xs text-slate-400">当前模式没有支持的平台</span>
+        )}
       </div>
       <div>
         <button onClick={() => setEngineOpen(!engineOpen)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${engineOpen ? "" : "-rotate-90"}`} strokeWidth={1.5} />
-          {platforms.find(p => p.id === platform)?.label} · {ENGINES.find(e => e.id === mode)?.label} 选项
+          {supported.find(p => p.id === platform)?.label} · {MODE_META[mode]?.label ?? mode} 选项
         </button>
         {engineOpen && fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(f)}</Row>)}
         {engineOpen && hasProviders && (
-          <ApiProvidersSection engineCfg={engineCfg} mode={mode} providers={siteCfg!.api_providers!} saveSite={saveSite} />
+          <ApiProvidersSection engineCfg={engineCfg} mode={mode} providers={apiProviders} saveSite={saveSite} />
         )}
       </div>
     </Section>
@@ -290,7 +316,21 @@ interface SettingsViewProps {
 
 export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: SettingsViewProps) {
   const saveGlobal = useSaveGlobalConfig();
-  const mode = globalConfig.mode;
+  const { data: sources } = useSources();
+  // 模式列表从 sources capabilities 动态生成（同搜索页），已知模式固定顺序
+  const modeOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (sources) {
+      for (const info of Object.values(sources)) {
+        for (const m of Object.keys(info.capabilities)) set.add(m);
+      }
+    }
+    const ordered: string[] = KNOWN_MODE_ORDER.filter(m => set.has(m));
+    for (const m of set) if (!(KNOWN_MODE_ORDER as readonly string[]).includes(m)) ordered.push(m);
+    return ordered;
+  }, [sources]);
+  const availableModes = modeOptions.length > 0 ? modeOptions : [...KNOWN_MODE_ORDER];
+  const mode = availableModes.includes(globalConfig.mode) ? globalConfig.mode : availableModes[0];
 
   const updateGlobal = useCallback((key: string, value: unknown) => {
     saveGlobal.mutate({ ...globalConfig, [key]: value });
@@ -302,12 +342,16 @@ export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: 
       <Section icon={Download} title="下载引擎">
         <Row label="下载模式">
           <div className="flex gap-1.5">
-            {ENGINES.map(({ id, label, icon: Icon }) => (
-              <button key={id} onClick={() => updateGlobal("mode", id)}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${mode === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
-                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />{label}
-              </button>
-            ))}
+            {availableModes.map(id => {
+              const meta = MODE_META[id] ?? { label: id, icon: Zap, desc: "" };
+              const Icon = meta.icon;
+              return (
+                <button key={id} onClick={() => updateGlobal("mode", id)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${mode === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
+                  <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />{meta.label}
+                </button>
+              );
+            })}
           </div>
         </Row>
       </Section>
