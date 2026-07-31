@@ -7,7 +7,7 @@ name = "novelbase"
 version = "4.1.0"
 description = "多平台小说下载器核心库"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "novel-downloader contributors" }]
 
