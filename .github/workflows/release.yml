@@ -1,0 +1,105 @@
+name: Release
+
+# 手动触发：发布新版本
+#   1. 校验版本号 + 从 CHANGELOG.md 提取对应版本段落
+#   2. 创建 tag（v{version}）
+#   3. 触发 build-dist.yml 构建发行产物（Windows exe / Linux x64+arm64 / APK）
+#   4. 等待构建完成并下载产物
+#   5. 创建 GitHub Release（标题=版本号，内容=CHANGELOG 段落，附件=构建产物）
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 4.2.0，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
+        required: true
+        default: '4.2.0'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 校验版本号并提取 CHANGELOG 段落
+        run: |
+          set -e
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "错误：版本号格式应为 x.y.z"
+            exit 1
+          fi
+          python3 - "$VERSION" <<'EOF'
+          import re, sys
+          version = sys.argv[1]
+          text = open('CHANGELOG.md', encoding='utf-8').read()
+          m = re.search(rf'## v{re.escape(version)}\n(.*?)(?=\n## v|\Z)', text, re.S)
+          if not m:
+              print(f"错误：CHANGELOG.md 中未找到 ## v{version} 段落")
+              sys.exit(1)
+          open('release-body.md', 'w', encoding='utf-8').write(m.group(1).strip())
+          print(f"已提取 ## v{version} 段落作为 Release 内容")
+          EOF
+
+      - name: 创建 tag
+        run: |
+          VERSION="v${{ inputs.version }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "tag $VERSION 已存在，复用"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$VERSION"
+            git push origin "$VERSION"
+            echo "tag $VERSION 已创建"
+          fi
+
+      - name: 触发 build-dist 并等待完成
+        id: trigger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo
+            // 记录触发前 build-dist 最新 run
+            const before = (await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: 'build-dist.yml', per_page: 1
+            })).data.workflow_runs[0]?.id || 0
+            // 触发构建
+            await github.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id: 'build-dist.yml', ref: 'dev'
+            })
+            core.info(`已触发 build-dist.yml（触发前最新 run: ${before}）`)
+            // 轮询直到出现新的 completed run（每 15s 一次，最多 60 分钟）
+            let runId = null, conclusion = null
+            for (let i = 0; i < 240; i++) {
+              await new Promise(r => setTimeout(r, 15000))
+              const runs = (await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'build-dist.yml', per_page: 3
+              })).data.workflow_runs
+              const run = runs.find(r => r.id !== before && r.status === 'completed')
+              if (run) { runId = run.id; conclusion = run.conclusion; break }
+            }
+            if (!runId) throw new Error('等待 build-dist 完成超时（60 分钟）')
+            if (conclusion !== 'success') throw new Error(`build-dist 构建失败（conclusion=${conclusion}）`)
+            core.setOutput('run_id', String(runId))
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          run_id: ${{ steps.trigger.outputs.run_id }}
+          path: artifacts
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          body_path: release-body.md
+          files: artifacts/**
+          fail_on_unmatched_files: true
