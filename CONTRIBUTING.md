@@ -111,20 +111,12 @@ novel-downloader/
 │           ├── components/       #   UI 组件库
 │           └── utils/            #   sessionCache / chapterCache
 │
-├── android/                      # Android APK（Kotlin + NanoHTTPD 内嵌 WebServer + WebView）
-│   └── app/src/main/
-│       ├── java/com/noveldownloader/
-│       │   ├── MainActivity.kt   #   WebView 壳
-│       │   ├── WebServer.kt      #   内嵌 HTTP 服务（服务打包的前端 + API）
-│       │   └── config/ engine/ export/ source/ storage/ data/
-│       └── assets/frontend/      # 前端构建产物（打包 APK 前需 npm run build 并同步）
-│
 ├── template/config/              # 默认配置模板（config.yaml + sites/*.yaml + formats/*.yaml + groups.yaml）
-├── app_data/                     # 运行时数据（config/ storage/ exports/，gitignored）
+├── app_data/                     # 运行时数据（config/ storage/ exports/ browser/，gitignored）
 ├── scripts/                      # debug_source.py / debug_exporter.py / cloud_sync.py / recover_db.py
 ├── tests/                        # 单元测试（118 passed）
 ├── docs/                         # session-prompt.md + specs/ + superpowers/
-└── build-*.ps1 / build-*.sh      # Nuitka 打包脚本（build-main / build-web / build-cli / build-android）
+└── build-*.ps1 / build-*.sh      # Nuitka 打包脚本（build-main / build-web / build-cli / build-pypi）
 ```
 
 ## 依赖方向
@@ -199,7 +191,7 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML �
 2. 按引擎模式创建子目录：`browser/`、`requests/`、`api/{provider}/`。
 3. 每个模式目录实现模块级函数：`search.py`、`novel_info.py`、`chapter_list.py`、`chapter_content.py`（函数名与 capabilities 功能名一致，由 `registry.FUNC_FILE_MAP` 映射）。
 4. 在 `template/config/sites/` 下添加 `{name}.yaml`（模板可参考现有平台），并在 `app_data/config/sites/` 生成运行时配置。
-5. 若打包 exe/APK：在 Nuitka 构建脚本的 `--include-package` 显式加入 `novelbase.sources.{name}.{mode}` 子包。
+5. 若打包 exe：在 Nuitka 构建脚本的 `--include-package` 显式加入 `novelbase.sources.{name}.{mode}` 子包。
 
 ### 新导出器
 
