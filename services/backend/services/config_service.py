@@ -6,13 +6,15 @@ import sys
 from pathlib import Path
 import yaml
 
-def _copy_dir(src: Path, dst: Path) -> None:
+def _copy_dir(src: Path, dst: Path, _max_depth: int = 10) -> None:
     """递归复制目录，保留已有文件（不覆盖）。"""
+    if _max_depth < 0:
+        return
     dst.mkdir(parents=True, exist_ok=True)
     for item in src.iterdir():
         target = dst / item.name
         if item.is_dir():
-            _copy_dir(item, target)
+            _copy_dir(item, target, _max_depth - 1)
         elif not target.exists():
             shutil.copy2(item, target)
 
@@ -33,7 +35,10 @@ def _get_app_data_dir() -> Path:
             meipass = Path(sys._MEIPASS)
             src = meipass / "app_data"
             if src.exists():
-                _copy_dir(src, app_data)
+                try:
+                    _copy_dir(src, app_data)
+                except (OSError, PermissionError):
+                    app_data.mkdir(parents=True, exist_ok=True)
             else:
                 app_data.mkdir(parents=True, exist_ok=True)
         return app_data
