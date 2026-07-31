@@ -1,20 +1,17 @@
 name: Build Distributables
 
 # 手动触发：构建发行产物
-#   - novel-downloader-web.exe      Windows x64 / x86（Nuitka 打包，引用 build-web.ps1）
+#   - novel-downloader-web.exe      Windows x64（Nuitka 打包，引用 build-web.ps1）
 #   - novel-downloader-web          Linux x64 / arm64（Nuitka 打包，引用 build-web.sh）
 #   - novel-downloader-v1.0.0.apk   Android universal APK（引用 build-android.sh，KS_PASS 非交互签名）
 on:
   workflow_dispatch:
 
 jobs:
-  # ═══════════════ Windows x64 / x86 exe ═══════════════
+  # ═══════════════ Windows x64 exe ═══════════════
   build-windows:
-    name: Windows ${{ matrix.arch }} exe
+    name: Windows x64 exe
     runs-on: windows-latest
-    strategy:
-      matrix:
-        arch: [x64, x86]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,18 +20,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          architecture: ${{ matrix.arch }}
 
       - name: Install dependencies
-        shell: bash
-        run: |
-          if [ "${{ matrix.arch }}" = "x86" ]; then
-            # x86 无 pillow-heif win32 wheel，排除（novelbase 为延迟 import 不影响）
-            grep -v '^pillow-heif' requirements.txt > req-x86.txt
-            pip install -r req-x86.txt nuitka
-          else
-            pip install -r requirements.txt nuitka
-          fi
+        run: pip install -r requirements.txt nuitka
 
       - name: Build (引用 build-web.ps1)
         run: powershell -ExecutionPolicy Bypass -File ./build-web.ps1
@@ -45,13 +33,13 @@ jobs:
         run: |
           VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-${{ matrix.arch }}-$VERSION.exe"
+          mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-x64-$VERSION.exe"
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-windows-${{ matrix.arch }}-${{ steps.ver.outputs.version }}
-          path: dist/novel-downloader-web-windows-${{ matrix.arch }}-${{ steps.ver.outputs.version }}.exe
+          name: novel-downloader-web-windows-x64-${{ steps.ver.outputs.version }}
+          path: dist/novel-downloader-web-windows-x64-${{ steps.ver.outputs.version }}.exe
 
   # ═══════════════ Linux x64 / arm64 ═══════════════
   build-linux:
