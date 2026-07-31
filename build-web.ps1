@@ -44,7 +44,7 @@ $SOURCE_PKGS = @(
 
 Write-Host "--- Nuitka: web backend (5-10 min) ---" -ForegroundColor Cyan
 Get-ChildItem dist\*.build, dist\*.dist -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
+python -m nuitka --standalone --onefile --static-libpython=yes --jobs=$env:NUMBER_OF_PROCESSORS `
     @SOURCE_PKGS `
     --include-package=app `
     --include-package=services `

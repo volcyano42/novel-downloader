@@ -24,7 +24,7 @@ cd ../..
 
 echo -e "\033[36m--- Nuitka: web backend (5-10 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
-python -m nuitka --standalone --onefile --jobs=$(nproc) \
+python -m nuitka --standalone --onefile --static-libpython=yes --jobs=$(nproc) \
     --include-package=novelbase \
     --include-package=novelbase.sources.fanqie \
     --include-package=novelbase.sources.fanqie.browser \
