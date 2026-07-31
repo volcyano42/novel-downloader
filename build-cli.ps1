@@ -1,4 +1,4 @@
-# Build non-interactive CLI: novel-downloader-cli
+﻿# Build non-interactive CLI: novel-downloader-cli
 # Usage: .\build-cmd.ps1
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8

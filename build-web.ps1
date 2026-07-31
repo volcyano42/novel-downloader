@@ -1,4 +1,4 @@
-# Build Web UI: novel-downloader-web.exe (backend + frontend)
+﻿# Build Web UI: novel-downloader-web.exe (backend + frontend)
 # Usage: .\build-web.ps1
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8

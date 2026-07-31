@@ -1,4 +1,4 @@
-# Build novel-downloader-android APK
+﻿# Build novel-downloader-android APK
 # Usage: .\build-android.ps1 [-ProjectPath <path>] [-Sign] [-KeyStore <path>] [-KeyAlias <name>]
 #
 #   -ProjectPath    Android 项目根目录（默认：.\android）

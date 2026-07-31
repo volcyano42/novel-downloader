@@ -1,4 +1,4 @@
-# Build & upload novelbase to PyPI
+﻿# Build & upload novelbase to PyPI
 # Usage: .\build-pypi.ps1 [-Token <pypi-token>] [-SkipBuild] [-Repository <pypi|testpypi>]
 #
 #   -Token        PyPI API token（默认读取 $env:PYPI_TOKEN；推荐用环境变量，勿硬编码）
