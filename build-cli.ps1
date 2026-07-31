@@ -33,8 +33,13 @@ $SOURCE_PKGS = @(
 )
 
 Write-Host "--- Nuitka: non-interactive CLI (3-5 min) ---" -ForegroundColor Cyan
+python -m pip install pefile
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: pefile 安装失败（exit $LASTEXITCODE）" -ForegroundColor Red
+    exit 1
+}
 Get-ChildItem dist\*.build, dist\*.dist -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
+python -m nuitka --standalone --onefile --windows-dependency-tool=pefile --jobs=$env:NUMBER_OF_PROCESSORS `
     @SOURCE_PKGS `
     --include-package=app `
     --include-data-dir=app_data/config=app_data/config `
