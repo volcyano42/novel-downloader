@@ -21,13 +21,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt nuitka
 
-      - name: Cache Nuitka + pip
+      - name: Cache Nuitka + pip + node_modules
         uses: actions/cache@v4
         with:
           path: |
             ~/AppData/Local/Nuitka
             ~/AppData/Local/pip/cache
-          key: nuitka-win-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.tsx', '**/*.ts') }}
+            services/frontend/node_modules
+          key: nuitka-win-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.tsx', '**/*.ts', 'services/frontend/package-lock.json') }}
           restore-keys: |
             nuitka-win-${{ runner.os }}-
 

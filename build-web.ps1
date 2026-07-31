@@ -14,19 +14,24 @@ if ($null -eq (New-Item -ItemType Directory -Path $lockDir -ErrorAction Silently
 
 try {
 
-Write-Host "--- Building frontend ---" -ForegroundColor Cyan
+Write-Host "--- Building frontend ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
 Push-Location services\frontend
 if (-not (Test-Path node_modules)) {
-    Write-Host "npm install..." -ForegroundColor Yellow
-    npm install
+    Write-Host "npm install (npmmirror)..." -ForegroundColor Yellow
+    npm install --registry=https://registry.npmmirror.com
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: npm install 失败（exit $LASTEXITCODE）" -ForegroundColor Red
+        exit 1
+    }
 }
-Write-Host "npm run build..."
+Write-Host "npm run build ($(Get-Date -Format HH:mm:ss))..."
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: 前端构建失败（exit $LASTEXITCODE）" -ForegroundColor Red
     exit 1
 }
 Pop-Location
+Write-Host "--- Frontend done ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
 
 $SOURCE_PKGS = @(
     "--include-package=novelbase",
