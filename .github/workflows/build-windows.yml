@@ -21,8 +21,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt nuitka
 
+      - name: Cache Nuitka + pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            .nuitka-cache
+            ~/AppData/Local/pip/cache
+          key: nuitka-win-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.tsx', '**/*.ts') }}
+          restore-keys: |
+            nuitka-win-${{ runner.os }}-
+
       - name: Build (引用 build-web.ps1)
-        timeout-minutes: 75
+        timeout-minutes: 110
         run: powershell -ExecutionPolicy Bypass -File ./build-web.ps1
 
       - name: 读取版本号并重命名
