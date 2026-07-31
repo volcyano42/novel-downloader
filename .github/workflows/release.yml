@@ -12,7 +12,7 @@ on:
       version:
         description: '版本号（如 4.2.0，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
         required: true
-        default: '4.2.0'
+        default: '4.2.1'
 
 permissions:
   contents: write
