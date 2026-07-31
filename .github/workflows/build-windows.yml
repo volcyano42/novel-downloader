@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            .nuitka-cache
+            ~/AppData/Local/Nuitka
             ~/AppData/Local/pip/cache
           key: nuitka-win-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.tsx', '**/*.ts') }}
           restore-keys: |
