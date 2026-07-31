@@ -22,6 +22,10 @@ if (-not (Test-Path node_modules)) {
 }
 Write-Host "npm run build..."
 npm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: 前端构建失败（exit $LASTEXITCODE）" -ForegroundColor Red
+    exit 1
+}
 Pop-Location
 
 $SOURCE_PKGS = @(
@@ -44,7 +48,7 @@ $SOURCE_PKGS = @(
 
 Write-Host "--- Nuitka: web backend (5-10 min) ---" -ForegroundColor Cyan
 Get-ChildItem dist\*.build, dist\*.dist -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-python -m nuitka --standalone --onefile --static-libpython=yes --jobs=$env:NUMBER_OF_PROCESSORS `
+python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
     @SOURCE_PKGS `
     --include-package=app `
     --include-package=services `
@@ -54,6 +58,10 @@ python -m nuitka --standalone --onefile --static-libpython=yes --jobs=$env:NUMBE
     --output-dir=dist `
     --output-filename=novel-downloader-web `
     services/backend/main.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Nuitka 构建失败（exit $LASTEXITCODE）" -ForegroundColor Red
+    exit 1
+}
 
 Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 Write-Host "Done: dist/novel-downloader-web.exe" -ForegroundColor Green

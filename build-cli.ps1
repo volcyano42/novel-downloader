@@ -42,6 +42,10 @@ python -m nuitka --standalone --onefile --jobs=$env:NUMBER_OF_PROCESSORS `
     --output-dir=dist `
     --output-filename=novel-downloader-cmd `
     cli.py
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Nuitka 构建失败（exit $LASTEXITCODE）" -ForegroundColor Red
+    exit 1
+}
 
 Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 Write-Host "Done: dist/novel-downloader-cmd.exe" -ForegroundColor Green
