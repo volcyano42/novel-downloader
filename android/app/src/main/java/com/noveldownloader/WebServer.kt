@@ -245,7 +245,7 @@ class WebServer(
                     "hosts" to s.hosts, "show_name" to s.showName,
                     "id_pattern" to s.idPattern.pattern,
                     "capabilities" to mapOf("requests" to listOf("search", "novel_info", "chapter_list", "chapter_content"))) }
-                json(200, sources)
+                json(200, okData(sources))
             }
 
             // Platform list
@@ -261,7 +261,12 @@ class WebServer(
     private fun readBody(session: IHTTPSession): String {
         val map = HashMap<String, String>()
         session.parseBody(map)
-        return map["postData"] ?: ""
+        // POST → map["postData"]（原始 body）；PUT → map["content"]（NanoHTTPD 存入临时文件路径）
+        map["postData"]?.let { return it }
+        map["content"]?.let { path ->
+            return runCatching { java.io.File(path).readText() }.getOrDefault("")
+        }
+        return ""
     }
 
     private fun json(status: Int, data: Any): Response {
