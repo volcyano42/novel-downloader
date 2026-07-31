@@ -3,7 +3,7 @@ name: Release
 # 手动触发：发布新版本
 #   1. 校验版本号 + 从 CHANGELOG.md 提取对应版本段落
 #   2. 创建 tag（v{version}）
-#   3. 触发 build-dist.yml 构建发行产物（Windows exe / Linux x64+arm64+musl）
+#   3. 触发 build-dist.yml 构建发行产物（Windows exe / Linux x64+arm64）
 #   4. 等待构建完成并下载产物
 #   5. 创建 GitHub Release（标题=版本号，内容=CHANGELOG 段落，附件=构建产物）
 on:

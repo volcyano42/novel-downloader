@@ -4,7 +4,6 @@ name: Build Distributables
 #   - build-windows.yml           Windows x64 exe
 #   - build-linux-x64.yml         Linux x64
 #   - build-linux-arm64.yml       Linux arm64
-#   - build-linux-arm64-musl.yml  Linux arm64 musl 静态（Termux 可用）
 on:
   workflow_dispatch:
 
@@ -17,6 +16,3 @@ jobs:
 
   linux-arm64:
     uses: ./.github/workflows/build-linux-arm64.yml
-
-  linux-arm64-musl:
-    uses: ./.github/workflows/build-linux-arm64-musl.yml
