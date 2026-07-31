@@ -30,7 +30,13 @@ jobs:
         run: |
           VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-x64-$VERSION.exe"
+          # Windows Defender 可能短暂锁定刚编译的 exe，重试几次
+          for i in 1 2 3 4 5; do
+            mv dist/novel-downloader-web.exe "dist/novel-downloader-web-windows-x64-$VERSION.exe" && break
+            echo "重命名被锁定（第 $i 次），等待 10s..."
+            sleep 10
+          done
+          test -f "dist/novel-downloader-web-windows-x64-$VERSION.exe" || { echo "重命名最终失败"; ls -la dist/; exit 1; }
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
