@@ -1,5 +1,31 @@
 # 更新日志
 
+## v4.2.1
+
+### 新增
+
+1. **单平台构建 workflow** — 新增 `build-windows.yml` / `build-linux-x64.yml` / `build-linux-arm64.yml` / `build-linux-arm64-musl.yml` / `build-apk.yml`，每个可单独手动触发测试（保留 `build-dist.yml` 一键全平台）；新增 **Linux arm64 musl 静态构建**（Termux 可运行）
+2. **PyPI 构建上传脚本** — `build-pypi.ps1` / `build-pypi.sh`，token 走环境变量
+3. **前端设置页模式动态化** — 平台 / 引擎设置按 mode 过滤；**APK 与 WebUI 不自动跟随系统暗色**（默认亮色，手动可切换）
+
+### 变更
+
+1. **APK 改为通用 ABI** — 去掉 arm64-v8a 限定，任意设备可安装
+2. **产物命名追加版本号** — Windows exe / Linux 可执行文件 / APK 均带 `4.2.1` 版本后缀
+3. **Linux 构建改用 ubuntu-22.04** — 提升 glibc 兼容性（旧系统可运行）
+4. **放弃 Windows/Linux x86 构建** — pillow-heif 无 win32 支持，32 位系统不再出产物
+5. Nuitka 静态链接 libpython（Windows 移除不支持的 `--static-libpython`，Linux 保留）
+
+### 修复
+
+1. **Windows Nuitka 依赖分析** — 改用 `--experimental=force-dependencies-pefile`（原 `--windows-dependency-tool` 选项已移除），彻底规避 Dependency Walker 下载失败
+2. **Nuitka 参数兼容** — 增加 `--msvc=latest` / `--assume-yes-for-downloads`（官方文档推荐，CI 非交互环境不卡下载）
+3. **alpine musl 容器缺 bash** — docker 入口改 `sh -c` 并在 apk 安装 bash
+4. **ps1 脚本加 UTF-8 BOM** — 修复 Windows PowerShell 5.1 按 ANSI 解析导致中文乱码报错
+5. **APK 后端 API 兼容** — 修复 PUT 请求体读取、sources 响应包装
+
+---
+
 ## v4.2.0
 
 ### 新增
