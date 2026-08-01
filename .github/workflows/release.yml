@@ -93,7 +93,7 @@ jobs:
       - name: 下载构建产物
         uses: actions/download-artifact@v4
         with:
-          run_id: ${{ steps.trigger.outputs.run_id }}
+          run-id: ${{ steps.trigger.outputs.run_id }}
           path: artifacts
 
       - name: 创建/获取 Release
