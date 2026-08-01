@@ -23,6 +23,10 @@ jobs:
 
       - name: Build in termux-docker (bionic, 引用 build-termux.sh)
         run: |
+          # 清理可能残留的构建锁（host 挂载目录被上一轮 docker 容器遗留）
+          rm -rf .build.lock
+          # 确保镜像存在（arm64 runner 原生拉取）
+          docker pull termux/termux-docker:aarch64 || true
           docker run --rm \
             -v "${{ github.workspace }}":/src -w /src \
             --security-opt seccomp:unconfined \
