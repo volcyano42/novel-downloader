@@ -1,67 +1,8 @@
-name: Build Linux arm64 Termux portable
-
-# 手动触发或作为可复用 workflow 被 build-dist.yml 调用
-# 方案：build-portable.sh（Termux 用内置 Python pyroot/（PYTHONHOME 重定位）或 pkg python；依赖预装，用户开箱即用）
-on:
-  workflow_dispatch:
-  workflow_call:
-
-jobs:
-  build-linux-arm64-termux-portable:
-    name: Linux arm64 Termux portable
-    runs-on: ubuntu-22.04-arm   # 原生 arm64 runner
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: 读取版本号
-        id: ver
-        run: |
-          VERSION=$(python3 -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      # 在 termux-docker 容器预装 Python 依赖（bionic 环境，与真机 Termux 一致），
-      # 导出 site-packages (deps/) 与 Python 本体+依赖库 (pyroot/)
-      - name: 预装依赖 (termux-docker)
-        run: |
-          chmod -R a+rwX "${{ github.workspace }}"
-          docker pull termux/termux-docker:aarch64 || true
-          docker run --rm \
-            -v "${{ github.workspace }}":/src -w /src \
-            --security-opt seccomp:unconfined \
-            termux/termux-docker:aarch64 bash -c '
-              set -e
-              pkg set-mirror https://packages-cf.termux.dev/apt/termux-main >/dev/null 2>&1 || true
-              pkg update -y >/dev/null 2>&1 || true
-              pkg install -y python rust clang binutils patchelf \
-                libheif libjpeg-turbo zlib libffi openssl libyaml \
-                python-pillow python-lxml >/dev/null 2>&1
-              export ANDROID_API_LEVEL=24
-              # Termux 排除 browser 模式依赖（psutil 不支持 Android）；容器无 /tmp，用挂载卷
-              grep -v "^drissionpage" /src/requirements.txt > /src/.req-termux.txt
-              pip install --break-system-packages -r /src/.req-termux.txt
-              # 导出依赖 site-packages
-              mkdir -p /src/deps
-              cp -r "$PREFIX"/lib/python*/site-packages/. /src/deps/
-              # 导出 Python 本体（bin + 标准库 + 依赖 .so，供 PYTHONHOME 重定位）
-              mkdir -p /src/pyroot/bin /src/pyroot/lib
-              cp "$PREFIX"/bin/python* /src/pyroot/bin/ 2>/dev/null || true
-              cp -r "$PREFIX"/lib/python*/ /src/pyroot/lib/ 2>/dev/null || true
-              cp "$PREFIX"/lib/libpython* /src/pyroot/lib/ 2>/dev/null || true
-              # python 运行依赖的其他 .so（libssl/libffi/libz 等，Android linker 需要）
-              cp "$PREFIX"/lib/lib*.so* /src/pyroot/lib/ 2>/dev/null || true
-              chmod -R a+rwX /src/deps /src/pyroot
-              echo "预装完成: deps $(ls /src/deps | wc -l) 项, pyroot $(du -sh /src/pyroot | cut -f1)"
-            '
-
-      - name: Build portable (引用 build-portable.sh)
-        run: |
-          chmod +x build-portable.sh
-          ./build-portable.sh --platform termux --version ${{ steps.ver.outputs.version }} --deps-dir deps --pyroot-dir pyroot
-
       # CI 内实测：用内置 Python (PYTHONHOME) 启动服务，验证开箱即用
       - name: 验证 PYTHONHOME 启动
         run: |
+          # runner 创建的 dist 目录容器用户无写权限，先放开
+          chmod -R a+rwX "${{ github.workspace }}"
           docker run --rm \
             -v "${{ github.workspace }}":/src -w /src \
             --security-opt seccomp:unconfined \
@@ -92,10 +33,3 @@ jobs:
               [ "$CODE" = "200" ] || { echo "启动验证失败"; exit 1; }
               kill $SERVER_PID 2>/dev/null || true
             '
-
-      - name: Upload portable
-        uses: actions/upload-artifact@v4
-        with:
-          name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux
-          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux.tar.gz
-          if-no-files-found: error
