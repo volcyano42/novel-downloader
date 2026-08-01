@@ -95,6 +95,7 @@ jobs:
         with:
           run-id: ${{ steps.trigger.outputs.run_id }}
           path: artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 创建/获取 Release
         id: rel
