@@ -35,6 +35,8 @@ pkg install -y python clang binutils patchelf rust \
 
 # ── 2. pip 依赖（C 扩展在 Termux 源码编译，需 rust/clang/libheif）──
 echo -e "\033[36m--- pip 依赖 ---\033[0m"
+# maturin 构建 Rust 扩展（pydantic-core 等）需要 Android API level
+export ANDROID_API_LEVEL=24
 # Termux 排除 browser 模式依赖：drissionpage→psutil 不支持 Android（platform android is not supported）
 # browser 模式在 Termux 产物中不可用（requests/api 模式完整可用）
 grep -v '^drissionpage' requirements.txt > req-termux.txt
