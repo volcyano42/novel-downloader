@@ -21,7 +21,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # 在 termux-docker 容器预装 Python 依赖（bionic 环境，与真机 Termux 一致），
-      # 导出 site-packages (deps/) 与 Python 本体 (pyroot/)
+      # 导出 site-packages (deps/) 与 Python 本体+依赖库 (pyroot/)
       - name: 预装依赖 (termux-docker)
         run: |
           chmod -R a+rwX "${{ github.workspace }}"
@@ -43,11 +43,13 @@ jobs:
               # 导出依赖 site-packages
               mkdir -p /src/deps
               cp -r "$PREFIX"/lib/python*/site-packages/. /src/deps/
-              # 导出 Python 本体（bin + libpython + 标准库，供 PYTHONHOME 重定位）
+              # 导出 Python 本体（bin + 标准库 + 依赖 .so，供 PYTHONHOME 重定位）
               mkdir -p /src/pyroot/bin /src/pyroot/lib
               cp "$PREFIX"/bin/python* /src/pyroot/bin/ 2>/dev/null || true
               cp -r "$PREFIX"/lib/python*/ /src/pyroot/lib/ 2>/dev/null || true
               cp "$PREFIX"/lib/libpython* /src/pyroot/lib/ 2>/dev/null || true
+              # python 运行依赖的其他 .so（libssl/libffi/libz 等，Android linker 需要）
+              cp "$PREFIX"/lib/lib*.so* /src/pyroot/lib/ 2>/dev/null || true
               chmod -R a+rwX /src/deps /src/pyroot
               echo "预装完成: deps $(ls /src/deps | wc -l) 项, pyroot $(du -sh /src/pyroot | cut -f1)"
             '
@@ -70,7 +72,9 @@ jobs:
               export LD_LIBRARY_PATH="$PWD/pyroot/lib"
               export PATH="$PWD/pyroot/bin:$PATH"
               export PYTHONPATH="$PWD/python-deps"
-              python --version
+              echo "=== python --version ==="
+              python --version 2>&1 || true
+              echo "=== 启动 uvicorn ==="
               python -m uvicorn services.backend.main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
               SERVER_PID=$!
               CODE="000"
@@ -84,7 +88,7 @@ jobs:
               echo ""
               curl -s http://127.0.0.1:8000/api/v2/novels | head -c 80
               echo ""
-              head -6 server.log
+              head -8 server.log 2>/dev/null || echo "无 server.log"
               [ "$CODE" = "200" ] || { echo "启动验证失败"; exit 1; }
               kill $SERVER_PID 2>/dev/null || true
             '
