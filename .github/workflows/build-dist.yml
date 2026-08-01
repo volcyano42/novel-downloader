@@ -4,7 +4,7 @@ name: Build Distributables
 #   - build-windows.yml           Windows x64 portable
 #   - build-linux-x64.yml         Linux x64 portable
 #   - build-linux-arm64.yml       Linux arm64 portable
-# 注：Termux 产物由用户本机构建，不在 CI 产物矩阵中
+#   - build-linux-arm64-termux.yml Termux portable（内置 Python pyroot，开箱即用）
 on:
   workflow_dispatch:
 
@@ -17,3 +17,6 @@ jobs:
 
   linux-arm64:
     uses: ./.github/workflows/build-linux-arm64.yml
+
+  linux-arm64-termux:
+    uses: ./.github/workflows/build-linux-arm64-termux.yml
