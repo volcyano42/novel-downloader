@@ -40,6 +40,39 @@ try {
     Pop-Location
     Write-Host "--- Frontend done ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
 
+    # ── 下载 Embedded Python ──
+    Write-Host "--- Downloading Embedded Python ---" -ForegroundColor Cyan
+    $pyVersion = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+    Write-Host "Python version: $pyVersion"
+
+    $embedUrl = "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip"
+    $embedZip = Join-Path $distDir "python-embed.zip"
+    Write-Host "Downloading $embedUrl ..."
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $embedUrl -OutFile $embedZip
+
+    Write-Host "Extracting embed Python..."
+    Expand-Archive -Path $embedZip -DestinationPath $pythonEmbedDir -Force
+    Remove-Item $embedZip
+
+    # 修改 python3xx._pth：启用 site + 添加 Lib\site-packages
+    $pthFile = Get-ChildItem -Path $pythonEmbedDir -Filter "python*._pth" | Select-Object -First 1
+    if (-not $pthFile) {
+        Write-Host "ERROR: 找不到 ._pth 文件" -ForegroundColor Red
+        exit 1
+    }
+    $pthContent = Get-Content $pthFile.FullName
+    $pthContent = $pthContent -replace "^#import site", "import site"
+    $newContent = @()
+    foreach ($line in $pthContent) {
+        if ($line -eq "import site") {
+            $newContent += "Lib\site-packages"
+        }
+        $newContent += $line
+    }
+    $newContent | Set-Content $pthFile.FullName -Encoding ASCII
+    Write-Host "Modified $($pthFile.Name): site enabled, Lib\site-packages added"
+
     Write-Host "Done: $zipName" -ForegroundColor Green
 }
 finally {
