@@ -116,6 +116,7 @@ cp -r app "$DIST_DIR/app"
 mkdir -p "$DIST_DIR/services/backend" "$DIST_DIR/services/frontend"
 cp -r services/backend "$DIST_DIR/services/backend"
 cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
+mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
 find "$DIST_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
