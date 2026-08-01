@@ -1,4 +1,4 @@
-# Build portable zip: novel-downloader-web-portable-{version}-windows-x64.zip
+﻿# Build portable zip: novel-downloader-web-portable-{version}-windows-x64.zip
 # Usage: .\build-portable.ps1 [-Version <version>]
 param(
     [string]$Version
