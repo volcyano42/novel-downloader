@@ -187,7 +187,18 @@ pause
 '@
     $readmeContent | Set-Content -Path (Join-Path $portableDir "启动说明.txt") -Encoding UTF8
 
-    Write-Host "Done: $zipName" -ForegroundColor Green
+    # ── 打包 zip ──
+    if (-not $Version) {
+        $versionLine = Get-Content "novelbase\__init__.py" | Select-String '__version__\s*=\s*"(.+)"'
+        $Version = $versionLine.Matches.Groups[1].Value
+    }
+    Write-Host "--- Packaging zip (v$Version) ---" -ForegroundColor Cyan
+    $zipName = "novel-downloader-web-portable-v$Version.zip"
+    $zipPath = Join-Path $distDir $zipName
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Compress-Archive -Path (Join-Path $portableDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
+    $zipSizeMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+    Write-Host "Created: $zipName ($zipSizeMB MB)" -ForegroundColor Green
 }
 finally {
     Pop-Location
