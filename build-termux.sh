@@ -31,7 +31,7 @@ pkg set-mirror https://packages-cf.termux.dev/apt/termux-main >/dev/null 2>&1 ||
 pkg update -y >/dev/null 2>&1 || true
 pkg install -y python clang binutils patchelf rust \
     libheif libjpeg-turbo zlib libffi openssl libyaml \
-    python-pillow python-lxml
+    python-pillow python-lxml termux-elf-cleaner
 
 # ── 2. pip 依赖（C 扩展在 Termux 源码编译，需 rust/clang/libheif）──
 echo -e "\033[36m--- pip 依赖 ---\033[0m"
