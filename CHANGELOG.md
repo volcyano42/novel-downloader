@@ -1,5 +1,24 @@
 # 更新日志
 
+## v4.2.3-dev
+
+### 新增
+
+1. **Termux 构建支持** — 新增 `build-termux.sh`（termux-docker bionic 环境构建，产物真机 Termux 可直接运行）+ `build-linux-arm64-termux.yml` workflow；Termux 环境排除 browser 模式（drissionpage→psutil 不支持 Android），requests/api 模式完整可用
+
+### 变更
+
+1. **版本号同步** — `pyproject.toml` 与 `novelbase/__init__.py` 统一为 `4.2.3-dev`
+2. **Android 与 musl 产物移除** — 删除 `android/` 目录、`build-apk.yml`、`build-linux-arm64-musl.yml`（musl 动态产物 Termux 无法运行）；产物矩阵为 Windows x64 / Linux x64 / Linux arm64
+
+### 修复
+
+1. **build-windows 重命名** — 改为 PowerShell `Copy-Item`（git-bash `mv` 在 CI 上失败）
+2. **前端 npm 镜像** — CI 上 `npm install` 改用 npmmirror 镜像 + 时间戳输出（定位 Build 卡点）
+3. **Nuitka 参数排查** — 移除无效 `--cache-dir`（Nuitka 4.x 无此参数，会导致直接报错）；CI 缓存指向 Nuitka 内置目录 `%LOCALAPPDATA%\Nuitka`
+
+---
+
 ## v4.2.1
 
 ### 新增
