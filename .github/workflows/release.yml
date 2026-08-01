@@ -97,10 +97,52 @@ jobs:
           path: artifacts
 
       - name: 发布 Release
-        uses: softprops/action-gh-release@v2
+        uses: actions/github-script@v7
         with:
-          tag_name: v${{ inputs.version }}
-          name: v${{ inputs.version }}
-          body_path: release-body.md
-          files: artifacts/**
-          fail_on_unmatched_files: true
+          script: |
+            const fs = require('fs')
+            const path = require('path')
+            const owner = context.repo.owner, repo = context.repo.repo
+            const tag = 'v${{ inputs.version }}'
+            const body = fs.readFileSync('release-body.md', 'utf8')
+            // 创建或复用 release（tag 已存在时获取）
+            let release
+            try {
+              release = (await github.rest.repos.getReleaseByTag({owner, repo, tag})).data
+              core.info(`复用已有 release id=${release.id}`)
+            } catch {
+              release = (await github.rest.repos.createRelease({owner, repo, tag_name: tag, name: tag, body})).data
+              core.info(`创建 release id=${release.id}`)
+            }
+            // 收集 artifacts/ 下所有文件并上传（带重试）
+            const files = []
+            const walk = (dir) => {
+              if (!fs.existsSync(dir)) return
+              for (const f of fs.readdirSync(dir)) {
+                const p = path.join(dir, f)
+                if (fs.statSync(p).isDirectory()) walk(p)
+                else files.push(p)
+              }
+            }
+            walk('artifacts')
+            if (files.length === 0) throw new Error('artifacts/ 下没有文件')
+            core.info(`共 ${files.length} 个资产待上传`)
+            for (const f of files) {
+              const size = fs.statSync(f).size
+              core.info(`上传 ${path.basename(f)} (${(size/1024/1024).toFixed(1)} MB)`)
+              for (let i = 1; i <= 3; i++) {
+                try {
+                  await github.rest.repos.uploadReleaseAsset({
+                    owner, repo, release_id: release.id,
+                    name: path.basename(f),
+                    data: fs.readFileSync(f)
+                  })
+                  break
+                } catch (e) {
+                  if (i === 3) throw e
+                  core.warning(`上传 ${path.basename(f)} 第 ${i} 次失败: ${e.message}，10s 后重试`)
+                  await new Promise(r => setTimeout(r, 10000))
+                }
+              }
+            }
+            core.info('全部资产上传完成')
