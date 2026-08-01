@@ -1,43 +1,33 @@
-name: Build Linux x64
+name: Build Linux x64 portable
 
 # 手动触发或作为可复用 workflow 被 build-dist.yml 调用
+# 方案：build-portable.sh（python-build-standalone + 源码 + 依赖），免 Nuitka 编译
 on:
   workflow_dispatch:
   workflow_call:
 
 jobs:
-  build-linux-x64:
-    name: Linux x64
+  build-linux-x64-portable:
+    name: Linux x64 portable
     runs-on: ubuntu-22.04   # glibc 2.35，比 24.04 兼容更多旧发行版
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y patchelf
-          pip install -r requirements.txt nuitka
-
-      - name: Build (引用 build-web.sh)
-        run: |
-          chmod +x build-web.sh
-          ./build-web.sh
-
-      - name: 读取版本号并重命名
+      - name: 读取版本号
         id: ver
         run: |
-          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          VERSION=$(python3 -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          mv dist/novel-downloader-web "dist/novel-downloader-web-linux-x64-$VERSION"
 
-      - name: Upload binary
+      - name: Build portable (引用 build-portable.sh)
+        run: |
+          chmod +x build-portable.sh
+          ./build-portable.sh --platform linux-x64 --version ${{ steps.ver.outputs.version }}
+
+      - name: Upload portable
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-linux-x64-${{ steps.ver.outputs.version }}
-          path: dist/novel-downloader-web-linux-x64-${{ steps.ver.outputs.version }}
+          name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-linux-x64.tar.gz
+          if-no-files-found: error

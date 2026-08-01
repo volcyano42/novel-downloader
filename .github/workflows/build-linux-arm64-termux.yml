@@ -1,50 +1,33 @@
-name: Build Linux arm64 Termux
+name: Build Linux arm64 Termux portable
 
 # 手动触发或作为可复用 workflow 被 build-dist.yml 调用
-# 用 termux/termux-docker（bionic libc）构建 → 产物真机 Termux 可直接运行
+# 方案：build-portable.sh（Termux 用 pkg python，start.sh 首次运行自动装依赖），免 Nuitka 编译
 on:
   workflow_dispatch:
   workflow_call:
 
 jobs:
-  build-linux-arm64-termux:
-    name: Linux arm64 Termux
-    runs-on: ubuntu-22.04-arm   # 原生 arm64 runner（无需 QEMU）
+  build-linux-arm64-termux-portable:
+    name: Linux arm64 Termux portable
+    runs-on: ubuntu-22.04-arm   # 原生 arm64 runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Termux 容器内无现代 node → 先在 host 构建前端，容器里跳过
-      - name: Build frontend (host)
-        run: |
-          cd services/frontend
-          npm ci
-          npm run build
-
-      - name: Build in termux-docker (bionic, 引用 build-termux.sh)
-        run: |
-          # termux-docker entrypoint 降权到非 root 用户，挂载的 workspace 需放开写权限
-          chmod -R a+rwX "${{ github.workspace }}"
-          # 清理可能残留的构建锁
-          rm -rf .build.lock
-          # 确保镜像存在（arm64 runner 原生拉取）
-          docker pull termux/termux-docker:aarch64 || true
-          docker run --rm \
-            -v "${{ github.workspace }}":/src -w /src \
-            --security-opt seccomp:unconfined \
-            termux/termux-docker:aarch64 bash /src/build-termux.sh --skip-frontend
-
-      - name: 读取版本号并重命名
+      - name: 读取版本号
         id: ver
         run: |
-          VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
+          VERSION=$(python3 -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # 容器内产物属主是容器用户，mv 可能 Permission denied → 先放开权限
-          chmod -R a+rwX dist 2>/dev/null || true
-          mv dist/novel-downloader-web "dist/novel-downloader-web-linux-arm64-termux-$VERSION"
 
-      - name: Upload binary
+      - name: Build portable (引用 build-portable.sh)
+        run: |
+          chmod +x build-portable.sh
+          ./build-portable.sh --platform termux --version ${{ steps.ver.outputs.version }}
+
+      - name: Upload portable
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-linux-arm64-termux-${{ steps.ver.outputs.version }}
-          path: dist/novel-downloader-web-linux-arm64-termux-${{ steps.ver.outputs.version }}
+          name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux
+          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux.tar.gz
+          if-no-files-found: error
