@@ -22,6 +22,7 @@
 7. **废弃构建文件清理** — 删除 Nuitka 版 `build-web.sh`（含 --musl 参数）、`build-termux.sh` 及 `build-linux-arm64-termux.yml` workflow（portable 方案已替代，Termux 产物由用户本机构建）
 8. **workflow 显示名称统一** — `Build Windows x64` → `Build Windows x64 portable`（与 Linux portable 系列命名一致）
 9. **Windows 构建改用 portable 方案** — build-windows.yml 由 Nuitka 编译（build-web.ps1）改为 `build-portable.ps1`（Embedded Python + 源码 + 依赖 zip），产物统一为 `novel-downloader-web-portable-{version}-windows-x64.zip`
+10. **Termux 加回 build-dist（内置 Python）** — Termux portable 采用 pyroot 全内置方案（Python 本体 + 依赖库随包，PYTHONHOME 重定位，开箱即用无需 `pkg install python`）；build-dist 覆盖 Windows x64 / Linux x64 / Linux arm64 / Termux 四平台
 
 ### 修复
 
