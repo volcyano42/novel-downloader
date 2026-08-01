@@ -60,7 +60,8 @@ fi
 
 echo -e "\033[36m--- Nuitka: web backend (Termux, 15-30 min) ---\033[0m"
 rm -rf dist/*.build dist/*.dist
-python -m nuitka --standalone --onefile --static-libpython=yes --assume-yes-for-downloads --jobs=$(nproc) \
+# Termux 的 Python 无静态 libpython（--static-libpython=yes 报 not supported）；动态链接在 onefile 下由 Nuitka 打包 libpython
+python -m nuitka --standalone --onefile --static-libpython=no --assume-yes-for-downloads --jobs=$(nproc) \
     --nofollow-import-to=DrissionPage \
     --include-package=novelbase \
     --include-package=novelbase.sources.fanqie \
