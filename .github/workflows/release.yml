@@ -75,9 +75,9 @@ jobs:
               owner, repo, workflow_id: 'build-dist.yml', ref: 'main'
             })
             core.info(`已触发 build-dist.yml（触发前最新 run: ${before}）`)
-            // 轮询直到出现本次触发产生的新 completed run（id > before；每 15s 一次，最多 60 分钟）
+            // 轮询直到出现本次触发产生的新 completed run（id > before；每 15s 一次，最多 120 分钟）
             let runId = null, conclusion = null
-            for (let i = 0; i < 240; i++) {
+            for (let i = 0; i < 480; i++) {
               await new Promise(r => setTimeout(r, 15000))
               const runs = (await github.rest.actions.listWorkflowRuns({
                 owner, repo, workflow_id: 'build-dist.yml', per_page: 5
@@ -86,7 +86,7 @@ jobs:
               const run = runs.find(r => r.id > before && r.status === 'completed')
               if (run) { runId = run.id; conclusion = run.conclusion; break }
             }
-            if (!runId) throw new Error('等待 build-dist 完成超时（60 分钟）')
+            if (!runId) throw new Error('等待 build-dist 完成超时（120 分钟）')
             if (conclusion !== 'success') throw new Error(`build-dist 构建失败（conclusion=${conclusion}）`)
             core.setOutput('run_id', String(runId))
 
