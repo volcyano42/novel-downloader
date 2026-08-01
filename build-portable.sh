@@ -88,7 +88,11 @@ if [ -n "$PY_TARGET" ]; then
     echo "--- 下载 python-build-standalone ($PY_TARGET) ---"
     ASSET=$(PY_TARGET="$PY_TARGET" "$PYTHON" - <<'EOF'
 import json, os, re, urllib.request
-data = json.load(urllib.request.urlopen("https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest", timeout=30))
+req = urllib.request.Request(
+    "https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest",
+    headers={"User-Agent": "novel-downloader-build", "Accept": "application/vnd.github+json"},
+)
+data = json.load(urllib.request.urlopen(req, timeout=30))
 tag = data["tag_name"]
 pat = re.compile(r"^cpython-3\.13\.[0-9]+\+" + re.escape(tag) + r"-" + os.environ["PY_TARGET"] + r"-install_only\.tar\.gz$")
 for a in data["assets"]:
