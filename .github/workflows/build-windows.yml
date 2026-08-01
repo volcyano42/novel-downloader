@@ -1,6 +1,7 @@
 name: Build Windows x64 portable
 
 # 手动触发或作为可复用 workflow 被 build-dist.yml 调用
+# 方案：build-portable.ps1（Embedded Python + 源码 + 依赖 zip，与 Linux portable 一致，免 Nuitka 编译）
 on:
   workflow_dispatch:
   workflow_call:
@@ -18,14 +19,7 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt nuitka
-
-      - name: Build (引用 build-web.ps1)
-        timeout-minutes: 90
-        run: powershell -ExecutionPolicy Bypass -File ./build-web.ps1
-
-      - name: 读取版本号并重命名
+      - name: 读取版本号
         id: ver
         shell: pwsh
         run: |
@@ -34,21 +28,24 @@ jobs:
           if (-not $m.Success) { Write-Error "无法从 pyproject.toml 获取版本号"; exit 1 }
           $VERSION = $m.Groups[1].Value
           Write-Output "version=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "版本号: $VERSION"
+
+      - name: Build (引用 build-portable.ps1)
+        timeout-minutes: 90
+        run: powershell -ExecutionPolicy Bypass -File ./build-portable.ps1 -Version ${{ steps.ver.outputs.version }}
+
+      - name: 校验产物
+        shell: pwsh
+        run: |
+          $dst = "dist\novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64.zip"
           Write-Host "dist 内容:"
           Get-ChildItem dist | Format-Table Name, Length -AutoSize
-          $src = "dist\novel-downloader-web.exe"
-          $dst = "dist\novel-downloader-web-portable-$VERSION-windows-x64.exe"
-          if (-not (Test-Path $src)) { Write-Error "未找到产物: $src"; exit 1 }
-          for ($i = 1; $i -le 5; $i++) {
-            try { Copy-Item $src $dst -Force -ErrorAction Stop; break }
-            catch { Write-Host "复制被占用，第 $i 次，等待 10s..."; Start-Sleep 10 }
-          }
-          if (-not (Test-Path $dst)) { Write-Error "产物复制失败"; Get-ChildItem dist | Format-Table Name, Length -AutoSize; exit 1 }
+          if (-not (Test-Path $dst)) { Write-Error "未找到产物: $dst"; exit 1 }
           Write-Host "OK: $dst"
 
-      - name: Upload exe
+      - name: Upload zip
         uses: actions/upload-artifact@v4
         with:
           name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64
-          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64.exe
+          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64.zip
           if-no-files-found: error

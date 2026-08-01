@@ -1,4 +1,4 @@
-# Build portable zip: novel-downloader-web-portable-v{version}.zip
+# Build portable zip: novel-downloader-web-portable-{version}-windows-x64.zip
 # Usage: .\build-portable.ps1 [-Version <version>]
 param(
     [string]$Version
@@ -193,7 +193,8 @@ pause
         $Version = $versionLine.Matches.Groups[1].Value
     }
     Write-Host "--- Packaging zip (v$Version) ---" -ForegroundColor Cyan
-    $zipName = "novel-downloader-web-portable-v$Version.zip"
+    # 产物命名与 Linux portable 统一：novel-downloader-web-portable-{version}-windows-x64.zip（无 v 前缀）
+    $zipName = "novel-downloader-web-portable-$Version-windows-x64.zip"
     $zipPath = Join-Path $distDir $zipName
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Compress-Archive -Path (Join-Path $portableDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
