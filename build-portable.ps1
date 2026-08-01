@@ -110,6 +110,83 @@ try {
     Copy-Item -Recurse "services\frontend\dist" $frontendDistDst
     Copy-Item -Recurse "app_data\config" (Join-Path $portableDir "app_data\config")
 
+    # ── 下载 Chrome 在线安装包 ──
+    Write-Host "--- Downloading ChromeSetup.exe ---" -ForegroundColor Cyan
+    $chromeUrl = "https://dl.google.com/tag/s/installdataindex/update2/installers/ChromeSetup.exe"
+    $chromePath = Join-Path $portableDir "ChromeSetup.exe"
+    try {
+        Invoke-WebRequest -Uri $chromeUrl -OutFile $chromePath
+        Write-Host "ChromeSetup.exe downloaded ($((Get-Item $chromePath).Length) bytes)"
+    } catch {
+        Write-Host "WARNING: ChromeSetup.exe 下载失败，browser 模式需用户自行安装 Chrome" -ForegroundColor Yellow
+    }
+
+    # ── 生成启动脚本 ──
+    Write-Host "--- Generating launch script ---" -ForegroundColor Cyan
+    $batContent = @'
+@echo off
+chcp 65001 >nul
+cd /d "%~dp0"
+
+set "PYTHONHOME=%~dp0python"
+set "PATH=%~dp0python;%~dp0python\Scripts;%PATH%"
+
+:: 检查 Chrome 浏览器
+set "CHROME_FOUND="
+if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+
+if not defined CHROME_FOUND (
+    echo [提示] 未检测到 Chrome 浏览器。
+    echo 如需使用 browser 模式，请双击 ChromeSetup.exe 安装 Chrome。
+    echo 仅 requests / api 模式不受影响，可继续使用。
+    echo.
+)
+
+echo 正在启动 novel-downloader-web...
+start "" /B python\python.exe -m uvicorn services.backend.main:app --host 127.0.0.1 --port 8000
+
+echo 等待服务就绪...
+:wait
+python\python.exe -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >nul 2>&1
+if errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto wait
+)
+
+start "" http://localhost:8000
+echo 服务已启动，浏览器已打开 http://localhost:8000
+echo 关闭此窗口可停止服务。
+
+pause
+'@
+    $batContent | Set-Content -Path (Join-Path $portableDir "启动.bat") -Encoding UTF8
+
+    $readmeContent = @'
+=== novel-downloader-web 便携版 ===
+
+使用方法：
+  1. 如需使用 browser 模式（DrissionPage），先双击 ChromeSetup.exe 安装 Chrome
+  2. 双击 启动.bat
+  3. 浏览器会自动打开 http://localhost:8000
+
+首次使用 Chrome 模式：
+  DrissionPage 首次调用时可能自动下载匹配的 chromedriver，需等待几秒。
+
+数据存储位置：
+  下载的小说数据保存在 app_data/storage/ 目录下。
+  配置文件在 app_data/config/config.yaml。
+
+停止服务：
+  关闭命令行窗口即可。
+
+问题排查：
+  如果启动失败，检查是否缺少 VC++ 运行库（Visual C++ Redistributable）。
+  Chrome 模式需要 Chrome 浏览器已安装。
+'@
+    $readmeContent | Set-Content -Path (Join-Path $portableDir "启动说明.txt") -Encoding UTF8
+
     Write-Host "Done: $zipName" -ForegroundColor Green
 }
 finally {
