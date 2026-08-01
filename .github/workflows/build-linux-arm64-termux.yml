@@ -21,6 +21,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # 在 termux-docker 容器预装 Python 依赖（bionic 环境，与真机 Termux 一致），导出 site-packages
+      # pkg 命令保留输出便于排障；pkg install 带重试（并发/网络波动时偶发失败）
       - name: 预装依赖 (termux-docker)
         run: |
           chmod -R a+rwX "${{ github.workspace }}" 2>/dev/null || true
@@ -30,11 +31,17 @@ jobs:
             --security-opt seccomp:unconfined \
             termux/termux-docker:aarch64 bash -c '
               set -e
-              pkg set-mirror https://packages-cf.termux.dev/apt/termux-main >/dev/null 2>&1 || true
-              pkg update -y >/dev/null 2>&1 || true
-              pkg install -y python rust clang binutils patchelf \
-                libheif libjpeg-turbo zlib libffi openssl libyaml \
-                python-pillow python-lxml >/dev/null 2>&1
+              pkg set-mirror https://packages-cf.termux.dev/apt/termux-main || true
+              pkg update -y || true
+              for i in 1 2 3; do
+                if pkg install -y python rust clang binutils patchelf \
+                  libheif libjpeg-turbo zlib libffi openssl libyaml \
+                  python-pillow python-lxml; then
+                  break
+                fi
+                echo "pkg install 第 $i 次失败，重试..."
+                sleep 10
+              done
               export ANDROID_API_LEVEL=24
               # Termux 排除 browser 模式依赖（psutil 不支持 Android）；容器无 /tmp，用挂载卷
               grep -v "^drissionpage" /src/requirements.txt > /src/.req-termux.txt
