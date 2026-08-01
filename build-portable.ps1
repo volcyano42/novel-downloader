@@ -97,6 +97,19 @@ try {
     }
     Write-Host "Dependencies installed"
 
+    # ── 复制项目文件 ──
+    Write-Host "--- Copying project files ---" -ForegroundColor Cyan
+    Copy-Item -Recurse "novelbase" (Join-Path $portableDir "novelbase")
+    Copy-Item -Recurse "app" (Join-Path $portableDir "app")
+    $backendDst = Join-Path $portableDir "services\backend"
+    New-Item -ItemType Directory -Path (Join-Path $portableDir "services") -Force | Out-Null
+    Copy-Item -Recurse "services\backend" $backendDst
+    Get-ChildItem -Recurse -Directory -Filter "__pycache__" -Path $portableDir | Remove-Item -Recurse -Force
+    $frontendDistDst = Join-Path $portableDir "services\frontend\dist"
+    New-Item -ItemType Directory -Path (Join-Path $portableDir "services\frontend") -Force | Out-Null
+    Copy-Item -Recurse "services\frontend\dist" $frontendDistDst
+    Copy-Item -Recurse "app_data\config" (Join-Path $portableDir "app_data\config")
+
     Write-Host "Done: $zipName" -ForegroundColor Green
 }
 finally {
