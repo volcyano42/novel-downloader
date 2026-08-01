@@ -116,11 +116,15 @@ fi
 echo "--- 复制项目文件 ---"
 cp -r novelbase "$DIST_DIR/novelbase"
 cp -r app "$DIST_DIR/app"
-mkdir -p "$DIST_DIR/services/backend" "$DIST_DIR/services/frontend"
+# 注意：目标目录不预建（cp -r 会嵌套复制成 backend/backend）
+mkdir -p "$DIST_DIR/services"
 cp -r services/backend "$DIST_DIR/services/backend"
+mkdir -p "$DIST_DIR/services/frontend"
 cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
 mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
+# 根目录模块（main.py lifespan 引用）
+cp init_config.py "$DIST_DIR/init_config.py" 2>/dev/null || true
 
 # Termux 开箱即用：复制 CI 容器预装的 site-packages（PYTHONPATH 引用，用户不跑 pip）
 if [ "$PLATFORM" = "termux" ] && [ -n "$DEPS_DIR" ] && [ -d "$DEPS_DIR" ]; then
