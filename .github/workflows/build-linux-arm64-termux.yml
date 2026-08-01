@@ -23,7 +23,9 @@ jobs:
 
       - name: Build in termux-docker (bionic, 引用 build-termux.sh)
         run: |
-          # 清理可能残留的构建锁（host 挂载目录被上一轮 docker 容器遗留）
+          # termux-docker entrypoint 降权到非 root 用户，挂载的 workspace 需放开写权限
+          chmod -R a+rwX "${{ github.workspace }}"
+          # 清理可能残留的构建锁
           rm -rf .build.lock
           # 确保镜像存在（arm64 runner 原生拉取）
           docker pull termux/termux-docker:aarch64 || true
