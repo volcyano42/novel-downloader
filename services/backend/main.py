@@ -117,7 +117,8 @@ if _frontend:
 def main():
     """启动 Web 后端服务。"""
     import uvicorn, webbrowser, threading
-    frozen = getattr(sys, "frozen", False)
+    # Nuitka 不设置 sys.frozen（PyInstaller 才设置）——用 __compiled__ 判断打包版
+    compiled = "__compiled__" in globals() or getattr(sys, "frozen", False)
 
     # 1 秒后自动打开浏览器
     def _open_browser():
@@ -127,7 +128,7 @@ def main():
 
     threading.Thread(target=_open_browser, daemon=True).start()
 
-    if frozen:
+    if compiled:
         uvicorn.run(app, host="0.0.0.0", port=8000)
     else:
         uvicorn.run("services.backend.main:app", host="0.0.0.0", port=8000, reload=True)
