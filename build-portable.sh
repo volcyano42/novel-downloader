@@ -3,14 +3,15 @@
 # 参考 build-portable.ps1（Windows 用 embedded python），本脚本覆盖 Linux x64/arm64 + Termux
 # 平台解释器：
 #   linux-x64 / linux-arm64 : python-build-standalone（独立 Python，无需系统安装）
-#   termux                  : 用 Termux 的 pkg python（start.sh 自动安装依赖）
-# Usage: ./build-portable.sh --platform <linux-x64|linux-arm64|termux> [--version <v>]
+#   termux                  : 内置 Python pyroot/（PYTHONHOME 重定位）或 pkg python
+# Usage: ./build-portable.sh --platform <linux-x64|linux-arm64|termux> [--version <v>] [--deps-dir <dir>] [--pyroot-dir <dir>]
 set -e
 cd "$(dirname "$0")"
 
 PLATFORM=""
 VERSION=""
 DEPS_DIR=""
+PYROOT_DIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --platform=*) PLATFORM="${1#*=}" ;;
@@ -19,7 +20,9 @@ while [ $# -gt 0 ]; do
         --version) shift; VERSION="$1" ;;
         --deps-dir=*) DEPS_DIR="${1#*=}" ;;
         --deps-dir) shift; DEPS_DIR="$1" ;;
-        *) echo "未知参数: $1"; echo "用法: $0 --platform <linux-x64|linux-arm64|termux> [--version <v>] [--deps-dir <dir>]"; exit 1 ;;
+        --pyroot-dir=*) PYROOT_DIR="${1#*=}" ;;
+        --pyroot-dir) shift; PYROOT_DIR="$1" ;;
+        *) echo "未知参数: $1"; echo "用法: $0 --platform <linux-x64|linux-arm64|termux> [--version <v>] [--deps-dir <dir>] [--pyroot-dir <dir>]"; exit 1 ;;
     esac
     shift
 done
@@ -73,7 +76,7 @@ case "$PLATFORM" in
         PY_TARGET="aarch64-unknown-linux-gnu"
         ;;
     termux)
-        PY_TARGET=""   # 用 Termux pkg python
+        PY_TARGET=""   # 内置 pyroot/ 或 Termux pkg python
         ;;
     *)
         echo "错误: 不支持的平台 $PLATFORM（linux-x64 | linux-arm64 | termux）"
@@ -83,7 +86,6 @@ esac
 
 if [ -n "$PY_TARGET" ]; then
     echo "--- 下载 python-build-standalone ($PY_TARGET) ---"
-    # 用 GitHub API 解析最新 release 的资产名（避免硬编码版本）
     ASSET=$(PY_TARGET="$PY_TARGET" "$PYTHON" - <<'EOF'
 import json, os, re, urllib.request
 data = json.load(urllib.request.urlopen("https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest", timeout=30))
@@ -100,7 +102,6 @@ EOF
         exit 1
     fi
     echo "下载: $ASSET"
-    # --ssl-no-revoke：Windows curl(schannel) 吊销检查失败时跳过（Linux 自动忽略）
     curl -L --fail --retry 3 --ssl-no-revoke -o dist/python-standalone.tar.gz "$ASSET"
     mkdir -p "$DIST_DIR/python"
     tar -xzf dist/python-standalone.tar.gz -C "$DIST_DIR/python" --strip-components=1
@@ -132,20 +133,35 @@ if [ "$PLATFORM" = "termux" ] && [ -n "$DEPS_DIR" ] && [ -d "$DEPS_DIR" ]; then
     mkdir -p "$DIST_DIR/python-deps"
     cp -r "$DEPS_DIR"/. "$DIST_DIR/python-deps/"
 fi
+# Termux 全内置：复制 CI 容器打包的 Python 本体（PYTHONHOME 重定位，无需 pkg install python）
+if [ "$PLATFORM" = "termux" ] && [ -n "$PYROOT_DIR" ] && [ -d "$PYROOT_DIR" ]; then
+    echo "--- 复制内置 Python (--pyroot-dir) ---"
+    mkdir -p "$DIST_DIR/pyroot"
+    cp -r "$PYROOT_DIR"/. "$DIST_DIR/pyroot/"
+fi
 find "$DIST_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 # ── 5. 生成启动脚本 ──
 if [ "$PLATFORM" = "termux" ]; then
     cat > "$DIST_DIR/start.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# Termux 启动脚本（开箱即用：依赖已预装在 python-deps/，仅需系统 Python）
+# Termux 启动脚本（开箱即用：优先用内置 Python pyroot/，否则 pkg install python + python-deps/）
 cd "$(dirname "$0")"
 
-# 检测 python（Termux 需 pkg install python，一条命令；无编译/无 pip）
-if ! command -v python >/dev/null 2>&1; then
+# 优先：内置 Python（PYTHONHOME 重定位）
+if [ -d "$PWD/pyroot" ]; then
+    export PYTHONHOME="$PWD/pyroot"
+    export LD_LIBRARY_PATH="$PWD/pyroot/lib:$LD_LIBRARY_PATH"
+    export PATH="$PWD/pyroot/bin:$PATH"
+    PY="$PWD/pyroot/bin/python"
+    echo "使用内置 Python (pyroot/)"
+elif command -v python >/dev/null 2>&1; then
+    PY="python"
+else
     echo "[首次运行] 需要 Termux Python，正在安装..."
     pkg update -y
     pkg install -y python
+    PY="python"
 fi
 
 # 使用预装依赖（CI 容器中按同版本 Python 编译的 site-packages）
@@ -155,12 +171,12 @@ if [ -d "$PWD/python-deps" ]; then
 fi
 
 echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
-python -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
+"$PY" -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
 # 等待服务就绪后打开浏览器
 for i in $(seq 1 30); do
-    if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >/dev/null 2>&1; then
+    if "$PY" -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >/dev/null 2>&1; then
         termux-open-url http://127.0.0.1:8000 2>/dev/null || true
         break
     fi
@@ -213,7 +229,7 @@ cat > "$DIST_DIR/启动说明.txt" <<EOF
 说明：
   - browser 模式（DrissionPage）需要系统已安装 Chrome；Termux 版不含 browser 模式
   - Linux 版自带 Python 与依赖，开箱即用
-  - Termux 版依赖已预装（python-deps/），仅需 pkg install python（如未安装）
+  - Termux 版内置 Python (pyroot/) 与依赖，完全开箱即用（无需 pkg install python）
 EOF
 
 # ── 7. 打包 ──
