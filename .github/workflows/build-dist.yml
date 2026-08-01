@@ -1,9 +1,10 @@
 name: Build Distributables
 
 # 手动触发：一键构建全部发行产物（也可单独触发各产物 workflow，便于测试）
-#   - build-windows.yml           Windows x64 exe
-#   - build-linux-x64.yml         Linux x64
-#   - build-linux-arm64.yml       Linux arm64
+#   - build-windows.yml           Windows x64 portable
+#   - build-linux-x64.yml         Linux x64 portable
+#   - build-linux-arm64.yml       Linux arm64 portable
+# 注：Termux 产物由用户本机构建，不在 CI 产物矩阵中
 on:
   workflow_dispatch:
 

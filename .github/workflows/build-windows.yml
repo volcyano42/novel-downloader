@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-windows:
-    name: Windows x64 exe
+    name: Windows x64 portable
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -31,23 +31,24 @@ jobs:
         run: |
           $content = Get-Content pyproject.toml -Raw
           $m = [regex]::Match($content, 'version = "([^"]+)"')
-          if (-not $m.Success) { Write-Error "无法从 pyproject.toml 提取版本号"; exit 1 }
+          if (-not $m.Success) { Write-Error "无法从 pyproject.toml 获取版本号"; exit 1 }
           $VERSION = $m.Groups[1].Value
           Write-Output "version=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "dist 内容:"
           Get-ChildItem dist | Format-Table Name, Length -AutoSize
           $src = "dist\novel-downloader-web.exe"
-          $dst = "dist\novel-downloader-web-windows-x64-$VERSION.exe"
+          $dst = "dist\novel-downloader-web-portable-$VERSION-windows-x64.exe"
           if (-not (Test-Path $src)) { Write-Error "未找到产物: $src"; exit 1 }
           for ($i = 1; $i -le 5; $i++) {
             try { Copy-Item $src $dst -Force -ErrorAction Stop; break }
-            catch { Write-Host "复制被锁定（第 $i 次），等待 10s..."; Start-Sleep 10 }
+            catch { Write-Host "复制被占用，第 $i 次，等待 10s..."; Start-Sleep 10 }
           }
-          if (-not (Test-Path $dst)) { Write-Error "重命名最终失败"; Get-ChildItem dist | Format-Table Name, Length -AutoSize; exit 1 }
+          if (-not (Test-Path $dst)) { Write-Error "产物复制失败"; Get-ChildItem dist | Format-Table Name, Length -AutoSize; exit 1 }
           Write-Host "OK: $dst"
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-web-windows-x64-${{ steps.ver.outputs.version }}
-          path: dist/novel-downloader-web-windows-x64-${{ steps.ver.outputs.version }}.exe
+          name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64
+          path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-windows-x64.exe
+          if-no-files-found: error
