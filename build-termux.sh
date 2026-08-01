@@ -97,6 +97,8 @@ python -m nuitka --standalone --onefile --static-libpython=no --assume-yes-for-d
     services/backend/main.py
 
 rm -rf build
-# 容器内产物属主是容器用户，host runner 需读权限（mv/copy 依赖）
+# 容器内产物属主是容器用户，host runner 需读写权限（mv/copy 依赖）
+# 注意：dist/ 目录本身也是容器内创建的，必须一并放开（runner 非属主无法 chmod）
+chmod a+rwX dist
 chmod -R a+rwX dist/novel-downloader-web dist/main.dist dist/main.build 2>/dev/null || chmod -R a+rwX dist
 echo -e "\033[32mDone: dist/novel-downloader-web (Termux/bionic)\033[0m"
