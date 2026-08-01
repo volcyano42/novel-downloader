@@ -17,6 +17,9 @@
 2. **Android 与 musl 产物移除** — 删除 `android/` 目录、`build-apk.yml`、`build-linux-arm64-musl.yml`（musl 动态产物 Termux 无法运行）；产物矩阵为 Windows x64 / Linux x64 / Linux arm64
 3. **Linux 构建改用 portable 方案** — `build-linux-x64.yml` / `build-linux-arm64.yml` / `build-linux-arm64-termux.yml` 由 Nuitka 编译改为 `build-portable.sh`（构建 10-20 分钟，免 C 编译）
 4. **打包版判断修正** — 用 Nuitka `__compiled__` 特性替代 `sys.frozen`（Nuitka 不设置 sys.frozen，导致 exe 误走 reload 分支报 WinError 10013）
+5. **Windows 产物统一 portable 命名** — build-windows 产物改为 `novel-downloader-web-portable-{version}-windows-x64`（与 Linux 系列命名一致）
+6. **Termux 移出 CI 产物矩阵** — build-dist 不再构建 Termux 产物（Termux 由用户本机构建），`build-linux-arm64-termux.yml` 保留可单独触发
+7. **废弃构建文件清理** — 删除 Nuitka 版 `build-web.sh`（含 --musl 参数）、`build-termux.sh` 及 `build-linux-arm64-termux.yml` workflow（portable 方案已替代，Termux 产物由用户本机构建）
 
 ### 修复
 
