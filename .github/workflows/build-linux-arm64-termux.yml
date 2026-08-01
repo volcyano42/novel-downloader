@@ -32,10 +32,20 @@ jobs:
             termux/termux-docker:aarch64 bash -c '
               set -e
               pkg set-mirror https://packages-cf.termux.dev/apt/termux-main >/dev/null 2>&1 || true
-              pkg update -y >/dev/null 2>&1 || true
-              pkg install -y python rust clang binutils patchelf \
-                libheif libjpeg-turbo zlib libffi openssl libyaml \
-                python-pillow python-lxml >/dev/null 2>&1
+              # pkg update/install 带重试（CI 并发/网络波动偶发失败），输出保留便于排障
+              for u in 1 2 3; do
+                pkg update -y && break
+                echo "pkg update 第 $u 次失败，重试..." && sleep 15
+              done
+              for i in 1 2 3 4 5; do
+                if pkg install -y python rust clang binutils patchelf \
+                  libheif libjpeg-turbo zlib libffi openssl libyaml \
+                  python-pillow python-lxml; then
+                  break
+                fi
+                echo "pkg install 第 $i 次失败，重试..."
+                sleep 20
+              done
               export ANDROID_API_LEVEL=24
               # Termux 排除 browser 模式依赖（psutil 不支持 Android）；容器无 /tmp，用挂载卷
               grep -v "^drissionpage" /src/requirements.txt > /src/.req-termux.txt
