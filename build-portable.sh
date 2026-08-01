@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# Build portable package: novel-downloader-web-portable-v{version}-{platform}.tar.gz
+# 参考 build-portable.ps1（Windows 用 embedded python），本脚本覆盖 Linux x64/arm64 + Termux
+# 平台解释器：
+#   linux-x64 / linux-arm64 : python-build-standalone（独立 Python，无需系统安装）
+#   termux                  : 用 Termux 的 pkg python（start.sh 自动安装依赖）
+# Usage: ./build-portable.sh --platform <linux-x64|linux-arm64|termux> [--version <v>]
+set -e
+cd "$(dirname "$0")"
+
+PLATFORM=""
+VERSION=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --platform=*) PLATFORM="${1#*=}" ;;
+        --platform) shift; PLATFORM="$1" ;;
+        --version=*) VERSION="${1#*=}" ;;
+        --version) shift; VERSION="$1" ;;
+        *) echo "未知参数: $1"; echo "用法: $0 --platform <linux-x64|linux-arm64|termux> [--version <v>]"; exit 1 ;;
+    esac
+    shift
+done
+
+if [ -z "$PLATFORM" ]; then
+    echo "错误: 缺少 --platform 参数（linux-x64 | linux-arm64 | termux）"
+    exit 1
+fi
+
+# 构建机解释器（排除 WindowsApps Store stub；Git Bash 无 python3 时用 python）
+PYTHON=""
+for cand in python3 python; do
+    p="$(command -v "$cand" 2>/dev/null || true)"
+    case "$p" in
+        *WindowsApps*|"") continue ;;
+    esac
+    PYTHON="$p"
+    break
+done
+if [ -z "$PYTHON" ]; then
+    echo "错误: 找不到可用的 python3/python"
+    exit 1
+fi
+
+# ── 版本号 ──
+if [ -z "$VERSION" ]; then
+    VERSION=$("$PYTHON" -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml', encoding='utf-8').read()).group(1))")
+fi
+echo "版本: $VERSION | 平台: $PLATFORM"
+
+DIST_DIR="dist/portable"
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR"
+
+# ── 1. 构建前端 ──
+echo "--- 构建前端 ($(date +%H:%M:%S)) ---"
+( cd services/frontend
+  if [ ! -d node_modules ]; then
+      npm install --registry=https://registry.npmmirror.com || npm install
+  fi
+  npm run build
+)
+echo "--- 前端完成 ($(date +%H:%M:%S)) ---"
+
+# ── 2. Python 解释器 ──
+case "$PLATFORM" in
+    linux-x64)
+        PY_TARGET="x86_64-unknown-linux-gnu"
+        ;;
+    linux-arm64)
+        PY_TARGET="aarch64-unknown-linux-gnu"
+        ;;
+    termux)
+        PY_TARGET=""   # 用 Termux pkg python
+        ;;
+    *)
+        echo "错误: 不支持的平台 $PLATFORM（linux-x64 | linux-arm64 | termux）"
+        exit 1
+        ;;
+esac
+
+if [ -n "$PY_TARGET" ]; then
+    echo "--- 下载 python-build-standalone ($PY_TARGET) ---"
+    # 用 GitHub API 解析最新 release 的资产名（避免硬编码版本）
+    ASSET=$(PY_TARGET="$PY_TARGET" "$PYTHON" - <<'EOF'
+import json, os, re, urllib.request
+data = json.load(urllib.request.urlopen("https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest", timeout=30))
+tag = data["tag_name"]
+pat = re.compile(r"^cpython-3\.13\.[0-9]+\+" + re.escape(tag) + r"-" + os.environ["PY_TARGET"] + r"-install_only\.tar\.gz$")
+for a in data["assets"]:
+    if pat.match(a["name"]):
+        print(a["browser_download_url"])
+        break
+EOF
+)
+    if [ -z "$ASSET" ]; then
+        echo "错误: 找不到 $PY_TARGET 的 cpython-3.13 install_only 资产"
+        exit 1
+    fi
+    echo "下载: $ASSET"
+    # --ssl-no-revoke：Windows curl(schannel) 吊销检查失败时跳过（Linux 自动忽略）
+    curl -L --fail --retry 3 --ssl-no-revoke -o dist/python-standalone.tar.gz "$ASSET"
+    mkdir -p "$DIST_DIR/python"
+    tar -xzf dist/python-standalone.tar.gz -C "$DIST_DIR/python" --strip-components=1
+    rm -f dist/python-standalone.tar.gz
+    "$DIST_DIR/python/bin/python3" --version
+
+    # ── 3. 安装依赖（standalone python 直接用 manylinux wheel，无需编译）──
+    echo "--- 安装依赖 ---"
+    "$DIST_DIR/python/bin/python3" -m pip install --no-warn-script-location -r requirements.txt
+fi
+
+# ── 4. 复制项目文件 ──
+echo "--- 复制项目文件 ---"
+cp -r novelbase "$DIST_DIR/novelbase"
+cp -r app "$DIST_DIR/app"
+mkdir -p "$DIST_DIR/services/backend" "$DIST_DIR/services/frontend"
+cp -r services/backend "$DIST_DIR/services/backend"
+cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
+cp -r app_data/config "$DIST_DIR/app_data/config"
+find "$DIST_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
+# ── 5. 生成启动脚本 ──
+if [ "$PLATFORM" = "termux" ]; then
+    cat > "$DIST_DIR/start.sh" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+# Termux 启动脚本：首次运行自动安装 Python 与依赖
+cd "$(dirname "$0")"
+
+# 检测 python
+if ! command -v python >/dev/null 2>&1; then
+    echo "[首次运行] 安装 Python..."
+    pkg update -y
+    pkg install -y python rust clang binutils patchelf libheif libjpeg-turbo zlib libffi openssl libyaml
+fi
+
+# 检测依赖（requirements 标记文件）
+if [ ! -f .deps-installed ]; then
+    echo "[首次运行] 安装 Python 依赖（browser 模式除外，需编译约 10-20 分钟）..."
+    # Termux 排除 browser 模式依赖（psutil 不支持 Android）
+    grep -v '^drissionpage' requirements.txt > .req-termux.txt
+    pip install --break-system-packages -r .req-termux.txt
+    touch .deps-installed
+    echo "[首次运行] 依赖安装完成"
+fi
+
+echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
+python -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
+SERVER_PID=$!
+
+# 等待服务就绪后打开浏览器
+for i in $(seq 1 30); do
+    if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >/dev/null 2>&1; then
+        termux-open-url http://127.0.0.1:8000 2>/dev/null || true
+        break
+    fi
+    sleep 1
+done
+
+wait $SERVER_PID
+EOF
+else
+    cat > "$DIST_DIR/start.sh" <<'EOF'
+#!/usr/bin/env bash
+# 启动脚本（Linux）：使用打包的独立 Python
+cd "$(dirname "$0")"
+export PYTHONHOME="$PWD/python"
+export PATH="$PWD/python/bin:$PATH"
+
+echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
+python3 -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
+SERVER_PID=$!
+
+# 等待服务就绪后打开浏览器
+for i in $(seq 1 30); do
+    if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >/dev/null 2>&1; then
+        (xdg-open http://127.0.0.1:8000 >/dev/null 2>&1 || true) &
+        break
+    fi
+    sleep 1
+done
+
+wait $SERVER_PID
+EOF
+fi
+chmod +x "$DIST_DIR/start.sh"
+
+# ── 6. 说明文档 ──
+cat > "$DIST_DIR/启动说明.txt" <<EOF
+=== novel-downloader-web 便携版 (v$VERSION, $PLATFORM) ===
+
+使用方法：
+  1. 解压到任意目录
+  2. 运行 ./start.sh
+  3. 浏览器自动打开 http://127.0.0.1:8000
+
+数据存储位置：
+  下载的小说数据保存在 app_data/storage/
+  配置文件在 app_data/config/config.yaml
+
+停止服务：Ctrl+C 或关闭终端。
+
+说明：
+  - browser 模式（DrissionPage）需要系统已安装 Chrome；Termux 版不含 browser 模式
+  - Termux 版首次运行会自动安装 Python 与依赖（需网络，约 10-20 分钟）
+EOF
+
+# ── 7. 打包 ──
+echo "--- 打包 ($(date +%H:%M:%S)) ---"
+ARCHIVE="dist/novel-downloader-web-portable-v${VERSION}-${PLATFORM}.tar.gz"
+tar -czf "$ARCHIVE" -C dist portable
+SIZE_MB=$(du -m "$ARCHIVE" | cut -f1)
+echo "完成: $ARCHIVE ($SIZE_MB MB)"
