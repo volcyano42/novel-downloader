@@ -10,13 +10,16 @@ cd "$(dirname "$0")"
 
 PLATFORM=""
 VERSION=""
+DEPS_DIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --version=*) VERSION="${1#*=}" ;;
         --version) shift; VERSION="$1" ;;
-        *) echo "未知参数: $1"; echo "用法: $0 --platform <linux-x64|linux-arm64|termux> [--version <v>]"; exit 1 ;;
+        --deps-dir=*) DEPS_DIR="${1#*=}" ;;
+        --deps-dir) shift; DEPS_DIR="$1" ;;
+        *) echo "未知参数: $1"; echo "用法: $0 --platform <linux-x64|linux-arm64|termux> [--version <v>] [--deps-dir <dir>]"; exit 1 ;;
     esac
     shift
 done
@@ -118,30 +121,33 @@ cp -r services/backend "$DIST_DIR/services/backend"
 cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
 mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
+
+# Termux 开箱即用：复制 CI 容器预装的 site-packages（PYTHONPATH 引用，用户不跑 pip）
+if [ "$PLATFORM" = "termux" ] && [ -n "$DEPS_DIR" ] && [ -d "$DEPS_DIR" ]; then
+    echo "--- 复制预装依赖 (--deps-dir) ---"
+    mkdir -p "$DIST_DIR/python-deps"
+    cp -r "$DEPS_DIR"/. "$DIST_DIR/python-deps/"
+fi
 find "$DIST_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 # ── 5. 生成启动脚本 ──
 if [ "$PLATFORM" = "termux" ]; then
     cat > "$DIST_DIR/start.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# Termux 启动脚本：首次运行自动安装 Python 与依赖
+# Termux 启动脚本（开箱即用：依赖已预装在 python-deps/，仅需系统 Python）
 cd "$(dirname "$0")"
 
-# 检测 python
+# 检测 python（Termux 需 pkg install python，一条命令；无编译/无 pip）
 if ! command -v python >/dev/null 2>&1; then
-    echo "[首次运行] 安装 Python..."
+    echo "[首次运行] 需要 Termux Python，正在安装..."
     pkg update -y
-    pkg install -y python rust clang binutils patchelf libheif libjpeg-turbo zlib libffi openssl libyaml
+    pkg install -y python
 fi
 
-# 检测依赖（requirements 标记文件）
-if [ ! -f .deps-installed ]; then
-    echo "[首次运行] 安装 Python 依赖（browser 模式除外，需编译约 10-20 分钟）..."
-    # Termux 排除 browser 模式依赖（psutil 不支持 Android）
-    grep -v '^drissionpage' requirements.txt > .req-termux.txt
-    pip install --break-system-packages -r .req-termux.txt
-    touch .deps-installed
-    echo "[首次运行] 依赖安装完成"
+# 使用预装依赖（CI 容器中按同版本 Python 编译的 site-packages）
+if [ -d "$PWD/python-deps" ]; then
+    export PYTHONPATH="$PWD/python-deps:$PYTHONPATH"
+    echo "使用预装依赖 (python-deps/)"
 fi
 
 echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
@@ -202,12 +208,13 @@ cat > "$DIST_DIR/启动说明.txt" <<EOF
 
 说明：
   - browser 模式（DrissionPage）需要系统已安装 Chrome；Termux 版不含 browser 模式
-  - Termux 版首次运行会自动安装 Python 与依赖（需网络，约 10-20 分钟）
+  - Linux 版自带 Python 与依赖，开箱即用
+  - Termux 版依赖已预装（python-deps/），仅需 pkg install python（如未安装）
 EOF
 
 # ── 7. 打包 ──
 echo "--- 打包 ($(date +%H:%M:%S)) ---"
-ARCHIVE="dist/novel-downloader-web-portable-v${VERSION}-${PLATFORM}.tar.gz"
+ARCHIVE="dist/novel-downloader-web-portable-${VERSION}-${PLATFORM}.tar.gz"
 tar -czf "$ARCHIVE" -C dist portable
 SIZE_MB=$(du -m "$ARCHIVE" | cut -f1)
 echo "完成: $ARCHIVE ($SIZE_MB MB)"
