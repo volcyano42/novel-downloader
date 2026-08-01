@@ -39,6 +39,8 @@ jobs:
         run: |
           VERSION=$(python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # 容器内产物属主是容器用户，mv 可能 Permission denied → 先放开权限
+          chmod -R a+rwX dist 2>/dev/null || true
           mv dist/novel-downloader-web "dist/novel-downloader-web-linux-arm64-termux-$VERSION"
 
       - name: Upload binary
