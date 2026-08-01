@@ -73,6 +73,30 @@ try {
     $newContent | Set-Content $pthFile.FullName -Encoding ASCII
     Write-Host "Modified $($pthFile.Name): site enabled, Lib\site-packages added"
 
+    # ── 安装 pip ──
+    Write-Host "--- Installing pip ---" -ForegroundColor Cyan
+    $getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
+    $getPipPath = Join-Path $distDir "get-pip.py"
+    Invoke-WebRequest -Uri $getPipUrl -OutFile $getPipPath
+
+    $pythonExe = Join-Path $pythonEmbedDir "python.exe"
+    & $pythonExe $getPipPath --no-warn-script-location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: get-pip.py 失败" -ForegroundColor Red
+        exit 1
+    }
+    Remove-Item $getPipPath
+
+    # ── 安装项目依赖 ──
+    Write-Host "--- Installing dependencies ---" -ForegroundColor Cyan
+    $pipExe = Join-Path $pythonEmbedDir "Scripts\pip.exe"
+    & $pipExe install -r requirements.txt --no-warn-script-location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: pip install 失败" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "Dependencies installed"
+
     Write-Host "Done: $zipName" -ForegroundColor Green
 }
 finally {
