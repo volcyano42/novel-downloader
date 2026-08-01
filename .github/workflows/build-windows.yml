@@ -29,7 +29,10 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $VERSION = python -c "import re;print(re.search(r'version = \"([^\"]+)\"', open('pyproject.toml').read()).group(1))"
+          $content = Get-Content pyproject.toml -Raw
+          $m = [regex]::Match($content, 'version = "([^"]+)"')
+          if (-not $m.Success) { Write-Error "无法从 pyproject.toml 提取版本号"; exit 1 }
+          $VERSION = $m.Groups[1].Value
           Write-Output "version=$VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "dist 内容:"
           Get-ChildItem dist | Format-Table Name, Length -AutoSize
