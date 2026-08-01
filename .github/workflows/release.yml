@@ -3,16 +3,16 @@ name: Release
 # 手动触发：发布新版本
 #   1. 校验版本号 + 从 CHANGELOG.md 提取对应版本段落
 #   2. 创建 tag（v{version}）
-#   3. 触发 build-dist.yml 构建发行产物（Windows exe / Linux x64+arm64）
+#   3. 触发 build-dist.yml 构建发行产物（Windows exe / Linux x64+arm64 / Termux portable）
 #   4. 等待构建完成并下载产物
 #   5. 创建 GitHub Release（标题=版本号，内容=CHANGELOG 段落，附件=构建产物）
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 4.2.0，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
+        description: '版本号（如 4.2.1 或 4.2.3-dev，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
         required: true
-        default: '4.2.1'
+        default: '4.2.3-dev'
 
 permissions:
   contents: write
@@ -31,8 +31,8 @@ jobs:
         run: |
           set -e
           VERSION="${{ inputs.version }}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "错误：版本号格式应为 x.y.z"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "错误：版本号格式应为 x.y.z 或 x.y.z-dev（如 4.2.1、4.2.3-dev）"
             exit 1
           fi
           python3 - "$VERSION" <<'EOF'
