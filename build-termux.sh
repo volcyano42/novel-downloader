@@ -35,9 +35,11 @@ pkg install -y python clang binutils patchelf rust \
     python-pillow python-lxml termux-elf-cleaner
 
 # Nuitka 依赖检测需要 ldd（Termux binutils 不含）：用 readelf wrapper
+# 注意：必须复制到容器内文件系统再 chmod（挂载卷来自 Windows，无 Unix 执行位）
 if [ -f /src/scripts/termux-ldd.sh ]; then
-    ln -sf /src/scripts/termux-ldd.sh "$PREFIX/bin/ldd"
-    echo "ldd -> termux-ldd.sh (readelf wrapper)"
+    cp /src/scripts/termux-ldd.sh "$PREFIX/bin/ldd"
+    chmod +x "$PREFIX/bin/ldd"
+    echo "ldd -> termux-ldd.sh (readelf wrapper, 已复制到容器内)"
 else
     echo "警告: 无 ldd 替代，Nuitka 依赖检测可能失败"
 fi
