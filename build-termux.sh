@@ -31,7 +31,19 @@ pkg set-mirror https://packages-cf.termux.dev/apt/termux-main >/dev/null 2>&1 ||
 pkg update -y >/dev/null 2>&1 || true
 pkg install -y python clang binutils patchelf rust \
     libheif libjpeg-turbo zlib libffi openssl libyaml \
-    python-pillow python-lxml termux-elf-cleaner
+    python-pillow python-lxml termux-elf-cleaner llvm
+
+# Nuitka 依赖检测需要 ldd：优先用 llvm-ldd（Termux llvm 包提供），否则用 readelf wrapper
+if command -v llvm-ldd >/dev/null 2>&1; then
+    ln -sf "$(command -v llvm-ldd)" "$PREFIX/bin/ldd"
+    echo "ldd -> llvm-ldd"
+elif [ -f /src/scripts/termux-ldd.sh ]; then
+    ln -sf /src/scripts/termux-ldd.sh "$PREFIX/bin/ldd"
+    echo "ldd -> termux-ldd.sh (readelf wrapper)"
+else
+    echo "警告: 无 ldd 替代，Nuitka 依赖检测可能失败"
+fi
+which ldd
 
 # ── 2. pip 依赖（C 扩展在 Termux 源码编译，需 rust/clang/libheif）──
 echo -e "\033[36m--- pip 依赖 ---\033[0m"
