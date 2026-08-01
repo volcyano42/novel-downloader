@@ -62,8 +62,8 @@ jobs:
       # CI 内实测：用内置 Python (PYTHONHOME) 启动服务，验证开箱即用
       - name: 验证 PYTHONHOME 启动
         run: |
-          # runner 创建的 dist 目录容器用户无写权限，先放开
-          chmod -R a+rwX "${{ github.workspace }}"
+          # runner 创建的 dist 目录容器用户无写权限，先放开（pyroot 属主为容器 root，runner 无法 chmod，忽略失败——容器内 root 有全部权限）
+          chmod -R a+rwX "${{ github.workspace }}" 2>/dev/null || true
           docker run --rm \
             -v "${{ github.workspace }}":/src -w /src \
             --security-opt seccomp:unconfined \
