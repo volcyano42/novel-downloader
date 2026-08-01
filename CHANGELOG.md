@@ -20,6 +20,7 @@
 5. **Windows 产物统一 portable 命名** — build-windows 产物改为 `novel-downloader-web-portable-{version}-windows-x64`（与 Linux 系列命名一致）
 6. **Termux 移出 CI 产物矩阵** — build-dist 不再构建 Termux 产物（Termux 由用户本机构建），`build-linux-arm64-termux.yml` 保留可单独触发
 7. **废弃构建文件清理** — 删除 Nuitka 版 `build-web.sh`（含 --musl 参数）、`build-termux.sh` 及 `build-linux-arm64-termux.yml` workflow（portable 方案已替代，Termux 产物由用户本机构建）
+8. **workflow 显示名称统一** — `Build Windows x64` → `Build Windows x64 portable`（与 Linux portable 系列命名一致）
 
 ### 修复
 
