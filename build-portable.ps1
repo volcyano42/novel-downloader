@@ -100,7 +100,7 @@ try {
     # ── 复制项目文件 ──
     Write-Host "--- Copying project files ---" -ForegroundColor Cyan
     Copy-Item -Recurse "novelbase" (Join-Path $portableDir "novelbase")
-    Copy-Item -Recurse "app" (Join-Path $portableDir "app")
+    Copy-Item -Recurse "cli_lib" (Join-Path $portableDir "cli_lib")
     $backendDst = Join-Path $portableDir "services\backend"
     New-Item -ItemType Directory -Path (Join-Path $portableDir "services") -Force | Out-Null
     Copy-Item -Recurse "services\backend" $backendDst
