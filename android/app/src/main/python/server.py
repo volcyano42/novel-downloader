@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Android APK 版后端入口：注入 NLD_APP_DATA → 启动现有 FastAPI app → 挂载前端。"""
+"""Android APK 版后端入口：注入 NLD_APP_DATA → 启动现有 FastAPI app → 挂载前端。
+
+健康检查不在此处自注册 /health：MainActivity 轮询 services/backend/main.py 中
+注册于 SPA fallback 与根 mount 之前的 /api/v2/health（两种环境始终可达）；
+本模块注册的 /health 会被 SPA fallback（本地 services/frontend/dist 存在时）
+或根 StaticFiles mount 拦截，实际不可达。
+"""
 import os
 from pathlib import Path
 
@@ -42,12 +48,7 @@ from services.backend.main import app  # noqa: E402  （现有 FastAPI app）
 
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
+
 _frontend_dir = Path(__file__).resolve().parent.parent / "assets" / "frontend"
 if _frontend_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
-
-
-@app.get("/health")
-async def health() -> dict:
-    """MainActivity 轮询的就绪探针。"""
-    return {"status": "ok"}
