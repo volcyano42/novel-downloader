@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             if (checkHealth()) {
                 webView.loadUrl("$BASE/")
+            } else if (System.currentTimeMillis() - pollStart > HEALTH_TIMEOUT_MS) {
+                Toast.makeText(this@MainActivity, R.string.backend_not_ready, Toast.LENGTH_LONG).show()
             } else {
                 mainHandler.postDelayed(this, HEALTH_POLL_MS)
             }
