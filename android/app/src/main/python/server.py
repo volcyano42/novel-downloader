@@ -5,6 +5,11 @@
 注册于 SPA fallback 与根 mount 之前的 /api/v2/health（两种环境始终可达）；
 本模块注册的 /health 会被 SPA fallback（本地 services/frontend/dist 存在时）
 或根 StaticFiles mount 拦截，实际不可达。
+
+启动条件：仅当以 __main__ 运行（本地 python server.py，或 Chaquopy
+Python.start(..., "server") 使入口模块以 __main__ 方式执行）时阻塞启动 uvicorn。
+模块被 import（如 pytest）时不启动；不依赖 _ANDROID 判定（_ANDROID 仅用于
+get_app_data 的 Android 存储兜底）。
 """
 import os
 from pathlib import Path
@@ -61,11 +66,14 @@ _server: "uvicorn.Server | None" = None
 
 
 def _start() -> None:
-    """阻塞启动 uvicorn（Chaquopy Python.start 调用入口）。"""
+    """阻塞启动 uvicorn（Chaquopy Python.start 调用入口）；幂等：已在运行则直接返回。"""
     global _server
+    if _server is not None:
+        return
     config = uvicorn.Config(app, host="127.0.0.1", port=18080, log_level="info")
     _server = uvicorn.Server(config)
     _server.run()
+    _server = None  # 正常退出后复位，允许再次启动
 
 
 def _shutdown() -> None:
@@ -74,5 +82,5 @@ def _shutdown() -> None:
         _server.should_exit = True
 
 
-if __name__ == "__main__" or _ANDROID:
+if __name__ == "__main__":
     _start()
