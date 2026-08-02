@@ -53,11 +53,20 @@ _*.py
 .superpowers/
 reasonix.toml
 
-# 文档（不提交）
-docs/
 
 # Node
 node_modules/
 
 # 前端构建产物
 services/frontend/dist/
+
+# Android（构建产物/本地配置，不应提交）
+android/.gradle/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/*.jks
+android/app/src/main/python/services/
+android/app/src/main/python/init_config.py
+android/app/src/main/python/template/
+android/app/src/main/python/frontend/

@@ -55,6 +55,8 @@ jobs:
           APK_VERSION: ${{ inputs.version || 'dev' }}
         run: |
           cd android
+          APK_VERSION=$(echo "$APK_VERSION" | tr -cd '[:alnum:]._-')
+          [ -n "$APK_VERSION" ] || APK_VERSION=dev
           for apk in $(find app/build/outputs/apk/release -name '*.apk'); do
             base=$(dirname "$apk")
             mv "$apk" "$base/novel-downloader-web-${APK_VERSION}-android.apk"

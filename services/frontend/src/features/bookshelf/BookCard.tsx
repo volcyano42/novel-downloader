@@ -85,8 +85,9 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
           AndroidBridge?: { saveExport(taskId: string, fileName: string): void };
         }).AndroidBridge;
         if (androidBridge) {
-          // Android APK：走系统"保存到"对话框（SAF）
-          androidBridge.saveExport(task.task_id, `${title}.zip`);
+          // Android APK：走系统"保存到"对话框（SAF）；文件名清洗非法字符
+          const safeTitle = title.replace(/[\\/:*?"<>|]/g, "_");
+          androidBridge.saveExport(task.task_id, `${safeTitle}.zip`);
         } else {
           // 桌面/浏览器：现有逻辑
           window.open(`/api/v2/export/download/${task.task_id}`, "_self");
