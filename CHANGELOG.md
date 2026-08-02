@@ -26,6 +26,11 @@
 9. **Windows 构建改用 portable 方案** — build-windows.yml 由 Nuitka 编译（build-web.ps1）改为 `build-portable.ps1`（Embedded Python + 源码 + 依赖 zip），产物统一为 `novel-downloader-web-portable-{version}-windows-x64.zip`
 10. **Termux 加回 build-dist（内置 Python）** — Termux portable 采用 pyroot 全内置方案（Python 本体 + 依赖库随包，PYTHONHOME 重定位，开箱即用无需 `pkg install python`）；build-dist 覆盖 Windows x64 / Linux x64 / Linux arm64 / Termux 四平台
 11. **移除交互式 CLI** — 删除 `main.py` 及 app 交互层（`app/menus.py` / `app/ui.py` / `app/notify.py`），`cli.py` 重构为纯非交互唯一 CLI 入口：新增 `delete`（删除小说）、`novel list`（书架）、`source list`（书源，`source`/`sources` 均可）；`export` 改为直接导出不再走交互菜单；scripts 调试脚本改从 `app.config` 加载配置
+12. **app/ 目录更名 cli_lib** — CLI 辅助层（配置加载/下载编排）改名，避免与嵌套核心目录命名冲突；cli.py 与调试脚本引用同步更新
+13. **scripts/ 移至衍生产物目录** — 调试脚本（debug_source / debug_exporter / debug_parser / cloud_sync / recover_db / archive 等）不进核心仓库；构建辅助 check-termux-psutil.sh（原 probe-termux.sh，孤儿脚本）定位于衍生产物目录
+14. **删除废弃 Nuitka 构建脚本** — build-main、build-cli（CLI 版 Nuitka 构建遗留，已只发布 portable 便携版）
+15. **portable 构建仅打包 webui** — 移除 cli_lib 打包（webui 运行不依赖 CLI 层）
+16. **删除杂项文件** — package.json / package-lock.json（本地 reasonix npm 临时文件误入仓库）
 
 ### 修复
 
@@ -35,6 +40,7 @@
 4. **portable 打包结构** — 修复 `services/backend` 目录嵌套（`cp -r` 目标预建导致 `backend/backend`）；补打包根目录 `init_config.py`（main.py lifespan 必需，缺失则启动失败）
 5. **Termux 容器兼容** — 容器无 `/tmp`（改用挂载卷）；`ANDROID_API_LEVEL=24`（maturin 构建 pydantic-core 需要）；依赖 `.so` 随 `pyroot` 一并复制（PYTHONHOME 重定位必需）
 6. **storage.delete_novel 在 Windows 删除失败** — sqlite 连接对象依赖 GC 销毁、文件句柄延迟释放导致 `os.remove` 撞 `PermissionError`；删除前强制 `gc.collect()` 并加重试
+7. **构建脚本同步 cli_lib 改名** — build-portable.ps1/sh 与 build-web.ps1 仍引用已删除的 `app` 目录（打包会失败/漏包），改为 `cli_lib`
 
 ---
 
