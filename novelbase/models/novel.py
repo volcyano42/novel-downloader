@@ -255,6 +255,17 @@ class Novel:
     chapters: Chapters = field(default_factory=Chapters)
     extra: Box = field(default_factory=Box)
 
+    @property
+    def origin_id(self) -> str:
+        """源站原始 ID：Novel.id 去掉 {website}_ 前缀（如 fanqie_7123... → 7123...）。"""
+        if self.id and "_" in self.id:
+            return self.id.split("_", 1)[1]
+        return self.id
+
+    @origin_id.setter
+    def origin_id(self, value) -> None:
+        """只读属性，忽略赋值（兼容 Novel.loads 的 setattr 流程）。"""
+
     @staticmethod
     def loads(title: str, url: str, id: str, serial: int, author: str, description: str,
               tags: Sequence[str] | None = None, count: int | None = None, cover: dict | None = None,

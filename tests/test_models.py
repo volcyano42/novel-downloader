@@ -254,6 +254,31 @@ class TestNovel:
         assert novel.serial == 3
         assert len(novel.chapters) == 3
 
+    def test_origin_id_strips_platform_prefix(self):
+        cases = {
+            "fanqie_7123456789012345678": "7123456789012345678",
+            "qidian_1234567890": "1234567890",
+            "qimao_123456": "123456",
+            "92xs_987654": "987654",
+        }
+        for novel_id, expected in cases.items():
+            n = Novel(title="t", url="u", id=novel_id, serial=1,
+                      author="a", description="d")
+            assert n.origin_id == expected, novel_id
+
+    def test_origin_id_without_prefix_returns_id(self):
+        n = Novel(title="t", url="u", id="novel123", serial=1,
+                  author="a", description="d")
+        assert n.origin_id == "novel123"
+
+    def test_loads_origin_id_kwarg_ignored(self):
+        n = Novel.loads(
+            title="兼容", url="u", id="fanqie_7123456789012345678", serial=1,
+            author="a", description="d", tags=[], count=0,
+            origin_id="should_be_ignored",
+        )
+        assert n.origin_id == "7123456789012345678"
+
     def test_loads(self):
         n = Novel.loads(
             title="加载测试", url="http://x.com/n", id="n1", serial=2,
