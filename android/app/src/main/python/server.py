@@ -9,6 +9,8 @@
 import os
 from pathlib import Path
 
+import uvicorn
+
 try:
     from android.os import Environment  # Chaquopy Android 环境
     _ANDROID = True
@@ -52,3 +54,25 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 _frontend_dir = Path(__file__).resolve().parent.parent / "assets" / "frontend"
 if _frontend_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
+
+
+# ── 启动 / 关闭 ────────────────────────────────────────────────
+_server: "uvicorn.Server | None" = None
+
+
+def _start() -> None:
+    """阻塞启动 uvicorn（Chaquopy Python.start 调用入口）。"""
+    global _server
+    config = uvicorn.Config(app, host="127.0.0.1", port=18080, log_level="info")
+    _server = uvicorn.Server(config)
+    _server.run()
+
+
+def _shutdown() -> None:
+    """Service onDestroy 调用：优雅停止 uvicorn。"""
+    if _server is not None:
+        _server.should_exit = True
+
+
+if __name__ == "__main__" or _ANDROID:
+    _start()
