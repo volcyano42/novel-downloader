@@ -120,7 +120,6 @@ fi
 # ── 4. 复制项目文件 ──
 echo "--- 复制项目文件 ---"
 cp -r novelbase "$DIST_DIR/novelbase"
-cp -r cli_lib "$DIST_DIR/cli_lib"
 # 注意：目标目录不预建（cp -r 会嵌套复制成 backend/backend）
 mkdir -p "$DIST_DIR/services"
 cp -r services/backend "$DIST_DIR/services/backend"
