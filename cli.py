@@ -82,6 +82,22 @@ def _parse_args() -> argparse.Namespace:
     ep.add_argument("--group", "-g", default="default", help="分组名")
     ep.add_argument("--format", "-f", default="epub", help="导出格式 (epub/txt/img)")
 
+    # ── delete ──
+    dp2 = sub.add_parser("delete", help="删除已下载小说")
+    dp2.add_argument("--id", required=True, help="小说 ID（如 fanqie_7123456789012345678）")
+
+    # ── novel ──
+    np = sub.add_parser("novel", help="已下载小说管理")
+    np_sub = np.add_subparsers(dest="novel_command", required=True)
+    np_list = np_sub.add_parser("list", help="列出已下载小说")
+    np_list.add_argument("--group", "-g", default=None, help="按分组过滤")
+
+    # ── source（sources 为别名）──
+    sp = sub.add_parser("source", aliases=["sources"], help="书源管理")
+    sp_sub = sp.add_subparsers(dest="source_command", required=True)
+    sp_list = sp_sub.add_parser("list", help="列出可用书源")
+    sp_list.add_argument("--json", action="store_true", help="JSON 输出")
+
     # ── info ──
     ip = sub.add_parser("info", help="查看小说信息")
     ip.add_argument("--url", "-u", required=True, help="小说页面 URL")
@@ -169,14 +185,42 @@ def cmd_update(args):
 
 
 def cmd_export(args):
-    cfg = load_main_config()
     fmt_cfg = load_format_configs()
     if args.format not in fmt_cfg:
         print(f"格式 '{args.format}' 未在 app_data/config/formats/ 中配置")
         sys.exit(1)
 
-    from app.menus import do_export_menu
-    do_export_menu(args.group, fmt_cfg)
+    from app.config import load_groups
+    from app.core import _get_storage
+    from novelbase import export
+    from novelbase.utils.registry import register_export_options
+
+    storage = _get_storage()
+    novels = list(storage.iter_metas())
+    if not novels:
+        print("书架上没有小说")
+        return
+
+    groups = load_groups()
+    group_ids = set(groups.get(args.group, {}).keys()) if args.group != "default" else None
+    targets = [n for n in novels if args.group == "default" or (group_ids and n.id in group_ids)]
+    if not targets:
+        print(f"分组 '{args.group}' 中没有小说")
+        return
+
+    opt_cls = register_export_options().get(args.format)
+    if opt_cls is None:
+        print(f"无法获取导出选项: {args.format}")
+        return
+
+    for novel in targets:
+        opts = opt_cls(**fmt_cfg.get(args.format, {}))
+        print(f"导出 '{novel.title}' → {args.format} ...")
+        try:
+            result = export(novel, opts, args.format)
+            print(f"  完成: {result}")
+        except Exception as e:
+            print(f"  导出失败: {e}")
 
 
 def cmd_info(args):
@@ -197,6 +241,89 @@ def cmd_info(args):
             print(f"  封面：{novel.cover.image_format} ({len(novel.cover.raw_data)} bytes)")
     finally:
         engine.close()
+
+
+def cmd_delete(args):
+    """删除已下载小说（含章节/封面），并从全部分组移除。"""
+    from app.config import load_groups, save_groups
+    from app.core import _get_storage
+
+    storage = _get_storage()
+    novel_id = args.id
+    novel = storage.load_meta(novel_id)
+    if novel is None:
+        print(f"小说不存在: {novel_id}")
+        sys.exit(1)
+
+    storage.delete_novel(novel_id)
+
+    groups = load_groups()
+    removed = False
+    for g, novels in groups.items():
+        if isinstance(novels, dict) and novel_id in novels:
+            novels.pop(novel_id, None)
+            removed = True
+    save_groups(groups)
+
+    print(f"已删除《{novel.title}》 ({novel_id})" + ("，并移出分组" if removed else ""))
+
+
+def cmd_novel(args):
+    """已下载小说管理。"""
+    from app.config import load_groups
+    from app.core import _get_storage
+
+    if args.novel_command != "list":
+        return
+
+    storage = _get_storage()
+    novels = list(storage.iter_metas())
+    if not novels:
+        print("书架上没有小说")
+        return
+
+    groups = load_groups()
+    if args.group:
+        gids = set(groups.get(args.group, {}).keys())
+        novels = [n for n in novels if n.id in gids]
+        if not novels:
+            print(f"分组 '{args.group}' 中没有小说")
+            return
+
+    print(f"共 {len(novels)} 本小说：")
+    for i, n in enumerate(novels, 1):
+        g = next((g for g, ids in groups.items() if n.id in ids), "未分组")
+        print(f"  {i:2d}. {n.title}  — {n.author}  [{n.id}]  ({g})")
+
+
+def cmd_source(args):
+    """书源管理。"""
+    from novelbase.utils.registry import register_source
+
+    if args.source_command != "list":
+        return
+
+    sources = register_source()
+    if args.json:
+        import json
+        payload = {
+            name: {
+                "name": meta.get("name"),
+                "show_name": meta.get("show_name", name),
+                "hosts": list(meta.get("hosts", ())),
+                "id_pattern": getattr(meta.get("id_pattern"), "pattern", None),
+                "origin_id_pattern": getattr(meta.get("origin_id_pattern"), "pattern", None),
+            }
+            for name, meta in sources.items()
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    print(f"可用书源 ({len(sources)}):")
+    for name, meta in sources.items():
+        show = meta.get("show_name", name)
+        hosts = ", ".join(meta.get("hosts", ()))
+        print(f"  - {name} ({show})   hosts: {hosts}")
 
 
 def cmd_dev(args):
@@ -253,6 +380,10 @@ def main():
         "download": cmd_download,
         "update":   cmd_update,
         "export":   cmd_export,
+        "delete":   cmd_delete,
+        "novel":    cmd_novel,
+        "source":   cmd_source,
+        "sources":  cmd_source,
         "info":     cmd_info,
         "dev":      cmd_dev,
     }

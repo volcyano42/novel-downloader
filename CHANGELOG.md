@@ -1,6 +1,6 @@
 # 更新日志
 
-## v4.2.3-dev
+## v4.2.3
 
 ### 新增
 
@@ -10,6 +10,8 @@
    - **Termux**：依赖在 termux-docker 容器按 bionic 环境预编译打包（`python-deps/`），仅需 `pkg install python` 一条命令，无 pip/编译
    - 支持 `--deps-dir`（预装 site-packages）与 `--pyroot-dir`（内置 Python，PYTHONHOME 重定位，已实测通过）参数
 3. **便携版 CI 内启动验证** — termux workflow 在容器内实测 `uvicorn` 启动 + HTTP 200（前端与 API 均验证）
+4. **Novel.origin_id 派生属性** — 只读属性，值为去掉 `{website}_` 前缀的源站原始 ID（如 `fanqie_7123...` → `7123...`）
+5. **所有源新增 `ORIGIN_ID_PATTERN`** — 匹配去前缀的源站原始 ID（`Novel.origin_id`），与 `ID_PATTERN`（匹配带前缀的 Novel.id）并存；registry 扫描/硬编码兜底与 `cli.py source list --json` 同步暴露
 
 ### 变更
 
@@ -23,6 +25,7 @@
 8. **workflow 显示名称统一** — `Build Windows x64` → `Build Windows x64 portable`（与 Linux portable 系列命名一致）
 9. **Windows 构建改用 portable 方案** — build-windows.yml 由 Nuitka 编译（build-web.ps1）改为 `build-portable.ps1`（Embedded Python + 源码 + 依赖 zip），产物统一为 `novel-downloader-web-portable-{version}-windows-x64.zip`
 10. **Termux 加回 build-dist（内置 Python）** — Termux portable 采用 pyroot 全内置方案（Python 本体 + 依赖库随包，PYTHONHOME 重定位，开箱即用无需 `pkg install python`）；build-dist 覆盖 Windows x64 / Linux x64 / Linux arm64 / Termux 四平台
+11. **移除交互式 CLI** — 删除 `main.py` 及 app 交互层（`app/menus.py` / `app/ui.py` / `app/notify.py`），`cli.py` 重构为纯非交互唯一 CLI 入口：新增 `delete`（删除小说）、`novel list`（书架）、`source list`（书源，`source`/`sources` 均可）；`export` 改为直接导出不再走交互菜单；scripts 调试脚本改从 `app.config` 加载配置
 
 ### 修复
 
@@ -31,6 +34,7 @@
 3. **Nuitka 参数排查** — 移除无效 `--cache-dir`（Nuitka 4.x 无此参数，会导致直接报错）；CI 缓存指向 Nuitka 内置目录 `%LOCALAPPDATA%\Nuitka`
 4. **portable 打包结构** — 修复 `services/backend` 目录嵌套（`cp -r` 目标预建导致 `backend/backend`）；补打包根目录 `init_config.py`（main.py lifespan 必需，缺失则启动失败）
 5. **Termux 容器兼容** — 容器无 `/tmp`（改用挂载卷）；`ANDROID_API_LEVEL=24`（maturin 构建 pydantic-core 需要）；依赖 `.so` 随 `pyroot` 一并复制（PYTHONHOME 重定位必需）
+6. **storage.delete_novel 在 Windows 删除失败** — sqlite 连接对象依赖 GC 销毁、文件句柄延迟释放导致 `os.remove` 撞 `PermissionError`；删除前强制 `gc.collect()` 并加重试
 
 ---
 
