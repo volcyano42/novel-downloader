@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 占位前景图标：白色书本轮廓（108dp 安全区）。正式图标后续用 Android Studio Asset Studio 生成。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 书本主体 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30 C48,24 38,24 32,28 L32,72 C38,68 48,68 54,74 C60,68 70,68 76,72 L76,28 C70,24 60,24 54,30 Z" />
+    <!-- 左侧翻页高光 -->
+    <path
+        android:fillColor="#B3FFFFFF"
+        android:pathData="M50,35 L36,43 L36,48 L50,40 Z" />
+    <!-- 右侧翻页高光 -->
+    <path
+        android:fillColor="#B3FFFFFF"
+        android:pathData="M58,35 L72,43 L72,48 L58,40 Z" />
+</vector>
