@@ -536,25 +536,27 @@ class SQLiteStorage(BaseStorage):
     def delete_novel(self, novel_id: str) -> None:
         _log.info("delete_novel sqlite: id=%s", novel_id)
         novel_path = self._novel_path(novel_id)
-        # 先尝试 truncate WAL 以释放 Windows 文件锁
+        # Windows 上 sqlite 连接对象依赖 GC 销毁，文件句柄可能延迟释放；
+        # 先 checkpoint 并回收延迟销毁的连接，再删除文件，避免 os.remove 撞文件锁
         try:
             conn = sqlite3.connect(novel_path, timeout=5)
             conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             conn.close()
         except sqlite3.OperationalError:
             pass
+        import gc
+        gc.collect()
         for suffix in ("", "-wal", "-shm"):
-            try:
-                os.remove(novel_path + suffix)
-            except FileNotFoundError:
-                pass
-            except PermissionError:
-                import time
-                time.sleep(0.05)
+            for attempt in range(3):
                 try:
                     os.remove(novel_path + suffix)
+                    break
                 except FileNotFoundError:
-                    pass
+                    break
+                except PermissionError:
+                    import time
+                    gc.collect()
+                    time.sleep(0.05)
 
 
     def delete_chapter(self, novel_id: str, chapter_id: str) -> None:
