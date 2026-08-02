@@ -152,7 +152,7 @@ echo 等待服务就绪...
 :wait
 python\python.exe -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000')" >nul 2>&1
 if errorlevel 1 (
-    timeout /t 1 /nobreak >nul
+    %SystemRoot%\System32\timeout.exe /t 1 /nobreak >nul
     goto wait
 )
 
