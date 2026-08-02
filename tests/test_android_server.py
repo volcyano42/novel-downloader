@@ -103,6 +103,7 @@ def test_server_module_injects_app_data_env_when_absent(monkeypatch):
     """无 NLD_APP_DATA env 时，server 模块必须自行注入兜底目录（I1 回归）。"""
     # 确保 env 不存在，验证模块级注入不是空操作
     monkeypatch.delenv("NLD_APP_DATA", raising=False)
+    app_data_existed_before = FALLBACK_APP_DATA_DIR.exists()
     server = _import_server()
     try:
         injected = os.environ["NLD_APP_DATA"]
@@ -110,5 +111,9 @@ def test_server_module_injects_app_data_env_when_absent(monkeypatch):
         # 无 env 时走本地兜底分支：android/app/src/main/app_data
         assert server.get_app_data() == FALLBACK_APP_DATA_DIR
     finally:
-        # 清理模块级 ensure_app_data_writable() 创建的兜底目录
-        shutil.rmtree(FALLBACK_APP_DATA_DIR, ignore_errors=True)
+        # 清理模块级 ensure_app_data_writable() 创建的兜底目录（仅当测试自建时）
+        if not app_data_existed_before:
+            shutil.rmtree(FALLBACK_APP_DATA_DIR, ignore_errors=True)
+        else:
+            probe = FALLBACK_APP_DATA_DIR / ".write_probe"
+            probe.unlink(missing_ok=True)
