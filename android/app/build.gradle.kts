@@ -46,7 +46,7 @@ chaquopy {
         version = "3.11"
         pip {
             install("-r", "../../requirements.txt")
-            install("novelbase", "file:../..")
+            install("file:../..")
             exclude("drissionpage")
             exclude("psutil")
         }
