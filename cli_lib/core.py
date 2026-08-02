@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from app.config import (
+from cli_lib.config import (
     load_main_config, load_groups, load_site_config, load_format_configs,
     save_site_config, add_novel_to_group,
     build_options,
@@ -17,7 +17,7 @@ from novelbase.core.storage import create_storage
 from novelbase.utils.logger import get_logger
 from novelbase.utils.registry import register_source
 
-_log = get_logger("app.core")
+_log = get_logger("cli_lib.core")
 
 _storage = None
 
@@ -197,7 +197,7 @@ def _do_download_inner(
 def do_update(format_configs: dict, max_workers: int = 3):
     """非交互更新：全部已下载小说更新到最新章节。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from app.config import get_novel_group
+    from cli_lib.config import get_novel_group
 
     storage = _get_storage()
     groups = load_groups()

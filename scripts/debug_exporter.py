@@ -15,7 +15,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.config import _get_app_data_dir, load_format_configs, load_main_config, build_options
+from cli_lib.config import _get_app_data_dir, load_format_configs, load_main_config, build_options
 from novelbase.utils.registry import register_exporter
 
 APP_DATA = _get_app_data_dir()
@@ -67,7 +67,7 @@ def cmd_export(novel_id: str, fmt: str):
     # 创建 engine + downloader
     cfg = load_main_config()
     cfg["mode"] = "requests"
-    from app.config import load_site_config
+    from cli_lib.config import load_site_config
     site_cfg = load_site_config("fanqie")  # 导出不依赖平台
     options = build_options(cfg, site_cfg)
 

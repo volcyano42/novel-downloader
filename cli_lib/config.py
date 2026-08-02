@@ -14,7 +14,7 @@ import yaml
 from novelbase.core.options import Options
 from novelbase.utils.logger import get_logger
 
-_log = get_logger("app.config")
+_log = get_logger("cli_lib.config")
 
 APP_DATA: Path | None = None
 CONFIG_DIR: Path | None = None

@@ -138,7 +138,7 @@ def cmd_content_html(parser_cls, html_path: str, chapter_id: str = "",
 # ═══════════════════════════════════════════════════════════════════
 
 def _build_engine(platform: str, engine_mode: str):
-    from app.config import load_main_config, load_site_config, build_options
+    from cli_lib.config import load_main_config, load_site_config, build_options
     from novelbase import create_engine
 
     cfg = load_main_config()
