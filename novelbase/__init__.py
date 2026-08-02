@@ -36,7 +36,7 @@ from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .utils.registry import capabilities, resolve, list_sources as _list_registry_sources
 from .utils.hooks import SourceHooks
 
-__version__ = "4.2.3-dev"
+__version__ = "4.2.3"
 
 def list_sources():
     """列出所有可用 source 名称。"""
