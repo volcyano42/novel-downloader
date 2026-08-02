@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# ── 并行构建锁（与 Nuitka 脚本共用，防 dist/ 冲突）──
+# ── 并行构建锁（防 dist/ 冲突）──
 LOCK_DIR="$(dirname "$0")/.build.lock"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     echo -e "\033[31mERROR: 另一个构建正在进行（$LOCK_DIR 存在），请等待其完成\033[0m"

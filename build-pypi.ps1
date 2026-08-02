@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 Push-Location $PSScriptRoot
 
-# ── 并行构建锁（与 Nuitka 脚本共用，防 dist/ 冲突）──
+# ── 并行构建锁（防 dist/ 冲突）──
 $lockDir = Join-Path $PSScriptRoot ".build.lock"
 if ($null -eq (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyContinue)) {
     Write-Host "ERROR: 另一个构建正在进行（$lockDir 存在），请等待其完成" -ForegroundColor Red

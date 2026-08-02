@@ -117,7 +117,7 @@ if _frontend:
 def main():
     """启动 Web 后端服务。"""
     import uvicorn, webbrowser, threading
-    # Nuitka 不设置 sys.frozen（PyInstaller 才设置）——用 __compiled__ 判断打包版
+    # 打包版（exe）判断：__compiled__ 或 sys.frozen
     compiled = "__compiled__" in globals() or getattr(sys, "frozen", False)
 
     # 1 秒后自动打开浏览器

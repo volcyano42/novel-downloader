@@ -116,7 +116,7 @@ novel-downloader/
 ├── scripts/                      # debug_source.py / debug_exporter.py / cloud_sync.py / recover_db.py
 ├── tests/                        # 单元测试（118 passed）
 ├── docs/                         # session-prompt.md + specs/ + superpowers/
-└── build-*.ps1 / build-*.sh      # Nuitka 打包脚本（build-main / build-web / build-cli / build-pypi）
+└── build-*.ps1 / build-*.sh      # 构建脚本（build-portable / build-pypi）
 ```
 
 ## 依赖方向
@@ -191,7 +191,7 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML �
 2. 按引擎模式创建子目录：`browser/`、`requests/`、`api/{provider}/`。
 3. 每个模式目录实现模块级函数：`search.py`、`novel_info.py`、`chapter_list.py`、`chapter_content.py`（函数名与 capabilities 功能名一致，由 `registry.FUNC_FILE_MAP` 映射）。
 4. 在 `template/config/sites/` 下添加 `{name}.yaml`（模板可参考现有平台），并在 `app_data/config/sites/` 生成运行时配置。
-5. 若打包 exe：在 Nuitka 构建脚本的 `--include-package` 显式加入 `novelbase.sources.{name}.{mode}` 子包。
+5. 若打包便携版：portable 构建脚本全量复制 `novelbase`，无需额外配置；如需裁剪请同步修改 `build-portable.ps1/.sh` 的复制清单。
 
 ### 新导出器
 
