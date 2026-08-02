@@ -39,20 +39,31 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          BUILD_TOOLS=$(ls "$ANDROID_HOME"/build-tools/ | sort -V | tail -1)
           echo "$KEYSTORE_BASE64" | base64 -d > android/keystore.jks
           cd android
           for apk in $(find app/build/outputs/apk/release -name '*.apk'); do
-            "$ANDROID_HOME/build-tools/34.0.0/apksigner" sign \
+            "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" sign \
               --ks keystore.jks --ks-pass "pass:$KEYSTORE_PASSWORD" \
               --key-pass "pass:$KEY_PASSWORD" --ks-key-alias "$KEY_ALIAS" \
               --out "$apk.signed" "$apk"
             mv "$apk.signed" "$apk"
           done
 
+      - name: Rename APK artifact
+        env:
+          APK_VERSION: ${{ inputs.version || 'dev' }}
+        run: |
+          cd android
+          for apk in $(find app/build/outputs/apk/release -name '*.apk'); do
+            base=$(dirname "$apk")
+            mv "$apk" "$base/novel-downloader-web-${APK_VERSION}-android.apk"
+          done
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: novel-downloader-android-apk
+          name: novel-downloader-apk-${{ inputs.version || 'dev' }}
           path: |
             android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
