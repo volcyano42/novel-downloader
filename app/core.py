@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Core operations: search, download, update, main menu loop."""
+"""Core operations: download, update (non-interactive, used by cli.py)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,6 @@ from app.config import (
     load_main_config, load_groups, load_site_config, load_format_configs,
     save_site_config, add_novel_to_group,
     build_options,
-)
-from app.menus import do_settings, do_export_menu, do_delete
-from app.ui import (
-    _select, _text_input,
-    _create_progress, _advance_progress, parse_order_string, _build_url_from_id,
-    _display_width, _pad_right, _pad_center,
 )
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, export,
@@ -26,6 +20,29 @@ from novelbase.utils.registry import register_source
 _log = get_logger("app.core")
 
 _storage = None
+
+
+def _create_progress(total: int):
+    """Create a rich progress bar."""
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+    console = Console(stderr=True)
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=30),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console,
+    )
+    task = progress.add_task("[cyan]下载中...", total=total)
+    return progress, task
+
+
+def _advance_progress(progress, task, advance: int = 1, last_title: str = ""):
+    """Update progress bar."""
+    if last_title:
+        progress.update(task, description=f"[cyan]{last_title[:40]}")
+    progress.advance(task, advance)
 
 
 def _get_storage():
@@ -58,99 +75,7 @@ def _get_engine(platform: str = "fanqie"):
     return create_engine(options)
 
 
-# ── Login ────────────────────────────────────────────
-
-
-def do_visit_site() -> None:
-    """用 BrowserEngine 打开所选平台网站。"""
-    sources = register_source()
-    labels = {k: v.get("show_name", k) for k, v in sources.items()}
-    platform = _select("选择平台", [(labels.get(k, k), k) for k in sources.keys()])
-    if not platform:
-        return
-    hosts = sources[platform].get("hosts", ())
-    if not hosts:
-        print(f"平台 {labels.get(platform, platform)} 没有配置网址")
-        return
-    url = f"https://{hosts[0]}"
-
-    cfg = load_main_config()
-    site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg)
-    options.set_mode("browser")
-    engine = create_engine(options)
-    try:
-        page = engine.get_page()
-        page.get(url)
-        input(f"\n已打开 {url}，按回车关闭浏览器...")
-    finally:
-        engine.close()
-
-
-# ── Search ───────────────────────────────────────────
-
-
-def do_search(query: str) -> tuple[str | None, str | None]:
-    """Search novels. Returns (url, platform) or (None, None)."""
-    # URL 输入 → 自动推断平台
-    if query.startswith("http://") or query.startswith("https://"):
-        platform = _platform_from_url(query)
-        engine = _get_engine(platform)
-        try:
-            novel = resolve_meta(query, engine=engine, skip_delay=True)
-            print(f"\n📖 {novel.title} — {novel.author}")
-            return novel.url, platform
-        except Exception as e:
-            print(f"获取小说信息失败: {e}")
-            return None, None
-        finally:
-            engine.close()
-
-    # 关键字搜索 → 让用户选平台
-    platforms = list(load_main_config().get("sites", {}).keys()) or list(register_source().keys())
-    labels = {k: v.get("show_name", k) for k, v in register_source().items()}
-    choices = [(labels.get(p, p), p) for p in platforms]
-    platform = _select("选择平台", choices)
-    if not platform:
-        return None, None
-
-    engine = _get_engine(platform)
-    try:
-        results = search(platform, query, engine=engine, skip_delay=True)
-    finally:
-        engine.close()
-
-    if not results:
-        print("未找到结果")
-        return None, None
-
-    print(f"\n搜索 '{query}' 的结果:")
-    for i, r in enumerate(results, 1):
-        print(f" {i}. {r.title} — {r.author}")
-    choices_list = [(f"{r.title} — {r.author}", i - 1) for i, r in enumerate(results, 1)]
-    sel = _select("选择小说", choices_list)
-    if sel is None:
-        return None, None
-    if 0 <= sel < len(results):
-        return results[sel].url, platform
-    return None, None
-
-
 # ── Download ─────────────────────────────────────────
-
-
-def do_download(
-    url: str, group: str,
-    format_configs: dict, max_workers: int = 3,
-    skip_export: bool = True,
-) -> None:
-    """Core download flow. Creates engine internally. Downloads to DB only by default."""
-    platform = _platform_from_url(url)
-    engine = _get_engine(platform)
-    try:
-        _do_download_inner(engine, url, group, format_configs, max_workers, skip_delay=True, skip_export=skip_export)
-    finally:
-        engine.close()
 
 
 def _do_download_inner(
@@ -158,7 +83,7 @@ def _do_download_inner(
     format_configs: dict, max_workers: int = 3, skip_delay: bool=False,
     skip_export: bool = True,
 ) -> None:
-    """Core download flow (engine provided)."""
+    """Core download flow (engine provided). Non-interactive: 全量下载。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     # 1. Get metadata
@@ -184,48 +109,11 @@ def _do_download_inner(
 
     print(f"共 {len(chapters)} 章")
 
-    # Chapter selection
-    try:
-        show_detail = input("是否选择要下载的章节? (y/n): ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        show_detail = "n"
-    if show_detail == "y":
-        print(f"共 {len(chapters)} 章，输入范围 (如 1-10,20,30-): ", end="")
-        try:
-            raw = input().strip()
-        except (EOFError, KeyboardInterrupt):
-            return
-        indices = parse_order_string(raw, len(chapters))
-        if not indices:
-            return
-        chapters = [chapters[i] for i in indices]
-        print(f"已选择 {len(chapters)} 章")
-
     # 3. Merge with existing chapters
     storage = _get_storage()
     novel_id = novel.id
 
     storage.save_meta(novel)
-
-    # Check if novel is new — ask for group assignment
-    existing_groups = load_groups()
-    is_new = all(
-        novel_id not in ids
-        for ids in existing_groups.values()
-        if isinstance(ids, dict)
-    )
-    if is_new:
-        all_groups = list(existing_groups.keys()) or ["default"]
-        print(f"\n新小说归入哪个分组？可选: {', '.join(all_groups)}")
-        try:
-            group_input = input(f"分组名称 [default]: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            group_input = ""
-        if group_input:
-            group = group_input
-        else:
-            group = "default"
-    # else: keep existing group — don't reassign
     add_novel_to_group(novel_id, group)
 
     existing = list(storage.load_chapters(novel_id))
@@ -277,7 +165,7 @@ def _do_download_inner(
         if len(errors) > 10:
             print(f"  ... 还有 {len(errors) - 10} 个错误")
 
-    # 5. Export (skipped by default — use `cli.py export` or GUI export menu instead)
+    # 5. Export (skipped by default — use `cli.py export` instead)
     if not skip_export:
         dl = load_main_config().get("download", {})
         enabled_formats = dl.get("formats", [])
@@ -302,18 +190,12 @@ def _do_download_inner(
         else:
             print("未设置导出格式，跳过导出")
 
-    # 6. Notify
-    from app.notify import notify
-    notify_cfg = load_main_config().get("download", {}).get("notify", {})
-    if notify_cfg:
-        notify(notify_cfg, complete=success, incomplete=incomplete_count)
-
 
 # ── Update ───────────────────────────────────────────
 
 
 def do_update(format_configs: dict, max_workers: int = 3):
-    """列出全部已下载小说（分组区分），支持单选/全选更新。引擎在选择后才创建。"""
+    """非交互更新：全部已下载小说更新到最新章节。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from app.config import get_novel_group
 
@@ -326,7 +208,7 @@ def do_update(format_configs: dict, max_workers: int = 3):
         print("没有已下载的小说")
         return
 
-    # 按分组排列
+    # 按分组排列（仅展示）
     grouped: dict[str, list] = {}
     ungrouped = []
     for n in all_novels:
@@ -339,29 +221,19 @@ def do_update(format_configs: dict, max_workers: int = 3):
     # 显示小说列表（分组区分）
     print(f"\n找到 {len(all_novels)} 本已下载小说：")
     idx = 0
-    flat = []  # [(novel, display_label)]
     for g_name, novels in grouped.items():
         print(f"\n  [{g_name}]")
         for n in novels:
             idx += 1
             print(f"    {idx}. {n.title}  — {n.author}  [{n.id}]")
-            flat.append(n)
     if ungrouped:
         print(f"\n  [未分组]")
         for n in ungrouped:
             idx += 1
             print(f"    {idx}. {n.title}  — {n.author}  [{n.id}]")
-            flat.append(n)
 
-    choices = [(f"{n.title}  — {n.author}  [{n.id}]", n) for n in flat]
-    choices.append(("▸ 全部更新", "all"))
-    choices.append(("返回", None))
-
-    selection = _select("选择要更新的小说：", choices=choices)
-    if selection is None:
-        return
-
-    targets = flat if selection == "all" else [selection]
+    print("\n全部更新：")
+    targets = all_novels
 
     total = len(targets)
     updated = 0
@@ -410,99 +282,3 @@ def do_update(format_configs: dict, max_workers: int = 3):
             engine.close()
 
     print(f"\n更新完成: 共更新 {updated} 章")
-
-
-# ── Main menu ────────────────────────────────────────
-
-
-def main():
-    """Main menu loop."""
-    import sys
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-    print("Novel下载器 启动中...")
-
-    from init_config import check_config, init_all_config
-    result = check_config()
-    if result["missing"]:
-        if result["all_missing"]:
-            print("首次运行，正在从默认模板初始化配置...")
-        init_all_config()
-        print(f"已初始化 {len(result['missing'])} 个配置文件")
-
-    while True:
-        try:
-            cfg = load_main_config()
-            format_configs = load_format_configs()
-
-            dl = cfg.get("download", {})
-            group = dl.get("group", "default")
-            max_workers = dl.get("max_workers", 3)
-
-            BOX_W = 48
-            items = [
-                "1. 🔍 搜索下载",
-                "2. 🔄 更新已有小说",
-                "3. 📤 导出小说",
-                "4. 🔁 重新导出",
-                "5. 🗑️  删除小说",
-                "6. ⚙️  设置",
-                "7. 🌐 访问网站",
-                "0. 🚪 退出",
-            ]
-            print(f"\n┌{'─'*(BOX_W+2)}┐")
-            info_line = f"分组: {group}    并发: {max_workers}"
-            print(f"│ {_pad_right(info_line, BOX_W)} │")
-            print(f"├{'─'*(BOX_W+2)}┤")
-            for item in items:
-                print(f"│ {_pad_right(item, BOX_W)} │")
-            print(f"└{'─'*(BOX_W+2)}┘")
-
-            try:
-                ch = input("请选择: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                break
-
-            if ch == "1":
-                query = _text_input("搜索关键词或 URL")
-                if not query:
-                    continue
-                url, _platform = do_search(query)
-                if url:
-                    if not (url.startswith("http://") or url.startswith("https://")):
-                        url = _build_url_from_id(url)
-                    do_download(url, group, format_configs, max_workers)
-
-            elif ch == "2":
-                do_update(format_configs, max_workers)
-
-            elif ch == "3":
-                do_export_menu(group, format_configs)
-
-            elif ch == "4":
-                do_export_menu(group, format_configs)
-
-            elif ch == "5":
-                do_delete()
-
-            elif ch == "6":
-                from app.config import load_site_config as _lsc
-                cfg, site_cfg = do_settings(cfg, "fanqie", _lsc("fanqie"))
-
-            elif ch == "7":
-                do_visit_site()
-
-            elif ch == "0":
-                break
-
-        except KeyboardInterrupt:
-            print()
-            break
-        except Exception as e:
-            _log.exception("主循环异常")
-            print(f"发生错误: {e}")
-
-    print("再见！")
