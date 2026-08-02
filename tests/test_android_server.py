@@ -74,6 +74,7 @@ def test_server_module_has_app_with_static_mount(tmp_path, monkeypatch):
 
 def test_health_route_reachable_via_test_client(tmp_path, monkeypatch):
     """健康检查复用 services.backend.main 的 /api/v2/health（注册于 SPA fallback 与根 mount 之前，始终可达）。"""
+    assets_existed_before = ASSETS_FRONTEND_DIR.exists()
     ASSETS_FRONTEND_DIR.mkdir(parents=True, exist_ok=True)
     (ASSETS_FRONTEND_DIR / "index.html").write_text("<html>test</html>", encoding="utf-8")
     server = None
@@ -92,7 +93,10 @@ def test_health_route_reachable_via_test_client(tmp_path, monkeypatch):
         assert body["data"]["status"] == "ok"
     finally:
         _remove_frontend_mount(server)
-        shutil.rmtree(ASSETS_FRONTEND_DIR.parent, ignore_errors=True)
+        if not assets_existed_before:
+            shutil.rmtree(ASSETS_FRONTEND_DIR.parent, ignore_errors=True)
+        else:
+            (ASSETS_FRONTEND_DIR / "index.html").unlink(missing_ok=True)
 
 
 def test_server_module_injects_app_data_env_when_absent(monkeypatch):
