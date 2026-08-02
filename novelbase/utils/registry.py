@@ -47,6 +47,7 @@ def _scan_sources() -> dict[str, dict]:
                 "show_name": getattr(module, "SHOW_NAME", module_name),
                 "hosts": getattr(module, "HOSTS", ()),
                 "id_pattern": getattr(module, "ID_PATTERN", None),
+                "origin_id_pattern": getattr(module, "ORIGIN_ID_PATTERN", None),
             }
         except ImportError as e:
             print(f"load source failed {module_name} reason: {e}")
@@ -83,24 +84,28 @@ def _hardcoded_sources() -> dict[str, dict]:
             "show_name": "番茄",
             "hosts": ("fanqienovel.com", "changdunovel.com"),
             "id_pattern": re.compile(r"^fanqie_(\d{19})$"),
+            "origin_id_pattern": re.compile(r"^\d{19}$"),
         },
         "qidian": {
             "name": "qidian",
             "show_name": "起点",
             "hosts": ("www.qidian.com", "book.qidian.com"),
             "id_pattern": re.compile(r"^qidian_(\d{10})$"),
+            "origin_id_pattern": re.compile(r"^\d{10}$"),
         },
         "qimao": {
             "name": "qimao",
             "show_name": "七猫",
             "hosts": ("www.qimao.com", "qimao.com"),
             "id_pattern": re.compile(r"^qimao_(\d+)$"),
+            "origin_id_pattern": re.compile(r"^\d+$"),
         },
         "92xs": {
             "name": "92xs",
             "show_name": "就爱文学",
             "hosts": ("www.92xs.info", "92xs.info"),
             "id_pattern": re.compile(r"^92xs_(\d+)$"),
+            "origin_id_pattern": re.compile(r"^\d+$"),
         },
     }
 

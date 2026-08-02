@@ -312,6 +312,7 @@ def cmd_source(args):
                 "show_name": meta.get("show_name", name),
                 "hosts": list(meta.get("hosts", ())),
                 "id_pattern": getattr(meta.get("id_pattern"), "pattern", None),
+                "origin_id_pattern": getattr(meta.get("origin_id_pattern"), "pattern", None),
             }
             for name, meta in sources.items()
         }
