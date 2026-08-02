@@ -4,6 +4,7 @@
   template/config/  ← 默认配置模板，跟随代码版本（跨 CLI/WebUI 共用）
   app_data/config/  ← 运行时配置，用户可修改，gitignored
 """
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -17,7 +18,10 @@ def _template_dir() -> Path:
 
 
 def _target_dir() -> Path:
-    """运行时目标目录。frozen → exe 同目录, dev → 项目根。"""
+    """运行时目标目录。优先 NLD_APP_DATA env；frozen → exe 同目录；dev → 项目根。"""
+    env = os.environ.get("NLD_APP_DATA")
+    if env:
+        return Path(env).resolve() / "config"
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent / "app_data" / "config"
     return Path(__file__).resolve().parent / "app_data" / "config"

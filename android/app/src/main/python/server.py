@@ -56,7 +56,11 @@ from services.backend.main import app  # noqa: E402  （现有 FastAPI app）
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 
-_frontend_dir = Path(__file__).resolve().parent.parent / "assets" / "frontend"
+# 优先 Chaquopy 打包目录内的 frontend/（build-apk.sh 复制进 src/main/python/frontend）；
+# 回退旧 assets/frontend（本地直接运行/现有 test_android_server.py 的兼容路径）
+_frontend_dir = Path(__file__).resolve().parent / "frontend"
+if not _frontend_dir.is_dir():
+    _frontend_dir = Path(__file__).resolve().parent.parent / "assets" / "frontend"
 if _frontend_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
 
@@ -72,8 +76,10 @@ def _start() -> None:
         return
     config = uvicorn.Config(app, host="127.0.0.1", port=18080, log_level="info")
     _server = uvicorn.Server(config)
-    _server.run()
-    _server = None  # 正常退出后复位，允许再次启动
+    try:
+        _server.run()
+    finally:
+        _server = None  # 无论正常退出还是异常，都允许再次启动
 
 
 def _shutdown() -> None:

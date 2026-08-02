@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -34,13 +35,19 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val healthPoll = object : Runnable {
         override fun run() {
-            if (checkHealth()) {
-                webView.loadUrl("$BASE/")
-            } else if (System.currentTimeMillis() - pollStart > HEALTH_TIMEOUT_MS) {
-                Toast.makeText(this@MainActivity, R.string.backend_not_ready, Toast.LENGTH_LONG).show()
-            } else {
-                mainHandler.postDelayed(this, HEALTH_POLL_MS)
-            }
+            // 同步 HTTP 健康检查放后台线程，避免阻塞主线程（最坏 2s）
+            Thread {
+                val healthy = checkHealth()
+                mainHandler.post {
+                    if (healthy) {
+                        webView.loadUrl("$BASE/")
+                    } else if (SystemClock.elapsedRealtime() - pollStart > HEALTH_TIMEOUT_MS) {
+                        Toast.makeText(this@MainActivity, R.string.backend_not_ready, Toast.LENGTH_LONG).show()
+                    } else {
+                        mainHandler.postDelayed(this@healthPoll, HEALTH_POLL_MS)
+                    }
+                }
+            }.start()
         }
     }
     private var pollStart = 0L
@@ -50,8 +57,31 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         ServerService.start(this)
         requestStoragePermissionIfNeeded()
-        pollStart = System.currentTimeMillis()
+        pollStart = SystemClock.elapsedRealtime()
+        scheduleHealthPoll()
+    }
+
+    /** 重启健康轮询：先取消排队的回调再 post，避免重复调度导致并行轮询。 */
+    private fun scheduleHealthPoll() {
+        mainHandler.removeCallbacks(healthPoll)
         mainHandler.post(healthPoll)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 从 MANAGE_EXTERNAL_STORAGE 设置页返回后复查授权，已授权则重启轮询
+        if (Build.VERSION.SDK_INT >= 30 && EnvironmentCompat.hasAllFilesAccess()) {
+            pollStart = SystemClock.elapsedRealtime()
+            scheduleHealthPoll()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_WRITE_STORAGE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            pollStart = SystemClock.elapsedRealtime()
+            scheduleHealthPoll()
+        }
     }
 
     private fun setupWebView() {
@@ -95,7 +125,8 @@ class MainActivity : AppCompatActivity() {
                     .setNegativeButton("稍后", null)
                     .show()
             }
-        } else if (Build.VERSION.SDK_INT >= 29) {
+        } else if (Build.VERSION.SDK_INT >= 23) {
+            // API 23-28 请求 WRITE；API 21-22 自动授予存储权限，无需请求
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED
             ) {
