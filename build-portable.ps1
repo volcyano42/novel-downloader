@@ -108,6 +108,8 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $portableDir "services\frontend") -Force | Out-Null
     Copy-Item -Recurse "services\frontend\dist" $frontendDistDst
     Copy-Item -Recurse "app_data\config" (Join-Path $portableDir "app_data\config")
+    # 配置初始化模块（main.py lifespan 依赖，缺失则 uvicorn 启动失败）——与 build-portable.sh 对齐
+    Copy-Item "init_config.py" (Join-Path $portableDir "init_config.py")
 
     # ── 下载 Chrome 在线安装包 ──
     Write-Host "--- Downloading ChromeSetup.exe ---" -ForegroundColor Cyan
