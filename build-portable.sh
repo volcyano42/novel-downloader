@@ -127,8 +127,8 @@ mkdir -p "$DIST_DIR/services/frontend"
 cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
 mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
-# 根目录模块（services/backend/main.py lifespan 引用）
-cp init_config.py "$DIST_DIR/init_config.py" 2>/dev/null || true
+# 根目录模块（services/backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
+cp init_config.py "$DIST_DIR/init_config.py"
 
 # Termux 开箱即用：复制 CI 容器预装的 site-packages（PYTHONPATH 引用，用户不跑 pip）
 if [ "$PLATFORM" = "termux" ] && [ -n "$DEPS_DIR" ] && [ -d "$DEPS_DIR" ]; then

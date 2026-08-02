@@ -59,6 +59,7 @@ python -m nuitka --standalone --onefile --msvc=latest --assume-yes-for-downloads
     --include-package=services `
     --include-data-dir=app_data/config=app_data/config `
     --include-data-dir=template/config=template/config `
+    --include-data-file=init_config.py=init_config.py `
     --include-data-dir=services/frontend/dist=services/frontend/dist `
     --output-dir=dist `
     --output-filename=novel-downloader-web `
