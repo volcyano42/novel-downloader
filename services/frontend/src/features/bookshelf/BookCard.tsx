@@ -81,7 +81,16 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
       const task = await exportMut.mutateAsync(body);
       if (task.status === "completed" && task.task_id) {
         toast("导出成功，正在下载…", "success");
-        window.open(`/api/v2/export/download/${task.task_id}`, "_self");
+        const androidBridge = (window as unknown as {
+          AndroidBridge?: { saveExport(taskId: string, fileName: string): void };
+        }).AndroidBridge;
+        if (androidBridge) {
+          // Android APK：走系统"保存到"对话框（SAF）
+          androidBridge.saveExport(task.task_id, `${title}.zip`);
+        } else {
+          // 桌面/浏览器：现有逻辑
+          window.open(`/api/v2/export/download/${task.task_id}`, "_self");
+        }
       } else {
         toast(`导出失败：${task.error || "未知错误"}`, "error");
       }
