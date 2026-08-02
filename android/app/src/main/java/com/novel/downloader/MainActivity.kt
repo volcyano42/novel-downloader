@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 val healthy = checkHealth()
                 mainHandler.post {
+                    if (isDestroyed || isFinishing) return@post
                     if (healthy) {
                         webView.loadUrl("$BASE/")
                     } else if (SystemClock.elapsedRealtime() - pollStart > HEALTH_TIMEOUT_MS) {
@@ -69,8 +70,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 从 MANAGE_EXTERNAL_STORAGE 设置页返回后复查授权，已授权则重启轮询
+        // 从 MANAGE_EXTERNAL_STORAGE 设置页返回后复查授权，已授权则重启后端服务与轮询
         if (Build.VERSION.SDK_INT >= 30 && EnvironmentCompat.hasAllFilesAccess()) {
+            ServerService.start(this)
             pollStart = SystemClock.elapsedRealtime()
             scheduleHealthPoll()
         }
@@ -79,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_WRITE_STORAGE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            ServerService.start(this)
             pollStart = SystemClock.elapsedRealtime()
             scheduleHealthPoll()
         }

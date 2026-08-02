@@ -13,6 +13,7 @@ rm -rf app/src/main/python/services app/src/main/python/init_config.py \
        app/src/main/python/template app/src/main/python/frontend
 mkdir -p app/src/main/python/services
 cp -r ../services/__init__.py ../services/backend app/src/main/python/services/
+find app/src/main/python/services -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 cp ../init_config.py app/src/main/python/init_config.py
 cp -r ../template app/src/main/python/template
 mkdir -p app/src/main/python/frontend
