@@ -1,6 +1,6 @@
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { useMemo, useState } from "react";
-import { BookOpen, Download, Settings, User, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { BookOpen, Download, Settings, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/Toast";
@@ -99,7 +99,7 @@ function AppShell() {
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex md:hidden items-center justify-around border-t border-white/20 bg-white/90 backdrop-blur-xl px-2 py-2"
         style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
-        {DESKTOP_ITEMS.filter(i => i.id !== "settings").concat({ id: "settings" as NavItem, label: "我的", icon: User }).map(({ id, label: lbl, icon: Icon }) => (
+        {DESKTOP_ITEMS.map(({ id, label: lbl, icon: Icon }) => (
           <a key={id} href={TO_PATH[id]}
             className={cn(
               "flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-xs transition-colors",
