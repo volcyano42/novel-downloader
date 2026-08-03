@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 from importlib import import_module
 from pathlib import Path
@@ -76,40 +75,6 @@ def _scan_export_options() -> dict[str, Any]:
     return result
 
 
-def _hardcoded_sources() -> dict[str, dict]:
-    """exe 环境下 _scan_sources 可能找不到模块，硬编码兜底。"""
-    return {
-        "fanqie": {
-            "name": "fanqie",
-            "show_name": "番茄",
-            "hosts": ("fanqienovel.com", "changdunovel.com"),
-            "id_pattern": re.compile(r"^fanqie_(\d{19})$"),
-            "origin_id_pattern": re.compile(r"^\d{19}$"),
-        },
-        "qidian": {
-            "name": "qidian",
-            "show_name": "起点",
-            "hosts": ("www.qidian.com", "book.qidian.com"),
-            "id_pattern": re.compile(r"^qidian_(\d{10})$"),
-            "origin_id_pattern": re.compile(r"^\d{10}$"),
-        },
-        "qimao": {
-            "name": "qimao",
-            "show_name": "七猫",
-            "hosts": ("www.qimao.com", "qimao.com"),
-            "id_pattern": re.compile(r"^qimao_(\d+)$"),
-            "origin_id_pattern": re.compile(r"^\d+$"),
-        },
-        "92xs": {
-            "name": "92xs",
-            "show_name": "就爱文学",
-            "hosts": ("www.92xs.info", "92xs.info"),
-            "id_pattern": re.compile(r"^92xs_(\d+)$"),
-            "origin_id_pattern": re.compile(r"^\d+$"),
-        },
-    }
-
-
 def register_source() -> dict[str, dict]:
     """返回所有已注册的 source（{name: {name, hosts, id_pattern}}）。"""
     global _cache_source
@@ -119,26 +84,10 @@ def register_source() -> dict[str, dict]:
         if _cache_source is not None:
             return _cache_source
         result = _scan_sources()
-        if not result:
-            result = _hardcoded_sources()
         _cache_source = result
     return _cache_source
 
 
-def _hardcoded_exporters() -> dict[str, Callable]:
-    """exe 环境下扫描可能找不到模块，硬编码兜底。"""
-    from ..exporters.txt import export as _txt_export
-    from ..exporters.epub import export as _epub_export
-    from ..exporters.img import export as _img_export
-    return {"txt": _txt_export, "epub": _epub_export, "img": _img_export}
-
-
-def _hardcoded_export_options() -> dict[str, type[ExportOptions]]:
-    """exe 环境下 _scan_export_options 可能找不到模块，硬编码兜底。"""
-    from ..exporters.txt import TXTExportOptions
-    from ..exporters.epub import EPUBExportOptions
-    from ..exporters.img import IMGExportOptions
-    return {"txt": TXTExportOptions, "epub": EPUBExportOptions, "img": IMGExportOptions}
 
 
 def _scan_exporters() -> dict[str, Callable]:
@@ -166,8 +115,6 @@ def register_exporter() -> dict[str, Callable]:
         if _cache_exporter is not None:
             return _cache_exporter
         result = _scan_exporters()
-        if not result:
-            result = _hardcoded_exporters()
         _cache_exporter = result  # type: ignore[assignment]
     return _cache_exporter
 
@@ -180,8 +127,6 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
         if _cache_export_opts is not None:
             return _cache_export_opts
         result = _scan_export_options()
-        if not result:
-            result = _hardcoded_export_options()
         _cache_export_opts = result  # type: ignore[assignment]
     return _cache_export_opts
 
@@ -199,37 +144,6 @@ FUNC_FILE_MAP = {
 }
 
 
-def _probe_capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
-    """exe 环境下文件系统扫描失败，通过 import 探测 capabilities。"""
-    result: dict[str, list[str] | dict[str, list[str]]] = {}
-    _MODES = ["browser", "requests"]
-    _PROVIDERS = {"api": ["oiapi", "rain"]}
-    for mode in _MODES:
-        funcs: list[str] = []
-        for func_name, file_stem in FUNC_FILE_MAP.items():
-            try:
-                import_module(f"..sources.{name}.{mode}.{file_stem}", __package__)
-                funcs.append(func_name)
-            except (ImportError, ModuleNotFoundError):
-                pass
-        if funcs:
-            result[mode] = funcs
-    for mode, providers in _PROVIDERS.items():
-        prov_dict: dict[str, list[str]] = {}
-        for prov in providers:
-            funcs = []
-            for func_name, file_stem in FUNC_FILE_MAP.items():
-                try:
-                    import_module(f"..sources.{name}.{mode}.{prov}.{file_stem}", __package__)
-                    funcs.append(func_name)
-                except (ImportError, ModuleNotFoundError):
-                    pass
-            if funcs:
-                prov_dict[prov] = funcs
-        if prov_dict:
-            result[mode] = prov_dict
-    return result
-
 
 def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     """扫描 sources/{name}/ 目录，返回可用能力矩阵。
@@ -246,7 +160,7 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     """
     pkg_dir = Path(__file__).parent.parent / "sources" / name
     if not pkg_dir.is_dir():
-        return _probe_capabilities(name)
+        return {}
 
     result: dict[str, list[str] | dict[str, list[str]]] = {}
     for mode_dir in sorted(pkg_dir.iterdir()):
