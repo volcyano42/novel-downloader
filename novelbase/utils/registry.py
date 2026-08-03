@@ -1,10 +1,12 @@
 import os
 import threading
 from importlib import import_module
+from inspect import signature
 from pathlib import Path
 from typing import Any, Callable
 
 from ..core.options import ExportOptions
+from ..sources.contracts import CAPABILITY_META
 
 _lock = threading.Lock()
 _cache_source: dict[str, dict] | None = None
@@ -32,7 +34,7 @@ def _scan_sources() -> dict[str, dict]:
         if entry.startswith("_") or entry == "__pycache__":
             continue
         # 单文件形式：fanqie.py
-        if entry.endswith(".py") and entry not in ("__init__.py", "base.py"):
+        if entry.endswith(".py") and entry not in ("__init__.py", "base.py", "contracts.py"):
             module_name = entry[:-3]
         # 目录包形式：fanqie/__init__.py
         elif entry_path.is_dir() and (entry_path / "__init__.py").exists():
@@ -131,20 +133,6 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
     return _cache_export_opts
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 能力发现 + 动态分发
-# ═══════════════════════════════════════════════════════════════════
-
-# 逻辑功能名 → 文件名 stem（也是实际函数名）
-FUNC_FILE_MAP = {
-    "search": "search",
-    "novel_info": "novel_info",
-    "chapter_list": "chapter_list",
-    "chapter_content": "chapter_content",
-}
-
-
-
 def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
     """扫描 sources/{name}/ 目录，返回可用能力矩阵。
 
@@ -172,16 +160,16 @@ def capabilities(name: str) -> dict[str, list[str] | dict[str, list[str]]]:
         for sub in sorted(mode_dir.iterdir()):
             if sub.is_dir() and not sub.name.startswith("_") and sub.name != "__pycache__":
                 funcs: list[str] = []
-                for func_name, file_stem in FUNC_FILE_MAP.items():
-                    if (sub / f"{file_stem}.py").exists():
+                for func_name, meta in CAPABILITY_META.items():
+                    if (sub / f"{meta['file_stem']}.py").exists():
                         funcs.append(func_name)
                 if funcs:
                     providers[sub.name] = funcs
 
         # 检查 mode 目录自身是否有 .py 文件（无 provider 模式）
         direct_funcs: list[str] = []
-        for func_name, file_stem in FUNC_FILE_MAP.items():
-            if (mode_dir / f"{file_stem}.py").exists():
+        for func_name, meta in CAPABILITY_META.items():
+            if (mode_dir / f"{meta['file_stem']}.py").exists():
                 direct_funcs.append(func_name)
 
         if providers:
@@ -212,19 +200,35 @@ def resolve(name: str, mode: str, function: str, provider: str | None = None):
             provider = providers[0]  # 默认第一个
         elif provider not in providers:
             raise ValueError(f"provider {provider!r} not available for {name}/{mode}. Available: {providers}")
-        file_stem = FUNC_FILE_MAP.get(function, function)
+        meta = CAPABILITY_META.get(function)
+        if meta is None:
+            raise ValueError(f"unknown function {function!r}. Known: {list(CAPABILITY_META)}")
+        file_stem = meta["file_stem"]
         module_path = f"novelbase.sources.{name}.{mode}.{provider}.{file_stem}"
     else:
         if provider is not None:
             raise ValueError(f"provider specified but {name}/{mode} has no sub-providers")
-        file_stem = FUNC_FILE_MAP.get(function, function)
+        meta = CAPABILITY_META.get(function)
+        if meta is None:
+            raise ValueError(f"unknown function {function!r}. Known: {list(CAPABILITY_META)}")
+        file_stem = meta["file_stem"]
         module_path = f"novelbase.sources.{name}.{mode}.{file_stem}"
 
     try:
         module = import_module(module_path)
-        return getattr(module, file_stem)
+        fn = getattr(module, file_stem)
     except (ImportError, AttributeError) as e:
         raise ImportError(f"Failed to resolve {module_path}: {e}") from e
+
+    # 运行时签名校验：确保函数接受必需参数
+    sig = signature(fn)
+    missing = [p for p in meta["required_params"] if p not in sig.parameters]
+    if missing:
+        raise ValueError(
+            f"{module_path} 签名缺少参数: {missing}. "
+            f"当前签名: {list(sig.parameters)}"
+        )
+    return fn
 
 
 def list_sources() -> list[str]:
@@ -237,7 +241,7 @@ def list_sources() -> list[str]:
         if entry.name.startswith("_") or entry.name == "base.py":
             continue
         if (entry.is_dir() and (entry / "__init__.py").exists()) or \
-           (entry.suffix == ".py" and entry.name != "__init__.py"):
+           (entry.suffix == ".py" and entry.name not in ("__init__.py", "base.py", "contracts.py")):
             name = entry.stem if entry.is_file() else entry.name
             result.append(name)
     return result
