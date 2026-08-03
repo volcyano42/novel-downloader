@@ -183,7 +183,8 @@ async def list_platforms():
 @router.get("/sources")
 async def list_all_sources():
     """返回所有 source 及其完整能力矩阵。"""
-    from novelbase.utils.registry import register_source, capabilities as _caps
+    from novelbase.utils.registry import register_source
+    from novelbase.source import capabilities as _caps
     sources = register_source()
     result = {}
     for name, info in sources.items():

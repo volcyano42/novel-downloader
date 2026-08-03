@@ -1,13 +1,12 @@
 """测试 source 能力契约：签名校验、CAPABILITY_META 一致性、capabilities 输出。"""
 
 from inspect import signature
-from unittest.mock import Mock
 
 import pytest
 
+from novelbase.source import capabilities, list_sources, resolve
 from novelbase.sources.contracts import CAPABILITY_META
-from novelbase.utils import registry
-from novelbase.utils.registry import capabilities, list_sources, resolve
+import novelbase.source as _source_mod
 
 
 # ═══════════════════════════════════════════════════════════
@@ -30,14 +29,14 @@ class TestSignatureValidation:
         fake_mod = FakeMod()
         setattr(fake_mod, "search", bad_search)
 
-        original_import = registry.import_module
+        original_import = _source_mod.import_module
 
         def fake_import(name, package=None):
             if name.endswith(".search"):
                 return fake_mod
             return original_import(name, package=package)
 
-        monkeypatch.setattr(registry, "import_module", fake_import)
+        monkeypatch.setattr(_source_mod, "import_module", fake_import)
 
         with pytest.raises(ValueError, match="query"):
             resolve("fanqie", "browser", "search")
@@ -54,15 +53,15 @@ class TestSignatureValidation:
 
 
 def _iter_funcs(caps: dict):
-    """展开 capabilities() 输出 → (mode, provider_or_none, func_name) 三元组。"""
-    for mode, mode_caps in caps.items():
-        if isinstance(mode_caps, dict):
-            for provider, func_names in mode_caps.items():
-                for fn in func_names:
-                    yield mode, provider, fn
-        else:
-            for fn in mode_caps:
-                yield mode, None, fn
+    """展开 capabilities() 输出 → (mode, provider_or_none, func_name) 三元组。
+
+    caps 统一为 {mode: {provider: [funcs]}}，"" 表示无 provider 子目录。
+    """
+    for mode, providers in caps.items():
+        for provider, func_names in providers.items():
+            p = None if provider == "" else provider
+            for fn in func_names:
+                yield mode, p, fn
 
 
 class TestCapabilityMetaConsistency:
@@ -93,12 +92,12 @@ class TestCapabilityMetaConsistency:
 
 
 # ═══════════════════════════════════════════════════════════
-# capabilities() 输出结构
+# capabilities() 输出结构 — 统一 {mode: {provider: [funcs]}}
 # ═══════════════════════════════════════════════════════════
 
 
 class TestCapabilitiesOutput:
-    """capabilities() 输出结构保持不变。"""
+    """capabilities() 输出结构：统一 dict[str, dict[str, list[str]]]。"""
 
     def test_fanqie_has_api_with_providers(self):
         caps = capabilities("fanqie")
@@ -112,13 +111,16 @@ class TestCapabilitiesOutput:
             assert "chapter_list" in funcs
             assert "chapter_content" in funcs
 
-    def test_fanqie_has_browser_and_requests(self):
+    def test_fanqie_browser_has_empty_provider_key(self):
+        """单 provider mode → {"": [...]}。"""
         caps = capabilities("fanqie")
         assert "browser" in caps
-        assert isinstance(caps["browser"], list)
-        assert "search" in caps["browser"]
+        assert isinstance(caps["browser"], dict)
+        assert "" in caps["browser"]
+        assert "search" in caps["browser"][""]
         assert "requests" in caps
-        assert isinstance(caps["requests"], list)
+        assert isinstance(caps["requests"], dict)
+        assert "" in caps["requests"]
 
     def test_nonexistent_source_returns_empty(self):
         assert capabilities("nonexistent") == {}

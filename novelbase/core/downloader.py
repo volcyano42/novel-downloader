@@ -80,7 +80,7 @@ def search(platform: str,
         engine:   下载引擎实例。
         skip_delay: 跳过请求间延迟。
     """
-    from ..utils.registry import resolve as _resolve
+    from ..source import resolve as _resolve
 
     mode = _normalize_mode(engine)
     provider = _provider_for(engine)
@@ -121,7 +121,7 @@ def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     Returns:
         包含书名、作者、简介、封面等信息的 Novel 对象。
     """
-    from ..utils.registry import resolve as _resolve
+    from ..source import resolve as _resolve
 
     name = get_source(url)
     if name is None:
@@ -145,7 +145,7 @@ def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -
     Returns:
         按 order 排序的章节列表。
     """
-    from ..utils.registry import resolve as _resolve
+    from ..source import resolve as _resolve
 
     name = get_source(url)
     if name is None:
@@ -169,7 +169,7 @@ def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs
     Returns:
         已填充的 Chapter，章节不可获取时返回 None。
     """
-    from ..utils.registry import resolve as _resolve
+    from ..source import resolve as _resolve
 
     name = get_source_for_id(chapter.novel_id)
     # 回退：novel_id 不带前缀时用 chapter.url 查找

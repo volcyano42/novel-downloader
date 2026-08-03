@@ -40,7 +40,7 @@ class TestResolveChapter:
         ch = _make_chapter()
 
         with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
-            with patch("novelbase.utils.registry.resolve") as mock_resolve:
+            with patch("novelbase.source.resolve") as mock_resolve:
                 mock_resolve.return_value = lambda chapter, engine, **kw: ch
 
                 result = resolve_chapter(ch, engine)
@@ -53,7 +53,7 @@ class TestResolveChapter:
         ch = _make_chapter()
 
         with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
-            with patch("novelbase.utils.registry.resolve") as mock_resolve:
+            with patch("novelbase.source.resolve") as mock_resolve:
                 mock_resolve.return_value = lambda chapter, engine, **kw: None
 
                 result = resolve_chapter(ch, engine)
@@ -84,7 +84,7 @@ class TestResolveMeta:
         engine = _make_engine()
 
         with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
-            with patch("novelbase.utils.registry.resolve") as mock_resolve:
+            with patch("novelbase.source.resolve") as mock_resolve:
                 mock_resolve.return_value = lambda url, engine, **kw: expected
 
                 result = resolve_meta("https://fanqienovel.com/novel", engine)

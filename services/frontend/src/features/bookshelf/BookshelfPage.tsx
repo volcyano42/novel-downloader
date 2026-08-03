@@ -43,7 +43,7 @@ export default function BookshelfPage() {
       for (const [name, info] of Object.entries(sources)) {
         const caps = info.capabilities;
         if (caps.api && typeof caps.api === "object" && !Array.isArray(caps.api)) {
-          map[name] = Object.keys(caps.api);
+          map[name] = Object.keys(caps.api).filter(k => k !== "");
         }
       }
     }

@@ -7,7 +7,6 @@ from .core.downloader import (
     get_source_for_id,
     get_exporters,
     get_exporter_options,
-    split_into_groups,
     search,
 )
 from .core.engine import create_engine
@@ -33,7 +32,6 @@ from .core.options import (
 )
 from .core.storage import LocalStorage
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
-from .utils.registry import capabilities, resolve, list_sources as _list_registry_sources
 from .utils.hooks import SourceHooks
 
 __version__ = "4.2.3"
@@ -54,7 +52,6 @@ __all__ = [
     "get_source_for_id",
     "get_exporters",
     "get_exporter_options",
-    "split_into_groups",
     "search",
     "list_sources",
     # 选项
@@ -83,7 +80,5 @@ __all__ = [
     "Illustration",
     "SearchResult",
     # Registry
-    "capabilities",
-    "resolve",
     "SourceHooks",
 ]

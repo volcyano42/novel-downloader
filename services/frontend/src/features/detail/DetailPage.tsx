@@ -43,7 +43,7 @@ export default function DetailPage() {
   const { data: sources } = useSources();
   const sourceCaps = sources?.[plat]?.capabilities ?? {};
   const platModes = Object.keys(sourceCaps);
-  const platProviders = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api) : [];
+  const platProviders = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api).filter(k => k !== "") : [];
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchProvider);
   const downloadMut = useDownloadMutation();
   const { data: globalConfig } = useGlobalConfig();

@@ -141,7 +141,7 @@ function EngineSection({ mode }: { mode: string }) {
   const fields = ENGINE_FIELDS[mode] ?? [];
   const caps = sources?.[platform]?.capabilities;
   const apiProviders = caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)
-    ? Object.keys(caps.api)
+    ? Object.keys(caps.api).filter(k => k !== "")
     : [];
   const hasProviders = mode === "api" && apiProviders.length > 0;
 
