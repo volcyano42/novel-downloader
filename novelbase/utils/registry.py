@@ -17,9 +17,7 @@ _cache_export_opts: dict[str, type[ExportOptions]] | None = None
 def _scan_sources() -> dict[str, dict]:
     """扫描 sources/ 目录，收集每个 source 的 NAME / HOSTS / ID_PATTERN。
 
-    支持两种形式：
-    - 单文件：sources/fanqie.py
-    - 目录包：sources/fanqie/__init__.py
+    识别规则：目录 + 不以 _ 开头 + 含 __init__.py。
 
     Returns:
         {module_name: {"name": ..., "hosts": ..., "id_pattern": ...}}
@@ -30,17 +28,12 @@ def _scan_sources() -> dict[str, dict]:
         return result
 
     for entry in sorted(os.listdir(pkg_dir)):
-        entry_path = pkg_dir / entry
         if entry.startswith("_") or entry == "__pycache__":
             continue
-        # 单文件形式：fanqie.py
-        if entry.endswith(".py") and entry not in ("__init__.py", "base.py", "contracts.py"):
-            module_name = entry[:-3]
-        # 目录包形式：fanqie/__init__.py
-        elif entry_path.is_dir() and (entry_path / "__init__.py").exists():
-            module_name = entry
-        else:
+        entry_path = pkg_dir / entry
+        if not entry_path.is_dir() or not (entry_path / "__init__.py").exists():
             continue
+        module_name = entry
         try:
             module = import_module(f"..sources.{module_name}", __package__)
             result[module_name] = {
@@ -238,10 +231,7 @@ def list_sources() -> list[str]:
         return []
     result: list[str] = []
     for entry in sorted(pkg_dir.iterdir()):
-        if entry.name.startswith("_") or entry.name == "base.py":
+        if entry.name.startswith("_") or not entry.is_dir() or not (entry / "__init__.py").exists():
             continue
-        if (entry.is_dir() and (entry / "__init__.py").exists()) or \
-           (entry.suffix == ".py" and entry.name not in ("__init__.py", "base.py", "contracts.py")):
-            name = entry.stem if entry.is_file() else entry.name
-            result.append(name)
+        result.append(entry.name)
     return result
