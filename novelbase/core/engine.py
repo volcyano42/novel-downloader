@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import random
+import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -181,7 +182,7 @@ class BrowserEngine(Engine):
         browser_type / headless / user_data_dir / viewport 变更才重建浏览器。
         """
         needs_rebuild = False
-        for hard_attr in ("browser_type", "headless"):
+        for hard_attr in ("browser_type", "headless", "extra_args"):
             new_val = getattr(options, hard_attr, None)
             if new_val is not None and new_val != getattr(self.options, hard_attr, None):
                 setattr(self.options, hard_attr, new_val)
@@ -231,6 +232,14 @@ class BrowserEngine(Engine):
             )
         if self.options.user_data_dir:
             co.set_user_data_path(str(self.options.user_data_dir))
+        if self.options.extra_args:
+            for arg in self.options.extra_args:
+                co.set_argument(arg)
+        if sys.platform.startswith("linux"):
+            co.set_argument("--no-sandbox")
+            co.set_argument("--disable-gpu")
+            co.set_argument("--disable-setuid-sandbox")
+            co.set_argument("--disable-dev-shm-usage")
 
         self._browser = Chromium(co)
 

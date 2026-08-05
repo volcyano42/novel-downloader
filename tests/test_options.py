@@ -56,6 +56,7 @@ class TestBrowserOptions:
         assert o.headless is False
         assert o.user_data_dir is None
         assert o.viewport is None
+        assert o.extra_args is None
 
     def test_custom(self):
         o = BrowserOptions(
@@ -65,6 +66,10 @@ class TestBrowserOptions:
         assert o.browser_type == "firefox"
         assert o.headless is True
         assert o.viewport["width"] == 1920
+
+    def test_extra_args(self):
+        o = BrowserOptions(extra_args=["--no-sandbox", "--remote-debugging-port=9222"])
+        assert o.extra_args == ["--no-sandbox", "--remote-debugging-port=9222"]
 
 
 class TestExportOptions:

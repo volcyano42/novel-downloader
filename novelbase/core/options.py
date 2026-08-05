@@ -34,6 +34,7 @@ class BrowserOptions:
     headless: bool = False
     user_data_dir: Path | str | None = None
     viewport: dict[str, int] | None = None
+    extra_args: list[str] | None = None
 
 @dataclass
 class StorageOptions:
@@ -97,10 +98,12 @@ class Options:
                                 backoff_factor: float = 2,
                                 headless: bool = False,
                                 user_data_dir: Path | str | None = None,
-                                viewport: dict[str, int] | None = None) -> "Options":
+                                viewport: dict[str, int] | None = None,
+                                extra_args: list[str] | None = None) -> "Options":
             self._browser = BrowserOptions(browser_type=browser_type, delay=tuple(delay), timeout=timeout, retry_times=retry_times,
                                            backoff_factor=backoff_factor, headless=headless,
-                                           user_data_dir=user_data_dir, viewport=viewport)
+                                           user_data_dir=user_data_dir, viewport=viewport,
+                                           extra_args=extra_args)
             return self
 
 
@@ -137,4 +140,3 @@ class Options:
 
         @property
         def export(self) -> ExportOptions | None: return self._export
-

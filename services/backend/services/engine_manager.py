@@ -197,7 +197,7 @@ def _build_sub_options(mode: str, api=None, requests=None, browser=None):
         return BrowserOptions(browser_type=b.browser_type, delay=b.delay, timeout=b.timeout,
                               retry_times=b.retry_times, backoff_factor=b.backoff_factor,
                               headless=b.headless, user_data_dir=b.user_data_dir,
-                              viewport=b.viewport)
+                              viewport=b.viewport, extra_args=b.extra_args)
     return None
 
 

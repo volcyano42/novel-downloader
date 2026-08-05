@@ -32,6 +32,7 @@ class BrowserOptionsData(BaseModel):
     headless: bool = False
     user_data_dir: str | None = None
     viewport: dict[str, int] | None = None
+    extra_args: list[str] | None = None
 
 
 class CreateEngineRequest(BaseModel):
