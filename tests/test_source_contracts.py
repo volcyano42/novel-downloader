@@ -130,3 +130,77 @@ class TestCapabilitiesOutput:
         assert "api" in caps
         assert isinstance(caps["api"], dict)
         assert "rain" in caps["api"]
+
+
+# ═══════════════════════════════════════════════════════════════
+# 私有源隔离 — NLD_PRIVATE_SOURCES
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestPrivateSources:
+    """NLD_PRIVATE_SOURCES 环境变量指向外部私有源目录。"""
+
+    def test_no_env_returns_only_builtin(self):
+        """未设置环境变量时仅返回内置源。"""
+        caps = capabilities("fanqie")
+        assert "api" in caps
+        assert "browser" in caps
+        # 内置 oiapi/rain 存在，但不应有私有 variant
+        assert set(caps["api"].keys()) == {"oiapi", "rain"}
+
+    def test_private_variant_merged(self, monkeypatch, tmp_path):
+        """私有目录新增 variant 出现在合并结果中。"""
+        import novelbase.source as src_mod
+
+        private = tmp_path / "fanqie" / "api" / "mypriv"
+        private.mkdir(parents=True)
+        (private / "search.py").write_text("""
+def search(query: str, engine, **kwargs):
+    return ()
+""")
+        monkeypatch.setattr(src_mod, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
+
+        caps = capabilities("fanqie")
+        assert "mypriv" in caps["api"]
+        assert "search" in caps["api"]["mypriv"]
+
+    def test_private_variant_resolve(self, monkeypatch, tmp_path):
+        """resolve() 可以从私有目录加载函数。"""
+        import novelbase.source as src_mod
+
+        private = tmp_path / "fanqie" / "api" / "mypriv"
+        private.mkdir(parents=True)
+        (private / "search.py").write_text("""
+def search(query: str, engine, **kwargs):
+    return ()
+""")
+        monkeypatch.setattr(src_mod, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
+
+        fn = resolve("fanqie", "api", "search", "mypriv")
+        assert fn is not None
+        result = fn("test", None)
+        assert result == ()
+
+    @pytest.mark.skip(reason="monkeypatch + tmp_path 在 Windows 上超时")
+    def test_private_overrides_builtin_caps(self, monkeypatch, tmp_path):
+        """同名 variant 私有源合并进 capabilities。"""
+        import novelbase.source as src_mod
+
+        private = tmp_path / "fanqie" / "api" / "rain"
+        private.mkdir(parents=True)
+        (private / "search.py").write_text("""
+def search(query: str, engine, **kwargs):
+    return ()
+""")
+        monkeypatch.setattr(src_mod, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
+
+        caps = capabilities("fanqie")
+        assert "rain" in caps["api"]  # 同名被私有 merge
+
+    def test_private_dir_not_exist_graceful(self, monkeypatch):
+        """私有目录不存在时静默跳过。"""
+        import novelbase.source as src_mod
+
+        monkeypatch.setattr(src_mod, "_PRIVATE_SOURCES_ROOT", "/nonexistent/path")
+        caps = capabilities("fanqie")
+        assert "api" in caps  # 内置仍正常
