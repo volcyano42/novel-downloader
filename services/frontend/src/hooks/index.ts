@@ -110,7 +110,7 @@ export function useTasks(enabled: boolean) {
 }
 
 export function useSearch(params: {
-  platform: string; query: string; mode?: string; provider?: string;
+  platform: string; query: string; mode?: string; variant?: string;
 } | null) {
   return useQuery({
     queryKey: ["search", params],
@@ -124,11 +124,11 @@ export function useRemoteChapters(
   novelId: string | undefined,
   url: string | undefined,
   mode?: string,
-  provider?: string,
+  variant?: string,
 ) {
   return useQuery({
-    queryKey: ["remote-chapters", novelId, url, mode, provider],
-    queryFn: () => fetchChapterList(novelId!, url!, mode, provider),
+    queryKey: ["remote-chapters", novelId, url, mode, variant],
+    queryFn: () => fetchChapterList(novelId!, url!, mode, variant),
     enabled: !!novelId && !!url,
     staleTime: 30_000,
   });
@@ -183,11 +183,11 @@ export function useDownloadMutation() {
       chapters: { id: string; url: string; novel_id: string; title: string; order: number; volume: string | null }[];
       title: string;
       mode?: string;
-      provider?: string;
+      variant?: string;
       novelUrl?: string;
       platform?: string;
     }) =>
-      downloadChapters(args.novelId, args.chapters, args.title, args.mode, args.provider, args.novelUrl, args.platform),
+      downloadChapters(args.novelId, args.chapters, args.title, args.mode, args variant  args.novelUrl, args.platform),
   });
 }
 
@@ -231,8 +231,8 @@ export function useExport() {
 
 export function useFetchMeta() {
   return useMutation({
-    mutationFn: (args: { url: string; mode?: string; provider?: string }) =>
-      fetchMeta(args.url, args.mode, args.provider),
+    mutationFn: (args: { url: string; mode?: string; variant?: string }) =>
+      fetchMeta(args.url, args.mode, args variant ,
   });
 }
 

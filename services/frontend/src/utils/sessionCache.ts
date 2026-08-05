@@ -1,11 +1,11 @@
 /** 会话级缓存 — 所有值在浏览器刷新时清除，页面导航间保持。 */
 const KEYS = {
   mode: "nd:mode",
-  provider: "nd:provider",
+  variant  "nd:variant",
   query: "nd:search:query",
   platform: "nd:search:platform",
   searchMode: "nd:search:mode",
-  searchProvider: "nd:search:provider",
+  searchVariant: "nd:search:variant",
 } as const;
 
 export const SessionCache = {
@@ -15,19 +15,19 @@ export const SessionCache = {
   setMode(mode: string): void {
     sessionStorage.setItem(KEYS.mode, mode);
   },
-  getProvider(): string | undefined {
-    return sessionStorage.getItem(KEYS.provider) ?? undefined;
+  getVariant(): string | undefined {
+    return sessionStorage.getItem(KEYS.variant) ?? undefined;
   },
-  setProvider(provider?: string): void {
-    if (provider) sessionStorage.setItem(KEYS.provider, provider);
-    else sessionStorage.removeItem(KEYS.provider);
+  setVariant(variant?: string): void {
+    if (variant) sessionStorage.setItem(KEYS.variant, variant);
+    else sessionStorage.removeItem(KEYS.variant);
   },
   /** 缓存最近一次搜索参数，页面切换后恢复。 */
-  saveSearch(query: string, platform: string, mode?: string, provider?: string): void {
+  saveSearch(query: string, platform: string, mode?: string, variant?: string): void {
     sessionStorage.setItem(KEYS.query, query);
     sessionStorage.setItem(KEYS.platform, platform);
     if (mode) sessionStorage.setItem(KEYS.searchMode, mode);
-    if (provider) sessionStorage.setItem(KEYS.searchProvider, provider);
+    if (variant) sessionStorage.setItem(KEYS.searchVariant, variant);
   },
   getSearchQuery(): string {
     return sessionStorage.getItem(KEYS.query) ?? "";
@@ -38,23 +38,23 @@ export const SessionCache = {
   getSearchMode(): string | undefined {
     return sessionStorage.getItem(KEYS.searchMode) ?? undefined;
   },
-  getSearchProvider(): string | undefined {
-    return sessionStorage.getItem(KEYS.searchProvider) ?? undefined;
+  getSearchVariant(): string | undefined {
+    return sessionStorage.getItem(KEYS.searchVariant) ?? undefined;
   },
-  getSearchParams(): { platform: string; query: string; mode?: string; provider?: string } | null {
+  getSearchParams(): { platform: string; query: string; mode?: string; variant?: string } | null {
     const query = this.getSearchQuery();
     if (!query) return null;
     return {
       query,
       platform: this.getSearchPlatform(),
       mode: this.getSearchMode(),
-      provider: this.getSearchProvider(),
+      variant  this.getSearchVariant(),
     };
   },
   clearSearch(): void {
     sessionStorage.removeItem(KEYS.query);
     sessionStorage.removeItem(KEYS.platform);
     sessionStorage.removeItem(KEYS.searchMode);
-    sessionStorage.removeItem(KEYS.searchProvider);
+    sessionStorage.removeItem(KEYS.searchVariant);
   },
 };

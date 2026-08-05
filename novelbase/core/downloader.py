@@ -15,8 +15,8 @@ def _normalize_mode(engine) -> str:
     return (engine.mode if hasattr(engine, 'mode') else engine.name).lower()
 
 
-def _provider_for(engine) -> str | None:
-    """获取 API engine 的 provider 名，非 API 返回 None。"""
+def _variant_for(engine) -> str | None:
+    """获取 API engine 的 variant 名，非 API 返回 None。"""
     if _normalize_mode(engine) == "api":
         opts = getattr(engine, 'options', None)
         if opts is not None:
@@ -83,13 +83,13 @@ def search(platform: str,
     from ..source import resolve as _resolve
 
     mode = _normalize_mode(engine)
-    provider = _provider_for(engine)
+    variant = _variant_for(engine)
 
     if platform == "all":
         all_results: list[SearchResult] = []
         for name in list_sources():
             try:
-                fn = _resolve(name, mode, "search", provider=provider)
+                fn = _resolve(name, mode, "search", variant=variant)
                 kwargs["skip_delay"] = skip_delay
                 results = fn(query=query, engine=engine, **kwargs)
                 for r in results:
@@ -100,7 +100,7 @@ def search(platform: str,
         return tuple(all_results)
 
     try:
-        fn = _resolve(platform, mode, "search", provider=provider)
+        fn = _resolve(platform, mode, "search", variant=variant)
     except (ValueError, ImportError):
         raise SourceNotFoundError(f"source not found: {platform}")
     kwargs["skip_delay"] = skip_delay
@@ -128,9 +128,9 @@ def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
         raise SourceNotFoundError(f"source not found for: {url}")
 
     mode = _normalize_mode(engine)
-    provider = _provider_for(engine)
+    variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
-    fn = _resolve(name, mode, "novel_info", provider=provider)
+    fn = _resolve(name, mode, "novel_info", variant=variant)
     return fn(url=url, engine=engine, **kwargs)
 
 
@@ -152,9 +152,9 @@ def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -
         raise SourceNotFoundError(f"source not found for: {url}")
 
     mode = _normalize_mode(engine)
-    provider = _provider_for(engine)
+    variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
-    fn = _resolve(name, mode, "chapter_list", provider=provider)
+    fn = _resolve(name, mode, "chapter_list", variant=variant)
     return fn(url=url, engine=engine, **kwargs)
 
 
@@ -179,9 +179,9 @@ def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs
         raise SourceNotFoundError(f"source not found for novel_id: {chapter.novel_id}")
 
     mode = _normalize_mode(engine)
-    provider = _provider_for(engine)
+    variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
-    fn = _resolve(name, mode, "chapter_content", provider=provider)
+    fn = _resolve(name, mode, "chapter_content", variant=variant)
     return fn(chapter=chapter, engine=engine, **kwargs)
 
 

@@ -153,10 +153,10 @@ def load_platform_configs() -> dict[str, dict]:
         entry: dict = {}
         for mode in ("browser", "requests"):
             entry[mode] = deep_merge(ENGINE_DEFAULTS[mode], raw.get(mode, {}))
-        # api 是 provider 容器，不是模式配置
+        # api 是 variant 容器，不是模式配置
         api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
         entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
-        entry["api_providers"] = list(entry["api"].keys())
+        entry["api_variants"] = list(entry["api"].keys())
         result[platform] = entry
     return result
 
@@ -171,16 +171,16 @@ def load_site_config(platform: str) -> dict:
     return load_platform_raw(platform)
 
 
-def find_provider_options(provider: str) -> dict | None:
-    """在所有站点配置中查找指定 API provider 的选项（返回第一个启用的）。"""
+def find_variant_options(variant: str) -> dict | None:
+    """在所有站点配置中查找指定 API variant 的选项（返回第一个启用的）。"""
     sites_dir = CONFIG_DIR / "sites"
     if not sites_dir.is_dir():
         return None
     for p in sites_dir.glob("*.yaml"):
         site = load_yaml(p)
         api = site.get("api", {})
-        if isinstance(api, dict) and provider in api:
-            prov_cfg = api[provider]
+        if isinstance(api, dict) and variant in api:
+            prov_cfg = api[variant]
             if isinstance(prov_cfg, dict) and prov_cfg.get("enabled", True):
                 return prov_cfg
     return None

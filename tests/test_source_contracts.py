@@ -53,13 +53,13 @@ class TestSignatureValidation:
 
 
 def _iter_funcs(caps: dict):
-    """展开 capabilities() 输出 → (mode, provider_or_none, func_name) 三元组。
+    """展开 capabilities() 输出 → (mode, variant_or_none, func_name) 三元组。
 
-    caps 统一为 {mode: {provider: [funcs]}}，"" 表示无 provider 子目录。
+    caps 统一为 {mode: {variant: [funcs]}}，"default" 表示无 variant 子目录。
     """
-    for mode, providers in caps.items():
-        for provider, func_names in providers.items():
-            p = None if provider == "" else provider
+    for mode, variants in caps.items():
+        for variant, func_names in variants.items():
+            p = None if variant == "default" else variant
             for fn in func_names:
                 yield mode, p, fn
 
@@ -71,13 +71,13 @@ class TestCapabilityMetaConsistency:
         """遍历所有源的所有 mode，签名校验全部通过。"""
         for name in list_sources():
             caps = capabilities(name)
-            for mode, provider, func_name in _iter_funcs(caps):
-                fn = resolve(name, mode, func_name, provider=provider)
+            for mode, variant, func_name in _iter_funcs(caps):
+                fn = resolve(name, mode, func_name, variant=variant)
                 sig = signature(fn)
                 required = CAPABILITY_META[func_name]["required_params"]
                 missing = [p for p in required if p not in sig.parameters]
                 assert not missing, (
-                    f"{name}/{mode}{'/' + provider if provider else ''}/{func_name} "
+                    f"{name}/{mode}{'/' + variant if variant else ''}/{func_name} "
                     f"签名缺少参数: {missing}. 当前: {list(sig.parameters)}"
                 )
 
@@ -85,14 +85,14 @@ class TestCapabilityMetaConsistency:
         """capabilities() 返回的所有能力名都在 CAPABILITY_META 中。"""
         for name in list_sources():
             caps = capabilities(name)
-            for _mode, _provider, func_name in _iter_funcs(caps):
+            for _mode, _variant, func_name in _iter_funcs(caps):
                 assert func_name in CAPABILITY_META, (
                     f"{name} 的能力 {func_name!r} 不在 CAPABILITY_META 中"
                 )
 
 
 # ═══════════════════════════════════════════════════════════
-# capabilities() 输出结构 — 统一 {mode: {provider: [funcs]}}
+# capabilities() 输出结构 — 统一 {mode: {variant: [funcs]}}
 # ═══════════════════════════════════════════════════════════
 
 
@@ -111,16 +111,16 @@ class TestCapabilitiesOutput:
             assert "chapter_list" in funcs
             assert "chapter_content" in funcs
 
-    def test_fanqie_browser_has_empty_provider_key(self):
-        """单 provider mode → {"": [...]}。"""
+    def test_fanqie_browser_has_default_variant_key(self):
+        """单 variant mode → {"default": [...]}。"""
         caps = capabilities("fanqie")
         assert "browser" in caps
         assert isinstance(caps["browser"], dict)
-        assert "" in caps["browser"]
-        assert "search" in caps["browser"][""]
+        assert "default" in caps["browser"]
+        assert "search" in caps["browser"]["default"]
         assert "requests" in caps
         assert isinstance(caps["requests"], dict)
-        assert "" in caps["requests"]
+        assert "default" in caps["requests"]
 
     def test_nonexistent_source_returns_empty(self):
         assert capabilities("nonexistent") == {}

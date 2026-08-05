@@ -5,7 +5,7 @@ import { useNovelMeta, useRemoteChapters, useDownloadMutation, useGlobalConfig, 
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipVariant } from "@/components/ui/tooltip";
 import { useToast } from "@/components/Toast";
 import { SessionCache } from "@/utils/sessionCache";
 import { getCachedChapters, setCachedChapters } from "@/utils/chapterCache";
@@ -28,10 +28,10 @@ export default function DetailPage() {
   const { novelId } = useParams<{ novelId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const st = location.state as { remoteUrl?: string; searchMode?: string; searchProvider?: string; meta?: NovelMeta } | null;
+  const st = location.state as { remoteUrl?: string; searchMode?: string; searchVariant?: string; meta?: NovelMeta } | null;
   const remoteUrl = st?.remoteUrl;
   const searchMode = st?.searchMode ?? "browser";
-  const searchProvider = st?.searchProvider;
+  const searchVariant = st?.searchVariant;
   const toast = useToast();
 
   const { data: localMeta, isLoading: metaLoading } = useNovelMeta(novelId);
@@ -43,8 +43,8 @@ export default function DetailPage() {
   const { data: sources } = useSources();
   const sourceCaps = sources?.[plat]?.capabilities ?? {};
   const platModes = Object.keys(sourceCaps);
-  const platProviders = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api).filter(k => k !== "") : [];
-  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchProvider);
+  const platVariants = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api).filter(k => k !== "") : [];
+  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchVariant);
   const downloadMut = useDownloadMutation();
   const { data: globalConfig } = useGlobalConfig();
 
@@ -198,12 +198,12 @@ export default function DetailPage() {
 
   const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
   const [savedMode, setSavedMode] = useState("");
-  const [savedProvider, setSavedProvider] = useState("");
+  const [savedVariant, setSavedVariant] = useState("");
 
-  const runCheckUpdate = useCallback(async (mode: string, provider?: string) => {
+  const runCheckUpdate = useCallback(async (mode: string, variant?: string) => {
     setChecking(true);
     try {
-      const remote = await fetchChapterList(novelId!, effectiveRemoteUrl ?? novel?.url ?? "", mode, provider);
+      const remote = await fetchChapterList(novelId!, effectiveRemoteUrl ?? novel?.url ?? "", mode, variant);
       if (!remote.length) { toast("远端无章节数据"); return; }
       let localAll: ChapterBrief[];
       try {
@@ -222,7 +222,7 @@ export default function DetailPage() {
     finally { setChecking(false); }
   }, [novelId, effectiveRemoteUrl, novel?.url, toast]);
 
-  const runDownloadLocal = useCallback((mode: string, provider?: string) => {
+  const runDownloadLocal = useCallback((mode: string, variant?: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = localChapters
       .filter(c => selectedIds.has(c.id))
@@ -232,7 +232,7 @@ export default function DetailPage() {
       chapters: selected,
       title: novel?.title ?? novelId,
       mode,
-      provider,
+      variant,
       novelUrl: novel?.url,
       platform: platformFromUrl(novel?.url),
     });
@@ -240,7 +240,7 @@ export default function DetailPage() {
     navigate("/downloads");
   }, [novelId, selectedIds, localChapters, novel?.title, novel?.url, navigate, downloadMut]);
 
-  const runDownload = useCallback((mode: string, provider?: string) => {
+  const runDownload = useCallback((mode: string, variant?: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = merged
       .filter(mc => selectedIds.has(mc.remote.id))
@@ -250,7 +250,7 @@ export default function DetailPage() {
       chapters: selected,
       title: novel?.title ?? novelId,
       mode,
-      provider,
+      variant,
       novelUrl: novel?.url,
       platform: platformFromUrl(novel?.url),
     });
@@ -261,31 +261,31 @@ export default function DetailPage() {
   const handleCheckUpdate = useCallback(() => {
     // 优先用本 session 选过的模式，兜底用 Settings 中的全局配置
     const mode = sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser";
-    const provider = sessionStorage.getItem("nd:provider") ?? undefined;
+    const variant = sessionStorage.getItem("nd:variant") ?? undefined;
     setSavedMode(mode);
-    setSavedProvider(provider ?? "");
+    setSavedVariant(variant ?? "");
     setDialogVariant("check");
   }, [globalConfig?.mode]);
 
   const handleDownloadClick = useCallback(() => {
     setSavedMode(sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser");
-    setSavedProvider(sessionStorage.getItem("nd:provider") ?? "");
+    setSavedVariant(sessionStorage.getItem("nd:variant") ?? "");
     setDialogVariant("download");
   }, [globalConfig?.mode]);
 
-  const handleDialogConfirm = useCallback((mode: string, provider?: string) => {
+  const handleDialogConfirm = useCallback((mode: string, variant?: string) => {
     setSavedMode(mode);
-    setSavedProvider(provider ?? "");
+    setSavedVariant(variant ?? "");
     SessionCache.setMode(mode);
-    SessionCache.setProvider(provider);
+    SessionCache.setVariant variant ;
     const v = dialogVariant;
     setDialogVariant(null);
     if (v === "check") {
-      runCheckUpdate(mode, provider);
+      runCheckUpdate(mode, variant);
     } else if (showCompare) {
-      runDownload(mode, provider);
+      runDownload(mode, variant);
     } else {
-      runDownloadLocal(mode, provider);
+      runDownloadLocal(mode, variant);
     }
   }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
 
@@ -382,7 +382,7 @@ export default function DetailPage() {
                         {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
                       </div>
                     </label>
-                    <TooltipProvider><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipProvider>
+                    <TooltipVariant><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipVariant>
                     <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <span className="truncate text-slate-700 flex-1">{mc.remote.title}</span>
                       {(mc.remote.image_count ?? 0) > 0 && (
@@ -450,8 +450,8 @@ export default function DetailPage() {
 
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
-        initialMode={savedMode} initialProvider={savedProvider}
-        availableModes={platModes} providers={platProviders}
+        initialMode={savedMode} initialVariant={savedVariant}
+        availableModes={platModes} variants={platVariants}
         onStart={handleDialogConfirm} />
     </div>
   );

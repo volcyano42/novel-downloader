@@ -7,10 +7,10 @@ interface DownloadDialogProps {
   novelTitle: string; chapterCount: number;
   variant?: "download" | "check";
   initialMode?: string;
-  initialProvider?: string;
+  initialVariant?: string;
   availableModes?: string[];
-  providers?: string[];
-  onStart: (mode: string, provider?: string) => void;
+  variants?: string[];
+  onStart: (mode: string, variant?: string) => void;
 }
 
 const MODE_ICONS: Record<string, typeof Monitor> = { browser: Monitor, requests: Globe, api: Zap };
@@ -21,34 +21,34 @@ const MODE_DESCS: Record<string, string> = {
   api: "第三方接口",
 };
 
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialProvider, availableModes, providers = [], onStart }: DownloadDialogProps) {
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialVariant, availableModes, variants = [], onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
-  const [provider, setProvider] = useState(initialProvider ?? "");
+  const [variant, setVariant] = useState(initialVariant ?? "");
   const [loading, setLoading] = useState(false);
-  const [shakeProvider, setShakeProvider] = useState(false);
+  const [shakeVariant, setShakeVariant] = useState(false);
 
   const modes = (availableModes && availableModes.length > 0) ? availableModes : ["browser", "requests", "api"];
-  const hasApiProviders = providers.length > 0;
-  const visibleModes = hasApiProviders ? modes : modes.filter(m => m !== "api");
+  const hasApiVariants = variants.length > 0;
+  const visibleModes = hasApiVariants ? modes : modes.filter(m => m !== "api");
 
   useEffect(() => {
     if (open) {
       const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
       setMode(defaultMode);
-      setProvider(initialProvider ?? "");
+      setVariant(initialVariant ?? "");
       setLoading(false);
-      setShakeProvider(false);
+      setShakeVariant(false);
     }
-  }, [open, initialMode, initialProvider, providers.length]);
+  }, [open, initialMode, initialVariant, variants.length]);
 
   const handleStart = () => {
-    if (mode === "api" && !provider && providers.length > 0) {
-      setShakeProvider(true);
-      setTimeout(() => setShakeProvider(false), 400);
+    if (mode === "api" && !variant && variants.length > 0) {
+      setShakeVariant(true);
+      setTimeout(() => setShakeVariant(false), 400);
       return;
     }
     setLoading(true);
-    onStart(mode, mode === "api" && provider ? provider : undefined);
+    onStart(mode, mode === "api" && variant ? variant : undefined);
   };
 
   if (!open) return null;
@@ -64,7 +64,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
           {visibleModes.map(id => {
             const Icon = MODE_ICONS[id] ?? Globe;
             return (
-              <button key={id} onClick={() => { setMode(id); if (id !== "api") setProvider(""); }}
+              <button key={id} onClick={() => { setMode(id); if (id !== "api") setVariant(""); }}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
                   mode === id
@@ -81,20 +81,20 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
           })}
         </div>
 
-      {mode === "api" && providers.length > 0 && (
+      {mode === "api" && variants.length > 0 && (
         <div className={cn(
           "mb-4 rounded-xl border px-4 py-3 transition-colors",
-          shakeProvider
+          shakeVariant
             ? "border-red-300 bg-red-50 animate-shake"
             : "border-indigo-200 bg-indigo-50/50"
         )}>
           <p className="text-[11px] text-slate-400 mb-2">选择接口提供商</p>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {providers.map(p => (
-              <span key={p} onClick={() => { setProvider(prev => prev === p ? "" : p); }}
+            {variants.map(p => (
+              <span key={p} onClick={() => { setVariant(prev => prev === p ? "" : p); }}
                 className={cn(
                   "rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors",
-                  provider === p
+                  variant === p
                     ? "bg-indigo-500 text-white"
                     : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
                 )}>{p}</span>

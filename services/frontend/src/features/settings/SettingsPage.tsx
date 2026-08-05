@@ -140,10 +140,10 @@ function EngineSection({ mode }: { mode: string }) {
   const engineCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
   const fields = ENGINE_FIELDS[mode] ?? [];
   const caps = sources?.[platform]?.capabilities;
-  const apiProviders = caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)
+  const apiVariants = caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)
     ? Object.keys(caps.api).filter(k => k !== "")
     : [];
-  const hasProviders = mode === "api" && apiProviders.length > 0;
+  const hasVariants = mode === "api" && apiVariants.length > 0;
 
   const updateField = useCallback((key: string, value: unknown) => {
     saveSite.mutate({ [mode]: { [key]: value } });
@@ -193,41 +193,41 @@ function EngineSection({ mode }: { mode: string }) {
           {supported.find(p => p.id === platform)?.label} · {MODE_META[mode]?.label ?? mode} 选项
         </button>
         {engineOpen && fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(f)}</Row>)}
-        {engineOpen && hasProviders && (
-          <ApiProvidersSection engineCfg={engineCfg} mode={mode} providers={apiProviders} saveSite={saveSite} />
+        {engineOpen && hasVariants && (
+          <ApiVariantsSection engineCfg={engineCfg} mode={mode} variants={apiVariants} saveSite={saveSite} />
         )}
       </div>
     </Section>
   );
 }
 
-function ApiProvidersSection({ engineCfg, mode, providers, saveSite }: {
+function ApiVariantsSection({ engineCfg, mode, variants, saveSite }: {
   engineCfg: Record<string, unknown>;
   mode: string;
-  providers: string[];
+  variants: string[];
   saveSite: ReturnType<typeof useSaveSiteConfig>;
 }) {
-  const [provider, setProvider] = useState(providers[0]);
-  const pCfg = (engineCfg[provider] as Record<string, unknown> | undefined) ?? {};
+  const [variant, setVariant] = useState(variants[0]);
+  const pCfg = (engineCfg[variant] as Record<string, unknown> | undefined) ?? {};
   const [showKey, setShowKey] = useState(false);
 
-  const updateProvider = (key: string, value: unknown) => {
-    saveSite.mutate({ [mode]: { [provider]: { [key]: value } } });
+  const updateVariant = (key: string, value: unknown) => {
+    saveSite.mutate({ [mode]: { [variant]: { [key]: value } } });
   };
 
   return (
     <div className="border-t border-slate-100 dark:border-slate-800/50 pt-2 mt-2">
       <div className="flex gap-1.5 py-2">
-        {providers.map(p => (
-          <button key={p} onClick={() => setProvider(p)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium uppercase transition-all ${provider === p ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
+        {variants.map(p => (
+          <button key={p} onClick={() => setVariant(p)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium uppercase transition-all ${variant === p ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
             {p}
           </button>
         ))}
       </div>
       <Row label="KEY" desc="••••••••">
         <div className="flex items-center gap-1">
-          <input type="text" value={String(pCfg.key ?? "")} onChange={e => updateProvider("key", e.target.value)}
+          <input type="text" value={String(pCfg.key ?? "")} onChange={e => updateVariant("key", e.target.value)}
             className={cn("w-40 rounded-lg border border-white/20 bg-white/50 px-2 py-1 text-xs text-slate-700 outline-none dark:bg-slate-800/50 dark:text-slate-300 transition-opacity", showKey ? "opacity-100" : "opacity-0 pointer-events-none")} />
           <button onClick={() => setShowKey(!showKey)}
             className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
@@ -237,17 +237,17 @@ function ApiProvidersSection({ engineCfg, mode, providers, saveSite }: {
       </Row>
       <Row label="请求延迟">
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <input type="number" value={(pCfg.delay as number[])?.[0] ?? 3} onChange={e => updateProvider("delay", [Number(e.target.value), (pCfg.delay as number[])?.[1] ?? 5])}
+          <input type="number" value={(pCfg.delay as number[])?.[0] ?? 3} onChange={e => updateVariant("delay", [Number(e.target.value), (pCfg.delay as number[])?.[1] ?? 5])}
             className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300" />
           <span>~</span>
-          <input type="number" value={(pCfg.delay as number[])?.[1] ?? 5} onChange={e => updateProvider("delay", [(pCfg.delay as number[])?.[0] ?? 3, Number(e.target.value)])}
+          <input type="number" value={(pCfg.delay as number[])?.[1] ?? 5} onChange={e => updateVariant("delay", [(pCfg.delay as number[])?.[0] ?? 3, Number(e.target.value)])}
             className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300" />
           <span className="text-[11px] text-slate-400">秒</span>
         </div>
       </Row>
-      <Row label="超时"><Num value={Number(pCfg.timeout) || 30} onChange={v => updateProvider("timeout", v)} min={5} max={120} unit="秒" /></Row>
-      <Row label="重试次数"><Num value={Number(pCfg.retry_times) || 3} onChange={v => updateProvider("retry_times", v)} min={0} max={10} /></Row>
-      <Row label="退避因子" desc="重试间隔倍增系数"><Num value={Number(pCfg.backoff_factor) || 2} onChange={v => updateProvider("backoff_factor", v)} min={1} max={10} /></Row>
+      <Row label="超时"><Num value={Number(pCfg.timeout) || 30} onChange={v => updateVariant("timeout", v)} min={5} max={120} unit="秒" /></Row>
+      <Row label="重试次数"><Num value={Number(pCfg.retry_times) || 3} onChange={v => updateVariant("retry_times", v)} min={0} max={10} /></Row>
+      <Row label="退避因子" desc="重试间隔倍增系数"><Num value={Number(pCfg.backoff_factor) || 2} onChange={v => updateVariant("backoff_factor", v)} min={1} max={10} /></Row>
     </div>
   );
 }

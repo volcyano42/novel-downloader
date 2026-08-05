@@ -15,7 +15,7 @@ _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 
-def _run_download(task: dict, mode: str, provider: str | None, platform: str):
+def _run_download(task: dict, mode: str, variant: str | None, platform: str):
     """后台线程：创建 engine → 并发下载章节 → close engine，支持暂停/恢复。"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from novelbase import resolve_meta, resolve_chapter
@@ -23,7 +23,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
 
-    engine = get_cached_engine(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, variant=variant)
     try:
         store = create_storage(StorageOptions(
             backend="sqlite",
@@ -123,7 +123,7 @@ def _run_download(task: dict, mode: str, provider: str | None, platform: str):
 
 
 def create_task(novel_id: str, chapters: list[dict], title: str,
-                mode: str = "browser", provider: str | None = None,
+                mode: str = "browser", variant: str | None = None,
                 novel_url: str = "", platform: str = "fanqie") -> dict:
     task_id = str(uuid.uuid4())[:8]
     task = {
@@ -132,12 +132,12 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
         "error": None, "errors": [], "current_title": "",
         "chapters": chapters, "novel_url": novel_url,
         "_pause": threading.Event(),
-        "_mode": mode, "_provider": provider, "_platform": platform,
+        "_mode": mode, "_variant": variant, "_platform": platform,
     }
     with _tasks_lock:
         _tasks[task_id] = task
 
-    t = threading.Thread(target=_run_download, args=(task, mode, provider, platform),
+    t = threading.Thread(target=_run_download, args=(task, mode, variant, platform),
                          daemon=True)
     t.start()
     return {"task_id": task_id, "total": len(chapters)}
@@ -183,7 +183,7 @@ def resume_task(task_id: str) -> bool:
         task["progress"] = 0
         t = threading.Thread(
             target=_run_download,
-            args=(task, task.get("_mode", "browser"), task.get("_provider"), task.get("_platform", "fanqie")),
+            args=(task, task.get("_mode", "browser"), task.get("_variant"), task.get("_platform", "fanqie")),
             daemon=True,
         )
         t.start()

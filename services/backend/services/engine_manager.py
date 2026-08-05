@@ -1,4 +1,4 @@
-"""引擎工厂 — 按 platform + mode + provider 从 sites/{platform}.yaml 创建引擎。
+"""引擎工厂 — 按 platform + mode + variant 从 sites/{platform}.yaml 创建引擎。
 
 职责：读取配置 → 构建 Options → create_engine。
 生命周期由调用方管理（用完必须 close）。
@@ -10,7 +10,7 @@ import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from services.backend.services.config_service import load_site_config, find_provider_options
+from services.backend.services.config_service import load_site_config, find_variant_options
 from novelbase import Options, create_engine
 
 
@@ -20,11 +20,11 @@ _browser_executor = ThreadPoolExecutor(max_workers=1)
 _requests_executor = ThreadPoolExecutor(max_workers=4)
 
 
-def _fingerprint(platform: str, mode: str, provider: str | None = None) -> str:
+def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
     """生成缓存键。
 
     BrowserEngine: (platform, mode, browser_type, user_data_dir, viewport, headless)
-    APIEngine:     (platform, mode, provider)
+    APIEngine:     (platform, mode, variant)
     RequestsEngine:(platform, mode, "requests")
     """
     import hashlib
@@ -40,8 +40,8 @@ def _fingerprint(platform: str, mode: str, provider: str | None = None) -> str:
             f"{json.dumps(vp, sort_keys=True) if vp else ''}|"
             f"{mode_cfg.get('headless', True)}"
         )
-    elif mode == "api" and provider:
-        raw = f"{platform}|{mode}|{provider}"
+    elif mode == "api" and variant:
+        raw = f"{platform}|{mode}|{variant}"
     else:
         raw = f"{platform}|{mode}|requests"
     return hashlib.md5(raw.encode()).hexdigest()
@@ -49,27 +49,27 @@ def _fingerprint(platform: str, mode: str, provider: str | None = None) -> str:
 
 def get_cached_engine(platform: str,
                       mode: str = "browser",
-                      provider: str | None = None):
+                      variant: str | None = None):
     """从缓存取引擎，缓存未命中则创建。
 
     首次创建后复用，不再每次 close。调用方不再负责生命周期。
     通过 invalidate_engine 或在 lifespan shutdown 时统一清理。
     """
-    key = _fingerprint(platform, mode, provider)
+    key = _fingerprint(platform, mode, variant)
     if key in _engine_cache:
         engine = _engine_cache[key]
         return engine
 
-    engine = create_engine_for_request(platform, mode, provider)
+    engine = create_engine_for_request(platform, mode, variant)
     _engine_cache[key] = engine
     return engine
 
 
 def invalidate_engine(platform: str,
                       mode: str = "browser",
-                      provider: str | None = None) -> bool:
+                      variant: str | None = None) -> bool:
     """关闭并移除指定引擎（配置更新时调用）。"""
-    key = _fingerprint(platform, mode, provider)
+    key = _fingerprint(platform, mode, variant)
     engine = _engine_cache.pop(key, None)
     if engine:
         engine.close()
@@ -100,7 +100,7 @@ def _linux_default_browser_args() -> list[str] | None:
 
 def create_engine_for_request(platform: str,
                               mode: str = "browser",
-                              provider: str | None = None):
+                              variant: str | None = None):
     """从 sites/{platform}.yaml 读取配置，创建引擎实例。
 
     每个请求调用一次，用完必须调用 engine.close() 释放资源。
@@ -110,19 +110,19 @@ def create_engine_for_request(platform: str,
 
     _cfg = lambda k, default=None: mode_cfg.get(k, default)
 
-    # ── API 模式：自动发现 platform 首个启用 provider ──
-    if mode == "api" and not provider:
+    # ── API 模式：自动发现 platform 首个启用 variant ──
+    if mode == "api" and not variant:
         api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
         for name, prov in api_section.items():
             if isinstance(prov, dict) and prov.get("enabled", True):
-                provider = name
+                variant = name
                 break
 
-    if mode == "api" and provider:
-        prov_cfg = find_provider_options(provider) or {}
-        key = os.environ.get(f"{provider.upper()}_API_KEY", "") or prov_cfg.get("key", "")
+    if mode == "api" and variant:
+        prov_cfg = find_variant_options(variant) or {}
+        key = os.environ.get(f"{variant.upper()}_API_KEY", "") or prov_cfg.get("key", "")
         opts = Options().set_mode("api").set_api_options(
-            name=provider, key=key,
+            name=variant, key=key,
             delay=tuple(prov_cfg.get("delay", [3, 5])),
             timeout=prov_cfg.get("timeout", 30),
             retry_times=prov_cfg.get("retry_times", 3),
@@ -157,7 +157,7 @@ def create_engine_for_request(platform: str,
             backoff_factor=_cfg("backoff_factor", 2),
         )
     elif mode == "api":
-        raise ValueError(f"平台 {platform} 的 API 模式没有可用的 provider，请在站点配置中启用一个")
+        raise ValueError(f"平台 {platform} 的 API 模式没有可用的 variant，请在站点配置中启用一个")
 
     return create_engine(opts)
 

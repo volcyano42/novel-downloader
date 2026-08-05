@@ -67,7 +67,7 @@ export interface GlobalConfig {
 
 export interface SiteConfig {
   browser: EngineOptions; requests: EngineOptions; api: EngineOptions;
-  api_providers: string[];
+  api_variants: string[];
 }
 
 export type GroupsConfig = Record<string, Record<string, object>>;
@@ -146,29 +146,29 @@ export function streamChapters(
 // ── Download ───────────────────────────────────────
 
 export function searchDownload(params: {
-  platform: string; query: string; page?: number; mode?: string; provider?: string;
+  platform: string; query: string; page?: number; mode?: string; variant?: string;
 }) {
   const qs = new URLSearchParams({ query: params.query, platform: params.platform });
   if (params.page) qs.set("page", String(params.page));
   if (params.mode) qs.set("mode", params.mode);
-  if (params.provider) qs.set("provider", params.provider);
+  if (params.variant) qs.set("variant", params.variant);
   return apiGet<SearchResult[]>(`/download/search?${qs}`);
 }
 
-export function fetchMeta(url: string, mode?: string, provider?: string, signal?: AbortSignal) {
+export function fetchMeta(url: string, mode?: string, variant?: string, signal?: AbortSignal) {
   const qs = new URLSearchParams();
   if (mode) qs.set("mode", mode);
-  if (provider) qs.set("provider", provider);
+  if (variant) qs.set("variant", variant);
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiPost<NovelMeta>(`/download/novel${suffix}`, { url }, signal);
 }
 
 export function fetchChapterList(
-  novelId: string, url: string, mode?: string, provider?: string, signal?: AbortSignal,
+  novelId: string, url: string, mode?: string, variant?: string, signal?: AbortSignal,
 ) {
   const qs = new URLSearchParams({ url });
   if (mode) qs.set("mode", mode);
-  if (provider) qs.set("provider", provider);
+  if (variant) qs.set("variant", variant);
   return apiGet<ChapterBrief[]>(`/download/novel/${novelId}/chapters?${qs}`, signal);
 }
 
@@ -177,13 +177,13 @@ export function downloadChapters(
   chapters: { id: string; url: string; novel_id: string; title: string; order: number; volume: string | null }[],
   title: string,
   mode?: string,
-  provider?: string,
+  variant?: string,
   novelUrl?: string,
   platform?: string,
 ) {
   const qs = new URLSearchParams({ title });
   if (mode) qs.set("mode", mode);
-  if (provider) qs.set("provider", provider);
+  if (variant) qs.set("variant", variant);
   if (novelUrl) qs.set("novel_url", novelUrl);
   if (platform) qs.set("platform", platform);
   return apiPost<{ task_id: string; total: number }>(`/download/novel/${novelId}/chapter?${qs}`, chapters);

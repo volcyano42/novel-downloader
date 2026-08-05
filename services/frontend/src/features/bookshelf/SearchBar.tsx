@@ -7,14 +7,14 @@ interface SearchBarProps {
   onSearch: (query: string, filters: SearchFilters) => void;
   platforms?: { id: string; label: string }[];
   engineModes?: string[];
-  apiProviders?: Record<string, string[]>;
+  apiVariants?: Record<string, string[]>;
   platformModes?: Record<string, string[]>;
   loading?: boolean;
   defaultQuery?: string;
 }
 
 export interface SearchFilters {
-  platform?: string; mode?: string; provider?: string;
+  platform?: string; mode?: string; variant?: string;
 }
 
 type SearchTab = "url" | "title";
@@ -38,26 +38,26 @@ function ModeSelect({ modes, selected, onSelect, className }: {
   );
 }
 
-export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProviders = {}, platformModes = {}, loading, defaultQuery = "" }: SearchBarProps) {
+export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVariants = {}, platformModes = {}, loading, defaultQuery = "" }: SearchBarProps) {
   const [tab, setTab] = useState<SearchTab>("title");
   const [query, setQuery] = useState(defaultQuery);
   const [platform, setPlatform] = useState("all");
   const [mode, setMode] = useState(engineModes[0] ?? "browser");
-  const [provider, setProvider] = useState<string | undefined>();
+  const  variant  setVariant] = useState<string | undefined>();
 
   // 平台切换时自动切换到支持的模式
   useEffect(() => {
     if (!availableModes.includes(mode)) {
       setMode(availableModes[0] ?? "browser");
-      setProvider(undefined);
+      setVariant(undefined);
     }
   }, [platform, tab]);
 
   // 平台选择后，使用该平台支持的模式；全平台用全局列表
   const platModes = platform !== "all" ? (platformModes[platform] ?? engineModes) : engineModes;
-  // 标题搜索 + 全部/起点时去掉 API 模式（无 API provider 的平台）
-  const hasApiProvider = platform !== "all" ? (apiProviders[platform]?.length ?? 0) > 0 : Object.keys(apiProviders).length > 0;
-  const hideApiMode = tab === "title" && !hasApiProvider;
+  // 标题搜索 + 全部/起点时去掉 API 模式（无 API variant 的平台）
+  const hasApiVariant = platform !== "all" ? (apiVariants[platform]?.length ?? 0) > 0 : Object.keys(apiVariants).length > 0;
+  const hideApiMode = tab === "title" && !hasApiVariant;
   const availableModes = hideApiMode ? platModes.filter(m => m !== "api") : platModes;
   const effectiveMode = availableModes.includes(mode) ? mode : availableModes[0] ?? "browser";
 
@@ -66,9 +66,9 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
     if (!q) return;
     const m = tab === "url" ? urlEffectiveMode : (hideApiMode ? effectiveMode : mode);
     if (tab === "url") {
-      onSearch(q, { mode: m, provider });
+      onSearch(q, { mode: m, variant });
     } else {
-      onSearch(q, { platform, mode: m, provider });
+      onSearch(q, { platform, mode: m, variant });
     }
   };
 
@@ -85,7 +85,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
   useEffect(() => {
     if (hideApiMode && mode === "api") {
       setMode("browser");
-      setProvider(undefined);
+      setVariant(undefined);
     }
   }, [hideApiMode, mode]);
 
@@ -96,7 +96,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
   const allPlatforms = [{ id: "all", label: "全平台" } as const, ...platforms.map(p => ({ id: p.id, label: p.label }))];
 
   const currentPlatform = platform || "all";
-  const platformProviders = apiProviders[platform] ?? [];
+  const platformVariants = apiVariants[platform] ?? [];
 
   // URL 模式：从输入中检测平台
   const urlPlatform = (() => {
@@ -117,9 +117,9 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
     return "qimao";
   })();
   const effectiveUrlPlatform = urlPlatform || urlIdPlatform;
-  const urlProviders = effectiveUrlPlatform ? (apiProviders[effectiveUrlPlatform] ?? []) : [];
+  const urlVariants = effectiveUrlPlatform ? (apiVariants[effectiveUrlPlatform] ?? []) : [];
   const urlPlatModes = effectiveUrlPlatform ? (platformModes[effectiveUrlPlatform] ?? engineModes) : engineModes;
-  const urlHasApi = urlProviders.length > 0;
+  const urlHasApi = urlVariants.length > 0;
   const urlHideApi = !urlHasApi;
   const urlModes = urlHideApi ? urlPlatModes.filter(m => m !== "api") : urlPlatModes;
   const urlEffectiveMode = urlModes.includes(mode) ? mode : urlModes[0] ?? "browser";
@@ -128,7 +128,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
   useEffect(() => {
     if (tab === "url" && urlHideApi && mode === "api") {
       setMode("browser");
-      setProvider(undefined);
+      setVariant(undefined);
     }
   }, [tab, effectiveUrlPlatform, mode]);
 
@@ -196,20 +196,20 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
               搜索
             </button>
           </div>
-          {(urlModes.length > 0 || (urlEffectiveMode === "api" && urlProviders.length > 0)) && (
+          {(urlModes.length > 0 || (urlEffectiveMode === "api" && urlVariants.length > 0)) && (
             <div className="flex flex-wrap items-center gap-2">
               {urlModes.length > 0 && (
-                <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
+                <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
               )}
-              {urlEffectiveMode === "api" && urlProviders.length > 0 && (
+              {urlEffectiveMode === "api" && urlVariants.length > 0 && (
                 <div className="flex items-center gap-1">
-                  {urlProviders.map(p => (
+                  {urlVariants.map(p => (
                     <button
                       key={p}
-                      onClick={() => setProvider(provider === p ? undefined : p)}
+                      onClick={() => setVariant(variant === p ? undefined : p)}
                       className={cn(
                         "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                        provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                        variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
                       )}
                     >
                       {p}
@@ -258,7 +258,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* 平台选择 */}
-            <Select value={currentPlatform} onValueChange={v => { setPlatform(v); setProvider(undefined); }}>
+            <Select value={currentPlatform} onValueChange={v => { setPlatform(v); setVariant(undefined); }}>
               <SelectTrigger className="w-[100px] shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -269,17 +269,17 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiProvi
               </SelectContent>
             </Select>
             {availableModes.length > 0 && (
-              <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setProvider(undefined); }} />
+              <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
             )}
-            {effectiveMode === "api" && platformProviders.length > 0 && (
+            {effectiveMode === "api" && platformVariants.length > 0 && (
               <div className="flex items-center gap-1">
-                {platformProviders.map(p => (
+                {platformVariants.map(p => (
                   <button
                     key={p}
-                    onClick={() => setProvider(provider === p ? undefined : p)}
+                    onClick={() => setVariant(variant === p ? undefined : p)}
                     className={cn(
                       "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                      provider === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                      variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
                     )}
                   >
                     {p}

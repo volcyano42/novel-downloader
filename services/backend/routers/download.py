@@ -54,10 +54,10 @@ def _pick_executor(mode: str):
 @router.get("/search")
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         page: int = Query(1), mode: str = Query("browser"),
-                        provider: str | None = Query(None)):
+                        variant: str | None = Query(None)):
     from novelbase.core.downloader import get_source
 
-    engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, provider=provider)
+    engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, variant=variant)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
 
@@ -84,10 +84,10 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
 @router.post("/novel")
 async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
-                     provider: str | None = Query(None)):
+                     variant: str | None = Query(None)):
     url = _resolve_url(body.url)
     platform = _platform_from_url(url)
-    engine = get_cached_engine(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, variant=variant)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
@@ -103,10 +103,10 @@ async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"
 
 @router.get("/novel/{novel_id}")
 async def get_remote_novel(novel_id: str, url: str = Query(...),
-                           mode: str = Query("browser"), provider: str | None = Query(None)):
+                           mode: str = Query("browser"), variant: str | None = Query(None)):
     url = _resolve_url(url)
     platform = _platform_from_url(url)
-    engine = get_cached_engine(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, variant=variant)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
@@ -121,10 +121,10 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 
 @router.get("/novel/{novel_id}/chapters")
 async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
-                             mode: str = Query("browser"), provider: str | None = Query(None)):
+                             mode: str = Query("browser"), variant: str | None = Query(None)):
     url = _resolve_url(url)
     platform = _platform_from_url(url)
-    engine = get_cached_engine(platform, mode, provider=provider)
+    engine = get_cached_engine(platform, mode, variant=variant)
     executor = _pick_executor(mode)
     loop = asyncio.get_event_loop()
     try:
@@ -138,13 +138,13 @@ async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
 @router.post("/novel/{novel_id}/chapter")
 async def download_chapters(novel_id: str, body: list[DownloadChapterRequest],
                             title: str = Query(""), mode: str = Query("browser"),
-                            provider: str | None = Query(None),
+                            variant: str | None = Query(None),
                             novel_url: str = Query(""),
                             platform: str = Query("fanqie")):
     chapters_data = [{"id": ch.id, "url": ch.url, "title": ch.title,
                        "order": ch.order, "volume": ch.volume} for ch in body]
     return task_manager.create_task(novel_id, chapters_data, title,
-                                    mode, provider, novel_url, platform)
+                                    mode, variant, novel_url, platform)
 
 
 @router.get("/tasks")

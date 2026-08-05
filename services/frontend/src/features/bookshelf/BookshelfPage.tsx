@@ -37,7 +37,7 @@ export default function BookshelfPage() {
 
   // sources capabilities for SearchBar
   const { data: sources } = useSources();
-  const apiProviders = useMemo(() => {
+  const apiVariants = useMemo(() => {
     const map: Record<string, string[]> = {};
     if (sources) {
       for (const [name, info] of Object.entries(sources)) {
@@ -70,7 +70,7 @@ export default function BookshelfPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const searchModeRef = useRef(SessionCache.getMode());
-  const searchProviderRef = useRef<string | undefined>(SessionCache.getProvider());
+  const searchVariantRef = useRef<string | undefined>(SessionCache.getVariant());
   const navigatingRef = useRef(false);
   const [searchCachedQuery, setSearchCachedQuery] = useState("");
   const [resultTab, setResultTab] = useState<string>("all");
@@ -78,7 +78,7 @@ export default function BookshelfPage() {
 
   // search — using React Query
   const [searchParams, setSearchParams] = useState<{
-    platform: string; query: string; mode?: string; provider?: string;
+    platform: string; query: string; mode?: string; variant?: string;
   } | null>(null);
   const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
 
@@ -88,7 +88,7 @@ export default function BookshelfPage() {
     const cached = SessionCache.getSearchParams();
     if (cached) {
       searchModeRef.current = SessionCache.getMode();
-      searchProviderRef.current = SessionCache.getProvider();
+      searchVariantRef.current = SessionCache.getVariant();
       setSearchCachedQuery(cached.query);
     } else {
       const q = SessionCache.getSearchQuery();
@@ -114,26 +114,26 @@ export default function BookshelfPage() {
   }, [tasks, toast, refetchNovels]);
 
 
-  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; provider?: string }) => {
+  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; variant?: string }) => {
     if (!query.trim()) { setSearchParams(null); SessionCache.clearSearch(); return; }
     const platform = filters?.platform || searchPlatform;
     const mode = filters?.mode ?? "browser";
-    const provider = filters?.provider;
+    const variant = filters?.variant;
     searchModeRef.current = mode;
-    searchProviderRef.current = provider;
+    searchVariantRef.current = variant 
     SessionCache.setMode(mode);
-    SessionCache.setProvider(provider);
-    SessionCache.saveSearch(query, platform, mode, provider);
+    SessionCache.setVariant variant ;
+    SessionCache.saveSearch(query, platform, mode, variant);
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
       try {
-        const meta = await fetchMetaMut.mutateAsync({ url: query, mode, provider });
-        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, searchMode: mode, searchProvider: provider, meta } });
+        const meta = await fetchMetaMut.mutateAsync({ url: query, mode, variant });
+        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, searchMode: mode, searchVariant: variant, meta } });
       } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); }
       return;
     }
-    setSearchParams({ platform, query, mode, provider });
+    setSearchParams({ platform, query, mode, variant });
   }, [searchPlatform, navigate, toast, fetchMetaMut]);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
@@ -144,12 +144,12 @@ export default function BookshelfPage() {
     const maybeId = idMatch ? idMatch[2] : null;
     const local = maybeId ? novels.find(n => n.id === maybeId) : undefined;
     if (local) {
-      navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta: local } });
+      navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchVariant: searchVariantRef.current, meta: local } });
       return;
     }
     try {
-      const meta = await fetchMetaMut.mutateAsync({ url: result.url, mode: searchModeRef.current, provider: searchProviderRef.current });
-      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchProvider: searchProviderRef.current, meta } });
+      const meta = await fetchMetaMut.mutateAsync({ url: result.url, mode: searchModeRef.current, variant: searchVariantRef.current });
+      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchVariant: searchVariantRef.current, meta } });
     } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate, novels, fetchMetaMut, toast]);
 
@@ -255,7 +255,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiProviders={apiProviders} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiVariants={apiVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} />
           {!searchParams && !searching && (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-xs text-slate-400">
               <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">书籍ID</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono"># 1145141919810</span></div>
