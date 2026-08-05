@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json
 import random
-import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -235,11 +234,6 @@ class BrowserEngine(Engine):
         if self.options.extra_args:
             for arg in self.options.extra_args:
                 co.set_argument(arg)
-        if sys.platform.startswith("linux"):
-            co.set_argument("--no-sandbox")
-            co.set_argument("--disable-gpu")
-            co.set_argument("--disable-setuid-sandbox")
-            co.set_argument("--disable-dev-shm-usage")
 
         self._browser = Chromium(co)
 

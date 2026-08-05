@@ -6,6 +6,7 @@
 
 import json
 import os
+import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -91,6 +92,12 @@ _explicit_engines: dict[str, dict] = {}
 # 引擎创建（请求级，不缓存）
 # ═══════════════════════════════════════════════════════════════════
 
+def _linux_default_browser_args() -> list[str] | None:
+    """Linux 无桌面环境时返回 Chromium sandbox 兼容参数；非 Linux 返回 None。"""
+    if sys.platform.startswith("linux"):
+        return ["--no-sandbox", "--disable-gpu", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    return None
+
 def create_engine_for_request(platform: str,
                               mode: str = "browser",
                               provider: str | None = None):
@@ -137,6 +144,7 @@ def create_engine_for_request(platform: str,
             timeout=_cfg("timeout", 30),
             retry_times=_cfg("retry_times", 3),
             backoff_factor=_cfg("backoff_factor", 2),
+            extra_args=_cfg("extra_args") or _linux_default_browser_args(),
         )
     elif mode == "requests":
         opts = opts.set_requests_options(
@@ -175,7 +183,8 @@ def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
         b = browser
         opts.set_browser_options(browser_type=b.browser_type, delay=b.delay, timeout=b.timeout,
                                  retry_times=b.retry_times, backoff_factor=b.backoff_factor,
-                                 headless=b.headless, user_data_dir=b.user_data_dir, viewport=b.viewport)
+                                 headless=b.headless, user_data_dir=b.user_data_dir, viewport=b.viewport,
+                                 extra_args=b.extra_args if hasattr(b, 'extra_args') and b.extra_args else _linux_default_browser_args())
     return opts
 
 
