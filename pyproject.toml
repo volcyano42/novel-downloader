@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "novelbase"
-version = "4.2.3"
+version = "4.3.0"
 description = "多平台小说下载器核心库"
 readme = "README.md"
 license = "MIT"

@@ -1,5 +1,16 @@
 # 更新日志
 
+## v4.3.0
+
+### 新增
+
+1. **BrowserOptions 新增 `extra_args`** — 支持传入额外 Chromium 命令行参数（如 `--remote-debugging-port`、`--no-sandbox` 等），通过 CLI `--extra-args`、前端设置、配置文件均可配置
+2. **Linux 环境自动适配 Chromium 启动参数** — `BrowserEngine._init_browser()` 在 Linux 下自动追加 `--no-sandbox`、`--disable-gpu`、`--disable-setuid-sandbox`、`--disable-dev-shm-usage`，解决 Termux / SSH / Docker 等无桌面环境的 sandbox 报错
+
+### 说明
+
+- FastAPI `version="2.0.0"`（`services/backend/main.py:35`）为独立 API 版本，与项目版本 4.3.0 分属不同命名空间，非矛盾
+
 ## v4.2.3
 
 ### 新增

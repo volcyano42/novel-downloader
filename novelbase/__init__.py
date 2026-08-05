@@ -34,7 +34,7 @@ from .core.storage import LocalStorage
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .utils.hooks import SourceHooks
 
-__version__ = "4.2.3"
+__version__ = "4.3.0"
 
 def list_sources():
     """列出所有可用 source 名称。"""
