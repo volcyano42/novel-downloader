@@ -43,6 +43,38 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
   const [isDark, setIsDark] = useState(() => typeof window !== "undefined" && document.documentElement.classList.contains("dark"));
   const navLock = useRef(false);
 
+  // ---- 目录自动滚动 ----
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const hasAutoScrolled = useRef(false);
+  const savedScrollTop = useRef(0);
+
+  // 章节切换后重置滚动标记，下次打开目录重新定位
+  useEffect(() => { hasAutoScrolled.current = false; }, [currentChapterId]);
+
+  const onSheetChange = useCallback((open: boolean) => {
+    if (!open && navRef.current) savedScrollTop.current = navRef.current.scrollTop;
+    setSheetOpen(open);
+  }, []);
+
+  // Sheet 打开后：首次 scrollIntoView 到当前章节，之后恢复上次位置
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const raf = requestAnimationFrame(() => {
+      const nav = navRef.current;
+      if (!nav) return;
+      if (!hasAutoScrolled.current) {
+        const btn = nav.querySelector('[data-current="true"]') as HTMLElement | null;
+        btn?.scrollIntoView({ behavior: "smooth", block: "center" });
+        hasAutoScrolled.current = true;
+      } else {
+        nav.scrollTop = savedScrollTop.current;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sheetOpen]);
+  // --------------------------
+
   const toggleDark = useCallback(() => {
     const next = !isDark; setIsDark(next);
     document.documentElement.classList.toggle("dark", next);
@@ -93,13 +125,13 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
           <button onClick={toggleDark} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             {isDark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.5} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.5} />}
           </button>
-          <Sheet>
+          <Sheet open={sheetOpen} onOpenChange={onSheetChange}>
             <SheetTrigger asChild><button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><List className="h-[18px] w-[18px]" strokeWidth={1.5} /></button></SheetTrigger>
             <SheetContent side="right" className="w-72">
               <SheetHeader><SheetTitle>目录</SheetTitle></SheetHeader>
-              <nav className="mt-4 flex flex-col gap-1 overflow-y-auto max-h-[80vh]">
+              <nav ref={navRef} className="mt-4 flex flex-col gap-1 overflow-y-auto max-h-[80vh]">
                 {chapters.map(ch => (
-                  <button key={ch.id} onClick={() => onNavigate(ch.id)} className={cn("rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800", ch.id === currentChapterId ? "bg-[#5e6ad2]/10 text-[#5e6ad2] dark:bg-[#5e6ad2]/100/10" : "text-slate-600 dark:text-slate-400")}>{ch.title}</button>
+                  <button key={ch.id} onClick={() => onNavigate(ch.id)} data-current={ch.id === currentChapterId ? "true" : undefined} className={cn("rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800", ch.id === currentChapterId ? "bg-[#5e6ad2]/10 text-[#5e6ad2] dark:bg-[#5e6ad2]/100/10" : "text-slate-600 dark:text-slate-400")}>{ch.title}</button>
                 ))}
               </nav>
             </SheetContent>
