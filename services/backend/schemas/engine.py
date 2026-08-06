@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 class APIOptionsData(BaseModel):
     name: str
-    enabled: bool = True
     delay: tuple[float, float] = (3.0, 5.0)
     timeout: float = 30
     retry_times: int = 3

@@ -139,10 +139,9 @@ function EngineSection({ mode }: { mode: string }) {
 
   const engineCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
   const fields = ENGINE_FIELDS[mode] ?? [];
-  const caps = sources?.[platform]?.capabilities;
-  const apiVariants = caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)
-    ? Object.keys(caps.api).filter(k => k !== "")
-    : [];
+  // 使用 siteCfg.api_variants（来自 config 端点，包含全部 variant 含 disabled），
+  // 而非 caps.api（sources 端点已过滤为仅 enabled），确保设置页能显示所有 variant
+  const apiVariants: string[] = siteCfg?.api_variants ?? [];
   const hasVariants = mode === "api" && apiVariants.length > 0;
 
   const updateField = useCallback((key: string, value: unknown) => {

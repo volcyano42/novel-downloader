@@ -4,7 +4,6 @@ api:
     delay:
     - 0
     - 0.5
-    enabled: true
     key: ''
     params: {}
     retry_times: 3

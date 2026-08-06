@@ -10,6 +10,7 @@ import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from fastapi import HTTPException
 from services.backend.services.config_service import load_site_config, find_variant_options
 from novelbase import Options, create_engine
 
@@ -114,12 +115,16 @@ def create_engine_for_request(platform: str,
     if mode == "api" and not variant:
         api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
         for name, prov in api_section.items():
-            if isinstance(prov, dict) and prov.get("enabled", True):
+            if isinstance(prov, dict):
                 variant = name
                 break
+        if not variant:
+            raise HTTPException(400, f"平台 {platform} 的 API 模式没有启用任何 variant，请在站点配置中启用（如 oiapi/rain）或改用 requests/browser 模式")
 
     if mode == "api" and variant:
-        prov_cfg = find_variant_options(variant) or {}
+        prov_cfg = find_variant_options(variant)
+        if prov_cfg is None:
+            raise HTTPException(400, f"API variant '{variant}' 未启用或不存在，请在站点配置中启用它")
         key = os.environ.get(f"{variant.upper()}_API_KEY", "") or prov_cfg.get("key", "")
         opts = Options().set_mode("api").set_api_options(
             name=variant, key=key,
@@ -157,7 +162,7 @@ def create_engine_for_request(platform: str,
             backoff_factor=_cfg("backoff_factor", 2),
         )
     elif mode == "api":
-        raise ValueError(f"平台 {platform} 的 API 模式没有可用的 variant，请在站点配置中启用一个")
+        raise HTTPException(400, f"平台 {platform} 的 API 模式没有可用的 variant，请在站点配置中启用一个")
 
     return create_engine(opts)
 

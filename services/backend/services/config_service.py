@@ -181,7 +181,7 @@ def find_variant_options(variant: str) -> dict | None:
         api = site.get("api", {})
         if isinstance(api, dict) and variant in api:
             prov_cfg = api[variant]
-            if isinstance(prov_cfg, dict) and prov_cfg.get("enabled", True):
+            if isinstance(prov_cfg, dict):
                 return prov_cfg
     return None
 
