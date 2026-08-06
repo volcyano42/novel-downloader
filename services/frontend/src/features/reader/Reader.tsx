@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type TouchEvent } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, Type, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -41,8 +41,6 @@ function insertImages(content: string, images: ImageData[]): string {
 export function Reader({ title, content, images = [], chapters, currentChapterId, author, onNavigate, onBack, className }: ReaderProps) {
   const [fontSize, setFontSize] = useState(18);
   const [isDark, setIsDark] = useState(() => typeof window !== "undefined" && document.documentElement.classList.contains("dark"));
-  const touchStartX = useRef(0);
-  const touchTargetRef = useRef<EventTarget | null>(null);
   const navLock = useRef(false);
 
   const toggleDark = useCallback(() => {
@@ -63,22 +61,6 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
     window.addEventListener("keyup", handleKeyUp);
     return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
   }, [chapters, currentChapterId, onNavigate]);
-
-  const onTouchStart = (e: TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchTargetRef.current = e.target;
-  };
-  const onTouchEnd = (e: TouchEvent) => {
-    if (touchTargetRef.current) {
-      const el = touchTargetRef.current as HTMLElement;
-      if (el.closest("button, a, input, [role=button]")) return;
-    }
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const idx = chapters.findIndex(c => c.id === currentChapterId);
-    if (Math.abs(dx) < 60) return;
-    if (dx > 0 && idx > 0) onNavigate(chapters[idx - 1].id);
-    if (dx < 0 && idx < chapters.length - 1) onNavigate(chapters[idx + 1].id);
-  };
 
   const currentIdx = chapters.findIndex(c => c.id === currentChapterId);
   const hasPrev = currentIdx > 0, hasNext = currentIdx < chapters.length - 1;
@@ -125,7 +107,7 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
         </div>
       </div>
 
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="relative z-10 mx-auto max-w-[720px] px-6 py-12">
+      <div className="relative z-10 mx-auto max-w-[720px] px-6 py-12">
         {title && (() => { const chUrl = chapters.find(c => c.id === currentChapterId)?.url; return (
           <h1 className="mb-8 flex items-start gap-2 font-serif font-bold text-slate-800 dark:text-slate-200" style={{ fontSize: `${fontSize + 6}px` }}>
             <span>{title}</span>
