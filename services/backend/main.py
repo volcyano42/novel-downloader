@@ -91,6 +91,10 @@ async def health():
 def _find_frontend_dist() -> Path | None:
     """定位前端构建产物目录。"""
     candidates = []
+    # Nuitka：不设 sys.frozen/_MEIPASS；onefile 数据文件解压到 __file__ 所在目录（对齐 init_config._get_root，sys.executable 指向 bootstrap exe 不可用）
+    if "__compiled__" in globals():
+        candidates.append(Path(__file__).resolve().parent / "services" / "frontend" / "dist")
+    # PyInstaller
     if getattr(sys, "frozen", False):
         candidates.append(Path(sys._MEIPASS) / "services" / "frontend" / "dist")
     candidates.extend([
