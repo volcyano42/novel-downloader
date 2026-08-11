@@ -1,8 +1,8 @@
 """构建时工具：扫描 sources/ 生成 _manifest.py 供 Nuitka 模式使用。
 
-用法: python -m novelbase.tools.build_manifest
+用法: python -m novelbase.utils.build_manifest
 
-生成 novelbase/sources/_manifest.py，内容包含所有书源的静态元数据，
+生成 novelbase/utils/_manifest.py，内容包含所有书源的静态元数据，
 Nuitka onefile 无法扫描文件系统时读取此文件替代。
 """
 import os
@@ -12,7 +12,7 @@ from pathlib import Path
 from ..source import _scan_capabilities
 
 SRC = Path(__file__).parent.parent / "sources"
-OUT = Path(__file__).parent.parent / "utils" / "_manifest.py"
+OUT = Path(__file__).parent / "_manifest.py"
 
 
 def _read_constants(init_path: Path) -> dict:

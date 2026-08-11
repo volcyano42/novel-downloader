@@ -38,7 +38,7 @@ try {
 
     # ── 生成书源 manifest（Nuitka onefile 无法扫描文件系统）──
     Write-Host "--- Generating source manifest ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
-    python -m novelbase.tools.build_manifest
+    python -m novelbase.utils.build_manifest
     if ($LASTEXITCODE -ne 0) { throw "manifest 生成失败" }
 
     # ── 安装 Nuitka 4.1.3 ──
