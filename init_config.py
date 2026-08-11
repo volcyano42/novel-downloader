@@ -48,8 +48,8 @@ def check_config() -> dict:
     target = _target_dir()
     missing: list[str] = []
 
-    # 主配置
-    for name in ("config.yaml", "groups.yaml"):
+    # 主配置（groups 已迁移到 user_data.db，不再复制 groups.yaml）
+    for name in ("config.yaml",):
         if not (target / name).exists() and (template / name).exists():
             missing.append(name)
 
@@ -86,11 +86,11 @@ def _copy_file(src: Path, dst: Path) -> None:
 
 
 def init_main_config() -> list[str]:
-    """初始化 config.yaml + groups.yaml。"""
+    """初始化 config.yaml（groups 已迁移到 user_data.db）。"""
     template = _template_dir()
     target = _target_dir()
     initialized: list[str] = []
-    for name in ("config.yaml", "groups.yaml"):
+    for name in ("config.yaml",):
         src = template / name
         dst = target / name
         if src.exists():

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookCard, BookCardSkeleton } from "./BookCard";
 import { SearchBar } from "./SearchBar";
@@ -8,7 +8,7 @@ import { SearchResultCard } from "./SearchResultCard";
 import { DownloadTask } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta, useFavorites } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import { SessionCache } from "@/utils/sessionCache";
@@ -28,6 +28,7 @@ export default function BookshelfPage() {
   const { data: novels = [], isLoading: loadingNovels, refetch: refetchNovels } = useNovels();
   const { data: globalConfig } = useGlobalConfig();
   const { data: groups = {} } = useGroups();
+  const { data: favorites = [] } = useFavorites();
   const { data: platforms = [] } = usePlatforms();
   const { data: tasks = [] } = useTasks(activeNav === "downloads");
   const toast = useToast();
@@ -168,6 +169,7 @@ export default function BookshelfPage() {
 
   // groups
   const groupNames = useMemo(() => Object.keys(groups), [groups]);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const handleDeleteNovel = useCallback((novelId: string) => {
     deleteNovelMut.mutate(novelId);
@@ -181,11 +183,13 @@ export default function BookshelfPage() {
           {loadingNovels ? (
             <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">{Array.from({ length: 6 }).map((_, i) => <BookCardSkeleton key={i} />)}</div>
           ) : (() => {
-            const filtered = searchQuery
-              ? novels.filter(n => n.title.includes(searchQuery) || n.author.includes(searchQuery))
-              : novels;
+            const filtered = (showFavoritesOnly
+              ? novels.filter(n => favorites.includes(n.id))
+              : novels).filter(n =>
+                !searchQuery || n.title.includes(searchQuery) || n.author.includes(searchQuery)
+              );
             if (filtered.length === 0) {
-              return <div className="flex flex-col items-center justify-center py-20 text-slate-400"><p className="text-lg">{searchQuery ? "无匹配结果" : "书架空空"}</p></div>;
+              return <div className="flex flex-col items-center justify-center py-20 text-slate-400"><p className="text-lg">{searchQuery ? "无匹配结果" : showFavoritesOnly ? "暂无收藏" : "书架空空"}</p></div>;
             }
             const groupMap = new Map<string, string>();
             for (const [group, ids] of Object.entries(groups)) {
@@ -206,6 +210,18 @@ export default function BookshelfPage() {
             });
             return (
               <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowFavoritesOnly(false)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      !showFavoritesOnly ? "bg-indigo-100 text-indigo-600" : "text-slate-500 hover:text-slate-700"
+                    }`}>全部</button>
+                  <button onClick={() => setShowFavoritesOnly(true)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                      showFavoritesOnly ? "bg-rose-100 text-rose-500" : "text-slate-500 hover:text-slate-700"
+                    }`}>
+                    <Heart className="h-3.5 w-3.5" fill={showFavoritesOnly ? "currentColor" : "none"} />收藏
+                  </button>
+                </div>
                 {entries.map(([tag, items]) => (
                   <div key={tag}>
                     <button onClick={() => toggleGroup(tag)} className="flex items-center gap-2 mb-3 group">
@@ -239,11 +255,11 @@ export default function BookshelfPage() {
           {tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
             : tasks.map(task => {
               const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
-              const status = task.status as "downloading" | "paused" | "completed" | "failed" | "partial";
+              const status = task.status as "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
               return (
                 <DownloadTask key={task.task_id} title={task.title}
                   status={status} progress={pct} errorMessage={task.error ?? undefined}
-                  currentTitle={task.current_title}
+                  currentTitle={task.current_title} chapters={task.chapters}
                   onPause={() => pauseTask(task.task_id)}
                   onResume={() => resumeTask(task.task_id)}
                   onCancel={() => deleteTask(task.task_id)}

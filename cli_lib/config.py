@@ -98,23 +98,18 @@ def save_main_config(cfg: dict) -> None:
 
 
 def load_groups() -> dict:
-    """Load app_data/config/groups.yaml.
+    """Load groups from user_data.db (migrated from groups.yaml).
 
     Returns: {group_name: {novel_id: {"pending_export": bool}, ...}, ...}
     """
-    path = CONFIG_DIR / "groups.yaml"
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    from cli_lib.user_db import load_groups as _db_load
+    return _db_load()
 
 
 def save_groups(groups: dict) -> None:
-    """Save app_data/config/groups.yaml."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    path = CONFIG_DIR / "groups.yaml"
-    with path.open("w", encoding="utf-8") as f:
-        yaml.dump(groups, f, allow_unicode=True, default_flow_style=False)
+    """Save groups to user_data.db."""
+    from cli_lib.user_db import save_groups as _db_save
+    _db_save(groups)
 
 
 def load_site_config(platform: str) -> dict:
@@ -177,12 +172,8 @@ def load_fmt_config(fmt_name: str) -> dict:
 
 def get_novel_group(novel_id: str, groups: dict | None = None) -> str | None:
     """Return group name for novel_id, or None if not found."""
-    if groups is None:
-        groups = load_groups()
-    for group_name, ids in groups.items():
-        if isinstance(ids, dict) and novel_id in ids:
-            return group_name
-    return None
+    from cli_lib.user_db import get_novel_group as _db_get
+    return _db_get(novel_id)
 
 
 def ensure_novel_in_group(novel_id: str) -> None:
@@ -192,29 +183,13 @@ def ensure_novel_in_group(novel_id: str) -> None:
 
 
 def add_novel_to_group(novel_id: str, group: str) -> bool:
-    """Add novel_id to group (auto-dedup and save groups.yaml).
+    """Add novel_id to group in user_data.db (auto-dedup).
 
     If the novel is already in another group, remove it first.
     Returns True if newly added, False if already in target group.
     """
-    path = CONFIG_DIR / "groups.yaml"
-    groups = load_groups()
-
-    # Remove from other groups
-    for g_name, ids in list(groups.items()):
-        if isinstance(ids, dict) and novel_id in ids and g_name != group:
-            del ids[novel_id]
-
-    # Add to target group
-    if group not in groups:
-        groups[group] = {}
-    if not isinstance(groups[group], dict):
-        groups[group] = {}
-    if novel_id not in groups[group]:
-        groups[group][novel_id] = {"pending_export": False}
-        save_groups(groups)
-        return True
-    return False
+    from cli_lib.user_db import add_novel_to_group as _db_add
+    return _db_add(novel_id, group)
 
 
 def build_options(cfg: dict, site_cfg: dict) -> Options:

@@ -49,17 +49,41 @@ async def save_config(body: dict):
     return {"status": "ok"}
 
 
-# ── groups.yaml ─────────────────────────────────────
+# ── groups（DB）──────────────────────────────────────
 
 @router.get("/groups")
 async def get_groups():
-    return config_service.load_yaml(_cfg_dir / "groups.yaml")
+    from cli_lib.user_db import load_groups
+    return load_groups()
 
 
 @router.put("/groups")
 async def save_groups(body: dict):
-    config_service.save_yaml(_cfg_dir / "groups.yaml", body)
+    from cli_lib.user_db import save_groups
+    save_groups(body)
     return {"status": "ok"}
+
+
+# ── favorites（DB）────────────────────────────────────
+
+@router.get("/favorites")
+async def get_favorites():
+    from cli_lib.user_db import load_favorites
+    return {"favorites": load_favorites()}
+
+
+@router.post("/favorites/{novel_id}")
+async def add_favorite(novel_id: str):
+    from cli_lib.user_db import add_favorite
+    ok = add_favorite(novel_id)
+    return {"ok": ok, "favorited": ok}
+
+
+@router.delete("/favorites/{novel_id}")
+async def remove_favorite(novel_id: str):
+    from cli_lib.user_db import remove_favorite
+    ok = remove_favorite(novel_id)
+    return {"ok": ok, "removed": ok}
 
 
 # ── sites/{website}.yaml ────────────────────────────

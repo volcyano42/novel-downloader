@@ -6,7 +6,7 @@ import {
   searchDownload, fetchMeta, fetchChapterList, downloadChapters,
   listTasks, pauseTask, resumeTask, deleteTask,
   getGlobalConfig, saveGlobalConfig,
-  getGroups, saveGroups,
+  getGroups, saveGroups, getFavorites, addFavorite, removeFavorite,
   getSiteConfig, saveSiteConfig,
   getFormatConfig, saveFormatConfig,
   downloadPlatforms, fetchSources,
@@ -157,6 +157,23 @@ export function useSaveGroups() {
   return useMutation({
     mutationFn: saveGroups,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
+  });
+}
+
+export function useFavorites() {
+  return useQuery({
+    queryKey: ["favorites"],
+    queryFn: () => getFavorites().then(r => r.favorites),
+    staleTime: Infinity,
+  });
+}
+
+export function useToggleFavorite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ novelId, favorited }: { novelId: string; favorited: boolean }) =>
+      favorited ? addFavorite(novelId) : removeFavorite(novelId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["favorites"] }),
   });
 }
 

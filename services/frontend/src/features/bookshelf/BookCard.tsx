@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback } from "react";
-import { BookOpen, FileDown, MoreHorizontal, Trash2, FolderPlus, Folder } from "lucide-react";
+import { BookOpen, FileDown, MoreHorizontal, Trash2, FolderPlus, Folder, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useExport, useGroups, useSaveGroups } from "@/hooks/index";
+import { useExport, useGroups, useSaveGroups, useFavorites, useToggleFavorite } from "@/hooks/index";
 import { ExportDialog } from "@/features/download/ExportDialog";
 import { useToast } from "@/components/Toast";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -34,6 +34,8 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
   const toast = useToast();
   const { data: groupsData = {} } = useGroups();
   const saveGroupsMut = useSaveGroups();
+  const { data: favorites = [] } = useFavorites();
+  const toggleFavMut = useToggleFavorite();
 
   const saveGroupsFn = useCallback(async (newGroups: Record<string, Record<string, object>>) => {
     await saveGroupsMut.mutateAsync(newGroups);
@@ -128,6 +130,16 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
             </div>
           )}
           <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
+            {novelId && (
+              <button onClick={e => { e.stopPropagation(); toggleFavMut.mutate({ novelId, favorited: !favorites.includes(novelId) }); }}
+                className={`rounded-lg p-1.5 transition-colors shadow-sm ${
+                  favorites.includes(novelId)
+                    ? "bg-rose-100 text-rose-500 hover:bg-rose-200"
+                    : "bg-white/80 text-slate-400 hover:text-rose-500 hover:bg-white"
+                }`}>
+                <Heart className="h-3.5 w-3.5" fill={favorites.includes(novelId) ? "currentColor" : "none"} strokeWidth={2} />
+              </button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button onClick={e => e.stopPropagation()}

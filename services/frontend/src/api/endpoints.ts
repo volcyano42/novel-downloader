@@ -28,10 +28,17 @@ export interface SearchResult {
   extra?: { rating?: number } | null;
 }
 
+export interface ChapterStatus {
+  title: string; order: number; status: "pending" | "downloading" | "downloaded" | "failed";
+  error?: string;
+}
+
 export interface TaskInfo {
   task_id: string; novel_id: string; title: string; total: number;
   progress: number; status: string; error: string | null; errors: string[];
   current_title: string;
+  chapters: ChapterStatus[];
+  eta?: number;
 }
 
 export interface EngineOptions {
@@ -231,6 +238,18 @@ export function getGroups() {
 
 export function saveGroups(data: GroupsConfig) {
   return apiPut<void>("/config/groups", data);
+}
+
+export function getFavorites() {
+  return apiGet<{ favorites: string[] }>("/config/favorites");
+}
+
+export function addFavorite(novelId: string) {
+  return apiPost<{ ok: boolean }>(`/config/favorites/${novelId}`, {});
+}
+
+export function removeFavorite(novelId: string) {
+  return apiDelete(`/config/favorites/${novelId}`);
 }
 
 export function getSiteConfig(website: string) {
