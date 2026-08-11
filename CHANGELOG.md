@@ -7,6 +7,14 @@
 1. **BrowserOptions 新增 `extra_args`** — 支持传入额外 Chromium 命令行参数（如 `--remote-debugging-port`、`--no-sandbox` 等），通过 CLI `--extra-args`、前端设置、配置文件均可配置
 2. **Linux 环境自动适配 Chromium 启动参数** — `BrowserEngine._init_browser()` 在 Linux 下自动追加 `--no-sandbox`、`--disable-gpu`、`--disable-setuid-sandbox`、`--disable-dev-shm-usage`，解决 Termux / SSH / Docker 等无桌面环境的 sandbox 报错
 
+### 重构
+
+1. **书源注册机制去硬编码** — `_hardcoded_sources()` / `_HARDCODED_CAPABILITIES` / `_hardcoded_exporters()` / `_hardcoded_export_options()` 全部移除；改为开发模式目录扫描 + Nuitka 模式读取构建时预生成的 `novelbase/utils/_manifest.py`
+2. **URL 推断数据驱动** — `_platform_from_url()` / `_resolve_url()` 改为基于书源 `HOSTS` / `ID_PATTERN` / `BOOK_URL_TEMPLATE` 匹配，无法识别时明确报错（不再静默回落 "fanqie"）
+3. **新增 consts** — 各书源 `__init__.py` 添加 `BOOK_URL_TEMPLATE`
+4. **新增 API** — `POST /api/v2/download/detect`（根据 URL/ID 推断平台）
+5. **新增工具** — `python -m novelbase.utils.build_manifest`（扫描 sources/ 生成 manifest）
+
 ### 说明
 
 - FastAPI `version="2.0.0"`（`services/backend/main.py:35`）为独立 API 版本，与项目版本 4.3.0 分属不同命名空间，非矛盾

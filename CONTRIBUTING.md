@@ -182,16 +182,45 @@ API key 优先从环境变量读取（`{PROVIDER}_API_KEY`），回退到 YAML �
 1. 在 `novelbase/sources/` 下新建目录 `{name}/`，`__init__.py` 中定义模块级常量：
 
    ```python
+   import re
    NAME = "fanqie"
    SHOW_NAME = "番茄"
    HOSTS = ("fanqienovel.com", "changdunovel.com")
    ID_PATTERN = re.compile(r"^fanqie_(\d{19})$")
+   ORIGIN_ID_PATTERN = re.compile(r"^\d{19}$")
+   # 构建书源完整 URL 的模板，{id} = ORIGIN_ID_PATTERN 匹配的部分
+   BOOK_URL_TEMPLATE = "https://fanqienovel.com/page/{id}"
    ```
 
+   全部常量说明：
+
+   | 常量 | 必需 | 说明 |
+   |------|:--:|------|
+   | `NAME` | ✅ | 内部标识（目录名） |
+   | `SHOW_NAME` | ✅ | 前端显示名 |
+   | `HOSTS` | ✅ | 域名列表，`platform_from_url()` 用来自动识别 URL 所属平台 |
+   | `ID_PATTERN` | ✅ | 匹配带前缀的 `Novel.id`（如 `fanqie_7143038691944959011`） |
+   | `ORIGIN_ID_PATTERN` | ✅ | 匹配去前缀的源站原始 ID |
+   | `BOOK_URL_TEMPLATE` | ✅ | 构建完整 URL 的模板，`{id}` 替换为原始 ID |
+
 2. 按引擎模式创建子目录：`browser/`、`requests/`、`api/{provider}/`。
-3. 每个模式目录实现模块级函数：`search.py`、`novel_info.py`、`chapter_list.py`、`chapter_content.py`（函数名与 capabilities 功能名一致，由 `registry.FUNC_FILE_MAP` 映射）。
+3. 每个模式目录实现模块级函数：`search.py`、`novel_info.py`、`chapter_list.py`、`chapter_content.py`（函数名与 capabilities 功能名一致，由 `contracts.py` 的 `CAPABILITY_META` 映射）。
 4. 在 `template/config/sites/` 下添加 `{name}.yaml`（模板可参考现有平台），并在 `app_data/config/sites/` 生成运行时配置。
-5. 若打包便携版：portable 构建脚本全量复制 `novelbase`，无需额外配置；如需裁剪请同步修改 `build-portable.ps1/.sh` 的复制清单。
+5. **生成 manifest**：运行 `python -m novelbase.utils.build_manifest` 重新生成 `novelbase/utils/_manifest.py`。此文件供 Nuitka onefile 模式读取（exe 内无目录结构可扫描），删/增书源后必须重新生成。
+6. 若打包便携版：portable 构建脚本全量复制 `novelbase`，无需额外配置；如需裁剪请同步修改 `build-portable.ps1/.sh` 的复制清单。
+
+### 移除书源
+
+1. 删除 `novelbase/sources/{platform}/` 目录。
+2. 运行 `python -m novelbase.utils.build_manifest` 重新生成 manifest。
+3. 删除 `app_data/config/sites/{platform}.yaml` 与 `template/config/sites/{platform}.yaml`。
+4. 完成。前端搜索 / 后端 URL 识别 / CLI 平台推断全部自动失效（数据驱动，无硬编码残留），`/api/v2/download/platform` 不再返回该书源。
+
+### Manifest 机制
+
+- **开发模式**：`register_source()` 和 `capabilities()` 直接扫描 `sources/` 目录，零配置。
+- **Nuitka onefile 模式**：exe 解压后无 `.py` 文件可扫描 → 读取构建时 `build_manifest.py` 预生成的 `novelbase/utils/_manifest.py`，内容与目录扫描结果完全一致。
+- **构建流程**：`build-nuitka.ps1` 在 Nuitka 编译前自动调用 `python -m novelbase.utils.build_manifest`，确保 manifest 与源码同步。
 
 ### 新导出器
 
