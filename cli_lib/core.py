@@ -57,14 +57,12 @@ def _get_storage():
 
 
 def _platform_from_url(url: str) -> str:
-    """从 URL 推断平台。"""
-    if "fanqienovel.com" in url or "changdunovel.com" in url:
-        return "fanqie"
-    if "qidian.com" in url:
-        return "qidian"
-    if "qimao.com" in url:
-        return "qimao"
-    return "fanqie"
+    """从 URL 推断平台（数据驱动）。"""
+    from novelbase.utils.registry import platform_from_url
+    plat = platform_from_url(url)
+    if plat:
+        return plat
+    raise ValueError(f"未识别书源 URL: {url}")
 
 
 def _get_engine(platform: str = "fanqie"):

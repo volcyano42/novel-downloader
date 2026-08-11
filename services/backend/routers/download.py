@@ -8,43 +8,25 @@ from services.backend.services.engine_manager import get_cached_engine, _browser
 from services.backend.services import task_manager
 from services.backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
+from novelbase.utils.registry import platform_from_url, resolve_book_url
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
 
 def _platform_from_url(url: str) -> str:
-    """从 URL 推断平台。"""
-    if "fanqienovel.com" in url:
-        return "fanqie"
-    if "qidian.com" in url:
-        return "qidian"
-    if "qimao.com" in url:
-        return "qimao"
-    return "fanqie"  # 默认
+    """从 URL 推断平台（数据驱动，基于书源 hosts 匹配）。"""
+    plat = platform_from_url(url)
+    if plat:
+        return plat
+    raise HTTPException(400, f"未识别书源 URL: {url}")
 
 
 def _resolve_url(raw: str) -> str:
-    """将 URL 或带前缀 ID 转为完整 URL。"""
-    raw = raw.strip()
-    if raw.startswith("http://") or raw.startswith("https://"):
-        return raw
-    # 带前缀 ID → 通过 id_pattern 匹配平台，构建 URL
-    from novelbase.core.downloader import get_source_for_id
-    name = get_source_for_id(raw)
-    if name == "fanqie":
-        num = raw.split("_", 1)[-1]
-        return f"https://fanqienovel.com/page/{num}"
-    if name == "qidian":
-        num = raw.split("_", 1)[-1]
-        return f"https://www.qidian.com/book/{num}/"
-    if name == "qimao":
-        num = raw.split("_", 1)[-1]
-        return f"https://www.qimao.com/shuku/{num}/"
-    if name == "92xs":
-        num = raw.split("_", 1)[-1]
-        return f"http://www.92xs.info/book/{num}.html"
-    # 无法识别，原样返回让下游报错
-    return raw
+    """将 URL 或带前缀 ID 转为完整 URL（数据驱动）。"""
+    try:
+        return resolve_book_url(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def _pick_executor(mode: str):
@@ -197,3 +179,23 @@ async def list_all_sources():
             "capabilities": caps,
         }
     return result
+
+
+# ── Detect ────────────────────────────────────────────
+
+@router.post("/detect")
+async def detect_platform(body: dict):
+    """根据 URL 或 ID 推断平台和完整 URL。前端 URL 猜测逻辑的后端实现。"""
+    raw: str = body.get("raw", "")
+    if not raw:
+        raise HTTPException(400, "缺少 raw 字段")
+    from novelbase.utils.registry import platform_from_url, resolve_book_url
+    plat = platform_from_url(raw)
+    if plat:
+        return {"platform": plat}
+    try:
+        url = resolve_book_url(raw)
+        plat = platform_from_url(url)
+        return {"platform": plat, "url": url}
+    except ValueError:
+        return {"platform": None}

@@ -25,29 +25,18 @@ __all__ = ["capabilities", "resolve", "list_sources", "register_source"]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
 
-# Nuitka 编译后目录扫描失败，硬编码能力矩阵兜底。新增书源时需同步更新。
-_HARDCODED_CAPABILITIES: dict[str, dict[str, dict[str, list[str]]]] = {
-    "92xs": {
-        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-    },
-    "fanqie": {
-        "api": {
-            "oiapi": ["search", "novel_info", "chapter_list", "chapter_content"],
-            "rain": ["search", "novel_info", "chapter_list", "chapter_content"],
-        },
-        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-    },
-    "qidian": {
-        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-    },
-    "qimao": {
-        "api": {"rain": ["search", "novel_info", "chapter_list", "chapter_content"]},
-        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
-    },
-}
+
+def _is_compiled() -> bool:
+    return "__compiled__" in globals()
+
+
+def _load_manifest_capabilities(name: str) -> dict[str, dict[str, list[str]]]:
+    """Nuitka 模式从 manifest 加载能力矩阵。"""
+    try:
+        from .utils import _manifest
+        return _manifest._SOURCES.get(name, {}).get("modes", {})
+    except ImportError:
+        return {}
 
 
 def _scan_source_dirs(name: str) -> list[Path]:
@@ -123,9 +112,9 @@ def capabilities(name: str) -> dict[str, dict[str, list[str]]]:
             if mode not in merged:
                 merged[mode] = {}
             merged[mode].update(variants)  # 私有源覆盖同名 variant
-    # Nuitka: 目录扫描失败（exe 内无 .py 文件），退回硬编码
-    if not merged:
-        merged = _HARDCODED_CAPABILITIES.get(name, {})
+    # Nuitka: 目录扫描失败（exe 内无 .py 文件），从 manifest 读取
+    if not merged and _is_compiled():
+        merged = _load_manifest_capabilities(name)
     return merged
 
 
