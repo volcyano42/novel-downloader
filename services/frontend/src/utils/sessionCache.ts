@@ -1,7 +1,7 @@
 /** 会话级缓存 — 所有值在浏览器刷新时清除，页面导航间保持。 */
 const KEYS = {
   mode: "nd:mode",
-  variant  "nd:variant",
+  variant: "nd:variant",
   query: "nd:search:query",
   platform: "nd:search:platform",
   searchMode: "nd:search:mode",
@@ -48,7 +48,7 @@ export const SessionCache = {
       query,
       platform: this.getSearchPlatform(),
       mode: this.getSearchMode(),
-      variant  this.getSearchVariant(),
+      variant: this.getSearchVariant(),
     };
   },
   clearSearch(): void {

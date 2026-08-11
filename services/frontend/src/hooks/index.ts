@@ -187,7 +187,7 @@ export function useDownloadMutation() {
       novelUrl?: string;
       platform?: string;
     }) =>
-      downloadChapters(args.novelId, args.chapters, args.title, args.mode, args variant  args.novelUrl, args.platform),
+      downloadChapters(args.novelId, args.chapters, args.title, args.mode, args.variant, args.novelUrl, args.platform),
   });
 }
 
@@ -232,7 +232,7 @@ export function useExport() {
 export function useFetchMeta() {
   return useMutation({
     mutationFn: (args: { url: string; mode?: string; variant?: string }) =>
-      fetchMeta(args.url, args.mode, args variant ,
+      fetchMeta(args.url, args.mode, args.variant),
   });
 }
 

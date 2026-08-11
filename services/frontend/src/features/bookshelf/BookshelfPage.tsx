@@ -122,7 +122,7 @@ export default function BookshelfPage() {
     searchModeRef.current = mode;
     searchVariantRef.current = variant 
     SessionCache.setMode(mode);
-    SessionCache.setVariant variant ;
+    SessionCache.setVariant(variant);
     SessionCache.saveSearch(query, platform, mode, variant);
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);

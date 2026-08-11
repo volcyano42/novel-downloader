@@ -43,7 +43,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
   const [query, setQuery] = useState(defaultQuery);
   const [platform, setPlatform] = useState("all");
   const [mode, setMode] = useState(engineModes[0] ?? "browser");
-  const  variant  setVariant] = useState<string | undefined>();
+  const [variant, setVariant] = useState<string | undefined>();
 
   // 平台切换时自动切换到支持的模式
   useEffect(() => {

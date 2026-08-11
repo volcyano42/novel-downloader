@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 interface DownloadDialogProps {
   open: boolean; onClose: () => void;
   novelTitle: string; chapterCount: number;
-  variant?: "download" | "check";
+  dialogMode?: "download" | "check";
   initialMode?: string;
   initialVariant?: string;
   availableModes?: string[];
@@ -21,7 +21,7 @@ const MODE_DESCS: Record<string, string> = {
   api: "第三方接口",
 };
 
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, variant = "download", initialMode, initialVariant, availableModes, variants = [], onStart }: DownloadDialogProps) {
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialogMode = "download", initialMode, initialVariant, availableModes, variants = [], onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [variant, setVariant] = useState(initialVariant ?? "");
   const [loading, setLoading] = useState(false);
@@ -57,8 +57,8 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
         className="w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl p-6 animate-in zoom-in-95 fade-in duration-200">
-        <h2 className="text-base font-semibold text-slate-800 mb-1">{variant === "check" ? "检查更新设置" : "下载设置"}</h2>
-        <p className="text-xs text-slate-500 mb-4 truncate">{variant === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
+        <h2 className="text-base font-semibold text-slate-800 mb-1">{dialogMode === "check" ? "检查更新设置" : "下载设置"}</h2>
+        <p className="text-xs text-slate-500 mb-4 truncate">{dialogMode === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
         <div className="space-y-2 mb-4">
           {visibleModes.map(id => {
@@ -110,8 +110,8 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, varian
           </button>
           <button onClick={handleStart} disabled={loading}
             className="flex-1 rounded-xl bg-indigo-500 text-white py-2.5 text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : variant === "check" ? <RefreshCw className="h-4 w-4" strokeWidth={2} /> : <Download className="h-4 w-4" strokeWidth={2} />}
-            {loading ? "启动中..." : variant === "check" ? "开始检查" : `开始下载 (${chapterCount}章)`}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : dialogMode === "check" ? <RefreshCw className="h-4 w-4" strokeWidth={2} /> : <Download className="h-4 w-4" strokeWidth={2} />}
+            {loading ? "启动中..." : dialogMode === "check" ? "开始检查" : `开始下载 (${chapterCount}章)`}
           </button>
         </div>
       </div>

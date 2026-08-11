@@ -5,7 +5,7 @@ import { useNovelMeta, useRemoteChapters, useDownloadMutation, useGlobalConfig, 
 import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
 import { listChapters } from "@/api/endpoints";
 import { DownloadDialog } from "@/features/download/DownloadDialog";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipVariant } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/components/Toast";
 import { SessionCache } from "@/utils/sessionCache";
 import { getCachedChapters, setCachedChapters } from "@/utils/chapterCache";
@@ -277,7 +277,7 @@ export default function DetailPage() {
     setSavedMode(mode);
     setSavedVariant(variant ?? "");
     SessionCache.setMode(mode);
-    SessionCache.setVariant variant ;
+    SessionCache.setVariant(variant);
     const v = dialogVariant;
     setDialogVariant(null);
     if (v === "check") {
@@ -382,7 +382,7 @@ export default function DetailPage() {
                         {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>}
                       </div>
                     </label>
-                    <TooltipVariant><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipVariant>
+                    <span className="inline-flex"><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></span>
                     <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <span className="truncate text-slate-700 flex-1">{mc.remote.title}</span>
                       {(mc.remote.image_count ?? 0) > 0 && (
@@ -449,7 +449,7 @@ export default function DetailPage() {
       )}
 
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
-        variant={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
+        dialogMode={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
         initialMode={savedMode} initialVariant={savedVariant}
         availableModes={platModes} variants={platVariants}
         onStart={handleDialogConfirm} />
