@@ -31,3 +31,4 @@ jobs:
           name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-linux-x64
           path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-linux-x64.tar.gz
           if-no-files-found: error
+          retention-days: 3

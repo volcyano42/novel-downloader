@@ -14,6 +14,7 @@ venv/
 env/
 
 app_data/
+会话归档/
 
 # 测试 & 覆盖率
 .pytest_cache/

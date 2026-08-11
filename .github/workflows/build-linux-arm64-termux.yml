@@ -121,3 +121,4 @@ jobs:
           name: novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux
           path: dist/novel-downloader-web-portable-${{ steps.ver.outputs.version }}-termux.tar.gz
           if-no-files-found: error
+          retention-days: 3
