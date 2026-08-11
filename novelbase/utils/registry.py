@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from importlib import import_module
 from pathlib import Path
@@ -69,7 +70,8 @@ def _scan_export_options() -> dict[str, Any]:
 
 
 def register_source() -> dict[str, dict]:
-    """返回所有已注册的 source（{name: {name, hosts, id_pattern}}）。"""
+    """返回所有已注册的 source（{name: {name, hosts, id_pattern}}）。
+    Nuitka 编译后 _scan_sources 的 import_module 会失败，退回硬编码兜底。"""
     global _cache_source
     if _cache_source is not None:
         return _cache_source
@@ -77,6 +79,8 @@ def register_source() -> dict[str, dict]:
         if _cache_source is not None:
             return _cache_source
         result = _scan_sources()
+        if not result:
+            result = _hardcoded_sources()
         _cache_source = result
     return _cache_source
 
@@ -108,6 +112,8 @@ def register_exporter() -> dict[str, Callable]:
         if _cache_exporter is not None:
             return _cache_exporter
         result = _scan_exporters()
+        if not result:
+            result = _hardcoded_exporters()
         _cache_exporter = result  # type: ignore[assignment]
     return _cache_exporter
 
@@ -120,8 +126,61 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
         if _cache_export_opts is not None:
             return _cache_export_opts
         result = _scan_export_options()
+        if not result:
+            result = _hardcoded_export_options()
         _cache_export_opts = result  # type: ignore[assignment]
     return _cache_export_opts
+
+
+def _hardcoded_sources() -> dict[str, dict]:
+    """Nuitka 编译后 import_module 动态加载失败，硬编码兜底。
+    新增书源时需同步更新此表。"""
+    return {
+        "fanqie": {
+            "name": "fanqie",
+            "show_name": "番茄",
+            "hosts": ("fanqienovel.com", "changdunovel.com"),
+            "id_pattern": re.compile(r"^fanqie_(\d{19})$"),
+            "origin_id_pattern": re.compile(r"^\d{19}$"),
+        },
+        "qidian": {
+            "name": "qidian",
+            "show_name": "起点",
+            "hosts": ("www.qidian.com", "book.qidian.com"),
+            "id_pattern": re.compile(r"^qidian_(\d{10})$"),
+            "origin_id_pattern": re.compile(r"^\d{10}$"),
+        },
+        "qimao": {
+            "name": "qimao",
+            "show_name": "七猫",
+            "hosts": ("www.qimao.com", "qimao.com"),
+            "id_pattern": re.compile(r"^qimao_(\d+)$"),
+            "origin_id_pattern": re.compile(r"^\d+$"),
+        },
+        "92xs": {
+            "name": "92xs",
+            "show_name": "就爱文学",
+            "hosts": ("www.92xs.info", "92xs.info"),
+            "id_pattern": re.compile(r"^92xs_(\d+)$"),
+            "origin_id_pattern": re.compile(r"^\d+$"),
+        },
+    }
+
+
+def _hardcoded_exporters() -> dict[str, Callable]:
+    """Nuitka 编译后 import_module 动态加载失败，硬编码兜底。"""
+    from ..exporters.txt import export as _txt_export
+    from ..exporters.epub import export as _epub_export
+    from ..exporters.img import export as _img_export
+    return {"txt": _txt_export, "epub": _epub_export, "img": _img_export}
+
+
+def _hardcoded_export_options() -> dict[str, type[ExportOptions]]:
+    """Nuitka 编译后 import_module 动态加载失败，硬编码兜底。"""
+    from ..exporters.txt import TXTExportOptions
+    from ..exporters.epub import EPUBExportOptions
+    from ..exporters.img import IMGExportOptions
+    return {"txt": TXTExportOptions, "epub": EPUBExportOptions, "img": IMGExportOptions}
 
 
 def list_sources() -> list[str]:

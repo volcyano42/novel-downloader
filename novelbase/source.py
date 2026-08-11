@@ -25,6 +25,30 @@ __all__ = ["capabilities", "resolve", "list_sources", "register_source"]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
 
+# Nuitka 编译后目录扫描失败，硬编码能力矩阵兜底。新增书源时需同步更新。
+_HARDCODED_CAPABILITIES: dict[str, dict[str, dict[str, list[str]]]] = {
+    "92xs": {
+        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+    },
+    "fanqie": {
+        "api": {
+            "oiapi": ["search", "novel_info", "chapter_list", "chapter_content"],
+            "rain": ["search", "novel_info", "chapter_list", "chapter_content"],
+        },
+        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+    },
+    "qidian": {
+        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+    },
+    "qimao": {
+        "api": {"rain": ["search", "novel_info", "chapter_list", "chapter_content"]},
+        "browser": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+        "requests": {"default": ["search", "novel_info", "chapter_list", "chapter_content"]},
+    },
+}
+
 
 def _scan_source_dirs(name: str) -> list[Path]:
     """返回所有 source 目录路径（内置 + 私有）。
@@ -83,6 +107,7 @@ def capabilities(name: str) -> dict[str, dict[str, list[str]]]:
     返回结构统一为 {mode: {variant: [functions]}}。
     无 variant 子目录的 mode 使用 "default" 作为 variant key。
     私有源的同名 variant 覆盖内置源（允许本地覆盖/补丁）。
+    Nuitka 编译后目录扫描失败时退回硬编码矩阵。
 
     >>> capabilities("fanqie")
     {"api": {"oiapi": [...], "rain": [...]},
@@ -98,6 +123,9 @@ def capabilities(name: str) -> dict[str, dict[str, list[str]]]:
             if mode not in merged:
                 merged[mode] = {}
             merged[mode].update(variants)  # 私有源覆盖同名 variant
+    # Nuitka: 目录扫描失败（exe 内无 .py 文件），退回硬编码
+    if not merged:
+        merged = _HARDCODED_CAPABILITIES.get(name, {})
     return merged
 
 
@@ -147,9 +175,23 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
             break
 
     if not found:
-        raise ImportError(
-            f"Failed to resolve {name}/{mode}/{variant}/{file_stem}: file not found"
-        )
+        # Nuitka: .py 文件不存在（编译进 exe），直接试 import_module
+        if src_dir == _sources[0]:
+            if variant == "default":
+                module_path = f"novelbase.sources.{name}.{mode}.{file_stem}"
+            else:
+                module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
+            try:
+                module = import_module(module_path)
+                fn = getattr(module, file_stem)
+            except (ImportError, AttributeError) as e:
+                raise ImportError(
+                    f"Failed to resolve {name}/{mode}/{variant}/{file_stem}: {e}"
+                ) from e
+        else:
+            raise ImportError(
+                f"Failed to resolve {name}/{mode}/{variant}/{file_stem}: file not found"
+            )
 
     # 内置源用 import_module，私有源用 spec_from_file_location
     if src_dir == _sources[0]:

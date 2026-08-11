@@ -10,19 +10,26 @@ import sys
 from pathlib import Path
 
 
+def _get_root() -> Path:
+    """应用根目录，兼容 PyInstaller / Nuitka / 源码运行。"""
+    if getattr(sys, "frozen", False):                     # PyInstaller
+        return Path(sys._MEIPASS)
+    if "__compiled__" in globals():                       # Nuitka
+        return Path(os.path.dirname(os.path.abspath(__file__)))
+    return Path(__file__).resolve().parent                # dev
+
+
 def _template_dir() -> Path:
-    """模板源目录。frozen → _MEIPASS, dev → __file__ 上溯。"""
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "template" / "config"
-    return Path(__file__).resolve().parent / "template" / "config"
+    """模板源目录。"""
+    return _get_root() / "template" / "config"
 
 
 def _target_dir() -> Path:
-    """运行时目标目录。优先 NLD_APP_DATA env；frozen → exe 同目录；dev → 项目根。"""
+    """运行时目标目录。优先 NLD_APP_DATA env；frozen/compiled → exe 同目录；dev → 项目根。"""
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve() / "config"
-    if getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False) or "__compiled__" in globals():
         return Path(sys.executable).parent / "app_data" / "config"
     return Path(__file__).resolve().parent / "app_data" / "config"
 
