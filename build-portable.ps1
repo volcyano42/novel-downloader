@@ -158,9 +158,11 @@ if errorlevel 1 (
 
 start "" http://localhost:8000
 echo 服务已启动，浏览器已打开 http://localhost:8000
-echo 关闭此窗口可停止服务。
+echo 按 Ctrl+C 停止服务。
 
-pause
+:keepalive
+%SystemRoot%\System32\timeout.exe /t 5 /nobreak >nul 2>&1
+if not errorlevel 1 goto keepalive
 '@
     $batContent | Set-Content -Path (Join-Path $portableDir "启动.bat") -Encoding UTF8
 

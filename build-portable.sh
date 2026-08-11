@@ -174,6 +174,9 @@ if [ -d "$PWD/python-deps" ]; then
 fi
 
 echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
+SERVER_PID=""
+cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null; exit 0; }
+trap cleanup INT TERM
 "$PY" -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
@@ -197,6 +200,9 @@ export PYTHONHOME="$PWD/python"
 export PATH="$PWD/python/bin:$PATH"
 
 echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
+SERVER_PID=""
+cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null; exit 0; }
+trap cleanup INT TERM
 python3 -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
