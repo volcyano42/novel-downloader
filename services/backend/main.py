@@ -10,7 +10,7 @@ if str(_project_root) not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from services.backend.routers import storage, download, export, engine, config
@@ -110,13 +110,29 @@ _frontend = _find_frontend_dist()
 if _frontend:
     app.mount("/assets", StaticFiles(directory=str(_frontend / "assets")), name="assets")
 
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        """SPA fallback：非 API 路由返回 index.html。"""
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """SPA fallback：非 API 路由返回 index.html；前端未构建时返回提示页。"""
+    if _frontend is not None:
         path = _frontend / (full_path or "index.html")
         if path.is_file():
             return FileResponse(str(path))
         return FileResponse(str(_frontend / "index.html"))
+    # 前端未构建：返回 HTML 提示
+    if full_path and full_path != "index.html":
+        return JSONResponse({"ok": False, "message": "前端未构建，仅 API 可用"}, status_code=404)
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>novel-downloader</title>
+<style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc;color:#334155}main{text-align:center;max-width:420px;padding:2rem}h1{font-size:1.5rem;margin-bottom:.5rem}p{color:#64748b;line-height:1.6}code{background:#e2e8f0;padding:.15em .4em;border-radius:4px;font-size:.9em}</style>
+</head><body><main>
+<h1>📖 novel-downloader</h1>
+<p>API 服务已启动（<code>localhost:8000</code>）</p>
+<p>前端尚未构建。运行以下命令后刷新页面：</p>
+<code>cd services/frontend &amp;&amp; npm run build</code>
+<p style="margin-top:1.5rem;font-size:.85rem">仅 API 模式：<a href="/docs">/docs</a> · <a href="/api/v2/health">/api/v2/health</a></p>
+</main></body></html>""")
 
 def main():
     """启动 Web 后端服务。"""
