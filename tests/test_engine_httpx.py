@@ -120,3 +120,23 @@ def test_engine_base_has_abstract_async_methods():
     from novelbase.core.engine import Engine
     assert "async_fetch_text" in Engine.__abstractmethods__
     assert "async_fetch_json" in Engine.__abstractmethods__
+
+
+def test_requests_engine_close_cleans_async_client():
+    engine = _requests_engine()
+    # 触发懒加载
+    client = engine._get_async_client()
+    assert client is not None
+    assert engine._async_client is not None
+    engine.close()
+    # close 后 AsyncClient 应已关闭
+    assert engine._async_client.is_closed
+
+
+def test_requests_engine_close_without_async_client():
+    engine = _requests_engine()
+    # 未触发 async client，close 不应报错
+    assert engine._async_client is None
+    engine.close()
+    assert engine._async_client is None
+
