@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NovelDownloader</title>
+    <script>
+      (function() {
+        var theme = localStorage.getItem('reader-theme');
+        // 默认亮色，不跟随系统暗色（APK / WebUI 一致）；仅尊重手动选择
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

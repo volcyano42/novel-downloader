@@ -50,7 +50,7 @@ def main():
     # 启动前端 (Vite dev server)
     frontend = subprocess.Popen(
         [npm, "run", "dev"],
-        cwd=str(ROOT / "services" / "frontend"),
+        cwd=str(ROOT / "frontend"),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

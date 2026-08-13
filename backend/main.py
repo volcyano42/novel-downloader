@@ -93,13 +93,13 @@ def _find_frontend_dist() -> Path | None:
     candidates = []
     # Nuitka：不设 sys.frozen/_MEIPASS；onefile 数据文件解压到 __file__ 所在目录（对齐 init_config._get_root，sys.executable 指向 bootstrap exe 不可用）
     if "__compiled__" in globals():
-        candidates.append(Path(__file__).resolve().parent / "services" / "frontend" / "dist")
+        candidates.append(Path(__file__).resolve().parent / "frontend" / "dist")
     # PyInstaller
     if getattr(sys, "frozen", False):
-        candidates.append(Path(sys._MEIPASS) / "services" / "frontend" / "dist")
+        candidates.append(Path(sys._MEIPASS) / "frontend" / "dist")
     candidates.extend([
-        _project_root / "services" / "frontend" / "dist",
-        Path.cwd() / "services" / "frontend" / "dist",
+        _project_root / "frontend" / "dist",
+        Path.cwd() / "frontend" / "dist",
     ])
     for p in candidates:
         if (p / "index.html").exists():
@@ -130,7 +130,7 @@ async def serve_frontend(full_path: str):
 <h1>📖 novel-downloader</h1>
 <p>API 服务已启动（<code>localhost:8000</code>）</p>
 <p>前端尚未构建。运行以下命令后刷新页面：</p>
-<code>cd services/frontend &amp;&amp; npm run build</code>
+<code>cd frontend &amp;&amp; npm run build</code>
 <p style="margin-top:1.5rem;font-size:.85rem">仅 API 模式：<a href="/docs">/docs</a> · <a href="/api/v2/health">/api/v2/health</a></p>
 </main></body></html>""")
 
