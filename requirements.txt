@@ -1,12 +1,12 @@
 beautifulsoup4
 drissionpage
 fastapi
+httpx
+chardet
 Pillow
 pillow-heif
 python-box
 PyYAML
-Requests
 rich
-urllib3
 uvicorn
 yarl
