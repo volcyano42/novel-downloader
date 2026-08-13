@@ -15,11 +15,11 @@ import sys
 from pathlib import Path
 
 # ── 确保项目根在 sys.path ──────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).parent
+_PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 # ── 复用 app.config 的配置加载 ─────────────────────────────────
-from cli_lib.config import (
+from cli.config import (
     load_main_config, load_site_config, load_format_configs, load_groups,
     build_options, add_novel_to_group, ensure_novel_in_group,
 )
@@ -166,7 +166,7 @@ def cmd_search(args):
 def cmd_download(args):
     engine, format_configs = _get_engine(_resolve_platform(args), args.mode)
     try:
-        from cli_lib.core import _do_download_inner
+        from cli.core import _do_download_inner
         _do_download_inner(engine, args.url, args.group, format_configs,
                            max_workers=args.workers)
     finally:
@@ -176,7 +176,7 @@ def cmd_download(args):
 def cmd_update(args):
     engine, format_configs = _get_engine(args.platform, args.mode)
     try:
-        from cli_lib.core import do_update
+        from cli.core import do_update
         do_update(format_configs, max_workers=args.workers)
     finally:
         engine.close()
@@ -188,8 +188,8 @@ def cmd_export(args):
         print(f"格式 '{args.format}' 未在 app_data/config/formats/ 中配置")
         sys.exit(1)
 
-    from cli_lib.config import load_groups
-    from cli_lib.core import _get_storage
+    from cli.config import load_groups
+    from cli.core import _get_storage
     from novelbase import export
     from novelbase.utils.registry import register_export_options
 
@@ -243,8 +243,8 @@ def cmd_info(args):
 
 def cmd_delete(args):
     """删除已下载小说（含章节/封面），并从全部分组移除。"""
-    from cli_lib.config import load_groups, save_groups
-    from cli_lib.core import _get_storage
+    from cli.config import load_groups, save_groups
+    from cli.core import _get_storage
 
     storage = _get_storage()
     novel_id = args.id
@@ -268,8 +268,8 @@ def cmd_delete(args):
 
 def cmd_novel(args):
     """已下载小说管理。"""
-    from cli_lib.config import load_groups
-    from cli_lib.core import _get_storage
+    from cli.config import load_groups
+    from cli.core import _get_storage
 
     if args.novel_command != "list":
         return
@@ -344,7 +344,7 @@ def cmd_dev(args):
 
 def _scaffold_source(name: str, modes: list[str]):
     """生成新书源脚手架。"""
-    source_dir = Path(__file__).parent / "novelbase" / "sources" / name
+    source_dir = Path(__file__).parent.parent / "novelbase" / "sources" / name
     source_dir.mkdir(parents=True, exist_ok=True)
 
     (source_dir / "__init__.py").write_text(

@@ -14,7 +14,7 @@ import yaml
 from novelbase.core.options import Options
 from novelbase.utils.logger import get_logger
 
-_log = get_logger("cli_lib.config")
+_log = get_logger("cli.config")
 
 APP_DATA: Path | None = None
 CONFIG_DIR: Path | None = None
@@ -102,13 +102,13 @@ def load_groups() -> dict:
 
     Returns: {group_name: {novel_id: {"pending_export": bool}, ...}, ...}
     """
-    from cli_lib.user_db import load_groups as _db_load
+    from shared.user_data import load_groups as _db_load
     return _db_load()
 
 
 def save_groups(groups: dict) -> None:
     """Save groups to user_data.db."""
-    from cli_lib.user_db import save_groups as _db_save
+    from shared.user_data import save_groups as _db_save
     _db_save(groups)
 
 
@@ -172,7 +172,7 @@ def load_fmt_config(fmt_name: str) -> dict:
 
 def get_novel_group(novel_id: str, groups: dict | None = None) -> str | None:
     """Return group name for novel_id, or None if not found."""
-    from cli_lib.user_db import get_novel_group as _db_get
+    from shared.user_data import get_novel_group as _db_get
     return _db_get(novel_id)
 
 
@@ -188,7 +188,7 @@ def add_novel_to_group(novel_id: str, group: str) -> bool:
     If the novel is already in another group, remove it first.
     Returns True if newly added, False if already in target group.
     """
-    from cli_lib.user_db import add_novel_to_group as _db_add
+    from shared.user_data import add_novel_to_group as _db_add
     return _db_add(novel_id, group)
 
 
