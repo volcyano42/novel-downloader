@@ -202,7 +202,7 @@ def load_fmt_config(fmt_name):
 def get_database_url():
     return f"sqlite:///{APP_DATA / 'storage' / 'novels' / 'catalog.db'}"
 
-# ── build_options（从 cli_lib/config.py 迁移，改为 import shared.user_data）──
+# ── build_options（从旧 cli_lib/config.py 迁移，改为 import shared.user_data）──
 def build_options(cfg, site_cfg):
     from novelbase.core.options import Options
     options = Options()
