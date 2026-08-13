@@ -40,6 +40,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 - **CSS flex 陷阱** flex column 中 `flex-1` 不约束宽度，需 `min-w-0` + `overflow-hidden`；flex row 子元素默认 `min-width: auto`
 - **提交** 中文消息，一个方面一条 commit，禁止 `git add -A`
 - **配置** `app_data/config/` 下全部 YAML，不提交到 git
+- **文档** 一律写在 `docs/` 下（按子目录分类），**绝不提交到 git**（`.gitignore` 已忽略 `docs/`）
 
 ## Notes
 

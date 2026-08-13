@@ -54,6 +54,9 @@ _*.py
 .superpowers/
 reasonix.toml
 
+# 文档（不提交）
+docs/
+
 
 # Node
 node_modules/
