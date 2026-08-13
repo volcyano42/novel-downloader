@@ -72,3 +72,26 @@ def test_no_env_var_no_external(tmp_path, monkeypatch):
     _reload_exporter()
     exporters = exporter_mod.register_exporter()
     assert set(exporters.keys()) == {"txt", "epub", "img"}
+
+
+def test_bad_signature_exporter_skipped(tmp_path, monkeypatch):
+    """export 函数签名缺 chapters/novel 的外部导出器被跳过，不炸。"""
+    (tmp_path / "bad.py").write_text(
+        "from dataclasses import dataclass\n"
+        "from novelbase.core.options import ExportOptions\n"
+        "@dataclass\n"
+        "class BADExportOptions(ExportOptions):\n"
+        "    format: str = 'bad'\n"
+        "def export(options=None):\n"  # 缺 chapters/novel
+        "    return 'bad-exported'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NLD_PRIVATE_EXPORTERS", str(tmp_path))
+    _reload_exporter()
+
+    exporters = exporter_mod.register_exporter()
+    # 签名错误的导出器被跳过
+    assert "bad" not in exporters
+    # 内置格式不受影响
+    assert set(exporters.keys()) == {"txt", "epub", "img"}
+

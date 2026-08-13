@@ -71,6 +71,19 @@ def _scan_one_module(module_path: Path, module_name: str) -> tuple[str, Callable
     if not callable(export_func):
         return None
 
+    # 运行时签名校验：export 必须接受 chapters/novel 参数
+    from inspect import signature as _signature
+    from .exporters.contracts import EXPORT_REQUIRED_PARAMS
+
+    try:
+        sig = _signature(export_func)
+    except (TypeError, ValueError):
+        return None
+    missing = [p for p in EXPORT_REQUIRED_PARAMS if p not in sig.parameters]
+    if missing:
+        print(f"skip exporter {module_path}: export 签名缺少参数 {missing}")
+        return None
+
     # 找 *ExportOptions 类（继承 ExportOptions 且带 format 字段）
     options_cls = None
     fmt = None
