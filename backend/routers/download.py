@@ -8,7 +8,7 @@ from backend.services.engine_manager import get_cached_engine, _browser_executor
 from backend.services import task_manager
 from backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
-from novelbase.utils.registry import platform_from_url, resolve_book_url
+from novelbase.source import platform_from_url, resolve_book_url
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -157,7 +157,7 @@ async def delete_task(task_id: str):
 
 @router.get("/platform")
 async def list_platforms():
-    from novelbase.utils.registry import register_source
+    from novelbase.source import register_source
     sources = register_source()
     return [{"id": name, "label": info.get("show_name", name)} for name, info in sources.items()]
 
@@ -165,7 +165,7 @@ async def list_platforms():
 @router.get("/sources")
 async def list_all_sources():
     """返回所有 source 及其完整能力矩阵。"""
-    from novelbase.utils.registry import register_source
+    from novelbase.source import register_source
     from novelbase.source import capabilities as _caps
     sources = register_source()
     result = {}
@@ -189,7 +189,7 @@ async def detect_platform(body: dict):
     raw: str = body.get("raw", "")
     if not raw:
         raise HTTPException(400, "缺少 raw 字段")
-    from novelbase.utils.registry import platform_from_url, resolve_book_url
+    from novelbase.source import platform_from_url, resolve_book_url
     plat = platform_from_url(raw)
     if plat:
         return {"platform": plat}

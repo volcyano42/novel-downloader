@@ -1,10 +1,10 @@
 """Source 能力发现与动态分发（公共 API）。
 
-本模块提供 source 开发者和使用者需要的入口：
-- capabilities(name) → 返回统一结构的可用能力矩阵
-- resolve(name, mode, function, variant=None) → 动态 import 并返回同步函数
-- list_sources() → 列出所有可用源名称
-- register_source() → 返回已注册 source 元数据
+本模块是 source 子系统的唯一入口，负责：
+- 元数据注册：register_source() / list_sources()
+- 能力发现：capabilities(name)
+- 动态分发：resolve(name, mode, function, variant=None)
+- URL/ID 反查：platform_from_url() / resolve_book_url()
 
 新增源平台：直接在 sources/ 下创建目录/文件即可，零注册表修改。
 
@@ -13,22 +13,153 @@
 """
 
 import os
+import threading
 from importlib import import_module, util as importlib_util
 from inspect import signature
 from pathlib import Path
 
 from .sources.contracts import CAPABILITY_META
-from .utils.registry import list_sources, register_source  # noqa: F401 — 重导出
 
 
-__all__ = ["capabilities", "resolve", "list_sources", "register_source"]
+__all__ = [
+    "capabilities",
+    "resolve",
+    "list_sources",
+    "register_source",
+    "platform_from_url",
+    "resolve_book_url",
+]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
 
+_lock = threading.Lock()
+_cache_source: dict[str, dict] | None = None
+
 
 def _is_compiled() -> bool:
+    """检测是否为 Nuitka/PyInstaller 编译产物。"""
     return "__compiled__" in globals()
 
+
+# ═══════════════════════════════════════════════════════════════════
+# 元数据注册（source 名 / hosts / id_pattern 等）
+# ═══════════════════════════════════════════════════════════════════
+
+def _scan_sources() -> dict[str, dict]:
+    """扫描 sources/ 目录，收集每个 source 的 NAME / HOSTS / ID_PATTERN 等。
+
+    Returns:
+        {module_name: {"name": ..., "hosts": ..., "id_pattern": ...}}
+    """
+    result = {}
+    pkg_dir = Path(__file__).parent / "sources"
+    if not pkg_dir.exists():
+        return result
+
+    for entry in sorted(os.listdir(pkg_dir)):
+        if entry.startswith("_") or entry == "__pycache__":
+            continue
+        entry_path = pkg_dir / entry
+        if not entry_path.is_dir() or not (entry_path / "__init__.py").exists():
+            continue
+        module_name = entry
+        try:
+            module = import_module(f".sources.{module_name}", __package__)
+            result[module_name] = {
+                "name": getattr(module, "NAME", module_name),
+                "show_name": getattr(module, "SHOW_NAME", module_name),
+                "hosts": getattr(module, "HOSTS", ()),
+                "id_pattern": getattr(module, "ID_PATTERN", None),
+                "origin_id_pattern": getattr(module, "ORIGIN_ID_PATTERN", None),
+                "book_url_template": getattr(module, "BOOK_URL_TEMPLATE", ""),
+            }
+        except ImportError as e:
+            print(f"load source failed {module_name} reason: {e}")
+
+    return result
+
+
+def _load_manifest_sources() -> dict[str, dict]:
+    """从 _manifest.py 加载书源数据（Nuitka 模式）。"""
+    try:
+        from .utils import _manifest
+        return _manifest._flat_sources()
+    except ImportError:
+        return {}
+
+
+def register_source() -> dict[str, dict]:
+    """返回所有已注册的 source 元数据。Nuitka 模式从 manifest 读取。"""
+    global _cache_source
+    if _cache_source is not None:
+        return _cache_source
+    with _lock:
+        if _cache_source is not None:
+            return _cache_source
+        if _is_compiled():
+            _cache_source = _load_manifest_sources()
+        else:
+            _cache_source = _scan_sources()
+    return _cache_source
+
+
+def list_sources() -> list[str]:
+    """列出所有可用源名称（开发模式目录扫描，编译模式 manifest）。"""
+    if _is_compiled():
+        try:
+            from .utils import _manifest
+            return list(_manifest._SOURCES.keys())
+        except ImportError:
+            return []
+    pkg_dir = Path(__file__).parent / "sources"
+    if not pkg_dir.exists():
+        return []
+    result: list[str] = []
+    for entry in sorted(pkg_dir.iterdir()):
+        if entry.name.startswith("_") or not entry.is_dir() or not (entry / "__init__.py").exists():
+            continue
+        result.append(entry.name)
+    return result
+
+
+def platform_from_url(url: str) -> str | None:
+    """从 URL 推断平台名称，基于已注册书源的 hosts 匹配。"""
+    sources = register_source()
+    for name, meta in sources.items():
+        for host in meta.get("hosts", ()):
+            if host in url:
+                return name
+    return None
+
+
+def resolve_book_url(raw: str) -> str:
+    """将 URL 或带前缀 ID 转为完整 URL。
+
+    - 已是完整 URL 则直接返回
+    - 带前缀的 ID（如 fanqie_1234567890123456789）通过 ID_PATTERN 匹配平台，
+      再通过 BOOK_URL_TEMPLATE 构建完整 URL
+    - 无法识别时报 ValueError
+    """
+    raw = raw.strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+
+    # 带前缀 ID → 匹配平台
+    sources = register_source()
+    for name, meta in sources.items():
+        id_pat = meta.get("id_pattern")
+        if id_pat and id_pat.match(raw):
+            template = meta.get("book_url_template", "")
+            if template:
+                num = raw.split("_", 1)[-1] if "_" in raw else raw
+                return template.replace("{id}", num)
+
+    raise ValueError(f"无法识别书源或 ID 格式: {raw}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 能力发现 + 动态分发
+# ═══════════════════════════════════════════════════════════════════
 
 def _load_manifest_capabilities(name: str) -> dict[str, dict[str, list[str]]]:
     """Nuitka 模式从 manifest 加载能力矩阵。"""

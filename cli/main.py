@@ -31,7 +31,7 @@ _log = get_logger("novelbase.cli")
 
 def _platform_from_url(url: str) -> str:
     """从 URL 推断平台（数据驱动）。"""
-    from novelbase.utils.registry import platform_from_url
+    from novelbase.source import platform_from_url
     plat = platform_from_url(url)
     if plat:
         return plat
@@ -296,7 +296,7 @@ def cmd_novel(args):
 
 def cmd_source(args):
     """书源管理。"""
-    from novelbase.utils.registry import register_source
+    from novelbase.source import register_source
 
     if args.source_command != "list":
         return
@@ -327,7 +327,7 @@ def cmd_source(args):
 def cmd_dev(args):
     """开发工具。"""
     if args.dev_command == "list-sources":
-        from novelbase.utils.registry import list_sources as _ls_py
+        from novelbase.source import list_sources as _ls_py
 
         if args.json:
             print("JSON 规则源已移除")

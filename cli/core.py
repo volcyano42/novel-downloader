@@ -15,7 +15,7 @@ from novelbase import (
 )
 from novelbase.core.storage import create_storage
 from novelbase.utils.logger import get_logger
-from novelbase.utils.registry import register_source
+from novelbase.source import register_source
 
 _log = get_logger("cli.core")
 
@@ -58,7 +58,7 @@ def _get_storage():
 
 def _platform_from_url(url: str) -> str:
     """从 URL 推断平台（数据驱动）。"""
-    from novelbase.utils.registry import platform_from_url
+    from novelbase.source import platform_from_url
     plat = platform_from_url(url)
     if plat:
         return plat

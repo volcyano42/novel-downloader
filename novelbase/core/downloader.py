@@ -26,7 +26,7 @@ def _variant_for(engine) -> str | None:
 
 def get_source(url: str) -> str | None:
     """根据 URL 查找匹配的 source 名称。"""
-    from ..utils.registry import register_source
+    from ..source import register_source
     from yarl import URL
     parsed = URL(url)
     for name, info in register_source().items():
@@ -37,7 +37,7 @@ def get_source(url: str) -> str | None:
 
 def get_source_for_id(novel_id: str) -> str | None:
     """根据裸 novel_id 查找匹配的 source 名称。"""
-    from ..utils.registry import register_source
+    from ..source import register_source
     for name, info in register_source().items():
         pat = info.get("id_pattern")
         if pat and pat.match(novel_id):
@@ -47,7 +47,7 @@ def get_source_for_id(novel_id: str) -> str | None:
 
 def list_sources() -> list[str]:
     """返回所有已注册的 source 名称。"""
-    from ..utils.registry import register_source
+    from ..source import register_source
     return sorted(register_source().keys())
 
 
