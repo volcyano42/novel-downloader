@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from services.backend.services import config_service
+import shared.config as config_service
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
@@ -53,13 +53,13 @@ async def save_config(body: dict):
 
 @router.get("/groups")
 async def get_groups():
-    from cli_lib.user_db import load_groups
+    from shared.user_data import load_groups
     return load_groups()
 
 
 @router.put("/groups")
 async def save_groups(body: dict):
-    from cli_lib.user_db import save_groups
+    from shared.user_data import save_groups
     save_groups(body)
     return {"status": "ok"}
 
@@ -68,20 +68,20 @@ async def save_groups(body: dict):
 
 @router.get("/favorites")
 async def get_favorites():
-    from cli_lib.user_db import load_favorites
+    from shared.user_data import load_favorites
     return {"favorites": load_favorites()}
 
 
 @router.post("/favorites/{novel_id}")
 async def add_favorite(novel_id: str):
-    from cli_lib.user_db import add_favorite
+    from shared.user_data import add_favorite
     ok = add_favorite(novel_id)
     return {"ok": ok, "favorited": ok}
 
 
 @router.delete("/favorites/{novel_id}")
 async def remove_favorite(novel_id: str):
-    from cli_lib.user_db import remove_favorite
+    from shared.user_data import remove_favorite
     ok = remove_favorite(novel_id)
     return {"ok": ok, "removed": ok}
 

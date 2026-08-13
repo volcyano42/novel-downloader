@@ -5,10 +5,10 @@ import time
 import uuid
 
 from novelbase.core.exceptions import ChapterNotFoundError
-from services.backend.services.config_service import load_config, get_database_url
-from services.backend.services.engine_manager import get_cached_engine
+from shared.config import load_config, get_database_url
+from backend.services.engine_manager import get_cached_engine
 
-_log = logging.getLogger("services.backend.task_manager")
+_log = logging.getLogger("backend.task_manager")
 
 _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()

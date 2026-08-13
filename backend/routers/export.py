@@ -7,8 +7,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from services.backend.schemas import ExportRequest, ExportTaskStatus
-from services.backend.services.config_service import get_database_url
+from backend.schemas import ExportRequest, ExportTaskStatus
+from shared.config import get_database_url
 from novelbase import export as do_export, get_exporters
 
 router = APIRouter(prefix="/api/v2/export", tags=["export"])

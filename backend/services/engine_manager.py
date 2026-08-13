@@ -11,7 +11,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
-from services.backend.services.config_service import load_site_config, find_variant_options
+from shared.config import load_site_config, find_variant_options
 from novelbase import Options, create_engine
 
 

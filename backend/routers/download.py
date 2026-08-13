@@ -3,10 +3,10 @@ import asyncio
 from functools import partial
 
 from fastapi import APIRouter, HTTPException, Query
-from services.backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
-from services.backend.services.engine_manager import get_cached_engine, _browser_executor, _requests_executor
-from services.backend.services import task_manager
-from services.backend.routers.storage import _cover_to_response as encode_cover
+from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
+from backend.services.engine_manager import get_cached_engine, _browser_executor, _requests_executor
+from backend.services import task_manager
+from backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
 from novelbase.utils.registry import platform_from_url, resolve_book_url
 

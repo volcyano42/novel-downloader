@@ -21,20 +21,20 @@ def _import_server():
     importlib.import_module 对已加载模块直接命中 sys.modules 缓存，
     必须在每次导入前弹出缓存，否则第二个测试会拿到第一个测试加载时的
     模块实例（那时 assets/frontend 尚不存在，mount 不会生效）。
-    同时弹出 services.backend.main，避免两次测试共享同一 FastAPI app
+    同时弹出 backend.main，避免两次测试共享同一 FastAPI app
     导致 /api/v2/health 与根挂载重复注册。
     """
     sys.path.insert(0, SERVER_PY_DIR)
     try:
         sys.modules.pop("server", None)
-        sys.modules.pop("services.backend.main", None)
+        sys.modules.pop("backend.main", None)
         return importlib.import_module("server")
     finally:
         sys.path.pop(0)
 
 
 def _remove_frontend_mount(server):
-    """从共享的 services.backend.main.app 移除本次挂载的根 Mount（name == "frontend"）。
+    """从共享的 backend.main.app 移除本次挂载的根 Mount（name == "frontend"）。
 
     server 模块级 mount 挂在进程内共享的 FastAPI app 上，若测试后不清理，
     会永久污染后续测试（指向已删除目录）。见 I3。
@@ -74,7 +74,7 @@ def test_server_module_has_app_with_static_mount(tmp_path, monkeypatch):
 
 @pytest.mark.skip(reason="TestClient lifespan 在部分环境下挂起，待 #I4 修复")
 def test_health_route_reachable_via_test_client(tmp_path, monkeypatch):
-    """健康检查复用 services.backend.main 的 /api/v2/health（注册于 SPA fallback 与根 mount 之前，始终可达）。
+    """健康检查复用 backend.main 的 /api/v2/health（注册于 SPA fallback 与根 mount 之前，始终可达）。
 
     已知问题：TestClient 触发 async lifespan 时在 Windows / CI 的某些 Python 版本下挂起，
     底层与 Starlette/FastAPI 的事件循环管理有关，暂时 skip 等待 #I4 修复。

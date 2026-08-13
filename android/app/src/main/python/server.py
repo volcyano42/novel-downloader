@@ -51,7 +51,7 @@ APP_DATA = get_app_data()
 os.environ["NLD_APP_DATA"] = str(APP_DATA)  # config_service.py 优先读此 env
 ensure_app_data_writable()
 
-from services.backend.main import app  # noqa: E402  （现有 FastAPI app）
+from backend.main import app  # noqa: E402  （现有 FastAPI app）
 
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 

@@ -1,8 +1,8 @@
-"""Tests for services.backend.schemas.export_config."""
+"""Tests for backend.schemas.export_config."""
 import pytest
 from pydantic import ValidationError
 
-from services.backend.schemas.export_config import (
+from backend.schemas.export_config import (
     DownloadConfigExportOptions,
     Epub3ExtensionDetail,
 )
