@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import random
 import threading
@@ -6,16 +7,28 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
+import httpx
 import requests
 from requests.adapters import HTTPAdapter
-from requests.structures import CaseInsensitiveDict
 from urllib3.util.retry import Retry
 
 from .exceptions import NetworkError
 from .options import Options, BrowserOptions, APIOptions, RequestsOptions
+from ..utils.encoding import detect_encoding
 from ..utils.logger import get_logger, mask_key
 
 _log = get_logger("novelbase.core.engine")
+
+
+def _resolve_proxy(proxies: dict | None) -> httpx.Proxy | None:
+    """httpx>=0.26 的 proxy 参数只接受单个代理；多协议字典按 https/http 优先取一个。"""
+    if not proxies:
+        return None
+    for scheme in ("https", "http"):
+        url = proxies.get(scheme)
+        if url:
+            return httpx.Proxy(url)
+    return httpx.Proxy(next(iter(proxies.values())))
 
 
 class Engine(ABC):
@@ -314,81 +327,85 @@ class RequestsEngine(Engine):
         super().__init__()
         self.name = "requests"
         self.options = options
-        self._session_local = threading.local()
-        self._session_lock = threading.Lock()
-        self._sessions: list[requests.Session] = []
+        self._client = httpx.Client(
+            headers=options.headers,
+            cookies=options.cookies,
+            proxy=_resolve_proxy(options.proxies),
+            follow_redirects=True,
+            timeout=options.timeout,
+            transport=httpx.HTTPTransport(retries=options.retry_times),
+        )
+        self._async_client = None
 
     def update_options(self, options: RequestsOptions) -> None:
         for attr in ("delay", "timeout", "retry_times", "backoff_factor", "headers", "cookies", "proxies"):
             if hasattr(options, attr):
                 setattr(self.options, attr, getattr(options, attr))
 
-    # ── Session 管理 ─────────────────────────────────────────────
-
-    def _create_session(self) -> requests.Session:
-        retry_strategy = Retry(
-            total=self.options.retry_times,
-            backoff_factor=self.options.backoff_factor,
-            status_forcelist=[500, 502, 503, 504],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session = requests.Session()
-        session.mount("https://", adapter)
-        if self.options.proxies:
-            session.proxies = self.options.proxies
-        if self.options.headers:
-            session.headers = CaseInsensitiveDict(self.options.headers)
-        return session
-
-    def _get_session(self) -> requests.Session:
-        if not hasattr(self._session_local, 'session'):
-            with self._session_lock:
-                session = self._create_session()
-                self._sessions.append(session)
-                self._session_local.session = session
-        return self._session_local.session
-
-    # ── 请求 ─────────────────────────────────────────────────────
+    def _get_async_client(self) -> httpx.AsyncClient:
+        if self._async_client is None:
+            self._async_client = httpx.AsyncClient(
+                headers=self.options.headers,
+                cookies=self.options.cookies,
+                proxy=_resolve_proxy(self.options.proxies),
+                follow_redirects=True,
+                timeout=self.options.timeout,
+                transport=httpx.AsyncHTTPTransport(retries=self.options.retry_times),
+            )
+        return self._async_client
 
     def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
         _log.debug("Requests fetch_text: url=%s", mask_key(url[:120]))
-        session = self._get_session()
         try:
-            response = session.get(
-                url,
-                timeout=(10, self.options.timeout),
-                cookies=self.options.cookies,
-            )
-        except requests.RequestException as e:
+            response = self._client.get(url)
+        except httpx.HTTPError as e:
             raise NetworkError(f"GET failed: {e}", url=url) from e
 
-        response.encoding = encoding or response.apparent_encoding or 'utf-8'
+        enc = encoding or detect_encoding(response.content)
+        text = response.content.decode(enc, errors="replace")
         if not skip_delay:
             time.sleep(random.uniform(*self.options.delay))
-        _log.debug("Requests fetch_text ok: len=%s", len(response.text))
-        return response.text
+        _log.debug("Requests fetch_text ok: len=%s", len(text))
+        return text
 
     def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
-        session = self._get_session()
         try:
-            response = session.get(
-                url,
-                timeout=(10, self.options.timeout),
-                cookies=self.options.cookies,
-            )
-        except requests.RequestException as e:
+            response = self._client.get(url)
+        except httpx.HTTPError as e:
             raise NetworkError(f"GET failed: {e}", url=url) from e
-
-        response.encoding = 'utf-8'
         if not skip_delay:
             time.sleep(random.uniform(*self.options.delay))
         return response.json()
 
+    async def async_fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        client = self._get_async_client()
+        response = await client.get(url)
+        enc = encoding or detect_encoding(response.content)
+        if not skip_delay:
+            await asyncio.sleep(random.uniform(*self.options.delay))
+        return response.content.decode(enc, errors="replace")
+
+    async def async_fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
+        client = self._get_async_client()
+        response = await client.get(url)
+        if not skip_delay:
+            await asyncio.sleep(random.uniform(*self.options.delay))
+        return response.json()
+
     def close(self) -> None:
         super().close()
-        for session in self._sessions:
+        try:
+            self._client.close()
+        except Exception:
+            pass
+        if self._async_client is not None:
             try:
-                session.close()
+                # AsyncClient.close() 是异步方法，需在事件循环里关；这里尽力关闭
+                import asyncio as _aio
+                try:
+                    _aio.get_running_loop()
+                except RuntimeError:
+                    _aio.run(self._async_client.aclose())
             except Exception:
                 pass
 
