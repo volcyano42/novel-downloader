@@ -8,9 +8,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from .exceptions import NetworkError
 from .options import Options, BrowserOptions, APIOptions, RequestsOptions
@@ -74,107 +71,110 @@ class APIEngine(Engine):
         super().__init__()
         self.name = "API"
         self.options = options
-        self._session_local = threading.local()
-        self._session_lock = threading.Lock()
-        self._sessions: list[requests.Session] = []
+        self._client = httpx.Client(
+            timeout=options.timeout,
+            follow_redirects=True,
+            transport=httpx.HTTPTransport(retries=options.retry_times),
+        )
+        self._async_client = None
 
     def update_options(self, options: APIOptions) -> None:
         for attr in ("delay", "timeout", "retry_times", "backoff_factor", "key", "params"):
             if hasattr(options, attr):
                 setattr(self.options, attr, getattr(options, attr))
 
-    def _create_session(self) -> requests.Session:
-        retry_strategy = Retry(
-            total=self.options.retry_times,
-            backoff_factor=self.options.backoff_factor,
-            status_forcelist=[500, 502, 503, 504],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session = requests.Session()
-        session.mount("https://", adapter)
-        return session
-
-    def _get_session(self) -> requests.Session:
-        if not hasattr(self._session_local, 'session'):
-            with self._session_lock:
-                session = self._create_session()
-                self._sessions.append(session)
-                self._session_local.session = session
-        return self._session_local.session
-
-    def _requests_get(self, url: str, skip_delay: bool = False, **kwargs) -> requests.Response:
-        """执行 GET 请求，统一处理延时、编码和异常。"""
-        session = self._get_session()
-        try:
-            response = session.get(
-                url=url,
-                params=self.options.params or None,
-                timeout=(10, self.options.timeout),
+    def _get_async_client(self) -> httpx.AsyncClient:
+        if self._async_client is None:
+            self._async_client = httpx.AsyncClient(
+                timeout=self.options.timeout,
+                follow_redirects=True,
+                transport=httpx.AsyncHTTPTransport(retries=self.options.retry_times),
             )
-        except requests.RequestException as e:
-            raise NetworkError(f"GET failed: {e}", url=url) from e
+        return self._async_client
 
-        response.encoding = 'utf-8'
-        if not skip_delay:
-            time.sleep(random.uniform(*self.options.delay))
-        return response
-
-    def _request_post(self, url: str, post_data: dict[str, Any] | None = None, skip_delay: bool = False, **kwargs) -> requests.Response:
-        """执行 POST 请求，统一处理延时、编码和异常。"""
-        if post_data is None:
-            raise NetworkError(
-                "APIEngine.fetch_* requires post_data kwarg",
-                url=url,
-            )
-
-        # 合并 APIOptions.params（若有）到 post_data
+    def _merge_post_data(self, post_data: dict[str, Any]) -> dict[str, Any]:
         if self.options.params:
             merged = dict(self.options.params)
             merged.update(post_data)
-            post_data = merged
+            return merged
+        return post_data
 
-        session = self._get_session()
-        try:
-            response = session.post(
-                url=url,
-                data=post_data,
-                timeout=(10, self.options.timeout),
-            )
-        except requests.RequestException as e:
-            raise NetworkError(f"POST failed: {e}", url=url) from e
-
-        response.encoding = 'utf-8'
-        if not skip_delay:
-            time.sleep(random.uniform(*self.options.delay))
-        return response
-
-    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+    def fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
         post_data = kwargs.pop('post_data', None)
         _log.debug("API fetch_text: url=%s", mask_key(url[:120]))
-        if post_data is not None:
-            response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
-        else:
-            response = self._requests_get(url, skip_delay=skip_delay, **kwargs)
-        if encoding:
-            response.encoding = encoding
-        _log.debug("API fetch_text ok: len=%s", len(response.text))
-        return response.text
+        try:
+            if post_data is not None:
+                response = self._client.post(url, data=self._merge_post_data(post_data))
+            else:
+                response = self._client.get(url, params=self.options.params or None)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"API request failed: {e}", url=url) from e
+        enc = encoding or detect_encoding(response.content)
+        text = response.content.decode(enc, errors="replace")
+        if not skip_delay:
+            time.sleep(random.uniform(*self.options.delay))
+        _log.debug("API fetch_text ok: len=%s", len(text))
+        return text
 
-    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
+    def fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
         post_data = kwargs.pop('post_data', None)
         _log.debug("API fetch_json: url=%s", mask_key(url[:120]))
-        if post_data is not None:
-            response = self._request_post(url, post_data=post_data, skip_delay=skip_delay, **kwargs)
-        else:
-            response = self._requests_get(url, skip_delay=skip_delay, **kwargs)
+        try:
+            if post_data is not None:
+                response = self._client.post(url, data=self._merge_post_data(post_data))
+            else:
+                response = self._client.get(url, params=self.options.params or None)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"API request failed: {e}", url=url) from e
+        if not skip_delay:
+            time.sleep(random.uniform(*self.options.delay))
+        return response.json()
+
+    async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
+        post_data = kwargs.pop('post_data', None)
+        client = self._get_async_client()
+        _log.debug("API async_fetch_text: url=%s", mask_key(url[:120]))
+        try:
+            if post_data is not None:
+                response = await client.post(url, data=self._merge_post_data(post_data))
+            else:
+                response = await client.get(url, params=self.options.params or None)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"API request failed: {e}", url=url) from e
+        enc = encoding or detect_encoding(response.content)
+        if not skip_delay:
+            await asyncio.sleep(random.uniform(*self.options.delay))
+        return response.content.decode(enc, errors="replace")
+
+    async def async_fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
+        post_data = kwargs.pop('post_data', None)
+        client = self._get_async_client()
+        _log.debug("API async_fetch_json: url=%s", mask_key(url[:120]))
+        try:
+            if post_data is not None:
+                response = await client.post(url, data=self._merge_post_data(post_data))
+            else:
+                response = await client.get(url, params=self.options.params or None)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"API request failed: {e}", url=url) from e
+        if not skip_delay:
+            await asyncio.sleep(random.uniform(*self.options.delay))
         return response.json()
 
     def close(self) -> None:
         super().close()
-        for session in self._sessions:
+        try:
+            self._client.close()
+        except Exception:
+            pass
+        if self._async_client is not None:
             try:
-                session.close()
-            except (OSError, AttributeError):
+                import asyncio as _aio
+                try:
+                    _aio.get_running_loop()
+                except RuntimeError:
+                    _aio.run(self._async_client.aclose())
+            except Exception:
                 pass
 
 class BrowserEngine(Engine):
