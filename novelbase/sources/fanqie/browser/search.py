@@ -1,4 +1,4 @@
-import requests
+import httpx
 
 from .._common import parse_search_result
 
@@ -9,7 +9,7 @@ def search(query: str, engine, **kwargs) -> list:
         f"?aid=1967&offset=0&q={query}"
     )
     try:
-        data = requests.get(search_url).json()
+        data = httpx.get(search_url, follow_redirects=True).json()
     except Exception:
         return []
     return list(parse_search_result(data=data))

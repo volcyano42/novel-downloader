@@ -2,7 +2,7 @@ import json
 import re
 import time
 
-import requests
+import httpx
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError, NovelNotFoundError, ParseError
@@ -95,8 +95,8 @@ def parse_novel_info(html: str, url) -> Novel:
     except AttributeError as exc:
         raise ParseError("Qidian novel info page missing expected element", detail=str(exc))
     try:
-        book_cover_data = requests.get(book_cover_url, timeout=10).content
-    except requests.RequestException:
+        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
+    except httpx.HTTPError:
         book_cover_data = b""
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
 

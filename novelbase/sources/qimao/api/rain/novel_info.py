@@ -3,7 +3,7 @@
 from ..._common import _api_url, standardize_id
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
-import requests
+import httpx
 from box import Box
 
 
@@ -30,8 +30,8 @@ def novel_info(url: str, engine, **kwargs):
 
     cover_url = book.get("image_link", "")
     try:
-        book_cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
-    except requests.RequestException:
+        book_cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
+    except httpx.HTTPError:
         book_cover_data = b""
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 

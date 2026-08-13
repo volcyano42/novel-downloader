@@ -2,7 +2,7 @@ import json
 import re
 from typing import Any
 
-import requests
+import httpx
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import ChapterNotFoundError, NovelNotFoundError, ParseError
@@ -133,14 +133,14 @@ def resolve_changdunovel(url: str) -> str:
         return f"https://fanqienovel.com/page/{bid}"
     # 兜底：发请求跟随重定向提取 /t/ 短链
     try:
-        r = requests.get(url, allow_redirects=True, timeout=10)
+        r = httpx.get(url, follow_redirects=True, timeout=10)
         qs = parse_qs(urlparse(r.url).query)
         bid = qs.get("book_id", [None])[0]
         if bid and bid.isdigit():
             return f"https://fanqienovel.com/page/{bid}"
         book_id = standardize_id(r.url)
         return f"https://fanqienovel.com/page/{book_id}"
-    except (requests.RequestException, ValueError):
+    except (httpx.HTTPError, ValueError):
         return url
 
 
@@ -194,8 +194,8 @@ def parse_novel_info(html: str) -> Novel:
 
     book_cover_url = page_data.get("thumbUri")
     try:
-        book_cover_data = requests.get(book_cover_url, timeout=10).content
-    except requests.RequestException:
+        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
+    except httpx.HTTPError:
         book_cover_data = b""
     cover_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
     chapter_list_with_volume = json_data.get("page", {}).get("chapterListWithVolume", {})
@@ -361,8 +361,8 @@ def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
         with ThreadPoolExecutor(max_workers=5) as pool:
             def _download_one(task: dict) -> tuple[int, bytes]:
                 try:
-                    return (task.get("_idx", 0), requests.get(task["url"], timeout=10).content)
-                except requests.RequestException:
+                    return (task.get("_idx", 0), httpx.get(task["url"], follow_redirects=True, timeout=10).content)
+                except httpx.HTTPError:
                     return (task.get("_idx", 0), b"")
             # 标记原始顺序
             for i, t in enumerate(img_tasks):

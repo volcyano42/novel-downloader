@@ -2,7 +2,7 @@
 import re
 import logging
 
-import requests
+import httpx
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import ChapterNotFoundError, NovelNotFoundError, ParseError
@@ -104,8 +104,8 @@ def parse_novel_info(html: str, *, url: str = ""):
     cover_img = soup.select_one(".wrap-pic img")
     cover_url = cover_img.get("src", "") if cover_img else ""
     try:
-        cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
-    except requests.RequestException:
+        cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
+    except httpx.HTTPError:
         cover_data = b""
     cover = Illustration(raw_data=cover_data, alt=name, url=cover_url)
     serial = 0

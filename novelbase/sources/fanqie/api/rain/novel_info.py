@@ -1,6 +1,6 @@
 import json
 
-import requests
+import httpx
 from box.box import Box
 
 from novelbase.core.exceptions import NovelNotFoundError
@@ -42,8 +42,8 @@ def novel_info(url: str, engine, **kwargs):
 
     cover_url = data.get("thumb_url", "")
     try:
-        book_cover_data = requests.get(cover_url, timeout=10).content if cover_url else b""
-    except requests.RequestException:
+        book_cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
+    except httpx.HTTPError:
         book_cover_data = b""
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 

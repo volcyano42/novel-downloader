@@ -1,5 +1,5 @@
 """92xs 搜索 — POST 到 /modules/article/search.php。"""
-import requests
+import httpx
 from bs4 import BeautifulSoup
 from novelbase.models.novel import SearchResult
 
@@ -9,7 +9,7 @@ SEARCH_URL = "http://www.92xs.info/modules/article/search.php"
 def search(query: str, engine, **kwargs) -> list[SearchResult]:
     """POST 搜索，解析返回的 HTML 表格。"""
     try:
-        resp = requests.post(
+        resp = httpx.post(
             SEARCH_URL,
             data={
                 "searchtype": "articlename",
@@ -17,9 +17,10 @@ def search(query: str, engine, **kwargs) -> list[SearchResult]:
                 "searchtype2": "author",
             },
             timeout=15,
+            follow_redirects=True,
         )
         resp.encoding = resp.apparent_encoding or "utf-8"
-    except requests.RequestException:
+    except httpx.HTTPError:
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")

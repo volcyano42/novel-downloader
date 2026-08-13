@@ -1,4 +1,4 @@
-import requests
+import httpx
 
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
@@ -25,8 +25,8 @@ def novel_info(url: str, engine, **kwargs):
 
     book_cover_url = data.get('cover')
     try:
-        book_cover_data = requests.get(book_cover_url, timeout=10).content
-    except requests.RequestException:
+        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
+    except httpx.HTTPError:
         book_cover_data = b""
     name = data.get('title')
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
