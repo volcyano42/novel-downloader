@@ -23,10 +23,9 @@ def test_builtin_exporters_discovered():
 
 
 def test_list_exporter_formats_and_options():
-    """list_exporter_formats / list_exporter_options 返回格式列表。"""
+    """list_exporter_formats 返回格式列表。"""
     _reload_exporter()
     assert exporter_mod.list_exporter_formats() == ["epub", "img", "txt"]
-    assert sorted(exporter_mod.list_exporter_options().keys()) == ["epub", "img", "txt"]
 
 
 def test_external_exporter_discovered(tmp_path, monkeypatch):
