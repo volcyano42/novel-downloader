@@ -59,7 +59,7 @@ mkdir -p "$DIST_DIR"
 
 # ── 1. 构建前端 ──
 echo "--- 构建前端 ($(date +%H:%M:%S)) ---"
-( cd services/frontend
+( cd frontend
   if [ ! -d node_modules ]; then
       npm install --registry=https://registry.npmmirror.com || npm install
   fi
@@ -123,8 +123,8 @@ cp -r novelbase "$DIST_DIR/novelbase"
 # 注意：目标目录不预建（cp -r 会嵌套复制成 backend/backend）
 mkdir -p "$DIST_DIR/services"
 cp -r services/backend "$DIST_DIR/services/backend"
-mkdir -p "$DIST_DIR/services/frontend"
-cp -r services/frontend/dist "$DIST_DIR/services/frontend/dist"
+mkdir -p "$DIST_DIR/frontend"
+cp -r frontend/dist "$DIST_DIR/frontend/dist"
 mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
 # 根目录模块（services/backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
@@ -177,7 +177,7 @@ echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
 SERVER_PID=""
 cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null; exit 0; }
 trap cleanup INT TERM
-"$PY" -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
+"$PY" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
 # 等待服务就绪后打开浏览器
@@ -203,7 +203,7 @@ echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."
 SERVER_PID=""
 cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null; exit 0; }
 trap cleanup INT TERM
-python3 -m uvicorn services.backend.main:app --host 0.0.0.0 --port 8000 &
+python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 
 # 等待服务就绪后打开浏览器

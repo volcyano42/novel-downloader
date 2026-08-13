@@ -56,10 +56,10 @@ try {
         "--output-filename=$exeName",
         "--include-package=novelbase",
         "--include-package=novelbase.sources",
-        "--include-package=services.backend",
+        "--include-package=backend",
         "--include-module=init_config",
         "--include-data-dir=template=template",
-        "--include-data-dir=services/frontend/dist=services/frontend/dist",
+        "--include-data-dir=frontend/dist=frontend/dist",
         "--assume-yes-for-downloads",
         "--msvc=latest",
         "services/backend/main.py"

@@ -146,7 +146,7 @@ if not defined CHROME_FOUND (
 )
 
 echo 正在启动 novel-downloader-web...
-start "" /B python\python.exe -m uvicorn services.backend.main:app --host 127.0.0.1 --port 8000
+start "" /B python\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 echo 等待服务就绪...
 :wait
