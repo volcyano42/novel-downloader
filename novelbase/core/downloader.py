@@ -53,12 +53,12 @@ def list_sources() -> list[str]:
 
 def get_exporters() -> dict[str, Callable]:
     """返回所有已注册的导出函数（{format: export_func}）。"""
-    from ..utils.registry import register_exporter
+    from ..exporter import register_exporter
     return register_exporter()
 
 
 def get_exporter_options() -> dict[str, type[ExportOptions]]:
-    from ..utils.registry import register_export_options
+    from ..exporter import register_export_options
     return register_export_options()
 
 
@@ -193,7 +193,7 @@ def export(novel: Novel, options: ExportOptions | None = None, format: str | Non
         options: 导出选项。
         format:  可选导出格式覆盖。
     """
-    from ..utils.registry import register_exporter
+    from ..exporter import register_exporter
 
     opt = options
     if opt is None or not opt.enabled:

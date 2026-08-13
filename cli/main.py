@@ -125,7 +125,7 @@ def _get_engine(platform: str, mode: str):
 
     # 注册导出格式 — 单格式模式
     format_configs = load_format_configs()
-    from novelbase.utils.registry import register_export_options
+    from novelbase.exporter import register_export_options
     _opt_cls_map = register_export_options()
     group = cfg.get("group", "default")
     active_format = next(iter(format_configs), None)  # 取第一个配置的格式
@@ -191,7 +191,7 @@ def cmd_export(args):
     from cli.config import load_groups
     from cli.core import _get_storage
     from novelbase import export
-    from novelbase.utils.registry import register_export_options
+    from novelbase.exporter import register_export_options
 
     storage = _get_storage()
     novels = list(storage.iter_metas())

@@ -173,7 +173,7 @@ def _do_download_inner(
                 fmt_cfg = format_configs.get(fmt, {})
                 if not fmt_cfg:
                     continue
-                from novelbase.utils.registry import register_export_options
+                from novelbase.exporter import register_export_options
                 opt_cls_map = register_export_options()
                 opt_cls = opt_cls_map.get(fmt)
                 if opt_cls is None:
