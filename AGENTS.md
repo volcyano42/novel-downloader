@@ -8,21 +8,21 @@
 # 后端导入验证
 python -c "from novelbase import *; print('OK')"
 
-# 运行测试（118 passed）
+# 运行测试（152 passed）
 python -m pytest tests/ -v --tb=short
 
 # 启动 CLI（交互式）
-python main.py
+python -m cli
 
 # 启动 CLI（非交互）
-python cli.py search --platform fanqie "关键词"
-python cli.py download --url "https://..." --mode requests
+python -m cli search --platform fanqie "关键词"
+python -m cli download --url "https://..." --mode requests
 
 # 启动 FastAPI 后端
-uvicorn services.backend.main:app --reload
+uvicorn backend.main:app --reload
 
 # 前端
-cd services/frontend
+cd frontend
 npm run dev              # 开发服务器
 npm run build            # 生产构建
 npx tsc --noEmit --project tsconfig.app.json   # 类型检查
