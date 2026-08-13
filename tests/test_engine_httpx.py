@@ -86,3 +86,31 @@ def test_api_engine_async_fetch_json_post(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["token"] == "abc"  # params 合并进 post_data
     engine.close()
+
+
+def _browser_engine(monkeypatch):
+    # 避免真实启动 Chromium：monkeypatch _init_browser
+    import novelbase.core.engine as eng
+    monkeypatch.setattr(eng.BrowserEngine, "_init_browser", lambda self: None)
+    from novelbase.core.options import BrowserOptions
+    return eng.BrowserEngine(BrowserOptions(delay=(0, 0), headless=True))
+
+
+def test_browser_engine_has_async_methods(monkeypatch):
+    engine = _browser_engine(monkeypatch)
+    assert asyncio.iscoroutinefunction(engine.async_fetch_text)
+    assert asyncio.iscoroutinefunction(engine.async_fetch_json)
+
+
+def test_browser_engine_async_delegates_to_sync(monkeypatch):
+    engine = _browser_engine(monkeypatch)
+    calls = []
+
+    def fake_fetch_text(url, skip_delay=False, encoding=None, **kwargs):
+        calls.append(url)
+        return "<html>ok</html>"
+
+    monkeypatch.setattr(engine, "fetch_text", fake_fetch_text)
+    result = asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
+    assert result == "<html>ok</html>"
+    assert calls == ["http://x"]

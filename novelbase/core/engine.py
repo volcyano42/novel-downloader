@@ -303,6 +303,16 @@ class BrowserEngine(Engine):
         text = self.fetch_text(url=url, skip_delay=skip_delay, **kwargs)
         return json.loads(text)
 
+    async def async_fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        return await asyncio.to_thread(
+            self.fetch_text, url=url, skip_delay=skip_delay, encoding=encoding, **kwargs
+        )
+
+    async def async_fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
+        return await asyncio.to_thread(
+            self.fetch_json, url=url, skip_delay=skip_delay, **kwargs
+        )
+
     def close(self) -> None:
         super().close()
         for page in self._page_pool:
