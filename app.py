@@ -21,7 +21,7 @@ def main():
 
     # 启动后端 (uvicorn)
     backend = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "services.backend.main:app",
+        [sys.executable, "-m", "uvicorn", "backend.main:app",
          "--host", "0.0.0.0", "--port", "8000"],
         cwd=str(ROOT),
         stdout=subprocess.PIPE,

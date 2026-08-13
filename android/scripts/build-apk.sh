@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 (cd ../services/frontend && npm ci && npm run build)
 
 # 2. 复制 Python 运行时模块进 Chaquopy 打包目录（app/src/main/python/，构建产物不提交 git）
-#    server.py 运行时 import 链：services.backend.* / init_config / template / 前端静态文件
+#    server.py 运行时 import 链：backend.* / init_config / template / 前端静态文件
 rm -rf app/src/main/python/services app/src/main/python/init_config.py \
        app/src/main/python/template app/src/main/python/frontend
 mkdir -p app/src/main/python/services
