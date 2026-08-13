@@ -42,6 +42,7 @@ Thumbs.db
 
 # 临时测试脚本
 _*.py
+!__init__.py
 
 # 类型检查缓存
 .mypy_cache/
