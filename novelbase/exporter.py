@@ -19,7 +19,12 @@ from typing import Callable
 
 from .core.options import ExportOptions
 
-__all__ = ["register_exporter", "register_export_options"]
+__all__ = [
+    "register_exporter",
+    "register_export_options",
+    "list_exporter_formats",
+    "list_exporter_options",
+]
 
 _PRIVATE_EXPORTERS_ROOT: str | None = os.environ.get("NLD_PRIVATE_EXPORTERS")
 
@@ -148,3 +153,13 @@ def register_export_options() -> dict[str, type[ExportOptions]]:
         _, options = _scan_exporters()
         _cache_export_opts = options
     return _cache_export_opts
+
+
+def list_exporter_formats() -> list[str]:
+    """列出所有可用导出格式名（对称 source.list_sources）。"""
+    return sorted(register_exporter().keys())
+
+
+def list_exporter_options() -> dict[str, type[ExportOptions]]:
+    """返回所有导出格式的 Options 类映射 {format: OptionsClass}。"""
+    return register_export_options()
