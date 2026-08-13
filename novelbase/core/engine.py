@@ -52,6 +52,16 @@ class Engine(ABC):
         """GET/POST 请求返回解析后的 JSON 对象。"""
         ...
 
+    @abstractmethod
+    async def async_fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        """异步版 fetch_text（GET/POST 返回纯文本）。"""
+        ...
+
+    @abstractmethod
+    async def async_fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict:
+        """异步版 fetch_json（GET/POST 返回解析后的 JSON）。"""
+        ...
+
     def close(self) -> None:
         """释放所有资源（进程退出前调用）。"""
         Engine._instances.pop(self._registry_key, None)

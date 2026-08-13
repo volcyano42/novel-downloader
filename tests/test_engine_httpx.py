@@ -114,3 +114,9 @@ def test_browser_engine_async_delegates_to_sync(monkeypatch):
     result = asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
     assert result == "<html>ok</html>"
     assert calls == ["http://x"]
+
+
+def test_engine_base_has_abstract_async_methods():
+    from novelbase.core.engine import Engine
+    assert "async_fetch_text" in Engine.__abstractmethods__
+    assert "async_fetch_json" in Engine.__abstractmethods__
