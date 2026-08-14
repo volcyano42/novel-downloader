@@ -130,7 +130,6 @@ async def _do_download_inner(
     success = 0
     incomplete_count = 0
     errors: list[str] = []
-    last_title = ""
 
     sem = asyncio.Semaphore(max_workers)
 
@@ -144,6 +143,9 @@ async def _do_download_inner(
                 return True, ch.title, ""
             except Exception as e:
                 return False, ch.title, str(e)
+            finally:
+                # 每章完成立即推进进度条（逐章实时；每章恰好推进一次，不重复计数）
+                _advance_progress(progress, task, last_title=ch.title)
 
     with progress:
         results = await asyncio.gather(*(_download_one(ch) for ch in to_download))
@@ -153,8 +155,6 @@ async def _do_download_inner(
             else:
                 incomplete_count += 1
                 errors.append(f"  [{title}]: {err}")
-            _advance_progress(progress, task, last_title=last_title)
-            last_title = title
 
     print(f"\n下载完成: 成功 {success}, 跳过 {skipped}, 不完整 {incomplete_count}")
     if errors:

@@ -30,7 +30,9 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
 
-    engine = get_cached_engine(platform, mode, variant=variant)
+    # get_cached_engine 是同步调用，browser 模式首次创建会启动 Chromium，
+    # 用 to_thread 移出事件循环，避免阻塞整个 FastAPI 事件循环数秒。
+    engine = await asyncio.to_thread(get_cached_engine, platform, mode, variant=variant)
     try:
         store = create_storage(StorageOptions(
             backend="sqlite",
