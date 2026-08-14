@@ -188,3 +188,29 @@ def test_requests_engine_async_fetch_images_success_and_failure(monkeypatch):
     result = asyncio.run(engine.async_fetch_images(["http://ok1", "http://fail", "http://ok2"]))
     assert result == [b"http://ok1", b"", b"http://ok2"]
 
+
+def test_api_engine_async_fetch_images_success_and_failure(monkeypatch):
+    """APIEngine 批量下载：成功项返回 bytes，失败项返回 b""。"""
+    import httpx
+
+    class FakeResponse:
+        def __init__(self, content): self.content = content
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+
+    class FakeAsyncClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url):
+            if "fail" in url:
+                raise httpx.HTTPError("boom")
+            return FakeResponse(url.encode())
+
+    monkeypatch.setattr("novelbase.core.engine.httpx.AsyncClient", FakeAsyncClient)
+    engine = _make_engine("api")
+    from novelbase.core.engine import APIEngine
+    assert isinstance(engine, APIEngine)
+    result = asyncio.run(engine.async_fetch_images(["http://ok1", "http://fail", "http://ok2"]))
+    assert result == [b"http://ok1", b"", b"http://ok2"]
+
