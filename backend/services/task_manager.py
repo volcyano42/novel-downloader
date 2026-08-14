@@ -1,4 +1,10 @@
-"""下载任务管理器 — 后台线程池、暂停/恢复、进度跟踪、真正取消。"""
+"""下载任务管理器 — asyncio 原生、暂停/恢复、进度跟踪、真正取消。
+
+create_task/list_tasks/pause_task/resume_task/delete_task 保持同步 def，
+由 FastAPI async 路由在事件循环线程里调用；下载协程通过
+asyncio.get_running_loop() + loop.create_task 调度到同一事件循环。
+"""
+import asyncio
 import logging
 import threading
 import time
@@ -11,12 +17,14 @@ from backend.services.engine_manager import get_cached_engine
 _log = logging.getLogger("backend.task_manager")
 
 _tasks: dict[str, dict] = {}
+# 单事件循环下协程之间不会在同步语句上交错，但下载协程与 create_task/
+# list_tasks 等同步函数混用时，threading.Lock 仍是最稳妥的保护（等价的
+# asyncio.Lock 无法在同步函数里 acquire）。
 _tasks_lock = threading.Lock()
 
 
-def _run_download(task: dict, mode: str, variant: str | None, platform: str):
-    """后台线程：创建 engine → 并发下载章节 → close engine，支持暂停/取消。"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+async def _run_download(task: dict, mode: str, variant: str | None, platform: str):
+    """下载协程：创建 engine → 并发下载章节 → 收尾状态，支持暂停/取消。"""
     from novelbase import resolve_meta, resolve_chapter
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
@@ -32,7 +40,7 @@ def _run_download(task: dict, mode: str, variant: str | None, platform: str):
         novel_url = task.get("novel_url", "")
         if novel_url:
             try:
-                meta = resolve_meta(novel_url, engine)
+                meta = await resolve_meta(novel_url, engine)
                 store.save_meta(meta)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
@@ -57,7 +65,7 @@ def _run_download(task: dict, mode: str, variant: str | None, platform: str):
                 with _tasks_lock:
                     task["eta"] = eta_seconds
 
-        def _download_one(ch_data: dict):
+        async def _download_one(ch_data: dict):
             # ── 取消检查（开始前）──
             if task["_cancel"].is_set():
                 return
@@ -66,7 +74,7 @@ def _run_download(task: dict, mode: str, variant: str | None, platform: str):
             if task["_pause"].is_set():
                 with _tasks_lock:
                     task["status"] = "paused"
-                task["_pause"].wait()
+                await task["_pause"].wait()
                 if task["_cancel"].is_set():
                     return
                 with _tasks_lock:
@@ -84,9 +92,9 @@ def _run_download(task: dict, mode: str, variant: str | None, platform: str):
             downloaded = None
             for attempt in range(max_retries + 1):
                 if attempt > 0:
-                    time.sleep(2 * attempt)
+                    await asyncio.sleep(2 * attempt)
                 try:
-                    downloaded = resolve_chapter(ch, engine)
+                    downloaded = await resolve_chapter(ch, engine)
                 except ChapterNotFoundError:
                     if attempt < max_retries:
                         continue
@@ -121,13 +129,20 @@ def _run_download(task: dict, mode: str, variant: str | None, platform: str):
             with _tasks_lock:
                 task["progress"] += 1
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_download_one, ch) for ch in task["chapters"]]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception:
-                    _log.warning("future.result() failed in download task", exc_info=True)
+        # 章节并发：Semaphore 限流 + gather 并发，异常按返回值收集不中断整体
+        sem = asyncio.Semaphore(max(1, max_workers))
+
+        async def _run_one(ch_data: dict):
+            async with sem:
+                await _download_one(ch_data)
+
+        results = await asyncio.gather(
+            *(_run_one(ch) for ch in task["chapters"]),
+            return_exceptions=True,
+        )
+        for r in results:
+            if isinstance(r, Exception):
+                _log.warning("章节下载协程异常", exc_info=r)
 
         # 收尾：被取消时不覆盖状态
         if task["_cancel"].is_set():
@@ -160,16 +175,17 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
         "total": len(chapters), "progress": 0, "status": "downloading",
         "error": None, "errors": [], "current_title": "",
         "chapters": ch_data, "novel_url": novel_url,
-        "_pause": threading.Event(),
-        "_cancel": threading.Event(),
+        "_pause": asyncio.Event(),
+        "_cancel": asyncio.Event(),
         "_mode": mode, "_variant": variant, "_platform": platform,
     }
     with _tasks_lock:
         _tasks[task_id] = task
 
-    t = threading.Thread(target=_run_download, args=(task, mode, variant, platform),
-                         daemon=True)
-    t.start()
+    # create_task 是同步 def，但被 async 路由调用 → 事件循环正在运行，
+    # 通过 get_running_loop() 拿当前 loop，把下载协程调度进去。
+    loop = asyncio.get_running_loop()
+    loop.create_task(_run_download(task, mode, variant, platform))
     return {"task_id": task_id, "total": len(chapters)}
 
 
@@ -233,19 +249,17 @@ def resume_task(task_id: str) -> bool:
         task["progress"] = 0
         for c in task["chapters"]:
             c["status"] = "pending"
-        t = threading.Thread(
-            target=_run_download,
-            args=(task, task.get("_mode", "browser"), task.get("_variant"),
-                  task.get("_platform", "fanqie")),
-            daemon=True,
-        )
-        t.start()
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run_download(
+            task, task.get("_mode", "browser"), task.get("_variant"),
+            task.get("_platform", "fanqie"),
+        ))
         return True
     return False
 
 
 def delete_task(task_id: str) -> bool:
-    """真正取消下载：设 _cancel 标志 + status=cancelled，后台线程检测到后停止。"""
+    """真正取消下载：设 _cancel 标志 + status=cancelled，下载协程检测到后停止。"""
     with _tasks_lock:
         task = _tasks.get(task_id)
         if not task:
