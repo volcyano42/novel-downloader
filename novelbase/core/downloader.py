@@ -67,11 +67,11 @@ def split_into_groups(target: Sequence[_T], group: int) -> tuple[Sequence[_T], .
     return tuple(target[i:i + group] for i in range(0, len(target), group))
 
 
-def search(platform: str,
-           query: str,
-           engine,
-           skip_delay: bool = False,
-           **kwargs) -> tuple[SearchResult, ...]:
+async def search(platform: str,
+                 query: str,
+                 engine,
+                 skip_delay: bool = False,
+                 **kwargs) -> tuple[SearchResult, ...]:
     """搜索小说。
 
     Args:
@@ -91,7 +91,7 @@ def search(platform: str,
             try:
                 fn = _resolve(name, mode, "search", variant=variant)
                 kwargs["skip_delay"] = skip_delay
-                results = fn(query=query, engine=engine, **kwargs)
+                results = await fn(query=query, engine=engine, **kwargs)
                 for r in results:
                     r.platform = name
                 all_results.extend(results)
@@ -104,13 +104,13 @@ def search(platform: str,
     except (ValueError, ImportError):
         raise SourceNotFoundError(f"source not found: {platform}")
     kwargs["skip_delay"] = skip_delay
-    results = fn(query=query, engine=engine, **kwargs)
+    results = await fn(query=query, engine=engine, **kwargs)
     for r in results:
         r.platform = platform
     return results
 
 
-def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
+async def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     """获取小说元数据。
 
     Args:
@@ -131,10 +131,10 @@ def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> Novel:
     variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
     fn = _resolve(name, mode, "novel_info", variant=variant)
-    return fn(url=url, engine=engine, **kwargs)
+    return await fn(url=url, engine=engine, **kwargs)
 
 
-def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> Chapters:
+async def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -> Chapters:
     """获取章节列表。
 
     Args:
@@ -155,10 +155,10 @@ def resolve_chapter_list(url: str, engine, skip_delay: bool = False, **kwargs) -
     variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
     fn = _resolve(name, mode, "chapter_list", variant=variant)
-    return fn(url=url, engine=engine, **kwargs)
+    return await fn(url=url, engine=engine, **kwargs)
 
 
-def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs) -> Chapter | None:
+async def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs) -> Chapter | None:
     """下载单个章节。
 
     Args:
@@ -182,7 +182,7 @@ def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **kwargs
     variant = _variant_for(engine)
     kwargs["skip_delay"] = skip_delay
     fn = _resolve(name, mode, "chapter_content", variant=variant)
-    return fn(chapter=chapter, engine=engine, **kwargs)
+    return await fn(chapter=chapter, engine=engine, **kwargs)
 
 
 def export(novel: Novel, options: ExportOptions | None = None, format: str | None = None, **kwargs):

@@ -1,6 +1,7 @@
 """Downloader 层测试。"""
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,9 +42,12 @@ class TestResolveChapter:
 
         with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
             with patch("novelbase.source.resolve") as mock_resolve:
-                mock_resolve.return_value = lambda chapter, engine, **kw: ch
+                async def _fake(chapter, engine, **kw):
+                    return ch
 
-                result = resolve_chapter(ch, engine)
+                mock_resolve.return_value = _fake
+
+                result = asyncio.run(resolve_chapter(ch, engine))
 
         assert result is ch
 
@@ -54,9 +58,12 @@ class TestResolveChapter:
 
         with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
             with patch("novelbase.source.resolve") as mock_resolve:
-                mock_resolve.return_value = lambda chapter, engine, **kw: None
+                async def _fake(chapter, engine, **kw):
+                    return None
 
-                result = resolve_chapter(ch, engine)
+                mock_resolve.return_value = _fake
+
+                result = asyncio.run(resolve_chapter(ch, engine))
 
         assert result is None
 
@@ -69,7 +76,7 @@ class TestResolveChapter:
 
         with patch("novelbase.core.downloader.get_source_for_id", return_value=None):
             with pytest.raises(SourceNotFoundError, match="source not found"):
-                resolve_chapter(ch, engine)
+                asyncio.run(resolve_chapter(ch, engine))
 
 
 # ── resolve_meta ─────────────────────────────────────────────────
@@ -85,8 +92,11 @@ class TestResolveMeta:
 
         with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
             with patch("novelbase.source.resolve") as mock_resolve:
-                mock_resolve.return_value = lambda url, engine, **kw: expected
+                async def _fake(url, engine, **kw):
+                    return expected
 
-                result = resolve_meta("https://fanqienovel.com/novel", engine)
+                mock_resolve.return_value = _fake
+
+                result = asyncio.run(resolve_meta("https://fanqienovel.com/novel", engine))
 
         assert result is expected
