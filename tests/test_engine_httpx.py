@@ -140,3 +140,16 @@ def test_requests_engine_close_without_async_client():
     engine.close()
     assert engine._async_client is None
 
+
+import asyncio
+import inspect
+
+def test_engine_has_async_fetch_images_abstract():
+    """Engine 基类声明 async_fetch_images 抽象方法。"""
+    from novelbase.core.engine import Engine
+    assert hasattr(Engine, "async_fetch_images")
+    method = Engine.async_fetch_images
+    assert inspect.iscoroutinefunction(method)
+    # 抽象方法：直接实例化基类会失败（已由其他抽象方法保证）
+    assert getattr(Engine.async_fetch_images, "__isabstractmethod__", False)
+

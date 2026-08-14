@@ -62,6 +62,11 @@ class Engine(ABC):
         """异步版 fetch_json（GET/POST 返回解析后的 JSON）。"""
         ...
 
+    @abstractmethod
+    async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
+        """批量下载图片字节，返回与 urls 等长的 bytes 列表（失败项为 b""）。"""
+        ...
+
     def close(self) -> None:
         """释放所有资源（进程退出前调用）。"""
         Engine._instances.pop(self._registry_key, None)
@@ -170,6 +175,10 @@ class APIEngine(Engine):
         if not skip_delay:
             await asyncio.sleep(random.uniform(*self.options.delay))
         return response.json()
+
+    async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
+        """占位实现：Task 2 将替换为真实批量下载（失败项 b""）。"""
+        raise NotImplementedError("async_fetch_images 由 Task 2 实现")
 
     def close(self) -> None:
         super().close()
@@ -323,6 +332,10 @@ class BrowserEngine(Engine):
             self.fetch_json, url=url, skip_delay=skip_delay, **kwargs
         )
 
+    async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
+        """占位实现：Task 3 将替换为真实批量下载（失败项 b""）。"""
+        raise NotImplementedError("async_fetch_images 由 Task 3 实现")
+
     def close(self) -> None:
         super().close()
         for page in self._page_pool:
@@ -411,6 +424,10 @@ class RequestsEngine(Engine):
         if not skip_delay:
             await asyncio.sleep(random.uniform(*self.options.delay))
         return response.json()
+
+    async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
+        """占位实现：Task 2 将替换为真实批量下载（失败项 b""）。"""
+        raise NotImplementedError("async_fetch_images 由 Task 2 实现")
 
     def close(self) -> None:
         super().close()
