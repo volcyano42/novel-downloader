@@ -147,7 +147,7 @@ def cmd_search(args):
     engine, format_configs = _get_engine(args.platform, args.mode)
     try:
         from novelbase.core.downloader import search
-        results = search(args.platform, args.query, engine, page=args.page)
+        results = asyncio.run(search(args.platform, args.query, engine, page=args.page))
         if not results:
             print("未找到任何结果")
             return
