@@ -1,7 +1,7 @@
 from novelbase.models.novel import SearchResult
 
 
-def search(query: str, engine, **kwargs) -> list:
+async def search(query: str, engine, **kwargs) -> list:
     page = kwargs.pop("page", 1)
     results: list[SearchResult] = []
     post_data = {
@@ -11,7 +11,7 @@ def search(query: str, engine, **kwargs) -> list:
         "method": "search",
         "type": "json"
     }
-    content = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
+    content = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
     if content.get("data"):
         book_info_list = content.get("data")

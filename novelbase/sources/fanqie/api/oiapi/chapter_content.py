@@ -3,7 +3,7 @@ from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
 from ..._common import standardize_id
 
 
-def chapter_content(chapter, engine, **kwargs):
+async def chapter_content(chapter, engine, **kwargs):
     """解析并填充content, count"""
     novel_id = standardize_id(chapter.novel_id)
     post_data = {
@@ -13,7 +13,7 @@ def chapter_content(chapter, engine, **kwargs):
         "method": "chapter",
         "type": "json"
     }
-    response = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
+    response = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
     data_list: dict = response.get('data', {})
     if not data_list:

@@ -4,11 +4,11 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def chapter_content(chapter, engine, **kwargs):
+async def chapter_content(chapter, engine, **kwargs):
     """解析并填充content, count"""
     item_id = standardize_id(chapter)
     url = _api_url(engine, type=4, itemid=item_id)
-    response = engine.fetch_json(url, **kwargs)
+    response = await engine.async_fetch_json(url, **kwargs)
 
     if response.get("code") != 0 and str(response.get("code")) != "0":
         err_msg = response.get("data", {}).get("content", "Unknown error")

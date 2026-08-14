@@ -5,10 +5,10 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def chapter_list(url: str, engine, **kwargs) -> list:
+async def chapter_list(url: str, engine, **kwargs) -> list:
     novel_id = standardize_id(url)
     url = _api_url(engine, type=3, bookid=novel_id)
-    json_data = engine.fetch_json(url, **kwargs)
+    json_data = await engine.async_fetch_json(url, **kwargs)
 
     if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
         raise ChapterNotFoundError(f"Rain API returned error code: {json_data.get('code')}")

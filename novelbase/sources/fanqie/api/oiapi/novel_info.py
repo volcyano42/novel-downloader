@@ -1,12 +1,10 @@
-import httpx
-
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
 
 from ..._common import standardize_id
 
 
-def novel_info(url: str, engine, **kwargs):
+async def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     post_data = {
         "id": novel_id,
@@ -14,7 +12,7 @@ def novel_info(url: str, engine, **kwargs):
         "method": "detail",
         "type": "json"
     }
-    json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
+    json_data = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
     data = json_data.get('data')
     if not data:
@@ -24,10 +22,7 @@ def novel_info(url: str, engine, **kwargs):
     novel_id = str(data.get('id'))
 
     book_cover_url = data.get('cover')
-    try:
-        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
-    except httpx.HTTPError:
-        book_cover_data = b""
+    book_cover_data = (await engine.async_fetch_images([book_cover_url]))[0] if book_cover_url else b""
     name = data.get('title')
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
     author = data.get('author')
@@ -40,7 +35,7 @@ def novel_info(url: str, engine, **kwargs):
         "method": "chapters",
         "type": "json"
     }
-    chapters_json = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=serial_post_data, **kwargs)
+    chapters_json = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=serial_post_data, **kwargs)
     chapter_items_volume = chapters_json.get('data', [])
     serial = sum(len(vol) for vol in chapter_items_volume)
 

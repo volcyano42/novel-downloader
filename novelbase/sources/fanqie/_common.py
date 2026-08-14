@@ -193,11 +193,8 @@ def parse_novel_info(html: str) -> Novel:
     abstract = page_data.get("abstract")
 
     book_cover_url = page_data.get("thumbUri")
-    try:
-        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
-    except httpx.HTTPError:
-        book_cover_data = b""
-    cover_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
+    # 封面只收集 URL，字节下载归 novel_info 能力函数（engine.async_fetch_images）
+    cover_image = Illustration(raw_data=b"", alt=name, url=book_cover_url) if book_cover_url else None
     chapter_list_with_volume = json_data.get("page", {}).get("chapterListWithVolume", {})
     serial = 0
     for chapters_list in chapter_list_with_volume:
@@ -247,8 +244,13 @@ def parse_chapter_list(html: str) -> Chapters:
     return Chapters(chapter_list)
 
 
-def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
-    """解析并填充content, count, images"""
+def parse_chapter_content(html: str, chapter: Chapter) -> tuple[Chapter, list[dict]] | None:
+    """解析并填充 content/count；图片只收集 URL 元信息，由调用方统一下载。
+
+    Returns:
+        (chapter, img_urls) 二元组；img_urls 为 [{"url", "alt", "insert"}, ...]。
+        页面存在 `div.muye-to-fanqie` 时返回 None。
+    """
 
     if BeautifulSoup(html, 'lxml').select_one("div.no-content"):
         raise ChapterNotFoundError("Chapter page shows no-content div")
@@ -354,30 +356,10 @@ def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
                             url=img_url, alt=picture_desc, insert=insert_pos
                         ))
 
-    # 并发下载所有图片
-    img_items: list[Illustration] = []
-    if img_tasks:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            def _download_one(task: dict) -> tuple[int, bytes]:
-                try:
-                    return (task.get("_idx", 0), httpx.get(task["url"], follow_redirects=True, timeout=10).content)
-                except httpx.HTTPError:
-                    return (task.get("_idx", 0), b"")
-            # 标记原始顺序
-            for i, t in enumerate(img_tasks):
-                t["_idx"] = i
-            results: dict[int, bytes] = {}
-            for fut in as_completed([pool.submit(_download_one, t) for t in img_tasks]):
-                idx, data = fut.result()
-                results[idx] = data
-        # 按原始顺序构造 Illustration
-        for i, t in enumerate(img_tasks):
-            img_data = results.get(i, b"")
-            img_items.append(Illustration(
-                alt=t["alt"], raw_data=img_data,
-                insert=t["insert"], url=t["url"]
-            ))
+    # 图片只收集 URL 与插入位置，不下载字节（下载归 engine.async_fetch_images）
+    img_urls: list[dict] = []
+    for t in img_tasks:
+        img_urls.append({"url": t["url"], "alt": t["alt"], "insert": t["insert"]})
 
     novel_content = separator.join(text_paragraphs)
     if '已经是最新一章' in novel_content:
@@ -385,5 +367,4 @@ def parse_chapter_content(html: str, chapter: Chapter) -> Chapter | None:
 
     chapter.count = count
     chapter.content = novel_content
-    chapter.images = tuple(img_items)
-    return chapter
+    return chapter, img_urls

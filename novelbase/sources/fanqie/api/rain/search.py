@@ -5,12 +5,12 @@ from novelbase.models.novel import SearchResult
 from ._helpers import _api_url
 
 
-def search(query: str, engine, **kwargs) -> list:
+async def search(query: str, engine, **kwargs) -> list:
     page = kwargs.pop("page", 1)
     results: list[SearchResult] = []
     offset = (page - 1) * 10
     url = _api_url(engine, type=1, keywords=query, page=offset)
-    content = engine.fetch_json(url, **kwargs)
+    content = await engine.async_fetch_json(url, **kwargs)
 
     if content.get("code") != 0 and str(content.get("code")) != "0":
         return []

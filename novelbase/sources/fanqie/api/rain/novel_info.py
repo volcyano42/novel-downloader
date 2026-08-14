@@ -1,6 +1,5 @@
 import json
 
-import httpx
 from box.box import Box
 
 from novelbase.core.exceptions import NovelNotFoundError
@@ -10,10 +9,10 @@ from ..._common import standardize_id
 from ._helpers import _api_url
 
 
-def novel_info(url: str, engine, **kwargs):
+async def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     url = _api_url(engine, type=2, bookid=novel_id)
-    json_data = engine.fetch_json(url, **kwargs)
+    json_data = await engine.async_fetch_json(url, **kwargs)
 
     if json_data.get("code") != 0 and str(json_data.get("code")) != "0":
         raise NovelNotFoundError()
@@ -41,10 +40,7 @@ def novel_info(url: str, engine, **kwargs):
     word_number = int(data.get("word_number", 0))
 
     cover_url = data.get("thumb_url", "")
-    try:
-        book_cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
-    except httpx.HTTPError:
-        book_cover_data = b""
+    book_cover_data = (await engine.async_fetch_images([cover_url]))[0] if cover_url else b""
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 
     tags: list[str] = []

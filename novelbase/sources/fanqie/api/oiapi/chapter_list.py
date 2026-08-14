@@ -4,7 +4,7 @@ from novelbase.models.novel import Chapter, Chapters
 from ..._common import standardize_id
 
 
-def chapter_list(url: str, engine, **kwargs) -> list:
+async def chapter_list(url: str, engine, **kwargs) -> list:
     novel_id = standardize_id(url)
     post_data = {
         "id": novel_id,
@@ -12,7 +12,7 @@ def chapter_list(url: str, engine, **kwargs) -> list:
         "method": "chapters",
         "type": "json"
     }
-    json_data = engine.fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
+    json_data = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
     chapter_items_volume = json_data.get('data')
     if not chapter_items_volume:
