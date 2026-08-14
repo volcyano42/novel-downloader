@@ -76,18 +76,18 @@ def _get_engine(platform: str = "fanqie"):
 # ── Download ─────────────────────────────────────────
 
 
-def _do_download_inner(
+async def _do_download_inner(
     engine, url: str, group: str,
     format_configs: dict, max_workers: int = 3, skip_delay: bool=False,
     skip_export: bool = True,
 ) -> None:
     """Core download flow (engine provided). Non-interactive: 全量下载。"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import asyncio
 
     # 1. Get metadata
     print("正在获取小说信息...")
     try:
-        novel = resolve_meta(url, engine=engine, skip_delay=skip_delay)
+        novel = await resolve_meta(url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取小说信息失败: {e}")
         return
@@ -96,7 +96,7 @@ def _do_download_inner(
     # 2. Get chapter list
     print("正在获取章节列表...")
     try:
-        chapters = resolve_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
+        chapters = await resolve_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取章节列表失败: {e}")
         return
@@ -132,28 +132,29 @@ def _do_download_inner(
     errors: list[str] = []
     last_title = ""
 
-    def _download_one(ch) -> tuple[bool, str, str]:
-        try:
-            resolved = resolve_chapter(ch, engine=engine)
-            if resolved is None:
-                return False, ch.title, "章节内容为空"
-            storage.save_chapter(novel, resolved)
-            return True, ch.title, ""
-        except Exception as e:
-            return False, ch.title, str(e)
+    sem = asyncio.Semaphore(max_workers)
+
+    async def _download_one(ch) -> tuple[bool, str, str]:
+        async with sem:
+            try:
+                resolved = await resolve_chapter(ch, engine=engine)
+                if resolved is None:
+                    return False, ch.title, "章节内容为空"
+                storage.save_chapter(novel, resolved)
+                return True, ch.title, ""
+            except Exception as e:
+                return False, ch.title, str(e)
 
     with progress:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_download_one, ch): ch for ch in to_download}
-            for fut in as_completed(futures):
-                ok, title, err = fut.result()
-                if ok:
-                    success += 1
-                else:
-                    incomplete_count += 1
-                    errors.append(f"  [{title}]: {err}")
-                _advance_progress(progress, task, last_title=last_title)
-                last_title = title
+        results = await asyncio.gather(*(_download_one(ch) for ch in to_download))
+        for ok, title, err in results:
+            if ok:
+                success += 1
+            else:
+                incomplete_count += 1
+                errors.append(f"  [{title}]: {err}")
+            _advance_progress(progress, task, last_title=last_title)
+            last_title = title
 
     print(f"\n下载完成: 成功 {success}, 跳过 {skipped}, 不完整 {incomplete_count}")
     if errors:
@@ -192,9 +193,9 @@ def _do_download_inner(
 # ── Update ───────────────────────────────────────────
 
 
-def do_update(format_configs: dict, max_workers: int = 3):
+async def do_update(format_configs: dict, max_workers: int = 3):
     """非交互更新：全部已下载小说更新到最新章节。"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import asyncio
     from cli.config import get_novel_group
 
     storage = _get_storage()
@@ -240,7 +241,7 @@ def do_update(format_configs: dict, max_workers: int = 3):
         platform = _platform_from_url(novel.url)
         engine = _get_engine(platform)
         try:
-            remote_chapters = resolve_chapter_list(novel.url, engine=engine)
+            remote_chapters = await resolve_chapter_list(novel.url, engine=engine)
             if not remote_chapters:
                 print("  无法获取远程章节")
                 continue
@@ -255,22 +256,21 @@ def do_update(format_configs: dict, max_workers: int = 3):
 
             print(f"  {len(existing)}/{len(remote_chapters)} \033[1;32m+{len(new_chapters)}\033[0m")
 
-            def _dl(ch):
-                try:
-                    resolved = resolve_chapter(ch, engine=engine)
-                    if resolved:
-                        storage.save_chapter(novel, resolved)
-                        return True
-                except Exception:
-                    pass
-                return False
+            sem = asyncio.Semaphore(max_workers)
 
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(_dl, ch): ch for ch in new_chapters}
-                ok = 0
-                for fut in as_completed(futures):
-                    if fut.result():
-                        ok += 1
+            async def _dl(ch):
+                async with sem:
+                    try:
+                        resolved = await resolve_chapter(ch, engine=engine)
+                        if resolved:
+                            storage.save_chapter(novel, resolved)
+                            return True
+                    except Exception:
+                        pass
+                    return False
+
+            results = await asyncio.gather(*(_dl(ch) for ch in new_chapters))
+            ok = sum(1 for r in results if r)
             print(f"  下载 {ok}/{len(new_chapters)} 章")
             updated += ok
 

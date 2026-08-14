@@ -10,6 +10,7 @@
 """
 
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -167,8 +168,8 @@ def cmd_download(args):
     engine, format_configs = _get_engine(_resolve_platform(args), args.mode)
     try:
         from cli.core import _do_download_inner
-        _do_download_inner(engine, args.url, args.group, format_configs,
-                           max_workers=args.workers)
+        asyncio.run(_do_download_inner(engine, args.url, args.group, format_configs,
+                                       max_workers=args.workers))
     finally:
         engine.close()
 
@@ -177,7 +178,7 @@ def cmd_update(args):
     engine, format_configs = _get_engine(args.platform, args.mode)
     try:
         from cli.core import do_update
-        do_update(format_configs, max_workers=args.workers)
+        asyncio.run(do_update(format_configs, max_workers=args.workers))
     finally:
         engine.close()
 
@@ -225,7 +226,7 @@ def cmd_info(args):
     engine, _ = _get_engine(_resolve_platform(args), args.mode)
     try:
         print(f"正在获取: {args.url}")
-        novel = resolve_meta(args.url, engine)
+        novel = asyncio.run(resolve_meta(args.url, engine))
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
