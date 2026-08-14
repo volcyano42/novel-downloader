@@ -2,14 +2,20 @@
 import httpx
 from bs4 import BeautifulSoup
 from novelbase.models.novel import SearchResult
+from novelbase.utils.encoding import detect_encoding
 
 SEARCH_URL = "http://www.92xs.info/modules/article/search.php"
 
 
-def search(query: str, engine, **kwargs) -> list[SearchResult]:
-    """POST 搜索，解析返回的 HTML 表格。"""
+async def search(query: str, engine, **kwargs) -> list[SearchResult]:
+    """POST 搜索，解析返回的 HTML 表格。
+
+    92xs 是 requests 平台，engine 的 async_fetch_text 只支持 GET；
+    这里用 engine 的异步客户端直接 POST（保留 POST body 语义）。
+    """
     try:
-        resp = httpx.post(
+        client = engine._get_async_client()
+        resp = await client.post(
             SEARCH_URL,
             data={
                 "searchtype": "articlename",
@@ -19,11 +25,12 @@ def search(query: str, engine, **kwargs) -> list[SearchResult]:
             timeout=15,
             follow_redirects=True,
         )
-        resp.encoding = resp.apparent_encoding or "utf-8"
     except httpx.HTTPError:
         return []
+    # httpx 无 apparent_encoding 属性，用项目统一的编码探测
+    text = resp.content.decode(detect_encoding(resp.content), errors="replace")
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(text, "html.parser")
     rows = soup.select("table#author tr")
     if not rows:
         return []

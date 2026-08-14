@@ -5,10 +5,10 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 
 
-def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
+async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
     """Parse and fill content, count."""
     api_url = _api_url(engine, type=4, id=chapter.novel_id, chapterid=chapter.id)
-    response = engine.fetch_json(api_url, **kwargs)
+    response = await engine.async_fetch_json(api_url, **kwargs)
 
     code = response.get("code")
     if code is not None and code != 0 and str(code) != "0":

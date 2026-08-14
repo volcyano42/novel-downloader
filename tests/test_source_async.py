@@ -171,3 +171,208 @@ class TestFanqieImagesViaEngine:
         assert novel.cover is not None
         assert novel.cover.raw_data == b"cover-bytes"
         assert novel.cover.url == "http://cover.example.com/c.jpg"
+
+
+# ═══════════════════════════════════════════════════════════
+# Task 6: qidian / qimao / 92xs 能力函数 async 化
+# ═══════════════════════════════════════════════════════════
+
+_QIDIAN_NOVEL_HTML = (
+    '<html><head><title>书名</title></head><body>'
+    '<h1 id="bookName">书名</h1>'
+    '<p class="book-desc">简介</p>'
+    '<div class="author-information"><a class="writer-name">作者</a>'
+    '<p class="book-attribute">玄幻·都市</p></div>'
+    '<p class="count"><em>12万</em></p>'
+    '<p id="book-intro-detail">详细介绍</p>'
+    '<a id="bookImg"><img src="//cover.qidian.com/novel.jpg"/></a>'
+    '<div class="catalog-all"><li>a</li></div>'
+    "</body></html>"
+)
+
+_QIMAO_RAIN_NOVEL_JSON = {
+    "code": 0,
+    "data": {
+        "book": {
+            "title": "书名",
+            "author": "作者",
+            "chapters": "10",
+            "words_num": "12345",
+            "image_link": "http://img.qimao.com/cover.jpg",
+            "intro": "简介",
+            "is_over": "0",
+            "category1_name": "都市",
+            "score": "8.5",
+        }
+    },
+}
+
+_QIMAO_CHAPTER_LIST_HTML = (
+    '<div class="qm-book-catalog-list-content">'
+    '<li><a href="/shuku/123-456/"><span class="txt">第一章</span></a></li>'
+    '<li><a href="/shuku/123-457/"><span class="txt">第二章</span></a></li>'
+    "</div>"
+)
+
+_92XS_NOVEL_HTML = (
+    '<div class="d_title"><h1>书名</h1></div>'
+    '<div class="p_author">作者：张三</div>'
+    '<div id="bookintro"><p>简介</p></div>'
+    '<div id="count"><span>都市小说</span><span>123456</span></div>'
+    '<div id="bookimg"><img src="/images/cover.jpg"/></div>'
+)
+
+_92XS_SEARCH_HTML = (
+    '<table id="author"><tr><td>书名</td><td>最新章节</td><td>作者</td><td>字数</td></tr>'
+    '<tr><td><a href="/book/9999.html">书名</a></td>'
+    "<td>最新章节</td><td>作者</td><td>100万</td></tr></table>"
+)
+
+
+class TestQidianQimao92xsCapabilitiesAreAsync:
+    """qidian/qimao/92xs 各 mode/variant 的四个能力函数全部 async def。"""
+
+    _CAP_MODULES = {
+        "qidian_requests": "novelbase.sources.qidian.requests",
+        "qidian_browser": "novelbase.sources.qidian.browser",
+        "qimao_requests": "novelbase.sources.qimao.requests",
+        "qimao_browser": "novelbase.sources.qimao.browser",
+        "qimao_rain": "novelbase.sources.qimao.api.rain",
+        "92xs_requests": "novelbase.sources.92xs.requests",
+    }
+
+    def test_all_capabilities_are_async(self):
+        import importlib
+        for label, pkg in self._CAP_MODULES.items():
+            for cap in ("search", "chapter_list", "chapter_content", "novel_info"):
+                mod = importlib.import_module(f"{pkg}.{cap}")
+                assert asyncio.iscoroutinefunction(getattr(mod, cap)), (
+                    f"{label}/{cap} 不是 async 函数"
+                )
+
+
+class TestQidianCoverViaEngine:
+    """qidian novel_info 封面下载走 engine.async_fetch_images。"""
+
+    def test_requests_novel_info_downloads_cover_via_engine(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.qidian.requests.novel_info")
+        engine = MagicMock()
+        engine.async_fetch_text = AsyncMock(return_value=_QIDIAN_NOVEL_HTML)
+        engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
+
+        novel = asyncio.run(
+            mod.novel_info("https://www.qidian.com/book/1234567890/", engine)
+        )
+
+        engine.async_fetch_images.assert_awaited_once_with(
+            ["https://cover.qidian.com/novel.jpg"]
+        )
+        assert novel.title == "书名"
+        assert novel.cover is not None
+        assert novel.cover.raw_data == b"cover-bytes"
+        assert novel.cover.url == "https://cover.qidian.com/novel.jpg"
+
+
+class TestQimaoCoverAndBrowserChapterList:
+    """qimao rain novel_info 封面走 engine；browser chapter_list 走 to_thread。"""
+
+    def test_rain_novel_info_downloads_cover_via_engine(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.qimao.api.rain.novel_info")
+        engine = MagicMock()
+        engine.options.key = "test-key"
+        engine.async_fetch_json = AsyncMock(return_value=_QIMAO_RAIN_NOVEL_JSON)
+        engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
+
+        novel = asyncio.run(
+            mod.novel_info("https://www.qimao.com/shuku/123/", engine)
+        )
+
+        engine.async_fetch_images.assert_awaited_once_with(
+            ["http://img.qimao.com/cover.jpg"]
+        )
+        assert novel.title == "书名"
+        assert novel.cover.raw_data == b"cover-bytes"
+        assert novel.cover.url == "http://img.qimao.com/cover.jpg"
+
+    def test_browser_chapter_list_uses_to_thread(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.qimao.browser.chapter_list")
+        engine = MagicMock()
+        page = MagicMock()
+        page.html = _QIMAO_CHAPTER_LIST_HTML
+        engine.new_page.return_value = page
+
+        chapters = asyncio.run(
+            mod.chapter_list("https://www.qimao.com/shuku/123-456/", engine)
+        )
+
+        engine.new_page.assert_called_once()
+        page.get.assert_called_once()
+        page.close.assert_called_once()
+        assert len(chapters) == 2
+        assert chapters[0].title == "第一章"
+
+
+class Test92xsCapabilities:
+    """92xs search 走 engine async client POST；novel_info 封面归 engine。"""
+
+    def test_search_posts_to_search_endpoint(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.92xs.requests.search")
+        engine = MagicMock()
+        client = AsyncMock()
+        resp = MagicMock()
+        resp.content = _92XS_SEARCH_HTML.encode("utf-8")
+        client.post = AsyncMock(return_value=resp)
+        engine._get_async_client.return_value = client
+
+        results = asyncio.run(mod.search("书名", engine))
+
+        engine._get_async_client.assert_called_once()
+        client.post.assert_awaited_once_with(
+            "http://www.92xs.info/modules/article/search.php",
+            data={
+                "searchtype": "articlename",
+                "searchkey": "书名",
+                "searchtype2": "author",
+            },
+            timeout=15,
+            follow_redirects=True,
+        )
+        assert len(results) == 1
+        assert results[0].title == "书名"
+        assert results[0].url == "http://www.92xs.info/book/9999.html"
+
+    def test_search_returns_empty_on_http_error(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.92xs.requests.search")
+        import httpx
+        engine = MagicMock()
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=httpx.HTTPError("boom"))
+        engine._get_async_client.return_value = client
+
+        results = asyncio.run(mod.search("书名", engine))
+
+        assert results == []
+
+    def test_novel_info_downloads_cover_via_engine(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.92xs.requests.novel_info")
+        engine = MagicMock()
+        engine.async_fetch_text = AsyncMock(return_value=_92XS_NOVEL_HTML)
+        engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
+
+        novel = asyncio.run(
+            mod.novel_info("http://www.92xs.info/book/9999.html", engine)
+        )
+
+        engine.async_fetch_images.assert_awaited_once_with(
+            ["http://www.92xs.info/images/cover.jpg"]
+        )
+        assert novel.title == "书名"
+        assert novel.author == "张三"
+        assert novel.id == "92xs_9999"
+        assert novel.cover.raw_data == b"cover-bytes"

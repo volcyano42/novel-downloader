@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 from novelbase.models.novel import Chapter
 
 
-def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
-    html = engine.fetch_text(chapter.url)
+async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
+    html = await engine.async_fetch_text(chapter.url)
     soup = BeautifulSoup(html, "html.parser")
 
     content_el = soup.select_one("#ccontent")

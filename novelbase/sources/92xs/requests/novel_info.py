@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 from novelbase.models.novel import Novel, Illustration
 
 
-def novel_info(url: str, engine, **kwargs) -> Novel:
-    html = engine.fetch_text(url)
+async def novel_info(url: str, engine, **kwargs) -> Novel:
+    html = await engine.async_fetch_text(url)
     soup = BeautifulSoup(html, "html.parser")
 
     # 书名
@@ -34,7 +34,7 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
         elif text.isdigit():
             word_count = int(text)
 
-    # 封面
+    # 封面 URL（字节由 engine.async_fetch_images 下载）
     cover: Illustration | None = None
     cover_img = soup.select_one("#bookimg img")
     if cover_img:
@@ -43,11 +43,7 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
             # 相对路径 → 绝对 URL
             if cover_url.startswith("/"):
                 cover_url = f"http://www.92xs.info{cover_url}"
-            try:
-                cover_data = __import__("requests").get(cover_url, timeout=10).content
-            except Exception:
-                cover_data = b""
-            cover = Illustration(raw_data=cover_data, url=cover_url, alt=title)
+            cover = Illustration(raw_data=b"", url=cover_url, alt=title)
 
     # 提取 book_id
     import re
@@ -56,7 +52,7 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
     m = re.search(r"(?:/book/|/html/)(\d+)", path)
     novel_id = f"92xs_{m.group(1)}" if m else ""
 
-    return Novel(
+    novel = Novel(
         title=title,
         author=author,
         id=novel_id,
@@ -67,3 +63,9 @@ def novel_info(url: str, engine, **kwargs) -> Novel:
         cover=cover,
         serial=0,  # 暂无可靠来源
     )
+    if novel.cover and novel.cover.url:
+        data = await engine.async_fetch_images([novel.cover.url])
+        novel.cover = Illustration(
+            raw_data=data[0], alt=novel.cover.alt, url=novel.cover.url
+        )
+    return novel

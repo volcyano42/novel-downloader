@@ -2,7 +2,6 @@ import json
 import re
 import time
 
-import httpx
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError, NovelNotFoundError, ParseError
@@ -94,11 +93,8 @@ def parse_novel_info(html: str, url) -> Novel:
         book_cover_url = 'https:' + soup.select_one('a#bookImg img').get('src')
     except AttributeError as exc:
         raise ParseError("Qidian novel info page missing expected element", detail=str(exc))
-    try:
-        book_cover_data = httpx.get(book_cover_url, follow_redirects=True, timeout=10).content
-    except httpx.HTTPError:
-        book_cover_data = b""
-    novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
+    # 封面字节由能力函数经 engine.async_fetch_images 下载
+    novel_image = Illustration(raw_data=b"", alt=name, url=book_cover_url)
 
     novel_id = standardize_id(url) if url else ""
 

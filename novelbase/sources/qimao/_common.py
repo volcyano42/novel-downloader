@@ -2,7 +2,6 @@
 import re
 import logging
 
-import httpx
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import ChapterNotFoundError, NovelNotFoundError, ParseError
@@ -103,11 +102,8 @@ def parse_novel_info(html: str, *, url: str = ""):
     abstract = intro_p.get_text(strip=True) if intro_p else ""
     cover_img = soup.select_one(".wrap-pic img")
     cover_url = cover_img.get("src", "") if cover_img else ""
-    try:
-        cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
-    except httpx.HTTPError:
-        cover_data = b""
-    cover = Illustration(raw_data=cover_data, alt=name, url=cover_url)
+    # 封面字节由能力函数经 engine.async_fetch_images 下载
+    cover = Illustration(raw_data=b"", alt=name, url=cover_url)
     serial = 0
     chapter_tab = soup.select_one(".qm-tab-list-item .sub-txt")
     if chapter_tab:

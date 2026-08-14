@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from novelbase.models.novel import Chapter, Chapters
 
 
-def chapter_list(url: str, engine, **kwargs) -> Chapters:
+async def chapter_list(url: str, engine, **kwargs) -> Chapters:
     # 规范化 URL：/book/{id}.html → /html/{id}/
     import re
     path = urlparse(url).path
@@ -12,7 +12,7 @@ def chapter_list(url: str, engine, **kwargs) -> Chapters:
     if m:
         url = f"http://www.92xs.info/html/{m.group(1)}/"
 
-    html = engine.fetch_text(url)
+    html = await engine.async_fetch_text(url)
     soup = BeautifulSoup(html, "html.parser")
 
     chapters: list[Chapter] = []

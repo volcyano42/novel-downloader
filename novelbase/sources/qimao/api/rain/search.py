@@ -6,12 +6,12 @@ from ..._common import _api_url, _log
 from novelbase.models.novel import SearchResult
 
 
-def search(query: str, engine, **kwargs) -> list[SearchResult]:
+async def search(query: str, engine, **kwargs) -> list[SearchResult]:
     page = kwargs.pop("page", 1)
     results: list[SearchResult] = []
     offset = (page - 1) * 10
     url = _api_url(engine, type=1, wd=query, page=offset)
-    content = engine.fetch_json(url, **kwargs)
+    content = await engine.async_fetch_json(url, **kwargs)
 
     code = content.get("code")
     if code is not None and code != 0 and str(code) != "0":

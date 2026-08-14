@@ -3,14 +3,13 @@
 from ..._common import _api_url, standardize_id
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
-import httpx
 from box import Box
 
 
-def novel_info(url: str, engine, **kwargs):
+async def novel_info(url: str, engine, **kwargs):
     novel_id = standardize_id(url)
     api_url = _api_url(engine, type=2, id=novel_id)
-    json_data = engine.fetch_json(api_url, **kwargs)
+    json_data = await engine.async_fetch_json(api_url, **kwargs)
 
     code = json_data.get("code")
     if code is not None and code != 0 and str(code) != "0":
@@ -29,10 +28,9 @@ def novel_info(url: str, engine, **kwargs):
     word_number = int(book.get("words_num", 0))
 
     cover_url = book.get("image_link", "")
-    try:
-        book_cover_data = httpx.get(cover_url, follow_redirects=True, timeout=10).content if cover_url else b""
-    except httpx.HTTPError:
-        book_cover_data = b""
+    book_cover_data = (
+        await engine.async_fetch_images([cover_url])
+    )[0] if cover_url else b""
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=cover_url)
 
     tags: list[str] = []

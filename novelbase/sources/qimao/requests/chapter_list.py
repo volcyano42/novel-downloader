@@ -8,10 +8,10 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 
 
-def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
+async def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:
     novel_id = standardize_id(url)
     url = f"https://www.qimao.com/shuku/{novel_id}/"
-    html = engine.fetch_text(url=url, **kwargs)
+    html = await engine.async_fetch_text(url=url, **kwargs)
     chapters = parse_chapter_list(html, novel_id=standardize_id(url))
     if len(chapters) == 0:
         raise ChapterNotFoundError(

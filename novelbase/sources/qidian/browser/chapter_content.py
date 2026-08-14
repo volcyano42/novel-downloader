@@ -5,9 +5,9 @@ from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 
 
-def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
+async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:
     url = chapter.url
-    html = engine.fetch_text(url=url, **kwargs)
+    html = await engine.async_fetch_text(url=url, **kwargs)
     if BeautifulSoup(html, "lxml").select_one("div.no-content"):
         raise ChapterNotFoundError("Qidian chapter page shows no-content div")
     result = parse_chapter_content(html, chapter)
