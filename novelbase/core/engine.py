@@ -342,8 +342,18 @@ class BrowserEngine(Engine):
         )
 
     async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
-        """占位实现：Task 3 将替换为真实批量下载（失败项 b""）。"""
-        raise NotImplementedError("async_fetch_images 由 Task 3 实现")
+        """图片下载用 httpx（不开 tab）。与 Requests/API 版结构一致。"""
+        sem = asyncio.Semaphore(max_workers)
+
+        async def _one(url: str) -> bytes:
+            async with sem:
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                        return (await client.get(url)).content
+                except httpx.HTTPError:
+                    return b""
+
+        return await asyncio.gather(*(_one(u) for u in urls))
 
     def close(self) -> None:
         super().close()

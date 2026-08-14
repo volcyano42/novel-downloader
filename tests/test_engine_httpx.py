@@ -214,3 +214,28 @@ def test_api_engine_async_fetch_images_success_and_failure(monkeypatch):
     result = asyncio.run(engine.async_fetch_images(["http://ok1", "http://fail", "http://ok2"]))
     assert result == [b"http://ok1", b"", b"http://ok2"]
 
+
+def test_browser_engine_async_fetch_images_uses_httpx_not_tab(monkeypatch):
+    """BrowserEngine 图片下载用 httpx，不 new_tab / get_page。"""
+    import httpx
+
+    class FakeResponse:
+        def __init__(self, content): self.content = content
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+
+    class FakeAsyncClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url):
+            return FakeResponse(url.encode())
+
+    monkeypatch.setattr("novelbase.core.engine.httpx.AsyncClient", FakeAsyncClient)
+
+    from novelbase.core.engine import BrowserEngine
+    from novelbase.core.options import BrowserOptions
+    engine = BrowserEngine.__new__(BrowserEngine)  # 不触发 __init__（避免启动 Chromium）
+    result = asyncio.run(engine.async_fetch_images(["http://a"]))
+    assert result == [b"http://a"]
+
