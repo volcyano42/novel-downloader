@@ -1,10 +1,8 @@
 """Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。"""
-import asyncio
-from functools import partial
 
 from fastapi import APIRouter, HTTPException, Query
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
-from backend.services.engine_manager import get_cached_engine, _browser_executor, _requests_executor
+from backend.services.engine_manager import get_cached_engine
 from backend.services import task_manager
 from backend.routers.storage import _cover_to_response as encode_cover
 from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
@@ -29,10 +27,6 @@ def _resolve_url(raw: str) -> str:
         raise HTTPException(400, str(e))
 
 
-def _pick_executor(mode: str):
-    return _browser_executor if mode == "browser" else _requests_executor
-
-
 @router.get("/search")
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         page: int = Query(1), mode: str = Query("browser"),
@@ -40,13 +34,11 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     from novelbase.core.downloader import get_source
 
     engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, variant=variant)
-    executor = _pick_executor(mode)
-    loop = asyncio.get_event_loop()
 
     if query.startswith("http://") or query.startswith("https://") or query.isdigit():
         try:
             url = _resolve_url(query)
-            novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
+            novel = await resolve_meta(url, engine)
             return [SearchResultData(title=novel.title, author=novel.author,
                                      url=novel.url, description=novel.description,
                                      extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
@@ -54,7 +46,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
             raise HTTPException(500, str(e))
 
     try:
-        results = await loop.run_in_executor(executor, search, platform, query, engine, page)
+        results = await search(platform, query, engine, page)
     except Exception as e:
         raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
@@ -70,10 +62,8 @@ async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"
     url = _resolve_url(body.url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, variant=variant)
-    executor = _pick_executor(mode)
-    loop = asyncio.get_event_loop()
     try:
-        novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
+        novel = await resolve_meta(url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -89,10 +79,8 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
     url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, variant=variant)
-    executor = _pick_executor(mode)
-    loop = asyncio.get_event_loop()
     try:
-        novel = await loop.run_in_executor(executor, resolve_meta, url, engine)
+        novel = await resolve_meta(url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -107,10 +95,8 @@ async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
     url = _resolve_url(url)
     platform = _platform_from_url(url)
     engine = get_cached_engine(platform, mode, variant=variant)
-    executor = _pick_executor(mode)
-    loop = asyncio.get_event_loop()
     try:
-        chapters = await loop.run_in_executor(executor, resolve_chapter_list, url, engine)
+        chapters = await resolve_chapter_list(url, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,

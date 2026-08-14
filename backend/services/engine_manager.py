@@ -8,7 +8,6 @@ import json
 import os
 import sys
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
 from shared.config import load_site_config, find_variant_options
@@ -17,8 +16,6 @@ from novelbase import Options, create_engine
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}
-_browser_executor = ThreadPoolExecutor(max_workers=1)
-_requests_executor = ThreadPoolExecutor(max_workers=4)
 
 
 def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
