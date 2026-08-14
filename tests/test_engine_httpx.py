@@ -153,3 +153,38 @@ def test_engine_has_async_fetch_images_abstract():
     # 抽象方法：直接实例化基类会失败（已由其他抽象方法保证）
     assert getattr(Engine.async_fetch_images, "__isabstractmethod__", False)
 
+
+def _make_engine(mode: str):
+    from novelbase.core.engine import create_engine
+    from novelbase.core.options import Options
+    opts = Options().set_mode(mode)
+    if mode == "requests":
+        opts.set_requests_options(headers={}, cookies={}, proxies={}, delay=[0, 0])
+    elif mode == "api":
+        opts.set_api_options(name="test", key="", delay=[0, 0])
+    return create_engine(opts)
+
+
+def test_requests_engine_async_fetch_images_success_and_failure(monkeypatch):
+    """批量下载：成功项返回 bytes，失败项返回 b""。"""
+    import httpx
+
+    class FakeResponse:
+        def __init__(self, content): self.content = content
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+
+    class FakeAsyncClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url):
+            if "fail" in url:
+                raise httpx.HTTPError("boom")
+            return FakeResponse(url.encode())
+
+    monkeypatch.setattr("novelbase.core.engine.httpx.AsyncClient", FakeAsyncClient)
+    engine = _make_engine("requests")
+    result = asyncio.run(engine.async_fetch_images(["http://ok1", "http://fail", "http://ok2"]))
+    assert result == [b"http://ok1", b"", b"http://ok2"]
+

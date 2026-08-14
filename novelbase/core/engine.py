@@ -177,8 +177,17 @@ class APIEngine(Engine):
         return response.json()
 
     async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
-        """占位实现：Task 2 将替换为真实批量下载（失败项 b""）。"""
-        raise NotImplementedError("async_fetch_images 由 Task 2 实现")
+        sem = asyncio.Semaphore(max_workers)
+
+        async def _one(url: str) -> bytes:
+            async with sem:
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                        return (await client.get(url)).content
+                except httpx.HTTPError:
+                    return b""
+
+        return await asyncio.gather(*(_one(u) for u in urls))
 
     def close(self) -> None:
         super().close()
@@ -426,8 +435,17 @@ class RequestsEngine(Engine):
         return response.json()
 
     async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
-        """占位实现：Task 2 将替换为真实批量下载（失败项 b""）。"""
-        raise NotImplementedError("async_fetch_images 由 Task 2 实现")
+        sem = asyncio.Semaphore(max_workers)
+
+        async def _one(url: str) -> bytes:
+            async with sem:
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                        return (await client.get(url)).content
+                except httpx.HTTPError:
+                    return b""
+
+        return await asyncio.gather(*(_one(u) for u in urls))
 
     def close(self) -> None:
         super().close()
