@@ -7,6 +7,7 @@
 import json
 import os
 import sys
+import threading
 import uuid
 
 from fastapi import HTTPException
@@ -16,6 +17,9 @@ from novelbase import Options, create_engine
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}
+# 保护 _engine_cache 并发读写。get_cached_engine 经 asyncio.to_thread 在
+# 多线程并发执行，check-then-create 若无锁会双创建引擎（多启一个 Chromium）。
+_engine_lock = threading.Lock()
 
 
 def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
@@ -54,13 +58,19 @@ def get_cached_engine(platform: str,
     通过 invalidate_engine 或在 lifespan shutdown 时统一清理。
     """
     key = _fingerprint(platform, mode, variant)
-    if key in _engine_cache:
-        engine = _engine_cache[key]
+    # 快速路径：缓存命中不加锁（高频，无副作用）
+    engine = _engine_cache.get(key)
+    if engine is not None:
         return engine
 
-    engine = create_engine_for_request(platform, mode, variant)
-    _engine_cache[key] = engine
-    return engine
+    # 慢路径：双重检查加锁，避免并发双创建
+    with _engine_lock:
+        engine = _engine_cache.get(key)
+        if engine is not None:
+            return engine
+        engine = create_engine_for_request(platform, mode, variant)
+        _engine_cache[key] = engine
+        return engine
 
 
 def invalidate_engine(platform: str,
@@ -68,7 +78,8 @@ def invalidate_engine(platform: str,
                       variant: str | None = None) -> bool:
     """关闭并移除指定引擎（配置更新时调用）。"""
     key = _fingerprint(platform, mode, variant)
-    engine = _engine_cache.pop(key, None)
+    with _engine_lock:
+        engine = _engine_cache.pop(key, None)
     if engine:
         engine.close()
         return True
@@ -77,9 +88,11 @@ def invalidate_engine(platform: str,
 
 def clear_engine_cache():
     """关闭所有缓存引擎（shutdown 时调用）。"""
-    for key, engine in list(_engine_cache.items()):
+    with _engine_lock:
+        engines = list(_engine_cache.values())
+        _engine_cache.clear()
+    for engine in engines:
         engine.close()
-    _engine_cache.clear()
 
 
 # ── 显式引擎实例（手动创建，key 为 engine_id）──
