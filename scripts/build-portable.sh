@@ -6,7 +6,7 @@
 #   termux                  : 内置 Python pyroot/（PYTHONHOME 重定位）或 pkg python
 # Usage: ./build-portable.sh --platform <linux-x64|linux-arm64|termux> [--version <v>] [--deps-dir <dir>] [--pyroot-dir <dir>]
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 PLATFORM=""
 VERSION=""
@@ -121,13 +121,12 @@ fi
 echo "--- 复制项目文件 ---"
 cp -r novelbase "$DIST_DIR/novelbase"
 # 注意：目标目录不预建（cp -r 会嵌套复制成 backend/backend）
-mkdir -p "$DIST_DIR/services"
-cp -r services/backend "$DIST_DIR/services/backend"
+cp -r backend "$DIST_DIR/backend"
 mkdir -p "$DIST_DIR/frontend"
 cp -r frontend/dist "$DIST_DIR/frontend/dist"
 mkdir -p "$DIST_DIR/app_data"
 cp -r app_data/config "$DIST_DIR/app_data/config"
-# 根目录模块（services/backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
+# 根目录模块（backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
 cp init_config.py "$DIST_DIR/init_config.py"
 
 # Termux 开箱即用：复制 CI 容器预装的 site-packages（PYTHONPATH 引用，用户不跑 pip）
