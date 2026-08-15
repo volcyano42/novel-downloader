@@ -407,11 +407,15 @@ class RequestsEngine(Engine):
         return self._async_client
 
     def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        post_data = kwargs.pop('post_data', None)
         _log.debug("Requests fetch_text: url=%s", mask_key(url[:120]))
         try:
-            response = self._client.get(url)
+            if post_data is not None:
+                response = self._client.post(url, data=post_data)
+            else:
+                response = self._client.get(url)
         except httpx.HTTPError as e:
-            raise NetworkError(f"GET failed: {e}", url=url) from e
+            raise NetworkError(f"Requests request failed: {e}", url=url) from e
 
         enc = encoding or detect_encoding(response.content)
         text = response.content.decode(enc, errors="replace")
@@ -430,8 +434,15 @@ class RequestsEngine(Engine):
         return response.json()
 
     async def async_fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
+        post_data = kwargs.pop('post_data', None)
         client = self._get_async_client()
-        response = await client.get(url)
+        try:
+            if post_data is not None:
+                response = await client.post(url, data=post_data)
+            else:
+                response = await client.get(url)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"Requests request failed: {e}", url=url) from e
         enc = encoding or detect_encoding(response.content)
         if not skip_delay:
             await asyncio.sleep(random.uniform(*self.options.delay))

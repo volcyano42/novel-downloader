@@ -57,6 +57,48 @@ def test_requests_engine_async_fetch_text(monkeypatch):
     engine.close()
 
 
+def test_requests_engine_async_fetch_text_post(monkeypatch):
+    """RequestsEngine async_fetch_text 支持 post_data（POST 请求）。"""
+    engine = _requests_engine()
+    calls = {}
+
+    async def fake_post(url, data=None):
+        calls["url"] = url
+        calls["data"] = data
+
+        class R:
+            content = "POST 响应".encode("utf-8")
+        return R()
+
+    monkeypatch.setattr(engine._get_async_client(), "post", fake_post)
+    result = asyncio.run(engine.async_fetch_text(
+        "http://x", post_data={"k": "v"}, skip_delay=True,
+    ))
+    assert result == "POST 响应"
+    assert calls["url"] == "http://x"
+    assert calls["data"] == {"k": "v"}
+    engine.close()
+
+
+def test_requests_engine_fetch_text_post(monkeypatch):
+    """RequestsEngine 同步 fetch_text 也支持 post_data。"""
+    engine = _requests_engine()
+    calls = {}
+
+    def fake_post(url, data=None):
+        calls["data"] = data
+
+        class R:
+            content = "POST 同步".encode("utf-8")
+        return R()
+
+    monkeypatch.setattr(engine._client, "post", fake_post)
+    result = engine.fetch_text("http://x", post_data={"a": "b"}, skip_delay=True)
+    assert result == "POST 同步"
+    assert calls["data"] == {"a": "b"}
+    engine.close()
+
+
 def _api_engine():
     opts = Options().set_mode("api").set_api_options(
         name="test", key="k", timeout=5, retry_times=1, delay=(0, 0),

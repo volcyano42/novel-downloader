@@ -322,24 +322,18 @@ class Test92xsCapabilities:
         from importlib import import_module
         mod = import_module("novelbase.sources.92xs.requests.search")
         engine = MagicMock()
-        client = AsyncMock()
-        resp = MagicMock()
-        resp.content = _92XS_SEARCH_HTML.encode("utf-8")
-        client.post = AsyncMock(return_value=resp)
-        engine._get_async_client.return_value = client
+        engine.async_fetch_text = AsyncMock(return_value=_92XS_SEARCH_HTML)
 
         results = asyncio.run(mod.search("书名", engine))
 
-        engine._get_async_client.assert_called_once()
-        client.post.assert_awaited_once_with(
+        engine.async_fetch_text.assert_awaited_once_with(
             "http://www.92xs.info/modules/article/search.php",
-            data={
+            post_data={
                 "searchtype": "articlename",
                 "searchkey": "书名",
                 "searchtype2": "author",
             },
-            timeout=15,
-            follow_redirects=True,
+            skip_delay=False,
         )
         assert len(results) == 1
         assert results[0].title == "书名"
@@ -348,11 +342,9 @@ class Test92xsCapabilities:
     def test_search_returns_empty_on_http_error(self):
         from importlib import import_module
         mod = import_module("novelbase.sources.92xs.requests.search")
-        import httpx
+        from novelbase.core.exceptions import NetworkError
         engine = MagicMock()
-        client = AsyncMock()
-        client.post = AsyncMock(side_effect=httpx.HTTPError("boom"))
-        engine._get_async_client.return_value = client
+        engine.async_fetch_text = AsyncMock(side_effect=NetworkError("boom"))
 
         results = asyncio.run(mod.search("书名", engine))
 

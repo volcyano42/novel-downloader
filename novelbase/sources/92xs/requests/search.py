@@ -1,34 +1,25 @@
 """92xs 搜索 — POST 到 /modules/article/search.php。"""
-import httpx
 from bs4 import BeautifulSoup
 from novelbase.models.novel import SearchResult
-from novelbase.utils.encoding import detect_encoding
+from novelbase.core.exceptions import NetworkError
 
 SEARCH_URL = "http://www.92xs.info/modules/article/search.php"
 
 
 async def search(query: str, engine, **kwargs) -> list[SearchResult]:
-    """POST 搜索，解析返回的 HTML 表格。
-
-    92xs 是 requests 平台，engine 的 async_fetch_text 只支持 GET；
-    这里用 engine 的异步客户端直接 POST（保留 POST body 语义）。
-    """
+    """POST 搜索，解析返回的 HTML 表格。"""
     try:
-        client = engine._get_async_client()
-        resp = await client.post(
+        text = await engine.async_fetch_text(
             SEARCH_URL,
-            data={
+            post_data={
                 "searchtype": "articlename",
                 "searchkey": query,
                 "searchtype2": "author",
             },
-            timeout=15,
-            follow_redirects=True,
+            skip_delay=kwargs.get("skip_delay", False),
         )
-    except httpx.HTTPError:
+    except NetworkError:
         return []
-    # httpx 无 apparent_encoding 属性，用项目统一的编码探测
-    text = resp.content.decode(detect_encoding(resp.content), errors="replace")
 
     soup = BeautifulSoup(text, "html.parser")
     rows = soup.select("table#author tr")
