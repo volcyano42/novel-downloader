@@ -171,8 +171,33 @@ def test_requests_engine_close_cleans_async_client():
     assert client is not None
     assert engine._async_client is not None
     engine.close()
-    # close 后 AsyncClient 应已关闭
-    assert engine._async_client.is_closed
+    # close 后 _async_client 置 None（幂等），且 client 已关闭（无泄漏）
+    assert engine._async_client is None
+    assert client.is_closed
+
+
+def test_requests_engine_close_idempotent():
+    """close 可重复调用：第二次 close 不抛异常，_async_client 保持 None。"""
+    engine = _requests_engine()
+    engine._get_async_client()
+    engine.close()
+    engine.close()  # 幂等，不抛异常
+    assert engine._async_client is None
+
+
+def test_requests_engine_close_inside_running_loop():
+    """running loop 内调用 close：走 loop.create_task 分支，不抛异常。"""
+    import asyncio
+
+    async def _run():
+        engine = _requests_engine()
+        engine._get_async_client()
+        engine.close()  # 此时有 running loop
+        assert engine._async_client is None
+        # 给后台 aclose 任务一点时间执行
+        await asyncio.sleep(0.01)
+
+    asyncio.run(_run())
 
 
 def test_requests_engine_close_without_async_client():

@@ -196,12 +196,16 @@ class APIEngine(Engine):
         except Exception:
             pass
         if self._async_client is not None:
+            client = self._async_client
+            self._async_client = None  # 先置空，保证 close 幂等
             try:
                 import asyncio as _aio
                 try:
-                    _aio.get_running_loop()
+                    loop = _aio.get_running_loop()
                 except RuntimeError:
-                    _aio.run(self._async_client.aclose())
+                    _aio.run(client.aclose())          # 无运行中 loop：同步关闭
+                else:
+                    loop.create_task(client.aclose())  # 有运行中 loop：后台关闭
             except Exception:
                 pass
 
@@ -450,7 +454,10 @@ class RequestsEngine(Engine):
 
     async def async_fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
         client = self._get_async_client()
-        response = await client.get(url)
+        try:
+            response = await client.get(url)
+        except httpx.HTTPError as e:
+            raise NetworkError(f"Requests request failed: {e}", url=url) from e
         if not skip_delay:
             await asyncio.sleep(random.uniform(*self.options.delay))
         return response.json()
@@ -475,13 +482,18 @@ class RequestsEngine(Engine):
         except Exception:
             pass
         if self._async_client is not None:
+            client = self._async_client
+            self._async_client = None  # 先置空，保证 close 幂等
             try:
-                # AsyncClient.close() 是异步方法，需在事件循环里关；这里尽力关闭
+                # AsyncClient.close() 是异步方法；有运行中 loop 就后台关闭，
+                # 否则同步 asyncio.run 关闭。
                 import asyncio as _aio
                 try:
-                    _aio.get_running_loop()
+                    loop = _aio.get_running_loop()
                 except RuntimeError:
-                    _aio.run(self._async_client.aclose())
+                    _aio.run(client.aclose())
+                else:
+                    loop.create_task(client.aclose())
             except Exception:
                 pass
 
