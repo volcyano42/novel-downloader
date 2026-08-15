@@ -117,6 +117,34 @@ def standardize_id(ref: str | Novel | Chapter) -> str:
     raise ValueError(f"ref {ref} Non conformance")
 
 
+async def resolve_changdunovel(url: str) -> str:
+    """解析 changdunovel.com URL，提取 book_id 返回标准 fanqienovel URL。
+
+    优先直接从输入 URL 的 query params 提取 book_id（分享长链已包含）；
+    兜底发请求跟随重定向提取 /t/ 短链。
+    """
+    if "changdunovel.com" not in url:
+        return url
+    # 优先直接从 URL query 提取（免网络请求）
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(url).query)
+    bid = qs.get("book_id", [None])[0]
+    if bid and bid.isdigit():
+        return f"https://fanqienovel.com/page/{bid}"
+    # 兜底：发请求跟随重定向提取 /t/ 短链（异步，不阻塞事件循环）
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+            r = await client.get(url)
+        qs = parse_qs(urlparse(str(r.url)).query)
+        bid = qs.get("book_id", [None])[0]
+        if bid and bid.isdigit():
+            return f"https://fanqienovel.com/page/{bid}"
+        book_id = standardize_id(str(r.url))
+        return f"https://fanqienovel.com/page/{book_id}"
+    except (httpx.HTTPError, ValueError):
+        return url
+
+
 def parse_search_result(data: dict[str, Any]) -> tuple[SearchResult, ...]:
     results: list[SearchResult] = []
     if data.get("data") and data["data"].get("ret_data"):
