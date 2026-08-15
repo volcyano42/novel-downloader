@@ -67,20 +67,27 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
                 with _tasks_lock:
                     task["eta"] = eta_seconds
 
-        async def _download_one(ch_data: dict):
-            # ── 取消检查（开始前）──
-            if task["_cancel"].is_set():
-                return
+        async def _wait_if_paused() -> bool:
+            """暂停/取消检查点：暂停中轮询等 resume（clear），取消返回 False。
 
-            # ── 暂停逻辑 ──
-            if task["_pause"].is_set():
+            优雅暂停语义：当前下载中的章节跑完后、下一章开始前停住。
+            asyncio.Event 无「等待 clear」方法，用轮询实现（原 await
+            _pause.wait() 在 event 已 set 时立即返回，暂停形同虚设）。
+            """
+            while task["_pause"].is_set():
                 with _tasks_lock:
                     task["status"] = "paused"
-                await task["_pause"].wait()
+                await asyncio.sleep(0.1)
                 if task["_cancel"].is_set():
-                    return
-                with _tasks_lock:
-                    task["status"] = "downloading"
+                    return False
+            with _tasks_lock:
+                task["status"] = "downloading"
+            return True
+
+        async def _download_one(ch_data: dict):
+            # ── 暂停/取消检查（章节开始前）──
+            if not await _wait_if_paused():
+                return
 
             # 标记章节为下载中
             with _tasks_lock:
@@ -135,6 +142,9 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
         sem = asyncio.Semaphore(max(1, max_workers))
 
         async def _run_one(ch_data: dict):
+            # 排队检查点：拿信号量前先响应暂停/取消（不占信号量）
+            if not await _wait_if_paused():
+                return
             async with sem:
                 await _download_one(ch_data)
 
@@ -149,6 +159,24 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
         # 收尾：被取消时不覆盖状态
         if task["_cancel"].is_set():
             return
+
+        # 收尾检查点：暂停中等待 resume，然后重跑剩余 pending 章节
+        while task["_pause"].is_set():
+            if task["_cancel"].is_set():
+                return
+            with _tasks_lock:
+                task["status"] = "paused"
+            await asyncio.sleep(0.1)
+
+        pending = [ch for ch in task["chapters"] if ch.get("status") == "pending"]
+        if pending:
+            results = await asyncio.gather(
+                *(_run_one(ch) for ch in pending),
+                return_exceptions=True,
+            )
+            for r in results:
+                if isinstance(r, Exception):
+                    _log.warning("章节下载协程异常", exc_info=r)
 
         if task["errors"]:
             task["status"] = "partial"

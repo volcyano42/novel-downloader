@@ -48,8 +48,8 @@ def test_create_task_returns_id_and_schedules_coroutine(monkeypatch):
     assert tm._tasks[tid["task_id"]]["_stub_ran"] is True
 
 
-def _install_mocks(monkeypatch, chapters):
-    """把书源/引擎/存储替换为异步 mock，返回并发统计容器。"""
+def _install_mocks(monkeypatch, chapters, speed: float = 0.01):
+    """把书源/引擎/存储替换为异步 mock，返回并发统计容器。speed 为每章下载耗时。"""
     from backend.services import engine_manager
     from novelbase.models.novel import Novel
 
@@ -67,7 +67,7 @@ def _install_mocks(monkeypatch, chapters):
     async def fake_resolve_chapter(ch, engine, **kw):
         stats["inflight"] += 1
         stats["peak"] = max(stats["peak"], stats["inflight"])
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(speed)
         ch.content = "内容"
         ch.count = 10
         stats["inflight"] -= 1
@@ -139,5 +139,68 @@ def test_resume_failed_task_restarts_coroutine(monkeypatch):
             await asyncio.sleep(0.01)
         assert task["status"] == "completed", task
         assert task["progress"] == 3, task
+
+    asyncio.run(_run())
+
+
+def test_pause_freezes_progress_until_resume(monkeypatch):
+    """暂停后进度冻结（wait() 反用修复）：点暂停任务停住，resume 后继续到完成。"""
+    from backend.services import task_manager as tm
+
+    chapters = _chapters(5)
+    _install_mocks(monkeypatch, chapters)
+    tm._tasks.clear()
+
+    async def _run():
+        r = tm.create_task("fanqie_1", chapters, "测试", mode="requests")
+        tid = r["task_id"]
+        t = tm._tasks[tid]
+        await asyncio.sleep(0.02)  # 让部分章节开始
+        assert tm.pause_task(tid) is True
+        await asyncio.sleep(0.15)  # 等待暂停生效（优雅暂停：当前章跑完）
+        frozen = t["progress"]
+        assert t["status"] == "paused", t
+        # 暂停期间进度不再增长
+        await asyncio.sleep(0.2)
+        assert t["progress"] == frozen, f"暂停期间 progress 从 {frozen} 增长到 {t['progress']}"
+        assert t["status"] == "paused"
+        # resume 后继续到完成
+        assert tm.resume_task(tid) is True
+        for _ in range(500):
+            if t["status"] in ("completed", "failed", "partial"):
+                break
+            await asyncio.sleep(0.01)
+        assert t["status"] == "completed", t
+        assert t["progress"] == 5, t
+
+    asyncio.run(_run())
+
+
+def test_pause_at_tail_does_not_skip(monkeypatch):
+    """尾部暂停不跳过（收尾检查点）：章节全下载完但暂停中，任务停在 paused 而非 completed。"""
+    from backend.services import task_manager as tm
+
+    chapters = _chapters(3)
+    _install_mocks(monkeypatch, chapters, speed=0.05)  # 每章 0.05s，时序可控
+    tm._tasks.clear()
+
+    async def _run():
+        r = tm.create_task("fanqie_1", chapters, "测试", mode="requests")
+        tid = r["task_id"]
+        t = tm._tasks[tid]
+        await asyncio.sleep(0.02)  # 3 章都已开始下载（还没完成）
+        assert tm.pause_task(tid) is True  # 此时 status == downloading
+        # 等 3 章都下载完（优雅暂停：当前章跑完）
+        await asyncio.sleep(0.12)
+        # 关键：章节虽全下载完，但暂停中 → 停在 paused 而非 completed
+        assert t["status"] == "paused", t
+        assert t["progress"] == 3, t  # 3 章都下载完了
+        # resume 后才 completed
+        assert tm.resume_task(tid) is True
+        for _ in range(500):
+            if t["status"] in ("completed", "failed", "partial"):
+                break
+            await asyncio.sleep(0.01)
+        assert t["status"] == "completed", t
 
     asyncio.run(_run())
