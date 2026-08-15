@@ -29,7 +29,7 @@ def _resolve_url(raw: str) -> str:
 
 @router.get("/search")
 async def search_novels(platform: str = Query(...), query: str = Query(...),
-                        page: int = Query(1), mode: str = Query("browser"),
+                        mode: str = Query("browser"),
                         variant: str | None = Query(None)):
     from novelbase.core.downloader import get_source
 
@@ -46,7 +46,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
             raise HTTPException(500, str(e))
 
     try:
-        results = await search(platform, query, engine, page)
+        results = await search(platform, query, engine)
     except Exception as e:
         raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url,

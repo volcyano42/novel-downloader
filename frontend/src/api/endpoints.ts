@@ -153,10 +153,9 @@ export function streamChapters(
 // ── Download ───────────────────────────────────────
 
 export function searchDownload(params: {
-  platform: string; query: string; page?: number; mode?: string; variant?: string;
+  platform: string; query: string; mode?: string; variant?: string;
 }) {
   const qs = new URLSearchParams({ query: params.query, platform: params.platform });
-  if (params.page) qs.set("page", String(params.page));
   if (params.mode) qs.set("mode", params.mode);
   if (params.variant) qs.set("variant", params.variant);
   return apiGet<SearchResult[]>(`/download/search?${qs}`);
