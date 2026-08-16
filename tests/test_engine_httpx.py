@@ -130,32 +130,120 @@ def test_api_engine_async_fetch_json_post(monkeypatch):
     engine.close()
 
 
-def _browser_engine(monkeypatch):
-    # 避免真实启动 Chromium：monkeypatch _init_browser
-    import novelbase.core.engine as eng
-    monkeypatch.setattr(eng.BrowserEngine, "_init_browser", lambda self: None)
+import asyncio
+
+
+class FakePlaywright:
+    """mock playwright.async_api.async_playwright 的最小替身。
+
+    FakePW 既是 context manager（支持 async with）又是 Playwright 实例（有 chromium）。
+    """
+
+    def __init__(self, monkeypatch):
+        self.calls = []
+        self._install(monkeypatch)
+
+    def _install(self, monkeypatch):
+        fake = self
+
+        class FakePage:
+            async def goto(self, url, timeout=None):
+                fake.calls.append(("goto", url))
+            async def content(self):
+                fake.calls.append(("content",))
+                return "<html>ok</html>"
+            async def close(self):
+                fake.calls.append(("page_close",))
+
+        class FakeContext:
+            async def new_page(self):
+                fake.calls.append(("new_page",))
+                return FakePage()
+            async def close(self):
+                fake.calls.append(("context_close",))
+
+        class FakeBrowser:
+            async def new_context(self, **kwargs):
+                fake.calls.append(("new_context", kwargs))
+                return FakeContext()
+            async def new_page(self):
+                fake.calls.append(("new_page",))
+                return FakePage()
+            async def close(self):
+                fake.calls.append(("browser_close",))
+
+        class FakeChromium:
+            async def launch(self, headless=True, args=None):
+                fake.calls.append(("launch", headless))
+                return FakeBrowser()
+
+        class FakePW:
+            def __init__(self):
+                self.chromium = FakeChromium()
+            async def start(self):
+                return self
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *exc):
+                fake.calls.append(("pw_stop",))
+
+        import novelbase.core.engine as eng
+        monkeypatch.setattr(eng, "_async_playwright", lambda: FakePW())
+
+
+def _browser_engine():
     from novelbase.core.options import BrowserOptions
-    return eng.BrowserEngine(BrowserOptions(delay=(0, 0), headless=True))
+    from novelbase.core.engine import BrowserEngine
+    return BrowserEngine(BrowserOptions(delay=(0, 0), headless=True))
 
 
-def test_browser_engine_has_async_methods(monkeypatch):
-    engine = _browser_engine(monkeypatch)
-    assert asyncio.iscoroutinefunction(engine.async_fetch_text)
-    assert asyncio.iscoroutinefunction(engine.async_fetch_json)
+def test_browser_engine_lazy_init(monkeypatch):
+    """__init__ 不启动浏览器（懒启动），_browser 初始为 None。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+    assert engine._browser is None
+    assert fake.calls == []
 
 
-def test_browser_engine_async_delegates_to_sync(monkeypatch):
-    engine = _browser_engine(monkeypatch)
-    calls = []
-
-    def fake_fetch_text(url, skip_delay=False, encoding=None, **kwargs):
-        calls.append(url)
-        return "<html>ok</html>"
-
-    monkeypatch.setattr(engine, "fetch_text", fake_fetch_text)
+def test_browser_engine_async_fetch_text_is_native(monkeypatch):
+    """async_fetch_text 直接 await Playwright（不再委托同步 fetch_text）。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
     result = asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
     assert result == "<html>ok</html>"
-    assert calls == ["http://x"]
+    # 懒启动 + goto + content 都被真实调用
+    assert ("launch", True) in fake.calls
+    assert ("new_context", {}) in fake.calls  # 无 user_data_dir/viewport 时 kwargs 为空
+    assert ("new_page",) in fake.calls
+    assert ("goto", "http://x") in fake.calls
+    assert ("content",) in fake.calls
+
+
+def test_browser_engine_sync_fetch_text_isolated_session(monkeypatch):
+    """同步 fetch_text 用独立浏览器会话，不触碰懒启动的 self._browser。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+    result = engine.fetch_text("http://sync", skip_delay=True)
+    assert result == "<html>ok</html>"
+    # 独立会话启停：browser 被 close，pw 被 stop
+    assert ("browser_close",) in fake.calls
+    assert ("pw_stop",) in fake.calls
+    # 懒启动的 self._browser 仍为 None（未被触碰）
+    assert engine._browser is None
+
+
+def test_browser_engine_new_page_async(monkeypatch):
+    """new_page 是 async 方法，懒启动后返回 page。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+
+    async def _run():
+        page = await engine.new_page()
+        return page
+    page = asyncio.run(_run())
+    assert page is not None
+    assert ("new_page",) in fake.calls
+    assert engine._browser is not None  # 懒启动完成
 
 
 def test_engine_base_has_abstract_async_methods():

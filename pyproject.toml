@@ -14,7 +14,7 @@ authors = [{ name = "novel-downloader contributors" }]
 dependencies = [
     "beautifulsoup4",
     "chardet",
-    "drissionpage",
+    "playwright",
     "fastapi",
     "httpx",
     "Pillow",

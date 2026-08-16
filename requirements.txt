@@ -1,5 +1,5 @@
 beautifulsoup4
-drissionpage
+playwright
 fastapi
 httpx
 chardet

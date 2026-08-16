@@ -2,7 +2,6 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-import threading
 import time
 from abc import ABC, abstractmethod
 from typing import Any
@@ -15,6 +14,11 @@ from ..utils.encoding import detect_encoding
 from ..utils.logger import get_logger, mask_key
 
 _log = get_logger("novelbase.core.engine")
+
+
+def _async_playwright():
+    from playwright.async_api import async_playwright
+    return async_playwright()
 
 
 def _resolve_proxy(proxies: dict | None) -> httpx.Proxy | None:
@@ -209,21 +213,21 @@ class APIEngine(Engine):
             except Exception:
                 pass
 
+
 class BrowserEngine(Engine):
     def __init__(self, options: BrowserOptions) -> None:
         super().__init__()
         self.name = "browser"
         self.options = options
-        self._thread_local = threading.local()
-        self._page_lock = threading.Lock()
-        self._page_pool: list = []
+        self._playwright = None
         self._browser = None
-        self._init_browser()
+        self._context = None
+        # 懒启动：__init__ 不启动浏览器，首次 async 调用时 _ensure_browser 启动
 
     def update_options(self, options: BrowserOptions) -> None:
         """热更新 delay/timeout/retry 等参数，不重建浏览器。
 
-        browser_type / headless / user_data_dir / viewport 变更才重建浏览器。
+        browser_type / headless / user_data_dir / viewport / extra_args 变更才重建浏览器。
         """
         needs_rebuild = False
         for hard_attr in ("browser_type", "headless", "extra_args"):
@@ -231,7 +235,6 @@ class BrowserEngine(Engine):
             if new_val is not None and new_val != getattr(self.options, hard_attr, None):
                 setattr(self.options, hard_attr, new_val)
                 needs_rebuild = True
-        # user_data_dir 比较时忽略 None vs "" 差异
         new_ud = getattr(options, "user_data_dir", None)
         old_ud = getattr(self.options, "user_data_dir", None)
         if str(new_ud or "") != str(old_ud or ""):
@@ -247,105 +250,139 @@ class BrowserEngine(Engine):
                 setattr(self.options, attr, getattr(options, attr))
 
         if needs_rebuild:
-            self._init_browser()
+            self._schedule_rebuild()
 
-    def _init_browser(self) -> None:
-        from DrissionPage import Chromium, ChromiumOptions
+    def _schedule_rebuild(self) -> None:
+        """标记浏览器需重建：下一次 async 调用前关闭旧 browser 并重建。"""
+        # 已有运行中 loop 才真正关闭；无 loop（尚未启动）时置 None 即可
+        if self._browser is not None or self._context is not None:
+            self._close_running()
 
-        # 确保内部状态已初始化（update_options 也会经过这里）
-        if not hasattr(self, '_thread_local'):
-            self._thread_local = threading.local()
-        if not hasattr(self, '_page_lock'):
-            self._page_lock = threading.Lock()
-        if not hasattr(self, '_page_pool'):
-            self._page_pool = []
+    def _close_running(self) -> None:
+        browser, context, pw = self._browser, self._context, self._playwright
+        self._browser = self._context = self._playwright = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._shutdown(browser, context, pw))
+        else:
+            loop.create_task(self._shutdown(browser, context, pw))
 
-        # quit 旧浏览器防止进程泄漏
-        if hasattr(self, '_browser'):
+    @staticmethod
+    async def _shutdown(browser, context, pw):
+        for obj in (browser, context):
+            if obj is not None:
+                try:
+                    await obj.close()
+                except Exception:
+                    pass
+        if pw is not None:
             try:
-                self._browser.quit()
+                await pw.stop()
             except Exception:
                 pass
 
-        co = ChromiumOptions()
-        co.headless(self.options.headless)
-        if self.options.viewport:
-            co.set_argument(
-                f'--window-size={self.options.viewport["width"]},'
-                f'{self.options.viewport["height"]}'
-            )
+    async def _ensure_browser(self):
+        if self._browser is not None:
+            return
+        pw = _async_playwright()
+        self._playwright = await pw.start()
+        browser_type = getattr(self._playwright, self.options.browser_type, None)
+        if browser_type is None:
+            raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
+        self._browser = await browser_type.launch(
+            headless=self.options.headless,
+            args=self.options.extra_args or [],
+        )
+        ctx_kwargs = {}
         if self.options.user_data_dir:
-            co.set_user_data_path(str(self.options.user_data_dir))
-        if self.options.extra_args:
-            for arg in self.options.extra_args:
-                co.set_argument(arg)
+            ctx_kwargs["user_data_dir"] = str(self.options.user_data_dir)
+        if self.options.viewport:
+            ctx_kwargs["viewport"] = self.options.viewport
+        self._context = await self._browser.new_context(**ctx_kwargs)
+        _log.info("BrowserEngine started: headless=%s", self.options.headless)
 
-        self._browser = Chromium(co)
+    async def new_page(self):
+        """懒启动后返回一个新的 Playwright page（供书源交互）。"""
+        await self._ensure_browser()
+        return await self._context.new_page()
 
-        _log.info(
-            "BrowserEngine init: headless=%s",
-            self.options.headless,
-        )
-        _log.debug("BrowserEngine started (pages created lazily per thread)")
+    async def _do_fetch_text(self, url, skip_delay=False, **kwargs):
+        page = await self._context.new_page()
+        try:
+            for i in range(self.options.retry_times):
+                if i > 0:
+                    _log.warning(
+                        "fetch_text retry %s/%s: url=%s",
+                        i + 1, self.options.retry_times, mask_key(url[:120]),
+                    )
+                try:
+                    await page.goto(url, timeout=self.options.timeout * 1000)
+                    if not skip_delay:
+                        await asyncio.sleep(random.uniform(*self.options.delay))
+                    html = await page.content()
+                    _log.debug("fetch_text ok: len=%s url=%s", len(html), mask_key(url[:120]))
+                    return html
+                except Exception as e:
+                    backoff = self.options.backoff_factor * (2 ** i)
+                    _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
+                               i + 1, e, backoff)
+                    await asyncio.sleep(backoff)
+            _log.error("fetch_text exhausted retries: url=%s", mask_key(url[:120]))
+            raise NetworkError(
+                f"fetch_text failed after {self.options.retry_times} retries",
+                url=url,
+            )
+        finally:
+            await page.close()
 
-    def get_page(self):
-        """获取当前线程独占的 ChromiumPage。
+    async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
+        """真异步：直接 await Playwright（不 to_thread）。"""
+        _log.debug("async_fetch_text start: url=%s", mask_key(url[:120]))
+        await self._ensure_browser()
+        return await self._do_fetch_text(url, skip_delay=skip_delay, **kwargs)
 
-        每个线程第一次调用时创建新 page 并加入池中；
-        后续调用复用该 page，天然线程隔离。
+    async def async_fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
+        text = await self.async_fetch_text(url=url, skip_delay=skip_delay, **kwargs)
+        return json.loads(text)
+
+    def fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
+        """同步入口：独立浏览器会话（自启自停），不触碰懒启动的 browser。
+
+        注意：不能在已运行的事件循环内调用（会抛 RuntimeError），
+        异步上下文请用 async_fetch_text。
         """
-        if not hasattr(self._thread_local, 'page'):
-            with self._page_lock:
-                self._thread_local.page = self._browser.new_tab()
-                self._page_pool.append(self._thread_local.page)
-        return self._thread_local.page
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "fetch_text 不能在异步上下文中同步调用，请改用 async_fetch_text"
+            )
+        return asyncio.run(self._fetch_in_isolated_session(url, skip_delay=skip_delay, **kwargs))
 
-    def new_page(self):
-        return self._browser.new_tab()
-
-    def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
-        _log.debug("fetch_text start: url=%s", mask_key(url[:120]))
-        page = self.get_page()
-
-        for i in range(self.options.retry_times):
-            if i > 0:
-                _log.warning(
-                    "fetch_text retry %s/%s: url=%s",
-                    i + 1, self.options.retry_times, mask_key(url[:120]),
-                )
+    async def _fetch_in_isolated_session(self, url, skip_delay=False, **kwargs) -> str:
+        async with _async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=self.options.headless,
+                args=self.options.extra_args or [],
+            )
             try:
-                page.get(url, timeout=self.options.timeout)
-                if not skip_delay:
-                    time.sleep(random.uniform(*self.options.delay))
-                _log.debug("fetch_text ok: len=%s url=%s", len(page.html), mask_key(url[:120]))
-                return page.html
-            except Exception as e:
-                backoff = self.options.backoff_factor * (2 ** i)
-                _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
-                           i + 1, e, backoff)
-                time.sleep(backoff)
+                page = await browser.new_page()
+                try:
+                    await page.goto(url, timeout=self.options.timeout * 1000)
+                    return await page.content()
+                finally:
+                    await page.close()
+            finally:
+                await browser.close()
 
-        _log.error("fetch_text exhausted retries: url=%s", mask_key(url[:120]))
-        raise NetworkError(
-            f"fetch_text failed after {self.options.retry_times} retries",
-            url=url,
-        )
-
-    def fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
+    def fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
         text = self.fetch_text(url=url, skip_delay=skip_delay, **kwargs)
         return json.loads(text)
 
-    async def async_fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
-        return await asyncio.to_thread(
-            self.fetch_text, url=url, skip_delay=skip_delay, encoding=encoding, **kwargs
-        )
-
-    async def async_fetch_json(self, url: str, skip_delay: bool = False, **kwargs) -> dict[str, Any]:
-        return await asyncio.to_thread(
-            self.fetch_json, url=url, skip_delay=skip_delay, **kwargs
-        )
-
-    async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
+    async def async_fetch_images(self, urls, max_workers=5) -> list[bytes]:
         """图片下载用 httpx（不开 tab）。与 Requests/API 版结构一致。"""
         sem = asyncio.Semaphore(max_workers)
 
@@ -361,20 +398,12 @@ class BrowserEngine(Engine):
 
     def close(self) -> None:
         super().close()
-        for page in self._page_pool:
-            try:
-                page.close()
-            except (OSError, AttributeError):
-                pass
-        if self._browser:
-            try:
-                self._browser.quit()
-            except (OSError, AttributeError):
-                pass
+        if self._browser is not None or self._context is not None or self._playwright is not None:
+            self._close_running()
 
     @property
     def browser(self) -> Any:
-        """返回底层 Chromium 浏览器实例，供高级操作使用。"""
+        """返回底层 Playwright browser 实例（懒启动后才有，否则 None）。"""
         return self._browser
 
 class RequestsEngine(Engine):
