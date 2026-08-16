@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Build Nuitka onefile: novel-downloader-web-{version}-{platform}
+# 合并历史 build-web.sh（Linux）+ build-termux.sh（Termux）
 # Usage: ./build-nuitka.sh [-v <version>] [-r <retries>]
 # Requires: Python 3.10+, npm, C 编译器（Linux: gcc/clang；Termux: clang）
 set -e
@@ -21,7 +22,6 @@ done
 # ── 平台检测 ──
 ARCH=$(uname -m)
 if [ -n "$PREFIX" ] && [ -d "$PREFIX" ]; then
-    # Termux 特有 PREFIX 环境变量
     PLATFORM="termux"
 else
     case "$ARCH" in
@@ -57,6 +57,19 @@ DIST_DIR="dist"
 EXE_NAME="novel-downloader-web-$VERSION-$PLATFORM"
 EXE_PATH="$DIST_DIR/$EXE_NAME"
 
+# ── 0. Termux 编译依赖（幂等；Linux 假设 gcc/clang 已装）──
+if [ "$PLATFORM" = "termux" ]; then
+    echo "--- Termux 编译依赖 ---"
+    pkg install -y clang binutils patchelf termux-elf-cleaner
+    # Nuitka 依赖检测需要 ldd：优先 llvm-ldd（Termux llvm 包提供）
+    if command -v llvm-ldd >/dev/null 2>&1; then
+        ln -sf "$(command -v llvm-ldd)" "$PREFIX/bin/ldd" 2>/dev/null || true
+        echo "ldd -> llvm-ldd"
+    else
+        echo "警告: 无 ldd 替代（llvm-ldd），Nuitka 依赖检测可能失败"
+    fi
+fi
+
 # ── 1. 构建前端 ──
 echo "--- 构建前端 ($(date +%H:%M:%S)) ---"
 ( cd frontend
@@ -78,18 +91,28 @@ echo "--- 安装 Nuitka ---"
 # ── 4. Nuitka 编译（自动重试）──
 NUITKA_ARGS=(
     -m nuitka
-    --mode=onefile
-    --output-dir="$DIST_DIR"
-    --output-filename="$EXE_NAME"
+    --standalone
+    --onefile
+    --assume-yes-for-downloads
+    --jobs="$(nproc)"
     --include-package=novelbase
     --include-package=novelbase.sources
     --include-package=backend
     --include-module=init_config
     --include-data-dir=template=template
     --include-data-dir=frontend/dist=frontend/dist
-    --assume-yes-for-downloads
-    backend/main.py
+    --output-dir="$DIST_DIR"
+    --output-filename="$EXE_NAME"
 )
+
+# 平台差异：Termux 无静态 libpython；browser 模式（DrissionPage→psutil）不支持 Android
+if [ "$PLATFORM" = "termux" ]; then
+    NUITKA_ARGS+=(--static-libpython=no)
+    NUITKA_ARGS+=(--nofollow-import-to=DrissionPage)
+else
+    NUITKA_ARGS+=(--static-libpython=yes)
+fi
+NUITKA_ARGS+=(backend/main.py)
 
 START_TIME=$(date +%s)
 for attempt in $(seq 1 "$MAX_RETRIES"); do
@@ -104,6 +127,10 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
     ELAPSED=$(( ( $(date +%s) - ATTEMPT_START + 30 ) / 60 ))
 
     if [ "$EXIT_CODE" -eq 0 ] && [ -f "$EXE_PATH" ]; then
+        # Termux onefile 产物需 elf-cleaner 清理（Android linker 必需）
+        if [ "$PLATFORM" = "termux" ]; then
+            termux-elf-cleaner "$EXE_PATH" 2>/dev/null || true
+        fi
         TOTAL_ELAPSED=$(( ( $(date +%s) - START_TIME + 30 ) / 60 ))
         SIZE_MB=$(du -m "$EXE_PATH" | cut -f1)
         echo "=== 构建完成: $EXE_NAME (${SIZE_MB}MB) 耗时 ${TOTAL_ELAPSED}min ($(date +%H:%M:%S)) ==="
@@ -112,7 +139,6 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
 
     echo "--- 尝试 $attempt 失败 (exit $EXIT_CODE, ${ELAPSED}min) ---"
     if [ "$attempt" -lt "$MAX_RETRIES" ]; then
-        # 退避：30s, 60s, 120s, 240s, 480s（封顶 480s）
         WAIT_SECONDS=$((30 * 2 ** (attempt - 1)))
         if [ "$WAIT_SECONDS" -gt 480 ]; then WAIT_SECONDS=480; fi
         WAIT_MIN=$(( (WAIT_SECONDS + 30) / 60 ))
