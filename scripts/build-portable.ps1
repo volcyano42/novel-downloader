@@ -101,6 +101,8 @@ try {
     Write-Host "--- Copying project files ---" -ForegroundColor Cyan
     Copy-Item -Recurse "novelbase" (Join-Path $portableDir "novelbase")
     Copy-Item -Recurse "backend" (Join-Path $portableDir "backend")
+    # 共享配置层（backend 的 routers/services 依赖 shared.config/user_data）
+    Copy-Item -Recurse "shared" (Join-Path $portableDir "shared")
     Get-ChildItem -Recurse -Directory -Filter "__pycache__" -Path $portableDir | Remove-Item -Recurse -Force
     $frontendDistDst = Join-Path $portableDir "frontend\dist"
     New-Item -ItemType Directory -Path (Join-Path $portableDir "frontend") -Force | Out-Null

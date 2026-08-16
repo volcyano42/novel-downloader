@@ -122,6 +122,8 @@ echo "--- 复制项目文件 ---"
 cp -r novelbase "$DIST_DIR/novelbase"
 # 注意：目标目录不预建（cp -r 会嵌套复制成 backend/backend）
 cp -r backend "$DIST_DIR/backend"
+# 共享配置层（backend 的 routers/services 依赖 shared.config/user_data）
+cp -r shared "$DIST_DIR/shared"
 mkdir -p "$DIST_DIR/frontend"
 cp -r frontend/dist "$DIST_DIR/frontend/dist"
 # 配置模板（不含用户数据 app_data，避免泄露 API key 等敏感字段；首次运行由 init_config 初始化）

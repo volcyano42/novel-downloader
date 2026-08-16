@@ -110,6 +110,7 @@ NUITKA_ARGS=(
     --include-package=novelbase
     --include-package=novelbase.sources
     --include-package=backend
+    --include-package=shared
     --include-module=init_config
     --include-data-dir=template=template
     --include-data-dir=frontend/dist=frontend/dist
