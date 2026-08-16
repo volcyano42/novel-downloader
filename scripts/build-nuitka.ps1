@@ -24,7 +24,7 @@ try {
 
     # ── 构建前端 ──
     Write-Host "--- Building frontend ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
-    Push-Location services\frontend
+    Push-Location frontend
     if (-not (Test-Path node_modules)) {
         Write-Host "npm install..." -ForegroundColor Yellow
         npm install --registry=https://registry.npmmirror.com
@@ -62,7 +62,7 @@ try {
         "--include-data-dir=frontend/dist=frontend/dist",
         "--assume-yes-for-downloads",
         "--msvc=latest",
-        "services/backend/main.py"
+        "backend/main.py"
     )
 
     $nuitkaCmd = "python " + ($nuitkaArgs -join " ")

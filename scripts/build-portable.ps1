@@ -20,7 +20,7 @@ try {
 
     # ── 构建前端 ──
     Write-Host "--- Building frontend ($(Get-Date -Format HH:mm:ss)) ---" -ForegroundColor Cyan
-    Push-Location services\frontend
+    Push-Location frontend
     if (-not (Test-Path node_modules)) {
         Write-Host "npm install (npmmirror)..." -ForegroundColor Yellow
         npm install --registry=https://registry.npmmirror.com
@@ -100,14 +100,13 @@ try {
     # ── 复制项目文件 ──
     Write-Host "--- Copying project files ---" -ForegroundColor Cyan
     Copy-Item -Recurse "novelbase" (Join-Path $portableDir "novelbase")
-    $backendDst = Join-Path $portableDir "services\backend"
-    New-Item -ItemType Directory -Path (Join-Path $portableDir "services") -Force | Out-Null
-    Copy-Item -Recurse "services\backend" $backendDst
+    Copy-Item -Recurse "backend" (Join-Path $portableDir "backend")
     Get-ChildItem -Recurse -Directory -Filter "__pycache__" -Path $portableDir | Remove-Item -Recurse -Force
-    $frontendDistDst = Join-Path $portableDir "services\frontend\dist"
-    New-Item -ItemType Directory -Path (Join-Path $portableDir "services\frontend") -Force | Out-Null
-    Copy-Item -Recurse "services\frontend\dist" $frontendDistDst
-    Copy-Item -Recurse "app_data\config" (Join-Path $portableDir "app_data\config")
+    $frontendDistDst = Join-Path $portableDir "frontend\dist"
+    New-Item -ItemType Directory -Path (Join-Path $portableDir "frontend") -Force | Out-Null
+    Copy-Item -Recurse "frontend\dist" $frontendDistDst
+    # 配置模板（不含用户数据 app_data，避免泄露 API key 等敏感字段；首次运行由 init_config 初始化）
+    Copy-Item -Recurse "template" (Join-Path $portableDir "template")
     # 配置初始化模块（main.py lifespan 依赖，缺失则 uvicorn 启动失败）——与 build-portable.sh 对齐
     Copy-Item "init_config.py" (Join-Path $portableDir "init_config.py")
 

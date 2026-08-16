@@ -124,8 +124,8 @@ cp -r novelbase "$DIST_DIR/novelbase"
 cp -r backend "$DIST_DIR/backend"
 mkdir -p "$DIST_DIR/frontend"
 cp -r frontend/dist "$DIST_DIR/frontend/dist"
-mkdir -p "$DIST_DIR/app_data"
-cp -r app_data/config "$DIST_DIR/app_data/config"
+# 配置模板（不含用户数据 app_data，避免泄露 API key 等敏感字段；首次运行由 init_config 初始化）
+cp -r template "$DIST_DIR/template"
 # 根目录模块（backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
 cp init_config.py "$DIST_DIR/init_config.py"
 
