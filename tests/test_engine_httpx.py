@@ -239,6 +239,57 @@ def test_browser_engine_sync_fetch_text_isolated_session(monkeypatch):
     assert engine._browser is None
 
 
+def test_browser_engine_sync_fetch_text_raises_network_error_on_fail(monkeypatch):
+    """同步 fetch_text 独立会话中 goto 失败后抛 NetworkError（retry/backoff 与 async 对齐）。"""
+    from novelbase.core.options import BrowserOptions
+    from novelbase.core.engine import BrowserEngine
+    from novelbase.core.exceptions import NetworkError
+
+    class FailingPage:
+        async def goto(self, url, timeout=None):
+            raise TimeoutError("goto timeout")
+
+        async def content(self):
+            return "<html>"
+
+        async def close(self):
+            pass
+
+    class FailingBrowser:
+        async def new_page(self):
+            return FailingPage()
+
+        async def close(self):
+            pass
+
+    class FailingChromium:
+        async def launch(self, headless=True, args=None):
+            return FailingBrowser()
+
+    class FailingPW:
+        def __init__(self):
+            self.chromium = FailingChromium()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            pass
+
+    import novelbase.core.engine as eng
+    monkeypatch.setattr(eng, "_async_playwright", lambda: FailingPW())
+
+    engine = BrowserEngine(BrowserOptions(
+        delay=(0, 0), headless=True, retry_times=1, backoff_factor=0,
+    ))
+    try:
+        engine.fetch_text("http://fail", skip_delay=True)
+    except NetworkError:
+        pass
+    else:
+        raise AssertionError("同步 fetch_text 在 goto 失败后应抛 NetworkError")
+
+
 def test_browser_engine_new_page_async(monkeypatch):
     """new_page 是 async 方法，懒启动后返回 page。"""
     fake = FakePlaywright(monkeypatch)

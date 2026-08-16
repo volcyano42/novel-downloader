@@ -222,8 +222,8 @@ class BrowserEngine(Engine):
         self._playwright = None
         self._browser = None
         self._context = None
-        self._launch_lock = asyncio.Lock()
-        # 懒启动：__init__ 不启动浏览器，首次 async 调用时 _ensure_browser 启动
+        self._launch_lock = None
+        # 懒启动：__init__ 不启动浏览器/锁，首次 async 调用时 _ensure_browser 启动
 
     def update_options(self, options: BrowserOptions) -> None:
         """热更新 delay/timeout/retry 等参数，不重建浏览器。
@@ -284,11 +284,13 @@ class BrowserEngine(Engine):
                 pass
 
     async def _ensure_browser(self):
-        if self._browser is not None:
+        if self._browser is not None or self._context is not None:
             return
+        if self._launch_lock is None:
+            self._launch_lock = asyncio.Lock()
         async with self._launch_lock:
             # double-check：并发首次调用时，后到者在锁内发现已启动则直接返回
-            if self._browser is not None:
+            if self._browser is not None or self._context is not None:
                 return
             pw = _async_playwright()
             self._playwright = await pw.start()
@@ -320,32 +322,36 @@ class BrowserEngine(Engine):
         await self._ensure_browser()
         return await self._context.new_page()
 
+    async def _fetch_with_page(self, page, url, skip_delay=False) -> str:
+        """在给定 page 上带 retry/backoff 抓取文本（async 与同步独立会话共用）。"""
+        for i in range(self.options.retry_times):
+            if i > 0:
+                _log.warning(
+                    "fetch_text retry %s/%s: url=%s",
+                    i + 1, self.options.retry_times, mask_key(url[:120]),
+                )
+            try:
+                await page.goto(url, timeout=self.options.timeout * 1000)
+                if not skip_delay:
+                    await asyncio.sleep(random.uniform(*self.options.delay))
+                html = await page.content()
+                _log.debug("fetch_text ok: len=%s url=%s", len(html), mask_key(url[:120]))
+                return html
+            except Exception as e:
+                backoff = self.options.backoff_factor * (2 ** i)
+                _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
+                           i + 1, e, backoff)
+                await asyncio.sleep(backoff)
+        _log.error("fetch_text exhausted retries: url=%s", mask_key(url[:120]))
+        raise NetworkError(
+            f"fetch_text failed after {self.options.retry_times} retries",
+            url=url,
+        )
+
     async def _do_fetch_text(self, url, skip_delay=False, **kwargs):
         page = await self._context.new_page()
         try:
-            for i in range(self.options.retry_times):
-                if i > 0:
-                    _log.warning(
-                        "fetch_text retry %s/%s: url=%s",
-                        i + 1, self.options.retry_times, mask_key(url[:120]),
-                    )
-                try:
-                    await page.goto(url, timeout=self.options.timeout * 1000)
-                    if not skip_delay:
-                        await asyncio.sleep(random.uniform(*self.options.delay))
-                    html = await page.content()
-                    _log.debug("fetch_text ok: len=%s url=%s", len(html), mask_key(url[:120]))
-                    return html
-                except Exception as e:
-                    backoff = self.options.backoff_factor * (2 ** i)
-                    _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
-                               i + 1, e, backoff)
-                    await asyncio.sleep(backoff)
-            _log.error("fetch_text exhausted retries: url=%s", mask_key(url[:120]))
-            raise NetworkError(
-                f"fetch_text failed after {self.options.retry_times} retries",
-                url=url,
-            )
+            return await self._fetch_with_page(page, url, skip_delay=skip_delay)
         finally:
             await page.close()
 
@@ -387,8 +393,7 @@ class BrowserEngine(Engine):
             try:
                 page = await browser.new_page()
                 try:
-                    await page.goto(url, timeout=self.options.timeout * 1000)
-                    return await page.content()
+                    return await self._fetch_with_page(page, url, skip_delay=skip_delay)
                 finally:
                     await page.close()
             finally:
