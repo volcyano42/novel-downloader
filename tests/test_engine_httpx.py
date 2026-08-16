@@ -351,34 +351,23 @@ def test_browser_engine_reuses_page_from_pool(monkeypatch):
     assert len(engine._idle_pages) == 1              # 池里有一个空闲 page
 
 
-def test_browser_engine_pool_limits_concurrent_pages(monkeypatch):
-    """max_pages 限制并发 page 数：借满后第 3 个请求阻塞，归还后才放行。"""
+def test_browser_engine_lazy_creates_pages_when_pool_empty(monkeypatch):
+    """池空则懒创建 page（无上限，与同步时代懒加载一致）；归还后复用。"""
     fake = FakePlaywright(monkeypatch)
-    from novelbase.core.options import BrowserOptions
-    from novelbase.core.engine import BrowserEngine
-    engine = BrowserEngine(BrowserOptions(delay=(0, 0), headless=True, max_pages=2))
+    engine = _browser_engine()
 
     async def _run():
         await engine._ensure_browser()
-        p1 = await engine._acquire_page()   # 池空，创建 page1
-        p2 = await engine._acquire_page()   # 池空，创建 page2
+        p1 = await engine._acquire_page()   # 池空 → 懒创建 page1
+        p2 = await engine._acquire_page()   # 池空 → 懒创建 page2（无上限）
+        assert p1 is not None and p2 is not None
         assert fake.calls.count(("new_page",)) == 2
 
-        acquired = []
-        async def third():
-            p = await engine._acquire_page()
-            acquired.append(p)
-        task = asyncio.create_task(third())
-        await asyncio.sleep(0)              # 让 third 尝试 acquire（信号量已耗尽）
-        assert acquired == []               # 第 3 个被阻塞
-
-        await engine._release_page(p1)      # 归还一个
-        await asyncio.sleep(0)
-        assert len(acquired) == 1           # 第 3 个复用归还的 page，无新 new_page
-        task.cancel()
+        await engine._release_page(p1)
+        await engine._release_page(p2)
+        p3 = await engine._acquire_page()   # 池非空 → 复用，不新创建
+        assert fake.calls.count(("new_page",)) == 2
     asyncio.run(_run())
-
-    assert fake.calls.count(("new_page",)) == 2   # 全程只创建 2 个 page
 
 
 def test_browser_engine_failed_fetch_closes_page_not_return(monkeypatch):

@@ -35,7 +35,6 @@ class BrowserOptions:
     user_data_dir: Path | str | None = None
     viewport: dict[str, int] | None = None
     extra_args: list[str] | None = None
-    max_pages: int = 5
 
 @dataclass
 class StorageOptions:
@@ -100,12 +99,11 @@ class Options:
                                 headless: bool = False,
                                 user_data_dir: Path | str | None = None,
                                 viewport: dict[str, int] | None = None,
-                                extra_args: list[str] | None = None,
-                                max_pages: int = 5) -> "Options":
+                                extra_args: list[str] | None = None) -> "Options":
             self._browser = BrowserOptions(browser_type=browser_type, delay=tuple(delay), timeout=timeout, retry_times=retry_times,
                                            backoff_factor=backoff_factor, headless=headless,
                                            user_data_dir=user_data_dir, viewport=viewport,
-                                           extra_args=extra_args, max_pages=max_pages)
+                                           extra_args=extra_args)
             return self
 
 
