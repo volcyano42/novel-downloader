@@ -336,6 +336,72 @@ def test_browser_engine_concurrent_lazy_init_launches_once(monkeypatch):
     assert fake.calls.count(("launch", True)) == 1
 
 
+def test_browser_engine_reuses_page_from_pool(monkeypatch):
+    """连续两次 async_fetch_text 复用同一个 page（new_page 只调用一次，不 close）。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+
+    async def _run():
+        await engine.async_fetch_text("http://a", skip_delay=True)
+        await engine.async_fetch_text("http://b", skip_delay=True)
+    asyncio.run(_run())
+
+    assert fake.calls.count(("new_page",)) == 1      # 第二次复用第一次的 page
+    assert fake.calls.count(("page_close",)) == 0    # 复用不 close
+    assert len(engine._idle_pages) == 1              # 池里有一个空闲 page
+
+
+def test_browser_engine_pool_limits_concurrent_pages(monkeypatch):
+    """max_pages 限制并发 page 数：借满后第 3 个请求阻塞，归还后才放行。"""
+    fake = FakePlaywright(monkeypatch)
+    from novelbase.core.options import BrowserOptions
+    from novelbase.core.engine import BrowserEngine
+    engine = BrowserEngine(BrowserOptions(delay=(0, 0), headless=True, max_pages=2))
+
+    async def _run():
+        await engine._ensure_browser()
+        p1 = await engine._acquire_page()   # 池空，创建 page1
+        p2 = await engine._acquire_page()   # 池空，创建 page2
+        assert fake.calls.count(("new_page",)) == 2
+
+        acquired = []
+        async def third():
+            p = await engine._acquire_page()
+            acquired.append(p)
+        task = asyncio.create_task(third())
+        await asyncio.sleep(0)              # 让 third 尝试 acquire（信号量已耗尽）
+        assert acquired == []               # 第 3 个被阻塞
+
+        await engine._release_page(p1)      # 归还一个
+        await asyncio.sleep(0)
+        assert len(acquired) == 1           # 第 3 个复用归还的 page，无新 new_page
+        task.cancel()
+    asyncio.run(_run())
+
+    assert fake.calls.count(("new_page",)) == 2   # 全程只创建 2 个 page
+
+
+def test_browser_engine_failed_fetch_closes_page_not_return(monkeypatch):
+    """抓取失败：page 被 close 且不归还池（避免坏 page 污染后续复用）。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+
+    async def fake_fail(page, url, skip_delay=False):
+        raise RuntimeError("goto failed")
+
+    monkeypatch.setattr(engine, "_fetch_with_page", fake_fail)
+
+    async def _run():
+        try:
+            await engine.async_fetch_text("http://x", skip_delay=True)
+        except RuntimeError:
+            pass
+    asyncio.run(_run())
+
+    assert ("page_close",) in fake.calls   # 失败 page 被 close
+    assert engine._idle_pages == []        # 不归还池
+
+
 def test_browser_engine_aclose_awaits_shutdown(monkeypatch):
     """aclose() await 完成浏览器/驱动释放，且状态置 None（幂等）。"""
     fake = FakePlaywright(monkeypatch)

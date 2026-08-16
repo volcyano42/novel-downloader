@@ -231,6 +231,8 @@ class BrowserEngine(Engine):
         self._browser = None
         self._context = None
         self._launch_lock = None
+        self._idle_pages: list = []   # 空闲 page 池（复用，避免每次 new_page/close 重新握手）
+        self._page_sem = None          # 限制最大 page 数的信号量（懒创建）
         # 懒启动：__init__ 不启动浏览器/锁，首次 async 调用时 _ensure_browser 启动
 
     def update_options(self, options: BrowserOptions) -> None:
@@ -254,7 +256,7 @@ class BrowserEngine(Engine):
             self.options.viewport = new_vp
             needs_rebuild = True
 
-        for attr in ("delay", "timeout", "retry_times", "backoff_factor"):
+        for attr in ("delay", "timeout", "retry_times", "backoff_factor", "max_pages"):
             if hasattr(options, attr):
                 setattr(self.options, attr, getattr(options, attr))
 
@@ -270,6 +272,8 @@ class BrowserEngine(Engine):
     def _close_running(self) -> None:
         browser, context, pw = self._browser, self._context, self._playwright
         self._browser = self._context = self._playwright = None
+        self._idle_pages.clear()   # 池里 page 随 context 关闭，清空引用
+        self._page_sem = None
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -330,6 +334,24 @@ class BrowserEngine(Engine):
         await self._ensure_browser()
         return await self._context.new_page()
 
+    async def _acquire_page(self):
+        """从池借一个空闲 page；池空则创建新 page（信号量限制最大并发 page 数）。
+
+        复用 page 保留其连接池/DNS/缓存，避免每次 new_page/close 重新握手；
+        信号量保证同一 page 同一时刻只被一个请求独占。
+        """
+        if self._page_sem is None:
+            self._page_sem = asyncio.Semaphore(max(1, self.options.max_pages))
+        await self._page_sem.acquire()
+        if self._idle_pages:
+            return self._idle_pages.pop()
+        return await self._context.new_page()
+
+    async def _release_page(self, page) -> None:
+        """归还 page 到池（不 close，供后续复用）。"""
+        self._idle_pages.append(page)
+        self._page_sem.release()
+
     async def _fetch_with_page(self, page, url, skip_delay=False) -> str:
         """在给定 page 上带 retry/backoff 抓取文本（async 与同步独立会话共用）。"""
         for i in range(self.options.retry_times):
@@ -357,11 +379,18 @@ class BrowserEngine(Engine):
         )
 
     async def _do_fetch_text(self, url, skip_delay=False, **kwargs):
-        page = await self._context.new_page()
+        page = await self._acquire_page()
         try:
-            return await self._fetch_with_page(page, url, skip_delay=skip_delay)
-        finally:
-            await page.close()
+            result = await self._fetch_with_page(page, url, skip_delay=skip_delay)
+        except Exception:
+            # 抓取失败：page 可能已损坏（多次 goto 失败/浏览器异常），close 不归还
+            try:
+                await page.close()
+            except Exception:
+                pass
+            raise
+        await self._release_page(page)
+        return result
 
     async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
         """真异步：直接 await Playwright（不 to_thread）。"""
@@ -439,6 +468,8 @@ class BrowserEngine(Engine):
         super().close()
         browser, context, pw = self._browser, self._context, self._playwright
         self._browser = self._context = self._playwright = None
+        self._idle_pages.clear()   # context 关闭会连带关池里 page，这里清空引用
+        self._page_sem = None
         await self._shutdown(browser, context, pw)
 
     @property
