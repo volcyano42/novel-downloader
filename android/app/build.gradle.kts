@@ -47,7 +47,7 @@ chaquopy {
         pip {
             install("-r", "../../requirements.txt")
             install("file:../..")
-            exclude("drissionpage")
+            exclude("playwright")
             exclude("psutil")
         }
     }

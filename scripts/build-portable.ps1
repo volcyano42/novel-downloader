@@ -171,12 +171,12 @@ if not errorlevel 1 goto keepalive
 === novel-downloader-web 便携版 ===
 
 使用方法：
-  1. 如需使用 browser 模式（DrissionPage），先双击 ChromeSetup.exe 安装 Chrome
+  1. 如需使用 browser 模式（Playwright），运行 `playwright install chromium` 下载浏览器
   2. 双击 启动.bat
   3. 浏览器会自动打开 http://localhost:8000
 
 首次使用 Chrome 模式：
-  DrissionPage 首次调用时可能自动下载匹配的 chromedriver，需等待几秒。
+  Playwright 首次调用前需下载匹配的 chromium（playwright install chromium）。
 
 数据存储位置：
   下载的小说数据保存在 app_data/storage/ 目录下。

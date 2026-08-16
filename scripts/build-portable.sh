@@ -178,7 +178,7 @@ elif ! "$PY" -c "import uvicorn" >/dev/null 2>&1; then
     # 裸包（无 pyroot 无 python-deps）：系统 python 无依赖，自举安装
     echo "[首次运行] 安装项目依赖（需联网，约 10-20 分钟）..."
     export ANDROID_API_LEVEL=24
-    grep -v '^drissionpage' requirements.txt > req-termux.txt
+    grep -v '^playwright' requirements.txt > req-termux.txt
     "$PY" -m pip install -r req-termux.txt
 fi
 
@@ -245,7 +245,7 @@ cat > "$DIST_DIR/启动说明.txt" <<EOF
 停止服务：Ctrl+C 或关闭终端。
 
 说明：
-  - browser 模式（DrissionPage）需要系统已安装 Chrome；Termux 版不含 browser 模式
+  - browser 模式（Playwright）需 `playwright install chromium`；Termux 版不含 browser 模式
   - Linux 版自带 Python 与依赖，开箱即用
   - Termux 版内置 Python (pyroot/) 与依赖，完全开箱即用（无需 pkg install python）
 EOF

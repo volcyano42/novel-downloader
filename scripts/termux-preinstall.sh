@@ -38,7 +38,7 @@ for attempt in 1 2 3; do
       done
       export ANDROID_API_LEVEL=24
       # Termux 排除 browser 模式依赖（psutil 不支持 Android）；容器无 /tmp，用挂载卷
-      grep -v "^drissionpage" /src/requirements.txt > /src/.req-termux.txt
+      grep -v "^playwright" /src/requirements.txt > /src/.req-termux.txt
       # 本地 qemu 容器：清华镜像返回 403，改用阿里云镜像
       pip install --break-system-packages -i https://mirrors.aliyun.com/pypi/simple/ -r /src/.req-termux.txt
       # 导出依赖 site-packages
