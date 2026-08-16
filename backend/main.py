@@ -28,8 +28,8 @@ async def lifespan(app: FastAPI):
         init_all_config()
         print(f"已初始化 {len(result['missing'])} 个配置文件")
     yield
-    # shutdown — 清理所有缓存引擎
-    clear_engine_cache()
+    # shutdown — 清理所有缓存引擎（await 确保浏览器进程彻底释放）
+    await clear_engine_cache()
 
 
 app = FastAPI(title="Novel Downloader API", version="2.0.0", docs_url="/docs", lifespan=lifespan)

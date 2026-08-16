@@ -44,6 +44,6 @@ async def update_engine(engine_id: str, body: UpdateEngineRequest):
 
 @router.delete("/{engine_id}")
 async def delete_engine(engine_id: str):
-    if not engine_manager.delete_explicit_engine(engine_id):
+    if not await engine_manager.delete_explicit_engine(engine_id):
         raise HTTPException(404, "引擎不存在")
     return {"status": "deleted", "engine_id": engine_id}

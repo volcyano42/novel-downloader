@@ -189,6 +189,8 @@ class FakePlaywright:
                 self.chromium = FakeChromium()
             async def start(self):
                 return self
+            async def stop(self):
+                fake.calls.append(("pw_stop",))
             async def __aenter__(self):
                 return self
             async def __aexit__(self, *exc):
@@ -332,6 +334,27 @@ def test_browser_engine_concurrent_lazy_init_launches_once(monkeypatch):
     results = asyncio.run(_run())
     assert results == ["<html>ok</html>", "<html>ok</html>"]
     assert fake.calls.count(("launch", True)) == 1
+
+
+def test_browser_engine_aclose_awaits_shutdown(monkeypatch):
+    """aclose() await 完成浏览器/驱动释放，且状态置 None（幂等）。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+
+    async def _run():
+        await engine.async_fetch_text("http://x", skip_delay=True)
+        await engine.aclose()
+        # 状态已置 None，可重复 aclose 不抛异常
+        await engine.aclose()
+    asyncio.run(_run())
+
+    assert engine._browser is None
+    assert engine._context is None
+    assert engine._playwright is None
+    # 懒启动 + 关闭：browser/context/pw 都被 await 关闭
+    assert ("browser_close",) in fake.calls
+    assert ("context_close",) in fake.calls
+    assert ("pw_stop",) in fake.calls
 
 
 def test_engine_base_has_abstract_async_methods():

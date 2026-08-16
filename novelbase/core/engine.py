@@ -79,6 +79,14 @@ class Engine(ABC):
         except ValueError:
             pass
 
+    async def aclose(self) -> None:
+        """异步关闭（供 async 上下文 await，确保资源完全释放后再退出）。
+
+        默认走同步 close；持有异步资源的引擎（如 BrowserEngine）覆盖此方法，
+        避免「运行中事件循环里 fire-and-forget 关闭，loop 随即退出导致资源残留」。
+        """
+        self.close()
+
     @abstractmethod
     def update_options(self, options) -> None:
         """更新引擎选项（运行时热更新）。"""
@@ -421,6 +429,17 @@ class BrowserEngine(Engine):
         super().close()
         if self._browser is not None or self._context is not None or self._playwright is not None:
             self._close_running()
+
+    async def aclose(self) -> None:
+        """异步关闭：await 完成浏览器/驱动释放（供 shutdown 等 async 上下文）。
+
+        同步 close() 在运行中事件循环里只能 fire-and-forget（loop 随即退出会残留
+        浏览器子进程）；aclose() 由调用方 await，确保彻底释放后再退出。
+        """
+        super().close()
+        browser, context, pw = self._browser, self._context, self._playwright
+        self._browser = self._context = self._playwright = None
+        await self._shutdown(browser, context, pw)
 
     @property
     def browser(self) -> Any:

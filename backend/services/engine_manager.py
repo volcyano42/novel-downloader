@@ -73,26 +73,26 @@ def get_cached_engine(platform: str,
         return engine
 
 
-def invalidate_engine(platform: str,
-                      mode: str = "browser",
-                      variant: str | None = None) -> bool:
+async def invalidate_engine(platform: str,
+                            mode: str = "browser",
+                            variant: str | None = None) -> bool:
     """关闭并移除指定引擎（配置更新时调用）。"""
     key = _fingerprint(platform, mode, variant)
     with _engine_lock:
         engine = _engine_cache.pop(key, None)
     if engine:
-        engine.close()
+        await engine.aclose()
         return True
     return False
 
 
-def clear_engine_cache():
+async def clear_engine_cache():
     """关闭所有缓存引擎（shutdown 时调用）。"""
     with _engine_lock:
         engines = list(_engine_cache.values())
         _engine_cache.clear()
     for engine in engines:
-        engine.close()
+        await engine.aclose()
 
 
 # ── 显式引擎实例（手动创建，key 为 engine_id）──
@@ -261,11 +261,13 @@ def update_explicit_engine(engine_id: str, mode: str,
     return {"id": engine_id, "mode": mode, "platform": info.get("platform", "")}
 
 
-def delete_explicit_engine(engine_id: str) -> bool:
+async def delete_explicit_engine(engine_id: str) -> bool:
     info = _explicit_engines.pop(engine_id, None)
     if info:
         eng = info["engine"]
-        if hasattr(eng, "close"):
+        if hasattr(eng, "aclose"):
+            await eng.aclose()
+        elif hasattr(eng, "close"):
             eng.close()
         return True
     return False
