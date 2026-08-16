@@ -143,6 +143,17 @@ for attempt in $(seq 1 "$MAX_RETRIES"); do
         # Termux onefile 产物需 elf-cleaner 清理（Android linker 必需）
         if [ "$PLATFORM" = "termux" ]; then
             termux-elf-cleaner "$EXE_PATH" 2>/dev/null || true
+            # 生成启动脚本：onefile + 动态 libpython（Termux 无静态库）→
+            # Android linker 不认 $ORIGIN rpath，找不到 libpython3.14.so，需显式 LD_LIBRARY_PATH
+            cat > "$DIST_DIR/start.sh" <<EOF
+#!/data/data/com.termux/files/usr/bin/bash
+# Nuitka onefile + 动态 libpython：不能直接 ./binary，需 LD_LIBRARY_PATH 指向系统 libpython
+cd "\$(dirname "\$0")"
+export LD_LIBRARY_PATH="\$PREFIX/lib:\$LD_LIBRARY_PATH"
+"./$EXE_NAME"
+EOF
+            chmod +x "$DIST_DIR/start.sh"
+            echo "提示: 用 ./dist/start.sh 启动（onefile 动态 libpython 需 LD_LIBRARY_PATH）"
         fi
         TOTAL_ELAPSED=$(( ( $(date +%s) - START_TIME + 30 ) / 60 ))
         SIZE_MB=$(du -m "$EXE_PATH" | cut -f1)
