@@ -126,6 +126,8 @@ mkdir -p "$DIST_DIR/frontend"
 cp -r frontend/dist "$DIST_DIR/frontend/dist"
 # 配置模板（不含用户数据 app_data，避免泄露 API key 等敏感字段；首次运行由 init_config 初始化）
 cp -r template "$DIST_DIR/template"
+# 依赖清单（裸包 fallback 自举 pip install 用）
+cp requirements.txt "$DIST_DIR/requirements.txt"
 # 根目录模块（backend/main.py lifespan 引用），缺失则构建失败（防静默漏包）
 cp init_config.py "$DIST_DIR/init_config.py"
 
@@ -170,6 +172,12 @@ fi
 if [ -d "$PWD/python-deps" ]; then
     export PYTHONPATH="$PWD/python-deps:$PYTHONPATH"
     echo "使用预装依赖 (python-deps/)"
+elif ! "$PY" -c "import uvicorn" >/dev/null 2>&1; then
+    # 裸包（无 pyroot 无 python-deps）：系统 python 无依赖，自举安装
+    echo "[首次运行] 安装项目依赖（需联网，约 10-20 分钟）..."
+    export ANDROID_API_LEVEL=24
+    grep -v '^drissionpage' requirements.txt > req-termux.txt
+    "$PY" -m pip install -r req-termux.txt
 fi
 
 echo "启动 novel-downloader-web (http://127.0.0.1:8000)..."

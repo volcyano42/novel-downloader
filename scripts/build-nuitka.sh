@@ -70,6 +70,18 @@ if [ "$PLATFORM" = "termux" ]; then
     fi
 fi
 
+# ── 0.5. 项目依赖（manifest/编译需要）──
+echo "--- 安装项目依赖 ($(date +%H:%M:%S)) ---"
+if [ "$PLATFORM" = "termux" ]; then
+    # maturin 构建 pydantic-core 等 Rust 扩展需要 Android API level
+    export ANDROID_API_LEVEL=24
+    # Termux 排除 browser 模式依赖（drissionpage→psutil 不支持 Android）
+    grep -v '^drissionpage' requirements.txt > req-termux.txt
+    "$PYTHON" -m pip install -r req-termux.txt
+else
+    "$PYTHON" -m pip install -r requirements.txt
+fi
+
 # ── 1. 构建前端 ──
 echo "--- 构建前端 ($(date +%H:%M:%S)) ---"
 ( cd frontend
