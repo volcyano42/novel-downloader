@@ -112,17 +112,6 @@ try {
     # 配置初始化模块（main.py lifespan 依赖，缺失则 uvicorn 启动失败）——与 build-portable.sh 对齐
     Copy-Item "init_config.py" (Join-Path $portableDir "init_config.py")
 
-    # ── 下载 Chrome 在线安装包 ──
-    Write-Host "--- Downloading ChromeSetup.exe ---" -ForegroundColor Cyan
-    $chromeUrl = "https://dl.google.com/tag/s/installdataindex/update2/installers/ChromeSetup.exe"
-    $chromePath = Join-Path $portableDir "ChromeSetup.exe"
-    try {
-        Invoke-WebRequest -Uri $chromeUrl -OutFile $chromePath
-        Write-Host "ChromeSetup.exe downloaded ($((Get-Item $chromePath).Length) bytes)"
-    } catch {
-        Write-Host "WARNING: ChromeSetup.exe 下载失败，browser 模式需用户自行安装 Chrome" -ForegroundColor Yellow
-    }
-
     # ── 生成启动脚本 ──
     Write-Host "--- Generating launch script ---" -ForegroundColor Cyan
     $batContent = @'
@@ -133,18 +122,11 @@ cd /d "%~dp0"
 set "PYTHONHOME=%~dp0python"
 set "PATH=%~dp0python;%~dp0python\Scripts;%PATH%"
 
-:: 检查 Chrome 浏览器
-set "CHROME_FOUND="
-if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-
-if not defined CHROME_FOUND (
-    echo [提示] 未检测到 Chrome 浏览器。
-    echo 如需使用 browser 模式，请双击 ChromeSetup.exe 安装 Chrome。
-    echo 仅 requests / api 模式不受影响，可继续使用。
-    echo.
-)
+:: browser 模式（Playwright）提示
+echo [提示] 如需使用 browser 模式，请先运行:
+echo   python\python.exe -m playwright install chromium
+echo 仅 requests / api 模式不受影响，可继续使用。
+echo.
 
 echo 正在启动 novel-downloader-web...
 start "" /B python\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
@@ -171,12 +153,12 @@ if not errorlevel 1 goto keepalive
 === novel-downloader-web 便携版 ===
 
 使用方法：
-  1. 如需使用 browser 模式（Playwright），运行 `playwright install chromium` 下载浏览器
+  1. 如需使用 browser 模式（Playwright），运行 `python\python.exe -m playwright install chromium` 下载浏览器
   2. 双击 启动.bat
   3. 浏览器会自动打开 http://localhost:8000
 
-首次使用 Chrome 模式：
-  Playwright 首次调用前需下载匹配的 chromium（playwright install chromium）。
+首次使用 browser 模式：
+  Playwright 首次调用前需下载匹配的 chromium（python\python.exe -m playwright install chromium）。
 
 数据存储位置：
   下载的小说数据保存在 app_data/storage/ 目录下。
@@ -187,7 +169,7 @@ if not errorlevel 1 goto keepalive
 
 问题排查：
   如果启动失败，检查是否缺少 VC++ 运行库（Visual C++ Redistributable）。
-  Chrome 模式需要 Chrome 浏览器已安装。
+  browser 模式需先运行 python\python.exe -m playwright install chromium。
 '@
     $readmeContent | Set-Content -Path (Join-Path $portableDir "启动说明.txt") -Encoding UTF8
 
