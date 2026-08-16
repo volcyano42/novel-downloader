@@ -275,7 +275,7 @@ class TestQidianCoverViaEngine:
 
 
 class TestQimaoCoverAndBrowserChapterList:
-    """qimao rain novel_info 封面走 engine；browser chapter_list 走 to_thread。"""
+    """qimao rain novel_info 封面走 engine；browser chapter_list 走 Playwright new_page。"""
 
     def test_rain_novel_info_downloads_cover_via_engine(self):
         from importlib import import_module
@@ -296,21 +296,28 @@ class TestQimaoCoverAndBrowserChapterList:
         assert novel.cover.raw_data == b"cover-bytes"
         assert novel.cover.url == "http://img.qimao.com/cover.jpg"
 
-    def test_browser_chapter_list_uses_to_thread(self):
+    def test_browser_chapter_list_clicks_catalog_tab(self):
         from importlib import import_module
         mod = import_module("novelbase.sources.qimao.browser.chapter_list")
         engine = MagicMock()
         page = MagicMock()
-        page.html = _QIMAO_CHAPTER_LIST_HTML
-        engine.new_page.return_value = page
+        page.goto = AsyncMock()
+        page.content = AsyncMock(return_value=_QIMAO_CHAPTER_LIST_HTML)
+        page.locator.return_value.count = AsyncMock(return_value=1)
+        page.locator.return_value.click = AsyncMock()
+        page.wait_for_timeout = AsyncMock()
+        page.close = AsyncMock()
+        engine.new_page = AsyncMock(return_value=page)
 
         chapters = asyncio.run(
             mod.chapter_list("https://www.qimao.com/shuku/123-456/", engine)
         )
 
-        engine.new_page.assert_called_once()
-        page.get.assert_called_once()
-        page.close.assert_called_once()
+        engine.new_page.assert_awaited_once()
+        page.goto.assert_awaited_once()
+        page.locator.assert_called_once_with(".tab-inner")
+        page.wait_for_timeout.assert_awaited_once_with(3000)
+        page.close.assert_awaited_once()
         assert len(chapters) == 2
         assert chapters[0].title == "第一章"
 

@@ -9,18 +9,15 @@ async def search(query: str, engine, **kwargs) -> list[SearchResult]:
     search_url = f"https://www.qidian.com/so/{query}.html"
 
     if page > 1:
-        # DrissionPage 是同步库，整段页面前进操作放到线程池
-        def _sync():
-            browser_page = engine.new_page()
-            try:
-                browser_page.get(search_url)
-                next_page_xpath = f"/html/body/div[1]/div[3]/div[1]/div[4]/div[2]/div/div/ul/li[{page}]"
-                browser_page.ele(f"xpath:{next_page_xpath}").click()
-                return browser_page.html
-            finally:
-                browser_page.close()
-
-        html = await asyncio.to_thread(_sync)
+        # Playwright 原生 async：直接 await，不再 to_thread
+        browser_page = await engine.new_page()
+        try:
+            await browser_page.goto(search_url)
+            next_page_xpath = f"/html/body/div[1]/div[3]/div[1]/div[4]/div[2]/div/div/ul/li[{page}]"
+            await browser_page.locator(f"xpath={next_page_xpath}").click()
+            html = await browser_page.content()
+        finally:
+            await browser_page.close()
     else:
         html = await engine.async_fetch_text(search_url, **kwargs)
 
