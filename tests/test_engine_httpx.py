@@ -156,6 +156,8 @@ class FakePlaywright:
                 fake.calls.append(("page_close",))
 
         class FakeContext:
+            def __init__(self):
+                self.browser = FakeBrowser()
             async def new_page(self):
                 fake.calls.append(("new_page",))
                 return FakePage()
@@ -163,8 +165,8 @@ class FakePlaywright:
                 fake.calls.append(("context_close",))
 
         class FakeBrowser:
-            async def new_context(self, **kwargs):
-                fake.calls.append(("new_context", kwargs))
+            async def new_context(self, viewport=None):
+                fake.calls.append(("new_context", viewport))
                 return FakeContext()
             async def new_page(self):
                 fake.calls.append(("new_page",))
@@ -176,6 +178,11 @@ class FakePlaywright:
             async def launch(self, headless=True, args=None):
                 fake.calls.append(("launch", headless))
                 return FakeBrowser()
+            async def launch_persistent_context(
+                self, user_data_dir, headless=True, args=None, **kwargs
+            ):
+                fake.calls.append(("launch_persistent_context", user_data_dir))
+                return FakeContext()
 
         class FakePW:
             def __init__(self):
@@ -213,7 +220,7 @@ def test_browser_engine_async_fetch_text_is_native(monkeypatch):
     assert result == "<html>ok</html>"
     # 懒启动 + goto + content 都被真实调用
     assert ("launch", True) in fake.calls
-    assert ("new_context", {}) in fake.calls  # 无 user_data_dir/viewport 时 kwargs 为空
+    assert ("new_context", None) in fake.calls  # 无 viewport 时显式参数为 None
     assert ("new_page",) in fake.calls
     assert ("goto", "http://x") in fake.calls
     assert ("content",) in fake.calls
@@ -244,6 +251,36 @@ def test_browser_engine_new_page_async(monkeypatch):
     assert page is not None
     assert ("new_page",) in fake.calls
     assert engine._browser is not None  # 懒启动完成
+
+
+def test_browser_engine_user_data_dir_uses_persistent_context(monkeypatch):
+    """user_data_dir 非空时走 launch_persistent_context，不调 launch/new_context。"""
+    from novelbase.core.options import BrowserOptions
+    from novelbase.core.engine import BrowserEngine
+    fake = FakePlaywright(monkeypatch)
+    engine = BrowserEngine(BrowserOptions(
+        delay=(0, 0), headless=True, user_data_dir="C:/tmp/ud",
+    ))
+    result = asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
+    assert result == "<html>ok</html>"
+    assert ("launch_persistent_context", "C:/tmp/ud") in fake.calls
+    assert not any(c[0] == "launch" for c in fake.calls)
+    assert not any(c[0] == "new_context" for c in fake.calls)
+
+
+def test_browser_engine_concurrent_lazy_init_launches_once(monkeypatch):
+    """并发首次 async_fetch_text 只启动一次浏览器（_launch_lock double-check）。"""
+    fake = FakePlaywright(monkeypatch)
+    engine = _browser_engine()
+
+    async def _run():
+        return await asyncio.gather(
+            engine.async_fetch_text("http://a", skip_delay=True),
+            engine.async_fetch_text("http://b", skip_delay=True),
+        )
+    results = asyncio.run(_run())
+    assert results == ["<html>ok</html>", "<html>ok</html>"]
+    assert fake.calls.count(("launch", True)) == 1
 
 
 def test_engine_base_has_abstract_async_methods():

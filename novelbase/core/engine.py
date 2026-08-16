@@ -222,6 +222,7 @@ class BrowserEngine(Engine):
         self._playwright = None
         self._browser = None
         self._context = None
+        self._launch_lock = asyncio.Lock()
         # 懒启动：__init__ 不启动浏览器，首次 async 调用时 _ensure_browser 启动
 
     def update_options(self, options: BrowserOptions) -> None:
@@ -285,22 +286,34 @@ class BrowserEngine(Engine):
     async def _ensure_browser(self):
         if self._browser is not None:
             return
-        pw = _async_playwright()
-        self._playwright = await pw.start()
-        browser_type = getattr(self._playwright, self.options.browser_type, None)
-        if browser_type is None:
-            raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
-        self._browser = await browser_type.launch(
-            headless=self.options.headless,
-            args=self.options.extra_args or [],
-        )
-        ctx_kwargs = {}
-        if self.options.user_data_dir:
-            ctx_kwargs["user_data_dir"] = str(self.options.user_data_dir)
-        if self.options.viewport:
-            ctx_kwargs["viewport"] = self.options.viewport
-        self._context = await self._browser.new_context(**ctx_kwargs)
-        _log.info("BrowserEngine started: headless=%s", self.options.headless)
+        async with self._launch_lock:
+            # double-check：并发首次调用时，后到者在锁内发现已启动则直接返回
+            if self._browser is not None:
+                return
+            pw = _async_playwright()
+            self._playwright = await pw.start()
+            browser_type = getattr(self._playwright, self.options.browser_type, None)
+            if browser_type is None:
+                raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
+            if self.options.user_data_dir:
+                # 持久化上下文：launch_persistent_context 返回 context（自带 browser）
+                self._context = await browser_type.launch_persistent_context(
+                    str(self.options.user_data_dir),
+                    headless=self.options.headless,
+                    args=self.options.extra_args or [],
+                    viewport=self.options.viewport,
+                )
+                self._browser = self._context.browser
+            else:
+                self._browser = await browser_type.launch(
+                    headless=self.options.headless,
+                    args=self.options.extra_args or [],
+                )
+                if self.options.viewport:
+                    self._context = await self._browser.new_context(viewport=self.options.viewport)
+                else:
+                    self._context = await self._browser.new_context()
+            _log.info("BrowserEngine started: headless=%s", self.options.headless)
 
     async def new_page(self):
         """懒启动后返回一个新的 Playwright page（供书源交互）。"""
@@ -364,7 +377,10 @@ class BrowserEngine(Engine):
 
     async def _fetch_in_isolated_session(self, url, skip_delay=False, **kwargs) -> str:
         async with _async_playwright() as pw:
-            browser = await pw.chromium.launch(
+            browser_type = getattr(pw, self.options.browser_type, None)
+            if browser_type is None:
+                raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
+            browser = await browser_type.launch(
                 headless=self.options.headless,
                 args=self.options.extra_args or [],
             )
