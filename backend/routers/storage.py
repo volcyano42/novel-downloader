@@ -23,9 +23,14 @@ def _get_storage():
         ))
     return _storage
 
-def _cover_to_response(cover) -> dict | None:
-    """HEIC -> JPEG 后 base64；PIL 缺失时退回不发送 raw_data。"""
+def _cover_to_response(cover, thumbnail: bool = False) -> dict | None:
+    """HEIC -> JPEG 后 base64；PIL 缺失时退回不发送 raw_data。
+
+    thumbnail=True 时生成缩略图（书架列表用，减小响应体与渲染开销）。
+    """
     if not cover: return None
+    if thumbnail and cover.raw_data:
+        cover = cover.thumbnail()
     if not cover.raw_data:
         return {"raw_data": None, "alt": cover.alt, "url": cover.url, "format": cover.image_format}
 
@@ -88,7 +93,7 @@ async def list_novels():
             "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
-            "cover": _cover_to_response(novel.cover),
+            "cover": _cover_to_response(novel.cover, thumbnail=True),
         })
     return result
 

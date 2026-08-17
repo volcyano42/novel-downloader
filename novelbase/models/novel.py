@@ -90,6 +90,37 @@ class Illustration:
                 "Illustration.convert(%s) 失败: %s", target_format, e)
             return self
 
+    def thumbnail(self, size: tuple[int, int] = (200, 250), quality: int = 70) -> Illustration:
+        """生成缩略图（等比缩小 + 转 JPEG），用于列表等轻量展示场景。
+
+        返回新的 Illustration；raw_data 为空或 Pillow 失败时退回自身（原图）。
+        """
+        if not self.raw_data:
+            return self
+        try:
+            from io import BytesIO
+            from PIL import Image
+
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+
+            src = Image.open(BytesIO(self.raw_data))
+            src.thumbnail(size)
+            if src.mode in ("RGBA", "LA", "P"):
+                bg = Image.new("RGB", src.size, (255, 255, 255))
+                mask = src.split()[-1] if src.mode == "RGBA" else None
+                bg.paste(src, mask=mask)
+                src = bg
+            buf = BytesIO()
+            src.save(buf, format="JPEG", quality=max(1, min(100, quality)))
+            return Illustration(raw_data=buf.getvalue(), alt=self.alt,
+                                insert=self.insert, url=self.url)
+        except Exception as e:
+            import logging
+            logging.getLogger("novelbase.models.novel").warning(
+                "Illustration.thumbnail(%s) 失败: %s", size, e)
+            return self
+
     def to_json(self) -> dict[str, Any]:
         return {
             "raw_data": b64encode(self.raw_data).decode(),
