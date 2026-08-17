@@ -166,9 +166,18 @@ export default function DetailPage() {
   };
 
   useEffect(() => {
-    if (coverZoom) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
+    const scrollArea = document.querySelector("#scroll-area") as HTMLElement | null;
+    if (coverZoom) {
+      document.body.style.overflow = "hidden";
+      if (scrollArea) scrollArea.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+      if (scrollArea) scrollArea.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      if (scrollArea) scrollArea.style.overflow = "";
+    };
   }, [coverZoom]);
 
   const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
@@ -383,7 +392,7 @@ export default function DetailPage() {
                       </div>
                     </label>
                     <span className="inline-flex"><TooltipProvider><Tooltip><TooltipTrigger asChild><span className={`shrink-0 text-xs w-5 text-right cursor-default ${statusColor}`}>{statusIcon}</span></TooltipTrigger><TooltipContent side="top"><p className="text-xs">{statusTip}</p></TooltipContent></Tooltip></TooltipProvider></span>
-                    <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                    <button onClick={() => mc.local && navigate(`/novel/${novelId}/${mc.remote.id}`)} disabled={!mc.local} className="group/ch flex-1 min-w-0 flex items-center rounded-xl px-4 py-2.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                       <span className="truncate text-slate-700 flex-1">{mc.remote.title}</span>
                       {(mc.remote.image_count ?? 0) > 0 && (
                         <span className="ml-1.5 shrink-0 inline-flex items-center gap-0.5 text-amber-500">
@@ -434,7 +443,7 @@ export default function DetailPage() {
       )}
 
       {coverZoom && cover && (
-        <div onClick={closeCover} onWheel={handleCoverWheel} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 p-8 overflow-hidden">
+        <div onClick={closeCover} onWheel={handleCoverWheel} className="fixed inset-0 z-50 flex items-center justify-center bg-black animate-in fade-in duration-200 p-8 overflow-hidden">
           <button onClick={closeCover} className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition-colors z-10"><X className="h-5 w-5" strokeWidth={1.5} /></button>
           <img src={cover} alt={novel?.title} className="rounded-2xl object-contain shadow-2xl transition-transform duration-75" style={{ transform: `scale(${coverScale})`, maxHeight: "90vh", maxWidth: "90vw" }} onClick={e => e.stopPropagation()} />
         </div>
