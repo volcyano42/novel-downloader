@@ -1,6 +1,6 @@
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
-import { useMemo, useState, useEffect } from "react";
-import { BookOpen, Download, Settings, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen, Maximize, Minimize } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BookOpen, Download, Settings, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/Toast";
@@ -21,25 +21,6 @@ const TO_PATH: Record<string, string> = {
   bookshelf: "/bookshelf", search: "/search-tab",
   downloads: "/downloads", settings: "/settings",
 };
-
-function FullscreenButton() {
-  const [isFs, setIsFs] = useState(false);
-  useEffect(() => {
-    const onChange = () => setIsFs(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-  const toggle = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void document.documentElement.requestFullscreen();
-  };
-  return (
-    <button onClick={toggle} title={isFs ? "退出全屏" : "全屏"}
-      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-      {isFs ? <Minimize className="h-[18px] w-[18px]" strokeWidth={1.5} /> : <Maximize className="h-[18px] w-[18px]" strokeWidth={1.5} />}
-    </button>
-  );
-}
 
 export default function App() {
   return (
@@ -93,17 +74,13 @@ function AppShell() {
             </a>
           ))}
         </nav>
-        <div className={cn("px-3 pb-4", collapsed && "flex justify-center px-0")}>
-          <FullscreenButton />
-        </div>
       </aside>
 
       {/* Main */}
       <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Mobile header */}
-        <header className="flex md:hidden shrink-0 items-center justify-between border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
+        <header className="flex md:hidden shrink-0 items-center border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3 z-30">
           <h1 className="text-base font-semibold text-slate-800">{label}</h1>
-          <FullscreenButton />
         </header>
         <div id="scroll-area" className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0 overscroll-contain" style={{ width: "100%", maxWidth: "100%" }}>
           <Routes>
