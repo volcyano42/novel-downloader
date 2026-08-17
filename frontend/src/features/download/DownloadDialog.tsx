@@ -35,7 +35,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
     if (open) {
       const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
       setMode(defaultMode);
-      setVariant(initialVariant ?? "");
+      setVariant(initialVariant ?? (defaultMode === "api" ? variants[0] ?? "" : ""));
       setLoading(false);
       setShakeVariant(false);
     }
@@ -64,7 +64,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
           {visibleModes.map(id => {
             const Icon = MODE_ICONS[id] ?? Globe;
             return (
-              <button key={id} onClick={() => { setMode(id); if (id !== "api") setVariant(""); }}
+              <button key={id} onClick={() => { setMode(id); if (id !== "api") setVariant(""); else if (!variant && variants.length > 0) setVariant(variants[0]); }}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
                   mode === id
