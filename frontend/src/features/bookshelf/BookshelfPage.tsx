@@ -12,6 +12,7 @@ import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatform
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import { SessionCache } from "@/utils/sessionCache";
+import { notifyUser } from "@/utils/notify";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -101,18 +102,21 @@ export default function BookshelfPage() {
   const prevTaskRef = useRef<Record<string, string>>({});
   useEffect(() => {
     const prev = prevTaskRef.current;
+    const sound = globalConfig?.notify?.sound ?? "bell";
     for (const t of tasks) {
       const wasDownloading = prev[t.task_id] === "downloading";
       if ((t.status === "completed" || t.status === "partial") && wasDownloading) {
         toast(`「${t.title}」下载完成`, "success");
+        notifyUser(sound, `「${t.title}」下载完成`);
         refetchNovels();
       } else if (t.status === "failed" && wasDownloading) {
         toast(`「${t.title}」下载失败${t.error ? "：" + t.error : ""}`, "error");
+        notifyUser(sound, `「${t.title}」下载失败`);
         refetchNovels();
       }
       prev[t.task_id] = t.status;
     }
-  }, [tasks, toast, refetchNovels]);
+  }, [tasks, toast, refetchNovels, globalConfig?.notify?.sound]);
 
 
   const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; variant?: string }) => {

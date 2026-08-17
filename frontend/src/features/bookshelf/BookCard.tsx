@@ -129,17 +129,17 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
               <BookOpen className="h-10 w-10 text-slate-300" strokeWidth={1.5} />
             </div>
           )}
-          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
-            {novelId && (
-              <button onClick={e => { e.stopPropagation(); toggleFavMut.mutate({ novelId, favorited: !favorites.includes(novelId) }); }}
-                className={`rounded-lg p-1.5 transition-colors shadow-sm ${
-                  favorites.includes(novelId)
-                    ? "bg-rose-100 text-rose-500 hover:bg-rose-200"
-                    : "bg-white/80 text-slate-400 hover:text-rose-500 hover:bg-white"
-                }`}>
-                <Heart className="h-3.5 w-3.5" fill={favorites.includes(novelId) ? "currentColor" : "none"} strokeWidth={2} />
-              </button>
-            )}
+          {novelId && (
+            <button onClick={e => { e.stopPropagation(); toggleFavMut.mutate({ novelId, favorited: !favorites.includes(novelId) }); }}
+              className={`absolute top-1.5 left-1.5 rounded-lg p-1.5 transition-colors shadow-sm md:opacity-0 md:group-hover/card:opacity-100 ${
+                favorites.includes(novelId)
+                  ? "bg-rose-100 text-rose-500 hover:bg-rose-200"
+                  : "bg-white/80 text-slate-400 hover:text-rose-500 hover:bg-white"
+              }`}>
+              <Heart className="h-3.5 w-3.5" fill={favorites.includes(novelId) ? "currentColor" : "none"} strokeWidth={2} />
+            </button>
+          )}
+          <div className="absolute bottom-1.5 right-1.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button onClick={e => e.stopPropagation()}
