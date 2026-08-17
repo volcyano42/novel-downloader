@@ -62,7 +62,7 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
   const visible = firstActive >= 0
     ? chapters.slice(firstActive, firstActive + 10)
     : chapters.slice(0, 10);
-  const hasPanel = (status === "downloading" || status === "paused") && chapters.length > 0;
+  const hasPanel = chapters.length > 0;
 
   return (
     <div className={cn(
