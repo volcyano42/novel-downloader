@@ -387,7 +387,7 @@ export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: 
         </Row>
       </Section>
 
-      <div className="sticky bottom-0 z-30 mt-2 py-4 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-950 dark:via-slate-950/95" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
+      <div className="sticky bottom-16 md:bottom-0 z-30 mt-2 py-4 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-950 dark:via-slate-950/95" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
         <button onClick={onSave} disabled={saving}
           className={`w-full rounded-2xl py-2.5 text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${saved ? "bg-emerald-500 text-white" : "bg-indigo-500 text-white hover:bg-indigo-600 active:scale-[0.98] shadow-lg shadow-indigo-500/25"} disabled:opacity-60 disabled:cursor-not-allowed`}>
           {saving ? <><Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />保存中...</> : saved ? <><Check className="h-4 w-4" strokeWidth={2.5} />已保存</> : "💾 保存设置"}

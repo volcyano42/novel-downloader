@@ -39,7 +39,10 @@ async def save_config(body: dict):
         dl["max_workers"] = body["max_workers"]
         changed = True
     if "notify" in body and isinstance(body["notify"], dict):
-        dl["notify"] = config_service.deep_merge(dl.get("notify", {}), body["notify"])
+        merged = config_service.deep_merge(dl.get("notify", {}), body["notify"])
+        defaults = config_service.GLOBAL_DEFAULTS["notify"]
+        # 清理与默认值相同的字段，避免前端原样回传时把默认值实体化写入 config.yaml
+        dl["notify"] = {k: v for k, v in merged.items() if k not in defaults or v != defaults[k]}
         changed = True
     if "log_level" in body:
         raw.setdefault("log", {})["level"] = body["log_level"]
