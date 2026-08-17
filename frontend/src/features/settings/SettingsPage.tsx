@@ -63,7 +63,9 @@ function Range({ value, onChange, min, max, left, right }: { value: number; onCh
         <span className="absolute text-[11px] font-semibold text-indigo-500 tabular-nums -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: `${pct}%` }}>{value}</span>
       </div>
       <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))}
-        className="w-full h-1.5 rounded-full bg-slate-200 appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer dark:bg-slate-700" />
+        className="w-full h-8 appearance-none bg-transparent cursor-pointer
+          [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-slate-200 dark:[&::-webkit-slider-runnable-track]:bg-slate-700
+          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:-mt-[5px]" />
       <div className="flex justify-between text-[10px] text-slate-400">
         <span>{left}</span>
         <span>{right}</span>
@@ -139,9 +141,19 @@ function EngineSection({ mode }: { mode: string }) {
 
   const engineCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
   const fields = ENGINE_FIELDS[mode] ?? [];
-  // 使用 siteCfg.api_variants（来自 config 端点，包含全部 variant 含 disabled），
-  // 而非 caps.api（sources 端点已过滤为仅 enabled），确保设置页能显示所有 variant
-  const apiVariants: string[] = siteCfg?.api_variants ?? [];
+  // 优先用 siteCfg.api_variants（config 端点，含全部 variant 含 disabled）；
+  // 远程访问/配置未初始化时 fallback 到 sources capabilities（enabled 的 api variant）
+  const apiVariants: string[] = useMemo(() => {
+    const fromSite = siteCfg?.api_variants ?? [];
+    if (fromSite.length > 0) return fromSite;
+    if (sources) {
+      const caps = sources[platform]?.capabilities;
+      if (caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)) {
+        return Object.keys(caps.api).filter(k => k !== "");
+      }
+    }
+    return [];
+  }, [siteCfg, sources, platform]);
   const hasVariants = mode === "api" && apiVariants.length > 0;
 
   const updateField = useCallback((key: string, value: unknown) => {
@@ -261,7 +273,6 @@ function FormatsSection() {
   const [tab, setTab] = useState("txt");
   const { data: fmtCfg } = useFormatConfig(tab);
   const saveFmt = useSaveFormatConfig(tab);
-  const enabled = !!fmtCfg?.enabled;
 
   return (
     <Section icon={Package} title="导出格式">
@@ -273,9 +284,6 @@ function FormatsSection() {
           </button>
         ))}
       </div>
-      <Row label="启用">
-        <Toggle checked={enabled} onChange={v => saveFmt.mutate({ ...fmtCfg, enabled: v })} />
-      </Row>
       {tab === "txt" && (
         <Row label="编码">
           <Select value={String(fmtCfg?.encoding ?? "utf-8")} onChange={v => saveFmt.mutate({ ...fmtCfg, encoding: v })}
