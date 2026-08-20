@@ -12,11 +12,12 @@ export default function ReaderPage() {
   const { data: chapters = [] } = useChapters(novelId);
   const { data: chapter, isLoading: loading } = useChapter(novelId, chapterId);
   const { data: meta } = useNovelMeta(novelId);
+  const content = chapter?.content ?? "";
 
-  // 进入/换章时置顶
+  // 进入/换章时置顶（依赖 content：内容加载完成后再次回顶，避免滚动位置被新内容撑开）
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [chapterId]);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [chapterId, content]);
 
   useEffect(() => {
     if (chapter) {
@@ -31,7 +32,6 @@ export default function ReaderPage() {
   }, [novelId, navigate]);
 
   const currentTitle = chapters.find(ch => ch.id === currentId)?.title ?? "";
-  const content = chapter?.content ?? "";
 
   if (loading || !content) return <ReaderSkeleton />;
 

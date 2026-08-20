@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo, type WheelEvent } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
 import { useNovelMeta, useRemoteChapters, useDownloadMutation, useGlobalConfig, compareChapters, useSources } from "@/hooks/index";
@@ -53,7 +53,6 @@ export default function DetailPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(isRemote);
   const [coverZoom, setCoverZoom] = useState(false);
-  const [coverScale, setCoverScale] = useState(1);
   const [nearBottom, setNearBottom] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -159,12 +158,6 @@ export default function DetailPage() {
 
   const handleBack = () => navigate(-1);
 
-  const handleCoverWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setCoverScale(prev => Math.min(5, Math.max(0.5, prev - e.deltaY * 0.005)));
-  };
-
   useEffect(() => {
     const scrollArea = document.querySelector("#scroll-area") as HTMLElement | null;
     if (coverZoom) {
@@ -180,7 +173,7 @@ export default function DetailPage() {
     };
   }, [coverZoom]);
 
-  const closeCover = () => { setCoverZoom(false); setCoverScale(1); };
+  const closeCover = () => { setCoverZoom(false); };
 
   useEffect(() => {
     const el = document.querySelector("#scroll-area");
@@ -246,8 +239,8 @@ export default function DetailPage() {
       platform: platformFromUrl(novel?.url),
     });
     setSelectedIds(new Set());
-    navigate("/downloads");
-  }, [novelId, selectedIds, localChapters, novel?.title, novel?.url, navigate, downloadMut]);
+    toast(`「${novel?.title ?? novelId}」已开始下载`, "success");
+  }, [novelId, selectedIds, localChapters, novel?.title, novel?.url, toast, downloadMut]);
 
   const runDownload = useCallback((mode: string, variant?: string) => {
     if (!novelId || selectedIds.size === 0) return;
@@ -264,8 +257,8 @@ export default function DetailPage() {
       platform: platformFromUrl(novel?.url),
     });
     setSelectedIds(new Set());
-    navigate("/downloads");
-  }, [novelId, selectedIds, merged, novel?.title, novel?.url, navigate, downloadMut]);
+    toast(`「${novel?.title ?? novelId}」已开始下载`, "success");
+  }, [novelId, selectedIds, merged, novel?.title, novel?.url, toast, downloadMut]);
 
   const handleCheckUpdate = useCallback(() => {
     // 优先用本 session 选过的模式，兜底用 Settings 中的全局配置
@@ -339,7 +332,6 @@ export default function DetailPage() {
           )}
           <div className="mt-8 mb-3 flex flex-wrap items-center gap-3">
             <h3 className="text-base font-semibold text-slate-800">章节列表</h3>
-            {streaming && <span className="text-xs text-amber-500">加载中...</span>}
             {showCompare && (
               <>
                 <button onClick={toggleAll} className="text-xs text-slate-400 hover:text-indigo-500 transition-colors">{allSelected ? "全不选" : "全选"}</button>
@@ -410,7 +402,9 @@ export default function DetailPage() {
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-y-auto overscroll-contain space-y-1 border border-slate-200 rounded-xl px-2">
-              {chapters.map(ch => {
+              {streaming ? (
+                Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-10 animate-pulse rounded-xl bg-slate-200" />)
+              ) : chapters.map(ch => {
                 const checked = selectedIds.has(ch.id);
                 return (
                 <div key={ch.id} className="flex items-center gap-2">
@@ -443,9 +437,9 @@ export default function DetailPage() {
       )}
 
       {coverZoom && cover && (
-        <div onClick={closeCover} onWheel={handleCoverWheel} className="fixed inset-0 z-50 flex items-center justify-center bg-black animate-in fade-in duration-200 p-8 overflow-hidden">
+        <div onClick={closeCover} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 p-8 overflow-hidden">
           <button onClick={closeCover} className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition-colors z-10"><X className="h-5 w-5" strokeWidth={1.5} /></button>
-          <img src={cover} alt={novel?.title} className="rounded-2xl object-contain shadow-2xl transition-transform duration-75" style={{ transform: `scale(${coverScale})`, maxHeight: "90vh", maxWidth: "90vw" }} onClick={e => e.stopPropagation()} />
+          <img src={cover} alt={novel?.title} className="rounded-2xl object-contain shadow-2xl max-h-[90vh] max-w-[90vw]" onClick={e => e.stopPropagation()} />
         </div>
       )}
 

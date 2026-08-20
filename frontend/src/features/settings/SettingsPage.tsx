@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Download, Settings, Check, Loader2, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers, Eye, EyeOff } from "lucide-react";
+import { Download, Settings, ChevronDown, Gauge, Package, Monitor, Globe, Zap, Bell, Layers, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSaveGlobalConfig, useSiteConfig, useSaveSiteConfig, useFormatConfig, useSaveFormatConfig, usePlatforms, useSources } from "@/hooks/index";
+import { useToast } from "@/components/Toast";
 import type { GlobalConfig, SiteConfig } from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -236,10 +237,10 @@ function ApiVariantsSection({ engineCfg, mode, variants, saveSite }: {
           </button>
         ))}
       </div>
-      <Row label="KEY" desc="••••••••">
+      <Row label="KEY">
         <div className="flex items-center gap-1">
-          <input type="text" value={String(pCfg.key ?? "")} onChange={e => updateVariant("key", e.target.value)}
-            className={cn("w-40 rounded-lg border border-white/20 bg-white/50 px-2 py-1 text-xs text-slate-700 outline-none dark:bg-slate-800/50 dark:text-slate-300 transition-opacity", showKey ? "opacity-100" : "opacity-0 pointer-events-none")} />
+          <input type="text" placeholder="在此输入 API Key" value={String(pCfg.key ?? "")} onChange={e => updateVariant("key", e.target.value)}
+            className={cn("w-40 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-300 transition-opacity", showKey ? "opacity-100" : "opacity-0 pointer-events-none")} />
           <button onClick={() => setShowKey(!showKey)}
             className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
             {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -315,14 +316,12 @@ function FormatsSection() {
 
 interface SettingsViewProps {
   globalConfig: GlobalConfig;
-  saving: boolean;
-  saved: boolean;
   onUpdate: (path: string, value: unknown) => void;
-  onSave: () => void;
 }
 
-export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: SettingsViewProps) {
+export function SettingsView({ globalConfig, onUpdate }: SettingsViewProps) {
   const saveGlobal = useSaveGlobalConfig();
+  const toast = useToast();
   const { data: sources } = useSources();
   // 模式列表从 sources capabilities 动态生成（同搜索页），已知模式固定顺序
   const modeOptions = useMemo(() => {
@@ -340,9 +339,11 @@ export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: 
   const mode = availableModes.includes(globalConfig.mode) ? globalConfig.mode : availableModes[0];
 
   const updateGlobal = useCallback((key: string, value: unknown) => {
-    saveGlobal.mutate({ ...globalConfig, [key]: value });
+    saveGlobal.mutateAsync({ ...globalConfig, [key]: value })
+      .then(() => toast("设置已保存", "success"))
+      .catch(() => toast("设置保存失败", "error"));
     onUpdate(key, value);
-  }, [globalConfig, saveGlobal, onUpdate]);
+  }, [globalConfig, saveGlobal, onUpdate, toast]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-4">
@@ -386,13 +387,6 @@ export function SettingsView({ globalConfig, saving, saved, onUpdate, onSave }: 
             options={[{ value: "bell", label: "🔔 响铃" }, { value: "system", label: "💻 系统通知" }, { value: "none", label: "🔇 静默" }]} />
         </Row>
       </Section>
-
-      <div className="sticky bottom-20 md:bottom-0 z-30 mt-2 py-4 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-950 dark:via-slate-950/95" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}>
-        <button onClick={onSave} disabled={saving}
-          className={`w-full rounded-2xl py-2.5 text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${saved ? "bg-emerald-500 text-white" : "bg-indigo-500 text-white hover:bg-indigo-600 active:scale-[0.98] shadow-lg shadow-indigo-500/25"} disabled:opacity-60 disabled:cursor-not-allowed`}>
-          {saving ? <><Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />保存中...</> : saved ? <><Check className="h-4 w-4" strokeWidth={2.5} />已保存</> : "💾 保存设置"}
-        </button>
-      </div>
     </div>
   );
 }

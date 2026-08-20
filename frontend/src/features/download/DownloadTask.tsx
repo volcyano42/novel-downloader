@@ -52,17 +52,44 @@ function ChapterRow({ ch }: { ch: ChapterStatus }) {
   );
 }
 
+function ChapterRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-slate-200" />
+      <span className="h-3 w-3/4 animate-pulse rounded bg-slate-200" />
+    </div>
+  );
+}
+
+export function DownloadTaskSkeleton() {
+  // 任务卡片骨架（仿 BookCardSkeleton 的 animate-pulse 风格）
+  return (
+    <div className="rounded-xl border border-white/20 bg-white/80 backdrop-blur-xl shadow-card px-4 py-3">
+      <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+      <div className="mt-2 flex items-center gap-2">
+        <div className="h-1.5 w-[120px] animate-pulse rounded-lg bg-slate-200" />
+        <div className="h-3 w-8 animate-pulse rounded bg-slate-200" />
+      </div>
+    </div>
+  );
+}
+
 export function DownloadTask({ title, status, progress = 0, errorMessage, currentTitle, chapters = [], onPause, onResume, onCancel, onRetry, className }: DownloadTaskProps) {
   const cfg = statusConfig[status]; const Icon = cfg.icon;
   const showProgress = status === "downloading" || status === "paused";
   const [expanded, setExpanded] = useState(false);
 
-  // 取「第一个非 downloaded 章节起的前 10 个」
-  const firstActive = chapters.findIndex(c => c.status !== "downloaded");
-  const visible = firstActive >= 0
-    ? chapters.slice(firstActive, firstActive + 10)
-    : chapters.slice(0, 10);
-  const hasPanel = chapters.length > 0;
+  // 章节可见范围：completed/partial 展开全部（显示成功/失败章节）；
+  // 下载中/暂停取「第一个非 downloaded 章节起的前 10 个」避免面板过长
+  const visible = status === "completed" || status === "partial"
+    ? chapters
+    : (() => {
+        const firstActive = chapters.findIndex(c => c.status !== "downloaded");
+        return firstActive >= 0
+          ? chapters.slice(firstActive, firstActive + 10)
+          : chapters.slice(0, 10);
+      })();
+  const hasPanel = chapters.length > 0 || showProgress;
 
   return (
     <div className={cn(
@@ -120,9 +147,11 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
         <div className="overflow-hidden">
           <div className="min-w-0 px-4 pb-3 border-t border-slate-100">
             <div className="pt-2 space-y-0.5">
-              {visible.map((ch, i) => (
-                <ChapterRow key={`${ch.order}-${ch.title}-${i}`} ch={ch} />
-              ))}
+              {visible.length === 0
+                ? Array.from({ length: 3 }).map((_, i) => <ChapterRowSkeleton key={i} />)
+                : visible.map((ch, i) => (
+                    <ChapterRow key={`${ch.order}-${ch.title}-${i}`} ch={ch} />
+                  ))}
             </div>
           </div>
         </div>

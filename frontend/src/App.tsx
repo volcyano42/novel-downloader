@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate, Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { BookOpen, Download, Settings, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,7 +62,7 @@ function AppShell() {
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {DESKTOP_ITEMS.map(({ id, label: lbl, icon: Icon }) => (
-            <a key={id} href={TO_PATH[id]} title={collapsed ? lbl : undefined}
+            <Link key={id} to={TO_PATH[id]} title={collapsed ? lbl : undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200",
                 collapsed && "justify-center px-0",
@@ -71,7 +71,7 @@ function AppShell() {
                   : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800",
               )}>
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.5} />{!collapsed && lbl}
-            </a>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -100,14 +100,14 @@ function AppShell() {
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex md:hidden items-center justify-around border-t border-white/20 bg-white/90 backdrop-blur-xl px-2 py-2"
         style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}>
         {DESKTOP_ITEMS.map(({ id, label: lbl, icon: Icon }) => (
-          <a key={id} href={TO_PATH[id]}
+          <Link key={id} to={TO_PATH[id]}
             className={cn(
               "flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-xs transition-colors",
               activeNav === id ? "text-indigo-500" : "text-slate-400",
             )}>
             <Icon className="h-[18px] w-[18px]" strokeWidth={1.5} />
             <span>{lbl}</span>
-          </a>
+          </Link>
         ))}
       </nav>
     </div>

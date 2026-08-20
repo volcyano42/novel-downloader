@@ -130,16 +130,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
             </div>
           )}
           {novelId && (
-            <button onClick={e => { e.stopPropagation(); toggleFavMut.mutate({ novelId, favorited: !favorites.includes(novelId) }); }}
-              className={`absolute top-1.5 left-1.5 rounded-lg p-1.5 transition-colors shadow-sm md:opacity-0 md:group-hover/card:opacity-100 ${
-                favorites.includes(novelId)
-                  ? "bg-rose-100 text-rose-500 hover:bg-rose-200"
-                  : "bg-white/80 text-slate-400 hover:text-rose-500 hover:bg-white"
-              }`}>
-              <Heart className="h-3.5 w-3.5" fill={favorites.includes(novelId) ? "currentColor" : "none"} strokeWidth={2} />
-            </button>
-          )}
-          <div className="absolute bottom-1.5 right-1.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
+            <div className="absolute bottom-1.5 right-1.5 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button onClick={e => e.stopPropagation()}
@@ -148,6 +139,15 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent onClick={e => e.stopPropagation()} align="end" className="w-40 !max-h-none !overflow-y-visible rounded-xl border-white/20 bg-white/95 backdrop-blur-xl shadow-xl py-1.5">
+                {novelId && (
+                  <DropdownMenuItem onSelect={() => toggleFavMut.mutate({ novelId, favorited: !favorites.includes(novelId) })}
+                    className="rounded-lg">
+                    <Heart className={`mr-2 h-3.5 w-3.5 ${favorites.includes(novelId) ? "text-rose-500" : ""}`}
+                      fill={favorites.includes(novelId) ? "currentColor" : "none"} strokeWidth={2} />
+                    {favorites.includes(novelId) ? "取消收藏" : "收藏"}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setShowExport(true)}
                   className="rounded-lg">
                   <FileDown className="mr-2 h-3.5 w-3.5" />
@@ -209,6 +209,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          )}
         </div>
         <div className="flex flex-1 flex-col gap-1 px-4 py-3">
           {novelId && <p className="truncate text-[11px] text-slate-400 font-mono">{novelId}</p>}
