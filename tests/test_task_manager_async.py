@@ -148,7 +148,9 @@ def test_pause_freezes_progress_until_resume(monkeypatch):
     from backend.services import task_manager as tm
 
     chapters = _chapters(5)
-    _install_mocks(monkeypatch, chapters)
+    # speed=0.05：5 章约 0.1s 下完，sleep(0.02) 时稳定处于下载中，
+    # 避免默认 speed=0.01 与 sleep(0.02) 临界竞态导致 pause 落在完成后
+    _install_mocks(monkeypatch, chapters, speed=0.05)
     tm._tasks.clear()
 
     async def _run():

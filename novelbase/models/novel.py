@@ -285,6 +285,8 @@ class Novel:
     cover: Illustration | None = None
     chapters: Chapters = field(default_factory=Chapters)
     extra: Box = field(default_factory=Box)
+    # serial 自动模式标记：serial==0 的书源（如 92xs）进入后持续跟随本地章节数
+    _serial_auto: bool = field(default=False, init=False, repr=False, compare=False)
 
     @property
     def origin_id(self) -> str:
@@ -296,6 +298,13 @@ class Novel:
     @origin_id.setter
     def origin_id(self, value) -> None:
         """只读属性，忽略赋值（兼容 Novel.loads 的 setattr 流程）。"""
+
+    def __post_init__(self) -> None:
+        # serial 兜底：serial 为 0 但已有章节时，进入自动模式跟随本地章节数
+        # （92xs 等书源拿不到源站总章节数，serial 恒为 0）
+        if not self.serial and len(self.chapters):
+            self.serial = len(self.chapters)
+            self._serial_auto = True
 
     @staticmethod
     def loads(title: str, url: str, id: str, serial: int, author: str, description: str,
@@ -313,6 +322,9 @@ class Novel:
 
     def update_chapter(self, chapter: Chapter | Iterable[Chapter]) -> None:
         self.chapters = self.chapters.merge(chapter)
+        if self._serial_auto or not self.serial:
+            self.serial = len(self.chapters)
+            self._serial_auto = True
 
 @dataclass
 class SearchResult:

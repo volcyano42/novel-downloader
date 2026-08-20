@@ -340,6 +340,41 @@ class TestNovel:
         novel.update_chapter(batch)
         assert len(novel.chapters) == 5
 
+    # ── serial 兜底：serial=0 时跟随本地章节数 ──
+
+    def test_serial_zero_with_chapters_defaults_to_length(self):
+        n = Novel(title="t", url="u", id="n", serial=0,
+                  author="a", description="d",
+                  chapters=Chapters([
+                      Chapter(id="c1", url="u1", novel_id="n", title="章1", order=1),
+                      Chapter(id="c2", url="u2", novel_id="n", title="章2", order=2),
+                  ]))
+        assert n.serial == 2
+
+    def test_serial_zero_without_chapters_stays_zero(self):
+        n = Novel(title="t", url="u", id="n", serial=0, author="a", description="d")
+        assert n.serial == 0
+
+    def test_serial_nonzero_not_overridden(self):
+        n = Novel(title="t", url="u", id="n", serial=12, author="a", description="d",
+                  chapters=Chapters([
+                      Chapter(id="c1", url="u1", novel_id="n", title="章1", order=1),
+                  ]))
+        assert n.serial == 12  # 源站总章节数优先，不被本地章节数覆盖
+
+    def test_update_chapter_syncs_serial_when_zero(self):
+        n = Novel(title="t", url="u", id="n", serial=0, author="a", description="d")
+        assert n.serial == 0
+        n.update_chapter(Chapter(id="c1", url="u1", novel_id="n", title="章1", order=1))
+        assert n.serial == 1
+        n.update_chapter(Chapter(id="c2", url="u2", novel_id="n", title="章2", order=2))
+        assert n.serial == 2
+
+    def test_update_chapter_keeps_nonzero_serial(self):
+        n = Novel(title="t", url="u", id="n", serial=10, author="a", description="d")
+        n.update_chapter(Chapter(id="c1", url="u1", novel_id="n", title="章1", order=1))
+        assert n.serial == 10  # 显式 serial 不被 update_chapter 改动
+
 # ═══════════════════════════════════════════════════════════════
 # SearchResult
 # ═══════════════════════════════════════════════════════════════
