@@ -4,11 +4,12 @@ import { ChevronDown, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookCard, BookCardSkeleton } from "./BookCard";
 import { SearchBar } from "./SearchBar";
+import { SearchHistoryPanel } from "./SearchHistoryPanel";
 import { SearchResultCard } from "./SearchResultCard";
-import { DownloadTask } from "@/features/download/DownloadTask";
+import { DownloadTask, DownloadTaskSkeleton } from "@/features/download/DownloadTask";
 import { SettingsView } from "@/features/settings/SettingsPage";
 import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useSaveGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta, useFavorites } from "@/hooks/index";
+import { useNovels, useGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta, useFavorites, useAddSearchHistory } from "@/hooks/index";
 import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
 import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
 import { SessionCache } from "@/utils/sessionCache";
@@ -31,11 +32,11 @@ export default function BookshelfPage() {
   const { data: groups = {} } = useGroups();
   const { data: favorites = [] } = useFavorites();
   const { data: platforms = [] } = usePlatforms();
-  const { data: tasks = [] } = useTasks(activeNav === "downloads");
+  const { data: tasks = [], isLoading: tasksLoading } = useTasks(activeNav === "downloads");
   const toast = useToast();
   const deleteNovelMut = useDeleteNovel();
-  const saveGlobalConfigMut = useSaveGlobalConfig();
   const fetchMetaMut = useFetchMeta();
+  const addHistoryMut = useAddSearchHistory();
 
   // sources capabilities for SearchBar
   const { data: sources } = useSources();
@@ -69,12 +70,11 @@ export default function BookshelfPage() {
   const searchPlatform = "fanqie";
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const searchModeRef = useRef(SessionCache.getMode());
   const searchVariantRef = useRef<string | undefined>(SessionCache.getVariant());
   const navigatingRef = useRef(false);
   const [searchCachedQuery, setSearchCachedQuery] = useState("");
+  const [prefill, setPrefill] = useState<{ nonce: number; query: string; platform?: string } | null>(null);
   const [resultTab, setResultTab] = useState<string>("all");
   const navigate = useNavigate();
 
@@ -129,6 +129,7 @@ export default function BookshelfPage() {
     SessionCache.setMode(mode);
     SessionCache.setVariant(variant);
     SessionCache.saveSearch(query, platform, mode, variant);
+    addHistoryMut.mutate({ platform, keyword: query.trim() });
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
@@ -139,7 +140,11 @@ export default function BookshelfPage() {
       return;
     }
     setSearchParams({ platform, query, mode, variant });
-  }, [searchPlatform, navigate, toast, fetchMetaMut]);
+  }, [searchPlatform, navigate, toast, fetchMetaMut, addHistoryMut]);
+
+  const handleHistoryPick = useCallback((item: { platform: string; keyword: string }) => {
+    setPrefill({ nonce: Date.now(), query: item.keyword, platform: item.platform || undefined });
+  }, []);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     if (navigatingRef.current) return;
@@ -159,17 +164,8 @@ export default function BookshelfPage() {
   }, [navigate, novels, fetchMetaMut, toast]);
 
   const handleSettingsUpdate = useCallback((_path: string, _value: unknown) => {
-    // 配置已在 SettingsView 内部通过 React Query 提交，此处仅重置保存标志
-    setSaved(false);
+    // 配置已在 SettingsView 内部通过 React Query 自动保存
   }, []);
-
-  const handleSaveSettings = useCallback(async () => {
-    if (!globalConfig) return;
-    setSaving(true);
-    try { await saveGlobalConfigMut.mutateAsync(globalConfig); setSaved(true); setTimeout(() => setSaved(false), 2500); }
-    catch { console.warn("saveGlobalConfig failed"); }
-    finally { setSaving(false); }
-  }, [globalConfig, saveGlobalConfigMut]);
 
   // groups
   const groupNames = useMemo(() => Object.keys(groups), [groups]);
@@ -192,26 +188,6 @@ export default function BookshelfPage() {
               : novels).filter(n =>
                 !searchQuery || n.title.includes(searchQuery) || n.author.includes(searchQuery)
               );
-            if (filtered.length === 0) {
-              return <div className="flex flex-col items-center justify-center py-20 text-slate-400"><p className="text-lg">{searchQuery ? "无匹配结果" : showFavoritesOnly ? "暂无收藏" : "书架空空"}</p></div>;
-            }
-            const groupMap = new Map<string, string>();
-            for (const [group, ids] of Object.entries(groups)) {
-              for (const id of Object.keys(ids)) groupMap.set(id, group);
-            }
-            const grouped = new Map<string, NovelMeta[]>();
-            const ungrouped: NovelMeta[] = [];
-            for (const n of filtered) {
-              const g = groupMap.get(n.id);
-              if (g) { if (!grouped.has(g)) grouped.set(g, []); grouped.get(g)!.push(n); }
-              else ungrouped.push(n);
-            }
-            const entries = [...grouped.entries(), ...(ungrouped.length ? [["未分类", ungrouped] as const] : [])];
-            const toggleGroup = (tag: string) => setCollapsed(prev => {
-              const next = new Set(prev);
-              if (next.has(tag)) next.delete(tag); else next.add(tag);
-              return next;
-            });
             return (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
@@ -226,28 +202,53 @@ export default function BookshelfPage() {
                     <Heart className="h-3.5 w-3.5" fill={showFavoritesOnly ? "currentColor" : "none"} />收藏
                   </button>
                 </div>
-                {entries.map(([tag, items]) => (
-                  <div key={tag}>
-                    <button onClick={() => toggleGroup(tag)} className="flex items-center gap-2 mb-3 group">
-                      <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${collapsed.has(tag) ? "-rotate-90" : ""}`} strokeWidth={1.5} />
-                      <span className="text-sm font-medium text-slate-600">{tag}</span>
-                      <span className="text-xs text-slate-400">({items.length})</span>
-                    </button>
-                    {!collapsed.has(tag) && (
-                      <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                        {items.map(novel => (
-                          <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author}
-                            onRead={() => navigate(`/novel/${novel.id}`)}
-                            groups={groupNames}
-                            currentGroup={tag === "未分类" ? undefined : tag}
-                            onDelete={handleDeleteNovel}
-                            cover={coverToUrl(novel.cover)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-slate-400"><p className="text-lg">{searchQuery ? "无匹配结果" : showFavoritesOnly ? "暂无收藏" : "书架空空"}</p></div>
+                ) : (() => {
+                  const groupMap = new Map<string, string>();
+                  for (const [group, ids] of Object.entries(groups)) {
+                    for (const id of Object.keys(ids)) groupMap.set(id, group);
+                  }
+                  const grouped = new Map<string, NovelMeta[]>();
+                  const ungrouped: NovelMeta[] = [];
+                  for (const n of filtered) {
+                    const g = groupMap.get(n.id);
+                    if (g) { if (!grouped.has(g)) grouped.set(g, []); grouped.get(g)!.push(n); }
+                    else ungrouped.push(n);
+                  }
+                  const entries = [...grouped.entries(), ...(ungrouped.length ? [["未分类", ungrouped] as const] : [])];
+                  const toggleGroup = (tag: string) => setCollapsed(prev => {
+                    const next = new Set(prev);
+                    if (next.has(tag)) next.delete(tag); else next.add(tag);
+                    return next;
+                  });
+                  return (
+                    <div className="space-y-6">
+                      {entries.map(([tag, items]) => (
+                        <div key={tag}>
+                          <button onClick={() => toggleGroup(tag)} className="flex items-center gap-2 mb-3 group">
+                            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${collapsed.has(tag) ? "-rotate-90" : ""}`} strokeWidth={1.5} />
+                            <span className="text-sm font-medium text-slate-600">{tag}</span>
+                            <span className="text-xs text-slate-400">({items.length})</span>
+                          </button>
+                          {!collapsed.has(tag) && (
+                            <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                              {items.map(novel => (
+                                <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author}
+                                  onRead={() => navigate(`/novel/${novel.id}`)}
+                                  groups={groupNames}
+                                  currentGroup={tag === "未分类" ? undefined : tag}
+                                  onDelete={handleDeleteNovel}
+                                  cover={coverToUrl(novel.cover)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -256,8 +257,10 @@ export default function BookshelfPage() {
 
       {activeNav === "downloads" && (
         <div className="mx-auto max-w-[720px] space-y-2 px-6 pt-12 pb-8 md:px-12">
-          {tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
-            : tasks.map(task => {
+          {tasksLoading ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <DownloadTaskSkeleton key={i} />)}</div>
+          ) : tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
+            : [...tasks].reverse().map(task => {
               const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
               const status = task.status as "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
               return (
@@ -275,14 +278,9 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiVariants={apiVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiVariants={apiVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
           {!searchParams && !searching && (
-            <div className="flex flex-col items-center gap-3 py-16 px-6 text-xs text-slate-400">
-              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">书籍ID</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono"># 1145141919810</span></div>
-              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">网页端链接</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono truncate max-w-[320px]">https://fanqienovel.com/page/1145141919810</span></div>
-              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">移动端分享链接</span><span className="bg-slate-100 rounded-md px-2 py-0.5 font-mono truncate max-w-[320px]">https://changdunovel.com/t/abc123/</span></div>
-              <div className="flex items-center gap-2"><span className="text-indigo-400 font-bold shrink-0">直接搜索关键词</span><span className="bg-slate-100 rounded-md px-2 py-0.5">穿越：……</span></div>
-            </div>
+            <SearchHistoryPanel onPick={handleHistoryPick} />
           )}
           {searchParams && searchResults.length === 0 && !searching && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -320,7 +318,7 @@ export default function BookshelfPage() {
                 )}
                 <div className="grid grid-cols-1 gap-3">
                   {grouped.map((r, i) => (
-                    <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} rating={r.extra?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
+                    <SearchResultCard key={i} title={r.title} author={r.author} description={r.description} cover={r.cover_url} rating={r.extra?.rating} loading={navigatingId === r.url} onClick={() => handleGoToNovel(r)} />
                   ))}
                 </div>
               </>
@@ -331,7 +329,7 @@ export default function BookshelfPage() {
 
       {activeNav === "settings" && globalConfig && (
         <div className="px-6 pt-12 pb-8 md:px-12">
-          <SettingsView globalConfig={globalConfig} saving={saving} saved={saved} onUpdate={handleSettingsUpdate} onSave={handleSaveSettings} />
+          <SettingsView globalConfig={globalConfig} onUpdate={handleSettingsUpdate} />
         </div>
       )}
     </>

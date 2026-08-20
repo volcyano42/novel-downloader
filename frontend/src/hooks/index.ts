@@ -11,6 +11,7 @@ import {
   getFormatConfig, saveFormatConfig,
   downloadPlatforms, fetchSources,
   triggerExport, exportTaskStatus,
+  getSearchHistory, addSearchHistory, deleteSearchHistory,
 } from "@/api/endpoints";
 import type { ChapterBrief } from "@/api/endpoints";
 
@@ -174,6 +175,32 @@ export function useToggleFavorite() {
     mutationFn: ({ novelId, favorited }: { novelId: string; favorited: boolean }) =>
       favorited ? addFavorite(novelId) : removeFavorite(novelId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["favorites"] }),
+  });
+}
+
+// ── Search History ────────────────────────────────
+
+export function useSearchHistory() {
+  return useQuery({
+    queryKey: ["search-history"],
+    queryFn: () => getSearchHistory().then(r => r.history),
+  });
+}
+
+export function useAddSearchHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ platform, keyword }: { platform: string; keyword: string }) =>
+      addSearchHistory(platform, keyword),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["search-history"] }),
+  });
+}
+
+export function useDeleteSearchHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (historyId: number) => deleteSearchHistory(historyId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["search-history"] }),
   });
 }
 

@@ -11,6 +11,8 @@ interface SearchBarProps {
   platformModes?: Record<string, string[]>;
   loading?: boolean;
   defaultQuery?: string;
+  /** 外部回填（点击搜索历史）：nonce 变化时同步到内部 state，不触发搜索 */
+  prefill?: { nonce: number; query: string; platform?: string } | null;
 }
 
 export interface SearchFilters {
@@ -38,12 +40,13 @@ function ModeSelect({ modes, selected, onSelect, className }: {
   );
 }
 
-export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVariants = {}, platformModes = {}, loading, defaultQuery = "" }: SearchBarProps) {
+export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVariants = {}, platformModes = {}, loading, defaultQuery = "", prefill }: SearchBarProps) {
   const [tab, setTab] = useState<SearchTab>("title");
   const [query, setQuery] = useState(defaultQuery);
   const [platform, setPlatform] = useState("all");
   const [mode, setMode] = useState(engineModes[0] ?? "browser");
   const [variant, setVariant] = useState<string | undefined>();
+  const [shakeVariant, setShakeVariant] = useState(false);
 
   // 平台切换时自动切换到支持的模式
   useEffect(() => {
@@ -65,6 +68,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
     const q = query.trim();
     if (!q) return;
     const m = tab === "url" ? urlEffectiveMode : (hideApiMode ? effectiveMode : mode);
+    // api 模式 + 有 variant 可选 + 未选 → 整块抖动并拦截（取消"未选默认出结果"兜底）
+    const variants = tab === "url" ? urlVariants : platformVariants;
+    if (m === "api" && variants.length > 0 && !variant) {
+      setShakeVariant(true);
+      setTimeout(() => setShakeVariant(false), 400);
+      return;
+    }
     if (tab === "url") {
       onSearch(q, { mode: m, variant });
     } else {
@@ -88,6 +98,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
       setVariant(undefined);
     }
   }, [hideApiMode, mode]);
+
+  // 点击搜索历史回填：nonce 变化时同步 keyword + platform（mode/variant 保持当前选择）
+  useEffect(() => {
+    if (!prefill) return;
+    setQuery(prefill.query);
+    if (prefill.platform) setPlatform(prefill.platform);
+  }, [prefill?.nonce]);
 
   const clear = () => {
     setQuery("");
@@ -196,27 +213,25 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
               搜索
             </button>
           </div>
-          {(urlModes.length > 0 || (urlEffectiveMode === "api" && urlVariants.length > 0)) && (
+          {urlModes.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              {urlModes.length > 0 && (
-                <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
-              )}
-              {urlEffectiveMode === "api" && urlVariants.length > 0 && (
-                <div className="flex items-center gap-1">
-                  {urlVariants.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setVariant(variant === p ? undefined : p)}
-                      className={cn(
-                        "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                        variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
+            </div>
+          )}
+          {urlEffectiveMode === "api" && urlVariants.length > 0 && (
+            <div className={cn("flex flex-wrap items-center gap-1 rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
+              {urlVariants.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setVariant(variant === p ? undefined : p)}
+                  className={cn(
+                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                    variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -271,23 +286,23 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
             {availableModes.length > 0 && (
               <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
             )}
-            {effectiveMode === "api" && platformVariants.length > 0 && (
-              <div className="flex items-center gap-1">
-                {platformVariants.map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setVariant(variant === p ? undefined : p)}
-                    className={cn(
-                      "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                      variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
+          {effectiveMode === "api" && platformVariants.length > 0 && (
+            <div className={cn("flex flex-wrap items-center gap-1 rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
+              {platformVariants.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setVariant(variant === p ? undefined : p)}
+                  className={cn(
+                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                    variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

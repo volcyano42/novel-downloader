@@ -25,6 +25,7 @@ export interface ChapterData extends ChapterBrief {
 export interface SearchResult {
   title: string; author: string; url: string; description: string | null;
   platform: string;
+  cover_url?: string | null;
   extra?: { rating?: number } | null;
 }
 
@@ -249,6 +250,28 @@ export function addFavorite(novelId: string) {
 
 export function removeFavorite(novelId: string) {
   return apiDelete(`/config/favorites/${novelId}`);
+}
+
+// ── Search History ─────────────────────────────────
+
+export interface SearchHistoryItem {
+  id: number; platform: string; keyword: string; searched_at: string;
+}
+
+export interface SearchHistoryGroup {
+  date_label: string; items: SearchHistoryItem[];
+}
+
+export function getSearchHistory() {
+  return apiGet<{ history: SearchHistoryGroup[] }>("/history/search");
+}
+
+export function addSearchHistory(platform: string, keyword: string) {
+  return apiPost<{ status: string }>("/history/search", { platform, keyword });
+}
+
+export function deleteSearchHistory(historyId: number) {
+  return apiDelete(`/history/search/${historyId}`);
 }
 
 export function getSiteConfig(website: string) {
