@@ -8,6 +8,7 @@ class SearchResultData(BaseModel):
     url: str
     description: str | None = None
     platform: str = ""
+    cover_url: str | None = None
     extra: dict | None = None
 
 

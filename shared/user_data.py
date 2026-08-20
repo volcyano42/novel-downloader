@@ -215,6 +215,16 @@ def get_search_history(limit: int = 50) -> list[dict]:
     ).fetchall()]
 
 
+def delete_search_history(history_id: int) -> bool:
+    """删除单条搜索历史，返回是否删除了记录。"""
+    conn = _connection()
+    cur = conn.execute(
+        "DELETE FROM search_history WHERE id = ?", (history_id,)
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def clear_search_history() -> None:
     conn = _connection()
     conn.execute("DELETE FROM search_history")

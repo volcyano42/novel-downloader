@@ -52,6 +52,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
                              platform=getattr(r, 'platform', ''),
+                             cover_url=getattr(r, 'cover_url', None),
                              extra=dict(r.extra) if getattr(r, 'extra', None) else None)
             for r in results]
 
