@@ -1,6 +1,6 @@
 # novel-downloader 文档导航
 
-外层容器 `D:\Linux\novel-downloader\docs\`(非 git 仓库,被 .gitignore 忽略,不入版本库)。核心仓库在 `D:\Linux\novel-downloader\novel-downloader\`。
+文档位于核心仓库 `D:\Linux\novel-downloader\novel-downloader\docs\`（2026-08-21 起**纳入 private 版本库**，公开迁移时 superpowers/session-prompt/learning 仍在红名单不迁 public）。
 
 ## 会话速览(必读)
 

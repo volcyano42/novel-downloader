@@ -18,7 +18,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 └── novel-downloader-tools\          ← 衍生产物（仓库外，git 永远管不到）
 ```
 
-> **docs/ 已移入工作区**（`D:\Linux\novel-downloader\novel-downloader\docs\`，2026-08-19 约定），仍被 .gitignore 忽略、不入版本库。架构速览见 [project/overview.md](project/overview.md)。
+> **docs/ 已纳入 private 版本库**（2026-08-21 起，位于 `novel-downloader/docs/`）；公开迁移时 superpowers/session-prompt/learning 在红名单不迁 public。架构速览见 [project/overview.md](project/overview.md)。
 
 ## CI 测试状态 — ✅ 全部通过
 
