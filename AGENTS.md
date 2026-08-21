@@ -42,5 +42,13 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 - **配置** `app_data/config/` 下全部 YAML，不提交到 git
 - **文档** 一律写在 `docs/` 下（按子目录分类），**绝不提交到 git**（`.gitignore` 已忽略 `docs/`）
 
+## Public 迁移约定（novel-downloader-public）
+
+- 迁移前**必读** `PUBLIC_MANIFEST.md`（白名单 = 允许复制；红名单 = 禁止；未列出一律不迁移）
+- **每次迁移先输出「本次迁移清单」**：本次复制文件/目录列表（来源→目标）+ 依据条目 + 红名单确认，供用户审查
+- 复制完**必跑** `python scripts/check_public.py`（三道防线：缺失/多余/敏感），通过才允许在 public 仓库提交
+- public 仓库（同级 `novel-downloader-public/`）独立提交/推送，不混入 private 的 commit 习惯
+- 敏感判定：`api` 书源（oiapi/rain）、`app_data`、私有配置、`docs/superpowers`、`AGENTS.md` 一律不进 public
+
 ## Notes
 
