@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 PRIVATE_DEFAULT = Path(__file__).resolve().parent.parent
-PUBLIC_DEFAULT = PRIVATE_DEFAULT.parent / "novel-downloader-public"
+PUBLIC_DEFAULT = PRIVATE_DEFAULT.parent / "novel-crawler"
 
 # 与 PUBLIC_MANIFEST.md 白名单保持一致
 INCLUDE_PATTERNS = [
@@ -35,7 +35,6 @@ INCLUDE_PATTERNS = [
     "LICENSE",
     "pyproject.toml",
     "requirements.txt",
-    "CHANGELOG.md",
     "docs/README.md",
     "docs/project/**",
     "docs/build/**",

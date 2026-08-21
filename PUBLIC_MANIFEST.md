@@ -1,6 +1,6 @@
 # PUBLIC_MANIFEST — 公开迁移白名单（.gitignore 的反面）
 
-> `novel-downloader-public` 公开仓库的迁移依据。**Agent 迁移前必读本文件**。
+> `novel-crawler` 公开仓库的迁移依据。**Agent 迁移前必读本文件**。
 > 白名单 = 允许复制到 public；红名单 = 禁止复制。**未列出的文件一律不迁移**。
 > 每次迁移前，Agent 必须另行输出「本次迁移清单」（本次实际复制列表 + 依据条目 + 红名单确认）。
 
@@ -31,7 +31,7 @@
 - `LICENSE`
 - `pyproject.toml`
 - `requirements.txt`
-- `CHANGELOG.md`
+- ~~`CHANGELOG.md`~~（不迁移：公开仓库 changelog 从 1.0.0 空开始）
 
 ### 文档
 
