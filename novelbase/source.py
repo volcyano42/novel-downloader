@@ -4,7 +4,7 @@
 - 元数据注册：register_source() / list_sources()
 - 能力发现：capabilities(name)
 - 动态分发：resolve(name, mode, function, variant=None)
-- URL/ID 反查：platform_from_url() / resolve_book_url()
+- URL 识别：platform_from_url() / resolve_book_url()
 
 新增源平台：直接在 sources/ 下创建目录/文件即可，零注册表修改。
 
@@ -42,14 +42,14 @@ def _is_compiled() -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 元数据注册（source 名 / hosts / id_pattern 等）
+# 元数据注册（source 名 / hosts 等）
 # ═══════════════════════════════════════════════════════════════════
 
 def _scan_sources() -> dict[str, dict]:
-    """扫描 sources/ 目录，收集每个 source 的 NAME / HOSTS / ID_PATTERN 等。
+    """扫描 sources/ 目录，收集每个 source 的 NAME / SHOW_NAME / HOSTS 等。
 
     Returns:
-        {module_name: {"name": ..., "hosts": ..., "id_pattern": ...}}
+        {module_name: {"name": ..., "show_name": ..., "hosts": ...}}
     """
     result = {}
     pkg_dir = Path(__file__).parent / "sources"
@@ -69,9 +69,6 @@ def _scan_sources() -> dict[str, dict]:
                 "name": getattr(module, "NAME", module_name),
                 "show_name": getattr(module, "SHOW_NAME", module_name),
                 "hosts": getattr(module, "HOSTS", ()),
-                "id_pattern": getattr(module, "ID_PATTERN", None),
-                "origin_id_pattern": getattr(module, "ORIGIN_ID_PATTERN", None),
-                "book_url_template": getattr(module, "BOOK_URL_TEMPLATE", ""),
             }
         except ImportError as e:
             print(f"load source failed {module_name} reason: {e}")
@@ -133,27 +130,14 @@ def platform_from_url(url: str) -> str | None:
 
 
 def resolve_book_url(raw: str) -> str:
-    """将 URL 或带前缀 ID 转为完整 URL。
+    """将输入转为完整 URL。
 
     - 已是完整 URL 则直接返回
-    - 带前缀的 ID（如 fanqie_1234567890123456789）通过 ID_PATTERN 匹配平台，
-      再通过 BOOK_URL_TEMPLATE 构建完整 URL
-    - 无法识别时报 ValueError
+    - 其他输入（含 hash id）无法识别时报 ValueError
     """
     raw = raw.strip()
     if raw.startswith("http://") or raw.startswith("https://"):
         return raw
-
-    # 带前缀 ID → 匹配平台
-    sources = register_source()
-    for name, meta in sources.items():
-        id_pat = meta.get("id_pattern")
-        if id_pat and id_pat.match(raw):
-            template = meta.get("book_url_template", "")
-            if template:
-                num = raw.split("_", 1)[-1] if "_" in raw else raw
-                return template.replace("{id}", num)
-
     raise ValueError(f"无法识别书源或 ID 格式: {raw}")
 
 

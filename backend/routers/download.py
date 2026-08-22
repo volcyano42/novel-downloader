@@ -20,7 +20,7 @@ def _platform_from_url(url: str) -> str:
 
 
 def _resolve_url(raw: str) -> str:
-    """将 URL 或带前缀 ID 转为完整 URL（数据驱动）。"""
+    """将输入转为完整 URL（数据驱动）。"""
     try:
         return resolve_book_url(raw)
     except ValueError as e:
@@ -35,7 +35,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
     engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, variant=variant)
 
-    if query.startswith("http://") or query.startswith("https://") or query.isdigit():
+    if query.startswith("http://") or query.startswith("https://"):
         try:
             url = _resolve_url(query)
             novel = await resolve_meta(url, engine)
@@ -158,11 +158,9 @@ async def list_all_sources():
     result = {}
     for name, info in sources.items():
         caps = _caps(name)
-        id_pat = info.get("id_pattern")
         result[name] = {
             "hosts": list(info.get("hosts", ())),
             "show_name": info.get("show_name", name),
-            "id_pattern": id_pat.pattern if id_pat else None,
             "capabilities": caps,
         }
     return result

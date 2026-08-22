@@ -6,7 +6,6 @@
 Nuitka onefile 无法扫描文件系统时读取此文件替代。
 """
 import os
-import re
 from pathlib import Path
 
 from ..source import _scan_capabilities
@@ -16,15 +15,14 @@ OUT = Path(__file__).parent / "_manifest.py"
 
 
 def _read_constants(init_path: Path) -> dict:
-    """读取 __init__.py 中的模块级常量（NAME, HOSTS, ID_PATTERN 等）。"""
+    """读取 __init__.py 中的模块级常量（NAME, SHOW_NAME, HOSTS 等）。"""
     constants = {}
     with init_path.open("r", encoding="utf-8") as f:
         source = f.read()
     # 用 exec 在当前命名空间执行，提取常量
     ns = {}
     exec(source, ns)
-    for key in ("NAME", "SHOW_NAME", "HOSTS", "ID_PATTERN",
-                "ORIGIN_ID_PATTERN", "BOOK_URL_TEMPLATE"):
+    for key in ("NAME", "SHOW_NAME", "HOSTS"):
         val = ns.get(key)
         if val is not None:
             constants[key.lower()] = val
@@ -51,11 +49,6 @@ def build():
         # 扫描能力矩阵
         caps = _scan_capabilities(pkg_dir)
 
-        # 序列化 regex 为 pattern string
-        for key in ("id_pattern", "origin_id_pattern"):
-            if key in consts and isinstance(consts[key], re.Pattern):
-                consts[key] = consts[key].pattern
-
         # 序列化 hosts 为 list
         if "hosts" in consts and isinstance(consts["hosts"], tuple):
             consts["hosts"] = list(consts["hosts"])
@@ -71,8 +64,6 @@ def build():
         "# Nuitka 模式下 register_source() / capabilities() 读取此文件。",
         "# 删/增书源后重新运行: python -m novelbase.tools.build_manifest",
         "",
-        "import re",
-        "",
         "_SOURCES = {",
     ]
 
@@ -81,12 +72,7 @@ def build():
         lines.append(f"    {name!r}: {{")
         lines.append(f"        'meta': {{")
         for k, v in meta.items():
-            if k in ("id_pattern", "origin_id_pattern"):
-                lines.append(f"            {k!r}: re.compile(r'{v}'),")
-            elif isinstance(v, list):
-                lines.append(f"            {k!r}: {v!r},")
-            else:
-                lines.append(f"            {k!r}: {v!r},")
+            lines.append(f"            {k!r}: {v!r},")
         lines.append(f"        }},")
         lines.append(f"        'modes': {data['modes']!r},")
         lines.append(f"    }},")
@@ -104,9 +90,6 @@ def build():
     lines.append("            'name': meta.get('name', name),")
     lines.append("            'show_name': meta.get('show_name', name),")
     lines.append("            'hosts': tuple(meta.get('hosts', [])),")
-    lines.append("            'id_pattern': meta.get('id_pattern', None),")
-    lines.append("            'origin_id_pattern': meta.get('origin_id_pattern', None),")
-    lines.append("            'book_url_template': meta.get('book_url_template', ''),")
     lines.append("        }")
     lines.append("    return result")
     lines.append("")
