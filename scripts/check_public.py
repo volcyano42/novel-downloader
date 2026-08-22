@@ -48,6 +48,7 @@ EXCLUDE_PATTERNS = [
     "novelbase/sources/qimao/**",
     "novelbase/sources/92xs/**",
     "novelbase/sources/fanqie/api/**",
+    "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
     "android/.gradle/**",

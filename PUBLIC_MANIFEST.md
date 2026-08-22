@@ -9,7 +9,7 @@
 ### 源码
 
 - `novelbase/**`
-  - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/**`
+  - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
   - 保留：`novelbase/sources/fanqie/browser/**`、`novelbase/sources/fanqie/requests/**`
 - `backend/**`
 - `frontend/**`
