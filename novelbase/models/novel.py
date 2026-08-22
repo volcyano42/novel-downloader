@@ -276,28 +276,17 @@ class Chapter:
 class Novel:
     title: str
     url: str
-    id: str
     serial: int
     author: str
     description: str
     tags: Sequence[str] | None = None
     count: int | None = None
+    id: str = ""                  # 由 resolve_meta 中心赋值（hash id）
     cover: Illustration | None = None
     chapters: Chapters = field(default_factory=Chapters)
     extra: Box = field(default_factory=Box)
     # serial 自动模式标记：serial==0 的书源（如 92xs）进入后持续跟随本地章节数
     _serial_auto: bool = field(default=False, init=False, repr=False, compare=False)
-
-    @property
-    def origin_id(self) -> str:
-        """源站原始 ID：Novel.id 去掉 {website}_ 前缀（如 fanqie_7123... → 7123...）。"""
-        if self.id and "_" in self.id:
-            return self.id.split("_", 1)[1]
-        return self.id
-
-    @origin_id.setter
-    def origin_id(self, value) -> None:
-        """只读属性，忽略赋值（兼容 Novel.loads 的 setattr 流程）。"""
 
     def __post_init__(self) -> None:
         # serial 兜底：serial 为 0 但已有章节时，进入自动模式跟随本地章节数
