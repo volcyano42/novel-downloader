@@ -28,43 +28,46 @@ def _connection() -> sqlite3.Connection:
     return conn
 
 
+_SCHEMA_SQL = """
+    CREATE TABLE IF NOT EXISTS groups (
+        group_name   TEXT NOT NULL,
+        novel_id     TEXT NOT NULL,
+        pending_export INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (group_name, novel_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS favorites (
+        novel_id     TEXT PRIMARY KEY,
+        favorited_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        note         TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS search_history (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform     TEXT NOT NULL,
+        keyword      TEXT NOT NULL,
+        searched_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_search_history_time
+        ON search_history(searched_at DESC);
+
+    CREATE TABLE IF NOT EXISTS bookmarks (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform        TEXT NOT NULL,
+        novel_id        TEXT NOT NULL,
+        chapter_index   INTEGER NOT NULL,
+        chapter_title   TEXT,
+        note            TEXT,
+        created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        UNIQUE(platform, novel_id, chapter_index)
+    );
+"""
+
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """建表 + 迁移 groups.yaml。"""
     # ── 建表 ──
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS groups (
-            group_name   TEXT NOT NULL,
-            novel_id     TEXT NOT NULL,
-            pending_export INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (group_name, novel_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS favorites (
-            novel_id     TEXT PRIMARY KEY,
-            favorited_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            note         TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS search_history (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform     TEXT NOT NULL,
-            keyword      TEXT NOT NULL,
-            searched_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_search_history_time
-            ON search_history(searched_at DESC);
-
-        CREATE TABLE IF NOT EXISTS bookmarks (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform        TEXT NOT NULL,
-            novel_id        TEXT NOT NULL,
-            chapter_index   INTEGER NOT NULL,
-            chapter_title   TEXT,
-            note            TEXT,
-            created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            UNIQUE(platform, novel_id, chapter_index)
-        );
-    """)
+    conn.executescript(_SCHEMA_SQL)
     conn.commit()
 
     # ── 迁移 groups.yaml → groups 表（仅首次，表为空且 yaml 存在时）──

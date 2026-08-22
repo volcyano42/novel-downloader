@@ -34,6 +34,16 @@ def _target_dir() -> Path:
     return Path(__file__).resolve().parent / "app_data" / "config"
 
 
+def _user_db_target_dir() -> Path:
+    """user_data.db 运行时目标目录（storage/users/default/）。"""
+    env = os.environ.get("NLD_APP_DATA")
+    if env:
+        return Path(env).resolve() / "storage" / "users" / "default"
+    if getattr(sys, "frozen", False) or "__compiled__" in globals():
+        return Path(sys.executable).parent / "app_data" / "storage" / "users" / "default"
+    return Path(__file__).resolve().parent / "app_data" / "storage" / "users" / "default"
+
+
 # ═══════════════════════════════════════════════════
 # 检查
 # ═══════════════════════════════════════════════════
@@ -137,10 +147,25 @@ def init_export_config(format: str) -> list[str]:
     return initialized
 
 
+def init_user_db() -> list[str]:
+    """初始化 user_data.db 空表模板（storage/users/default/，不存在才复制）。
+
+    模板由 shared/user_data.py 的 _SCHEMA_SQL 生成（四张空表），运行时
+    user_data.py 的 _ensure_schema 兜底建表（CREATE TABLE IF NOT EXISTS 幂等）。
+    """
+    template = _get_root() / "template" / "storage" / "users" / "default" / "user_data.db"
+    dst = _user_db_target_dir() / "user_data.db"
+    if template.exists() and not dst.exists():
+        _copy_file(template, dst)
+        return [str(dst)]
+    return []
+
+
 def init_all_config() -> list[str]:
-    """初始化全部（main + all sites + all formats）。"""
+    """初始化全部（main + all sites + all formats + user_data.db 模板）。"""
     result: list[str] = []
     result.extend(init_main_config())
     result.extend(init_site_config("all"))
     result.extend(init_export_config("all"))
+    result.extend(init_user_db())
     return result
