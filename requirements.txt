@@ -1,7 +1,9 @@
+# 项目统一依赖（private / public 共用，勿各自维护）
+# 由根 requirements.txt 与 backend/requirements.txt 合并而来（2026-08-22）
 beautifulsoup4
 lxml
 playwright
-fastapi
+fastapi>=0.100.0
 httpx
 chardet
 Pillow
@@ -9,5 +11,6 @@ pillow-heif
 python-box
 PyYAML
 rich
-uvicorn
+uvicorn[standard]>=0.30.0
 yarl
+python-dotenv>=1.0.0
