@@ -126,16 +126,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
     if (query.includes("92xs.info")) return "92xs";
     return null;
   })();
-  // 纯数字 ID → 按位数推断平台（与后端 id_pattern 一致）
-  const urlIdPlatform = (() => {
-    if (tab !== "url" || urlPlatform) return null;
-    const trimmed = query.trim();
-    if (!/^\d+$/.test(trimmed)) return null;
-    if (trimmed.length === 19) return "fanqie";
-    if (trimmed.length === 10) return "qidian";
-    return "qimao";
-  })();
-  const effectiveUrlPlatform = urlPlatform || urlIdPlatform;
+  const effectiveUrlPlatform = urlPlatform;
   const urlVariantsByMode = effectiveUrlPlatform ? (modeVariants[effectiveUrlPlatform] ?? {}) : {};
   const urlPlatModes = effectiveUrlPlatform ? (platformModes[effectiveUrlPlatform] ?? engineModes) : engineModes;
   const urlHasApi = (urlVariantsByMode["api"] ?? []).length > 0;
