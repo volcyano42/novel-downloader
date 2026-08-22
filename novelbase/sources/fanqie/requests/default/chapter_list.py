@@ -1,4 +1,4 @@
-from .._common import standardize_id, parse_chapter_list
+from ..._common import standardize_id, parse_chapter_list
 
 
 async def chapter_list(url: str, engine, **kwargs) -> list:

@@ -208,15 +208,10 @@ def _scan_capabilities(pkg_dir: Path) -> dict[str, dict[str, list[str]]]:
                 if funcs:
                     variants[sub.name] = funcs
 
-        direct_funcs: list[str] = []
-        for func_name, meta in CAPABILITY_META.items():
-            if (mode_dir / f"{meta['file_stem']}.py").exists():
-                direct_funcs.append(func_name)
-
+        # 无 fallback：mode 必须用 variant 子目录组织（如 default/），
+        # 直接放在 mode 根的文件不再被识别
         if variants:
             result[mode] = variants
-        elif direct_funcs:
-            result[mode] = {"default": direct_funcs}
 
     return result
 
@@ -284,12 +279,8 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
 
     found = False
     for src_dir in _sources:
-        if variant == "default":
-            # default variant: mode 目录下直接有 .py 文件
-            candidate = src_dir / mode / f"{file_stem}.py"
-        else:
-            # 命名 variant: mode/variant/ 子目录下有 .py 文件
-            candidate = src_dir / mode / variant / f"{file_stem}.py"
+        # 统一 variant 子目录结构：mode/variant/stem.py（无 default 根 fallback）
+        candidate = src_dir / mode / variant / f"{file_stem}.py"
         if candidate.is_file():
             found = True
             break
@@ -297,10 +288,7 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
     if not found:
         # Nuitka: .py 文件不存在（编译进 exe），直接试 import_module
         if src_dir == _sources[0]:
-            if variant == "default":
-                module_path = f"novelbase.sources.{name}.{mode}.{file_stem}"
-            else:
-                module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
+            module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
             try:
                 module = import_module(module_path)
                 fn = getattr(module, file_stem)
@@ -315,10 +303,7 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
 
     # 内置源用 import_module，私有源用 spec_from_file_location
     if src_dir == _sources[0]:
-        if variant == "default":
-            module_path = f"novelbase.sources.{name}.{mode}.{file_stem}"
-        else:
-            module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
+        module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
         try:
             module = import_module(module_path)
             fn = getattr(module, file_stem)
@@ -326,10 +311,7 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
             raise ImportError(f"Failed to resolve {module_path}: {e}") from e
     else:
         # 私有源：从文件路径加载
-        module_name = f"novelbase_private.sources.{name}.{mode}"
-        if variant != "default":
-            module_name += f".{variant}"
-        module_name += f".{file_stem}"
+        module_name = f"novelbase_private.sources.{name}.{mode}.{variant}.{file_stem}"
         spec = importlib_util.spec_from_file_location(module_name, str(candidate))
         if spec is None or spec.loader is None:
             raise ImportError(f"Failed to load spec from {candidate}")

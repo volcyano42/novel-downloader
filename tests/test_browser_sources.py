@@ -4,8 +4,8 @@ from importlib import import_module
 # 注：browser/__init__.py 的 `from .search import search` 会让包属性 search
 # 被函数覆盖，`from ...browser import search` 拿到的是函数而非子模块，
 # 故用 import_module 直接加载子模块。
-qidian_search = import_module("novelbase.sources.qidian.browser.search")
-qimao_chapter_list = import_module("novelbase.sources.qimao.browser.chapter_list")
+qidian_search = import_module("novelbase.sources.qidian.browser.default.search")
+qimao_chapter_list = import_module("novelbase.sources.qimao.browser.default.chapter_list")
 
 
 class FakePage:

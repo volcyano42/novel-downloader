@@ -1,6 +1,6 @@
-"""qimao requests - fetch novel info."""
+"""qimao browser - fetch novel info."""
 
-from .._common import parse_novel_info, standardize_id
+from ..._common import parse_novel_info, standardize_id
 from novelbase.models.novel import Novel, Illustration
 
 

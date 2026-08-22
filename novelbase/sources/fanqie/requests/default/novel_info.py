@@ -1,11 +1,12 @@
 from novelbase.models.novel import Illustration
 
-from .._common import parse_novel_info
+from ..._common import standardize_id, parse_novel_info
 
 
 async def novel_info(url: str, engine, **kwargs):
+    url = f"https://fanqienovel.com/page/{standardize_id(url)}"
     html = await engine.async_fetch_text(url=url, **kwargs)
-    novel = parse_novel_info(html, url=url)
+    novel = parse_novel_info(html=html)
     if novel.cover and novel.cover.url:
         data = await engine.async_fetch_images([novel.cover.url])
         novel.cover = Illustration(

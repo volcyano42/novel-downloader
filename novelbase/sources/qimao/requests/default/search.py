@@ -1,6 +1,6 @@
 """qimao requests - search."""
 
-from .._common import _log, parse_search_result
+from ..._common import _log, parse_search_result
 from novelbase.models.novel import SearchResult
 
 

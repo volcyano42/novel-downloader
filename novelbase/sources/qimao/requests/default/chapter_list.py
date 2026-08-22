@@ -3,7 +3,7 @@ Note: qimao chapter catalog is loaded by client-side JS in the initial SSR HTML.
 If the catalog is missing from SSR HTML, fallback to reader sidebar (partial only).
 For the full catalog, use browser engine."""
 
-from .._common import parse_chapter_list, standardize_id
+from ..._common import parse_chapter_list, standardize_id
 from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
 

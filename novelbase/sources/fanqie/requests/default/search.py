@@ -1,4 +1,4 @@
-from .._common import parse_search_result
+from ..._common import parse_search_result
 
 
 async def search(query: str, engine, **kwargs) -> list:

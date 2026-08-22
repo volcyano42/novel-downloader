@@ -1,4 +1,4 @@
-from .._common import parse_chapter_list
+from ..._common import parse_chapter_list
 from novelbase.models.novel import Novel, Chapter
 
 

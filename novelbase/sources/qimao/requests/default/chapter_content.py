@@ -1,6 +1,6 @@
-"""qimao browser - fetch chapter content."""
+"""qimao requests - fetch chapter content."""
 
-from .._common import parse_chapter_content
+from ..._common import parse_chapter_content
 from novelbase.models.novel import Chapter
 
 

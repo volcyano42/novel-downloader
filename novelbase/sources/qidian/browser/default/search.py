@@ -1,6 +1,6 @@
 import asyncio
 
-from .._common import parse_search_result
+from ..._common import parse_search_result
 from novelbase.models.novel import SearchResult
 
 

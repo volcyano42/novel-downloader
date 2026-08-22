@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Illustration
 
-from .._common import standardize_id, parse_chapter_content
+from ..._common import standardize_id, parse_chapter_content
 
 
 async def chapter_content(chapter, engine, **kwargs):
