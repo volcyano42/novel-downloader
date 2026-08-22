@@ -9,6 +9,7 @@ import pytest
 from novelbase.core.downloader import resolve_meta, resolve_chapter_list, resolve_chapter, get_source
 from novelbase.core.options import Options, StorageOptions
 from novelbase.models.novel import Novel, Chapter, Chapters
+from novelbase.utils.urls import canonical_book_url, make_novel_id
 
 
 # ── 辅助 ───────────────────────────────────────────────────────
@@ -119,3 +120,24 @@ class TestResolveMeta:
 
         assert re.fullmatch(r"[0-9a-f]{32}", result.id)
         assert result.extra["platform"] == "fanqie"
+
+    def test_hash_uses_preprocessed_novel_url_not_input(self):
+        """hash 基于 resolve_meta 返回的 novel.url（source 预处理后），而非输入 url"""
+        engine = _make_engine()
+        novel = Novel(title="t", url="https://fanqienovel.com/page/7123456789012345678",
+                      serial=1, author="a", description="d")
+
+        with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
+            with patch("novelbase.source.resolve") as mock_resolve:
+                async def _fake(url, engine, **kw):
+                    return novel
+
+                mock_resolve.return_value = _fake
+
+                # 输入是 changdunovel 短链，source 返回标准化 fanqienovel url
+                result = asyncio.run(resolve_meta("https://changdunovel.com/t/shortlink", engine))
+
+        expected = make_novel_id(
+            canonical_book_url("https://fanqienovel.com/page/7123456789012345678", "fanqie")
+        )
+        assert result.id == expected
