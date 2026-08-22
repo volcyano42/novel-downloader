@@ -7,12 +7,13 @@ interface SearchBarProps {
   onSearch: (query: string, filters: SearchFilters) => void;
   platforms?: { id: string; label: string }[];
   engineModes?: string[];
-  apiVariants?: Record<string, string[]>;
   platformModes?: Record<string, string[]>;
   loading?: boolean;
   defaultQuery?: string;
   /** 外部回填（点击搜索历史）：nonce 变化时同步到内部 state，不触发搜索 */
   prefill?: { nonce: number; query: string; platform?: string } | null;
+  /** platform → mode → variants（browser/requests 也有 variant，如 default） */
+  modeVariants?: Record<string, Record<string, string[]>>;
 }
 
 export interface SearchFilters {
@@ -40,7 +41,7 @@ function ModeSelect({ modes, selected, onSelect, className }: {
   );
 }
 
-export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVariants = {}, platformModes = {}, loading, defaultQuery = "", prefill }: SearchBarProps) {
+export function SearchBar({ onSearch, platforms = [], engineModes = [], platformModes = {}, loading, defaultQuery = "", prefill, modeVariants = {} }: SearchBarProps) {
   const [tab, setTab] = useState<SearchTab>("title");
   const [query, setQuery] = useState(defaultQuery);
   const [platform, setPlatform] = useState("all");
@@ -59,7 +60,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
   // 平台选择后，使用该平台支持的模式；全平台用全局列表
   const platModes = platform !== "all" ? (platformModes[platform] ?? engineModes) : engineModes;
   // 标题搜索 + 全部/起点时去掉 API 模式（无 API variant 的平台）
-  const hasApiVariant = platform !== "all" ? (apiVariants[platform]?.length ?? 0) > 0 : Object.keys(apiVariants).length > 0;
+  const hasApiVariant = platform !== "all" ? (modeVariants[platform]?.["api"]?.length ?? 0) > 0 : Object.keys(modeVariants).length > 0;
   const hideApiMode = tab === "title" && !hasApiVariant;
   const availableModes = hideApiMode ? platModes.filter(m => m !== "api") : platModes;
   const effectiveMode = availableModes.includes(mode) ? mode : availableModes[0] ?? "browser";
@@ -68,15 +69,16 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
     const q = query.trim();
     if (!q) return;
     const m = tab === "url" ? urlEffectiveMode : (hideApiMode ? effectiveMode : mode);
-    // api 模式 + 有 variant 可选 + 未选 → 整块抖动并拦截（取消"未选默认出结果"兜底）
+    // 多 variant 未选 → 整块抖动并拦截（单 variant 自动选，不校验）
     const variants = tab === "url" ? urlVariants : platformVariants;
-    if (m === "api" && variants.length > 0 && !variant) {
+    const effectiveVariant = variant ?? (variants.length === 1 ? variants[0] : undefined);
+    if (variants.length > 1 && !variant) {
       setShakeVariant(true);
       setTimeout(() => setShakeVariant(false), 400);
       return;
     }
     if (tab === "url") {
-      onSearch(q, { mode: m, variant });
+      onSearch(q, { mode: m, variant: effectiveVariant });
     } else {
       onSearch(q, { platform, mode: m, variant });
     }
@@ -113,7 +115,7 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
   const allPlatforms = [{ id: "all", label: "全平台" } as const, ...platforms.map(p => ({ id: p.id, label: p.label }))];
 
   const currentPlatform = platform || "all";
-  const platformVariants = apiVariants[platform] ?? [];
+  const platformVariants = modeVariants[platform]?.[effectiveMode] ?? [];
 
   // URL 模式：从输入中检测平台
   const urlPlatform = (() => {
@@ -134,12 +136,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
     return "qimao";
   })();
   const effectiveUrlPlatform = urlPlatform || urlIdPlatform;
-  const urlVariants = effectiveUrlPlatform ? (apiVariants[effectiveUrlPlatform] ?? []) : [];
+  const urlVariantsByMode = effectiveUrlPlatform ? (modeVariants[effectiveUrlPlatform] ?? {}) : {};
   const urlPlatModes = effectiveUrlPlatform ? (platformModes[effectiveUrlPlatform] ?? engineModes) : engineModes;
-  const urlHasApi = urlVariants.length > 0;
+  const urlHasApi = (urlVariantsByMode["api"] ?? []).length > 0;
   const urlHideApi = !urlHasApi;
   const urlModes = urlHideApi ? urlPlatModes.filter(m => m !== "api") : urlPlatModes;
   const urlEffectiveMode = urlModes.includes(mode) ? mode : urlModes[0] ?? "browser";
+  const urlVariants = urlVariantsByMode[urlEffectiveMode] ?? [];
 
   // URL 模式无 API 时自动切 browser
   useEffect(() => {
@@ -218,20 +221,23 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
               <ModeSelect modes={urlModes} selected={urlEffectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
             </div>
           )}
-          {urlEffectiveMode === "api" && urlVariants.length > 0 && (
-            <div className={cn("flex flex-wrap items-center gap-1 rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
-              {urlVariants.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setVariant(variant === p ? undefined : p)}
-                  className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                    variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
+          {urlVariants.length > 1 && (
+            <div className={cn("rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
+              <p className="text-[11px] text-slate-400 mb-1">{urlEffectiveMode === "api" ? "选择提供商" : "选择变体"}</p>
+              <div className="flex flex-wrap items-center gap-1">
+                {urlVariants.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setVariant(variant === p ? undefined : p)}
+                    className={cn(
+                      "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                      variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -287,20 +293,23 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], apiVaria
               <ModeSelect modes={availableModes} selected={effectiveMode} onSelect={m => { setMode(m); if (m !== "api") setVariant(undefined); }} />
             )}
           </div>
-          {effectiveMode === "api" && platformVariants.length > 0 && (
-            <div className={cn("flex flex-wrap items-center gap-1 rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
-              {platformVariants.map(p => (
-                <button
-                  key={p}
-                  onClick={() => setVariant(variant === p ? undefined : p)}
-                  className={cn(
-                    "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
-                    variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
+          {platformVariants.length > 1 && (
+            <div className={cn("rounded-lg px-1.5 py-1 transition-colors", shakeVariant && "border border-red-300 bg-red-50 animate-shake")}>
+              <p className="text-[11px] text-slate-400 mb-1">{effectiveMode === "api" ? "选择提供商" : "选择变体"}</p>
+              <div className="flex flex-wrap items-center gap-1">
+                {platformVariants.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setVariant(variant === p ? undefined : p)}
+                    className={cn(
+                      "rounded-lg px-2 py-1 text-[11px] font-medium transition-colors",
+                      variant === p ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

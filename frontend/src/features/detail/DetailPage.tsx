@@ -43,7 +43,12 @@ export default function DetailPage() {
   const { data: sources } = useSources();
   const sourceCaps = sources?.[plat]?.capabilities ?? {};
   const platModes = Object.keys(sourceCaps);
-  const platVariants = typeof sourceCaps.api === "object" && !Array.isArray(sourceCaps.api) ? Object.keys(sourceCaps.api).filter(k => k !== "") : [];
+  const platVariantsByMode: Record<string, string[]> = {};
+  for (const [m, variants] of Object.entries(sourceCaps)) {
+    if (variants && typeof variants === "object" && !Array.isArray(variants)) {
+      platVariantsByMode[m] = Object.keys(variants).filter(k => k !== "");
+    }
+  }
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchVariant);
   const downloadMut = useDownloadMutation();
   const { data: globalConfig } = useGlobalConfig();
@@ -454,7 +459,7 @@ export default function DetailPage() {
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         dialogMode={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
         initialMode={savedMode} initialVariant={savedVariant}
-        availableModes={platModes} variants={platVariants}
+        availableModes={platModes} variantsByMode={platVariantsByMode}
         onStart={handleDialogConfirm} />
     </div>
   );

@@ -9,7 +9,7 @@ interface DownloadDialogProps {
   initialMode?: string;
   initialVariant?: string;
   availableModes?: string[];
-  variants?: string[];
+  variantsByMode?: Record<string, string[]>;
   onStart: (mode: string, variant?: string) => void;
 }
 
@@ -21,34 +21,37 @@ const MODE_DESCS: Record<string, string> = {
   api: "第三方接口",
 };
 
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialogMode = "download", initialMode, initialVariant, availableModes, variants = [], onStart }: DownloadDialogProps) {
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialogMode = "download", initialMode, initialVariant, availableModes, variantsByMode = {}, onStart }: DownloadDialogProps) {
   const [mode, setMode] = useState(initialMode ?? "browser");
   const [variant, setVariant] = useState(initialVariant ?? "");
   const [loading, setLoading] = useState(false);
   const [shakeVariant, setShakeVariant] = useState(false);
 
+  const variants = variantsByMode[mode] ?? [];
   const modes = (availableModes && availableModes.length > 0) ? availableModes : ["browser", "requests", "api"];
-  const hasApiVariants = variants.length > 0;
-  const visibleModes = hasApiVariants ? modes : modes.filter(m => m !== "api");
+  const hasApiVariant = (variantsByMode["api"] ?? []).length > 0;
+  const visibleModes = hasApiVariant ? modes : modes.filter(m => m !== "api");
 
   useEffect(() => {
     if (open) {
       const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
       setMode(defaultMode);
-      setVariant(initialVariant ?? (defaultMode === "api" ? variants[0] ?? "" : ""));
+      const defaultVariants = variantsByMode[defaultMode] ?? [];
+      setVariant(initialVariant ?? (defaultVariants.length > 0 ? defaultVariants[0] : ""));
       setLoading(false);
       setShakeVariant(false);
     }
-  }, [open, initialMode, initialVariant, variants.length]);
+  }, [open, initialMode, initialVariant, visibleModes, variantsByMode]);
 
   const handleStart = () => {
-    if (mode === "api" && !variant && variants.length > 0) {
+    // 多 variant 未选 → 抖动拦截（单 variant 自动选，不校验）
+    if (variants.length > 1 && !variant) {
       setShakeVariant(true);
       setTimeout(() => setShakeVariant(false), 400);
       return;
     }
     setLoading(true);
-    onStart(mode, mode === "api" && variant ? variant : undefined);
+    onStart(mode, variant || undefined);
   };
 
   if (!open) return null;
@@ -64,7 +67,7 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
           {visibleModes.map(id => {
             const Icon = MODE_ICONS[id] ?? Globe;
             return (
-              <button key={id} onClick={() => { setMode(id); if (id !== "api") setVariant(""); else if (!variant && variants.length > 0) setVariant(variants[0]); }}
+              <button key={id} onClick={() => { setMode(id); setVariant((variantsByMode[id] ?? [])[0] ?? ""); }}
                 className={cn(
                   "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
                   mode === id
@@ -81,14 +84,14 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
           })}
         </div>
 
-      {mode === "api" && variants.length > 0 && (
+      {variants.length > 1 && (
         <div className={cn(
           "mb-4 rounded-xl border px-4 py-3 transition-colors",
           shakeVariant
             ? "border-red-300 bg-red-50 animate-shake"
             : "border-indigo-200 bg-indigo-50/50"
         )}>
-          <p className="text-[11px] text-slate-400 mb-2">选择接口提供商</p>
+          <p className="text-[11px] text-slate-400 mb-2">{mode === "api" ? "选择提供商" : "选择变体"}</p>
           <div className="flex items-center gap-1.5 flex-wrap">
             {variants.map(p => (
               <span key={p} onClick={() => { setVariant(prev => prev === p ? "" : p); }}

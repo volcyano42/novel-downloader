@@ -38,16 +38,20 @@ export default function BookshelfPage() {
   const fetchMetaMut = useFetchMeta();
   const addHistoryMut = useAddSearchHistory();
 
-  // sources capabilities for SearchBar
+  // sources capabilities for SearchBar（platform → mode → variants）
   const { data: sources } = useSources();
-  const apiVariants = useMemo(() => {
-    const map: Record<string, string[]> = {};
+  const modeVariants = useMemo(() => {
+    const map: Record<string, Record<string, string[]>> = {};
     if (sources) {
       for (const [name, info] of Object.entries(sources)) {
-        const caps = info.capabilities;
-        if (caps.api && typeof caps.api === "object" && !Array.isArray(caps.api)) {
-          map[name] = Object.keys(caps.api).filter(k => k !== "");
+        const caps = info.capabilities as Record<string, Record<string, unknown> | string[]>;
+        const byMode: Record<string, string[]> = {};
+        for (const [mode, variants] of Object.entries(caps)) {
+          if (variants && typeof variants === "object" && !Array.isArray(variants)) {
+            byMode[mode] = Object.keys(variants).filter(k => k !== "");
+          }
         }
+        map[name] = byMode;
       }
     }
     return map;
@@ -278,7 +282,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} apiVariants={apiVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
+          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} modeVariants={modeVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
           {!searchParams && !searching && (
             <SearchHistoryPanel onPick={handleHistoryPick} />
           )}
