@@ -100,3 +100,22 @@ class TestResolveMeta:
                 result = asyncio.run(resolve_meta("https://fanqienovel.com/novel", engine))
 
         assert result is expected
+
+    def test_sets_hash_id_and_platform(self):
+        """resolve_meta 中心化生成 hash id 并冗余写入 extra.platform"""
+        import re
+        engine = _make_engine()
+        novel = Novel(title="t", url="https://fanqienovel.com/page/7123456789012345678",
+                      serial=1, author="a", description="d")
+
+        with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
+            with patch("novelbase.source.resolve") as mock_resolve:
+                async def _fake(url, engine, **kw):
+                    return novel
+
+                mock_resolve.return_value = _fake
+
+                result = asyncio.run(resolve_meta("https://fanqienovel.com/page/7123456789012345678", engine))
+
+        assert re.fullmatch(r"[0-9a-f]{32}", result.id)
+        assert result.extra["platform"] == "fanqie"
