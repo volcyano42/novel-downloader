@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from novelbase.core.downloader import resolve_meta, resolve_chapter_list, resolve_chapter, get_source, get_source_for_id
+from novelbase.core.downloader import resolve_meta, resolve_chapter_list, resolve_chapter, get_source
 from novelbase.core.options import Options, StorageOptions
 from novelbase.models.novel import Novel, Chapter, Chapters
 
@@ -40,7 +40,7 @@ class TestResolveChapter:
         engine = _make_engine()
         ch = _make_chapter()
 
-        with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
+        with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
             with patch("novelbase.source.resolve") as mock_resolve:
                 async def _fake(chapter, engine, **kw):
                     return ch
@@ -56,7 +56,7 @@ class TestResolveChapter:
         engine = _make_engine()
         ch = _make_chapter()
 
-        with patch("novelbase.core.downloader.get_source_for_id", return_value="fanqie"):
+        with patch("novelbase.core.downloader.get_source", return_value="fanqie"):
             with patch("novelbase.source.resolve") as mock_resolve:
                 async def _fake(chapter, engine, **kw):
                     return None
@@ -68,13 +68,13 @@ class TestResolveChapter:
         assert result is None
 
     def test_raises_when_no_source_found(self):
-        """get_source_for_id 返回 None → SourceNotFoundError"""
+        """get_source 返回 None → SourceNotFoundError"""
         from novelbase.core.exceptions import SourceNotFoundError
 
         engine = _make_engine()
         ch = _make_chapter()
 
-        with patch("novelbase.core.downloader.get_source_for_id", return_value=None):
+        with patch("novelbase.core.downloader.get_source", return_value=None):
             with pytest.raises(SourceNotFoundError, match="source not found"):
                 asyncio.run(resolve_chapter(ch, engine))
 

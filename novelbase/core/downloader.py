@@ -36,16 +36,6 @@ def get_source(url: str) -> str | None:
     return None
 
 
-def get_source_for_id(novel_id: str) -> str | None:
-    """根据裸 novel_id 查找匹配的 source 名称。"""
-    from ..source import register_source
-    for name, info in register_source().items():
-        pat = info.get("id_pattern")
-        if pat and pat.match(novel_id):
-            return name
-    return None
-
-
 def list_sources() -> list[str]:
     """返回所有已注册的 source 名称。"""
     from ..source import register_source
@@ -176,12 +166,9 @@ async def resolve_chapter(chapter: Chapter, engine, skip_delay: bool = False, **
     """
     from ..source import resolve as _resolve
 
-    name = get_source_for_id(chapter.novel_id)
-    # 回退：novel_id 不带前缀时用 chapter.url 查找
+    name = get_source(chapter.url)
     if name is None:
-        name = get_source(chapter.url)
-    if name is None:
-        raise SourceNotFoundError(f"source not found for novel_id: {chapter.novel_id}")
+        raise SourceNotFoundError(f"source not found for url: {chapter.url}")
 
     mode = _normalize_mode(engine)
     variant = _variant_for(engine)
