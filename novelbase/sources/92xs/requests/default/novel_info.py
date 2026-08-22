@@ -45,17 +45,9 @@ async def novel_info(url: str, engine, **kwargs) -> Novel:
                 cover_url = f"http://www.92xs.info{cover_url}"
             cover = Illustration(raw_data=b"", url=cover_url, alt=title)
 
-    # 提取 book_id
-    import re
-    from urllib.parse import urlparse
-    path = urlparse(url).path
-    m = re.search(r"(?:/book/|/html/)(\d+)", path)
-    novel_id = f"92xs_{m.group(1)}" if m else ""
-
     novel = Novel(
         title=title,
         author=author,
-        id=novel_id,
         url=url,
         description=description,
         tags=tuple(tags),

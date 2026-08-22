@@ -373,5 +373,5 @@ class Test92xsCapabilities:
         )
         assert novel.title == "书名"
         assert novel.author == "张三"
-        assert novel.id == "92xs_9999"
+        assert novel.id == ""  # source 层不生成 id，由 resolve_meta 中心赋值（hash id）
         assert novel.cover.raw_data == b"cover-bytes"

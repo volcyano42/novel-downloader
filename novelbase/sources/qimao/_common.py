@@ -115,8 +115,7 @@ def parse_novel_info(html: str, *, url: str = ""):
     if serial == 0:
         chapter_items = soup.select(".book-catalog-list-content li a")
         serial = len(chapter_items)
-    novel_id = standardize_id(book_url) if book_url else ""
-    return Novel(url=book_url, id=f"qimao_{novel_id}", title=name, author=author,
+    return Novel(url=book_url, title=name, author=author,
                  serial=serial, tags=tuple(tags), description=abstract,
                  count=count_word, cover=cover)
 

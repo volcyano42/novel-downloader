@@ -96,11 +96,8 @@ def parse_novel_info(html: str, url) -> Novel:
     # 封面字节由能力函数经 engine.async_fetch_images 下载
     novel_image = Illustration(raw_data=b"", alt=name, url=book_cover_url)
 
-    novel_id = standardize_id(url) if url else ""
-
     return Novel(
         url=url,
-        id=f"qidian_{novel_id}",
         title=name,
         serial=serial,
         author=author,
