@@ -45,7 +45,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 ## Public 迁移约定（novel-crawler）
 
 - **迁移必须用 subagent 执行**（task/subagent 工具）：主 Agent 不亲自做复制/校验/文件遍历，避免大量文件清单与敏感判断污染主上下文导致降智
-- subagent 职责：读 `PUBLIC_MANIFEST.md` → **输出「本次迁移清单」**（复制列表 + 依据条目 + 红名单确认）→ 按白名单复制 → 跑 `python scripts/check_public.py` → 返回校验结果
+- subagent 职责：读 `PUBLIC_MANIFEST.md` → **输出「本次迁移清单」**（复制列表 + 依据条目 + 红名单确认）→ 按白名单复制（**迁移后改写 `novelbase/__init__.py` 的 `__version__` 与 pyproject 一致**）→ 跑 `python scripts/check_public.py` → 返回校验结果
 - 主 Agent 收到 subagent 报告后**向用户展示本次迁移清单与校验结果**，用户确认后再提交
 - 迁移前**必读** `PUBLIC_MANIFEST.md`（白名单 = 允许复制；红名单 = 禁止；未列出一律不迁移）
 - public 仓库（同级 `novel-crawler/`）独立提交/推送，不混入 private 的 commit 习惯

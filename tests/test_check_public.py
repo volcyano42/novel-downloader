@@ -100,3 +100,28 @@ class TestCheck:
         _make_files(private, {"novelbase/__init__.py": "x"})
         errors = check_public.check(private, tmp_path / "nope")
         assert any("[缺失]" in e for e in errors)
+
+    def test_version_mismatch_detected(self, tmp_path):
+        private = tmp_path / "private"
+        public = tmp_path / "public"
+        _make_files(private, {
+            "novelbase/__init__.py": '__version__ = "1.0.0"',
+            "pyproject.toml": 'version = "1.0.0"',
+        })
+        public.mkdir()
+        _full_public(private, public)
+        # 模拟迁移时 __version__ 未改写（private 版本被带过去）
+        (public / "novelbase" / "__init__.py").write_text('__version__ = "4.4.0"', encoding="utf-8")
+        errors = check_public.check(private, public)
+        assert any("[版本]" in e and "4.4.0" in e and "1.0.0" in e for e in errors)
+
+    def test_version_match_passes(self, tmp_path):
+        private = tmp_path / "private"
+        public = tmp_path / "public"
+        _make_files(private, {
+            "novelbase/__init__.py": '__version__ = "1.0.0"',
+            "pyproject.toml": 'version = "1.0.0"',
+        })
+        public.mkdir()
+        _full_public(private, public)
+        assert check_public.check(private, public) == []

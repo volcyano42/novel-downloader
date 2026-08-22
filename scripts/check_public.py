@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import re
 import sys
 from pathlib import Path
 
@@ -141,6 +142,18 @@ def check(private: Path, public: Path) -> list[str]:
             if pat in text:
                 errors.append(f"[敏感] {rel} 含敏感字样 '{pat}'")
                 break
+
+    # 防线 4：版本一致性（public 的 pyproject 与 novelbase.__version__ 必须一致）
+    pyproject = public / "pyproject.toml"
+    init_py = public / "novelbase" / "__init__.py"
+    if pyproject.exists() and init_py.exists():
+        py_ver = re.search(r'version\s*=\s*"([^"]+)"', pyproject.read_text(encoding="utf-8", errors="ignore"))
+        init_ver = re.search(r'__version__\s*=\s*"([^"]+)"', init_py.read_text(encoding="utf-8", errors="ignore"))
+        if py_ver and init_ver and py_ver.group(1) != init_ver.group(1):
+            errors.append(
+                f"[版本] novelbase/__init__.py __version__({init_ver.group(1)}) "
+                f"与 pyproject.toml version({py_ver.group(1)}) 不一致，迁移时需改写"
+            )
 
     return errors
 

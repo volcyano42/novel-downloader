@@ -33,6 +33,10 @@
 - `requirements.txt`
 - ~~`CHANGELOG.md`~~（不迁移：公开仓库 changelog 从 1.0.0 空开始）
 
+## 迁移规则
+
+- **版本号改写**：迁移后 `novelbase/__init__.py` 的 `__version__` 必须与 `pyproject.toml` 的 `version` 一致（public 当前 1.0.0）；`check_public.py` 防线 4 会校验，不一致报 `[版本]` 错误
+
 ### 文档
 
 - `docs/README.md`
