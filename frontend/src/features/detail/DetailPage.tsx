@@ -325,7 +325,7 @@ export default function DetailPage() {
               </a>
               <p className="text-sm text-slate-500">{novel.author}</p>
               <p className="text-xs text-slate-400 font-mono">{novel.id}</p>
-              <p className="text-sm text-slate-500">{loading ? "..." : localChapters.length}/{novel.serial} 章{newCount > 0 && <span className="ml-1.5 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-500 breathing-badge">+{newCount}</span>} · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
+              <p className="text-sm text-slate-500">{(loading || streaming) ? "..." : localChapters.length}/{novel.serial} 章{newCount > 0 && <span className="ml-1.5 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-500 breathing-badge">+{newCount}</span>} · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
               {novel.extra?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.extra.rating} 分</p>}
               {novel.tags && novel.tags.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{novel.tags.map(t => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{t}</span>)}</div>}
             </div>
