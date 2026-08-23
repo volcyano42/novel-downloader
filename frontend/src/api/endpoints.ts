@@ -124,14 +124,16 @@ export function streamChapters(
   novelId: string,
   onChapter: (ch: ChapterBrief) => void,
   onDone: () => void,
+  onError: () => void,
   signal?: AbortSignal,
 ) {
   const url = `/api/v2/storage/novel/${novelId}/chapters/stream`;
   return fetch(url, { signal }).then(async (res) => {
-    if (!res.ok || !res.body) { onDone(); return; }
+    if (!res.ok || !res.body) { onError(); return; }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
+    let sawDone = false;
     while (true) {
       const { done, value } = await reader.read();
       buf += decoder.decode(value ?? new Uint8Array(), { stream: !done });
@@ -140,14 +142,19 @@ export function streamChapters(
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           const payload = line.slice(6);
-          if (payload === "[DONE]") { onDone(); return; }
+          if (payload === "[DONE]") { sawDone = true; onDone(); return; }
           try { onChapter(JSON.parse(payload) as ChapterBrief); } catch {}
         }
       }
-      if (done) { onDone(); return; }
+      if (done) {
+        // 后端正常流以 data: [DONE] 收尾；未收到 [DONE] 就 EOF 视为异常终止
+        if (sawDone) onDone(); else onError();
+        return;
+      }
     }
   }).catch((e: Error) => {
-    if (e.name !== "AbortError") throw e;
+    // 网络/读取错误（非主动取消）→ 异常终止
+    if (e.name !== "AbortError") onError();
   });
 }
 
