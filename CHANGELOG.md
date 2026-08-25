@@ -39,6 +39,7 @@
 5. **下载进度条** — 逐章实时推进 + engine 同步创建移出事件循环
 6. **前端 TypeScript 语法** — variant 缺符号、TooltipVariant 不存在、DownloadDialog 参数重名
 7. **Nuitka onefile 前端资源定位** — 改用 `__file__` 目录，修复 exe 访问 404
+8. **CLI 存储路径与 backend 不一致** — `cli.core._get_storage` 与 `cli.config.build_options` 硬编码 `sqlite:///app_data/storage/novels.db`（父目录），扫不到 `app_data/storage/novels/` 下的小说，交互式菜单"更新已有小说"误报"没有已下载的小说"；改为与 backend 统一使用 `shared.config.get_database_url()`，并修正 template/config 的 `storage.database_url`
 8. **便携版 Ctrl+C 退出** — Windows 去 pause、Linux/Termux 加 trap 清理
 
 ### 说明

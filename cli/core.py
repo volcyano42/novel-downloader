@@ -46,9 +46,10 @@ def _get_storage():
     """获取或创建全局存储实例。"""
     global _storage
     if _storage is None:
+        from shared.config import get_database_url
         _storage = create_storage(StorageOptions(
             backend="sqlite",
-            database_url="sqlite:///app_data/storage/novels.db",
+            database_url=get_database_url(),
         ))
     return _storage
 

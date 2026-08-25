@@ -260,8 +260,9 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
         )
 
     # Storage
+    from shared.config import get_database_url
     storage_cfg = cfg.get("storage", {})
-    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels.db"
+    database_url = storage_cfg.get("database_url", "") or get_database_url()
     options.set_storage_options(backend="sqlite", database_url=database_url)
 
     return options
