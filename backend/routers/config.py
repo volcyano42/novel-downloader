@@ -96,9 +96,13 @@ async def get_site(website: str):
     raw = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
     entry: dict = {}
     for mode in ("browser", "requests"):
-        entry[mode] = config_service.deep_merge(
-            config_service.ENGINE_DEFAULTS[mode], raw.get(mode, {}),
-        )
+        entry[mode] = {
+            v: config_service.deep_merge(
+                config_service.ENGINE_DEFAULTS[mode],
+                config_service.get_mode_variant_config(raw, mode, v),
+            )
+            for v in config_service.mode_variants(raw, mode)
+        }
     # api 是 variant 容器，不是模式配置
     api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
     entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
@@ -111,9 +115,13 @@ async def save_site(website: str, body: dict):
     existing = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
     for mode in ("browser", "requests"):
         if mode in body and isinstance(body[mode], dict):
-            existing[mode] = config_service.deep_merge(
-                existing.get(mode, {}), body[mode],
-            )
+            existing_mode = existing.get(mode, {}) if isinstance(existing.get(mode), dict) else {}
+            for v, cfg in body[mode].items():
+                if isinstance(cfg, dict):
+                    existing_mode[v] = config_service.deep_merge(
+                        existing_mode.get(v, {}), cfg,
+                    )
+            existing[mode] = existing_mode
     # api mode 只保留 variant 子 dict，过滤标量字段
     if "api" in body and isinstance(body["api"], dict):
         api_existing = existing.get("api", {}) if isinstance(existing.get("api"), dict) else {}

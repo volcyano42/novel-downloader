@@ -13,7 +13,7 @@ import uuid
 from fastapi import HTTPException
 
 from novelbase import Options, create_engine
-from shared.config import load_site_config, find_variant_options
+from shared.config import load_site_config, find_variant_options, get_mode_variant_config
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}
@@ -33,7 +33,7 @@ def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
 
     if mode == "browser":
         site = load_site_config(platform)
-        mode_cfg = site.get(mode, {}) if isinstance(site, dict) else {}
+        mode_cfg = get_mode_variant_config(site, mode, variant)
         vp = mode_cfg.get("viewport")
         raw = (
             f"{platform}|{mode}|{mode_cfg.get('browser_type','chromium')}|"
@@ -116,7 +116,7 @@ def create_engine_for_request(platform: str,
     每个请求调用一次，用完必须调用 engine.close() 释放资源。
     """
     site = load_site_config(platform)
-    mode_cfg = site.get(mode, {}) if isinstance(site, dict) else {}
+    mode_cfg = get_mode_variant_config(site, mode, variant)
 
     _cfg = lambda k, default=None: mode_cfg.get(k, default)
 
