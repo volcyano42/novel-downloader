@@ -66,6 +66,9 @@ def do_search(query: str) -> tuple[str | None, str | None]:
     engine = _get_engine(platform)
     try:
         results = asyncio.run(search(platform, query, engine=engine, skip_delay=True))
+    except Exception as e:
+        print(f"搜索失败: {e}")
+        return None, None
     finally:
         engine.close()
 

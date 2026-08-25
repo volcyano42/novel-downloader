@@ -227,3 +227,20 @@ class TestInteractive:
     def test_platform_from_url_92xs_alias(self):
         from cli.interactive import _platform_from_url
         assert _platform_from_url("http://www.92xs.info/html/96850/35632400.html") == "92xs"
+
+    def test_do_search_keyword_search_error(self, monkeypatch, capsys):
+        from cli import interactive as mod
+
+        class _FakeEngine:
+            def close(self):
+                pass
+
+        async def boom(*a, **k):
+            raise RuntimeError("网络错误")
+
+        monkeypatch.setattr(mod, "_select", lambda *a, **k: "fanqie")
+        monkeypatch.setattr(mod, "search", boom)
+        monkeypatch.setattr(mod, "_get_engine", lambda *a, **k: _FakeEngine())
+        url, plat = mod.do_search("测试")
+        assert url is None and plat is None
+        assert "搜索失败" in capsys.readouterr().out
