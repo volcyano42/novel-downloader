@@ -1,4 +1,10 @@
-"""Novel下载器 — 统一启动器。一键启动前后端，Ctrl+C 优雅关闭。"""
+"""Novel下载器 — 统一启动器。一键启动前后端，Ctrl+C 优雅关闭。
+
+用法:
+    python app.py                  # 默认 0.0.0.0:8000
+    python app.py -a 127.0.0.1 -p 8080
+"""
+import argparse
 import os
 import shutil
 import subprocess
@@ -17,12 +23,17 @@ def stream_output(proc: subprocess.Popen, prefix: str):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Novel下载器 — 统一启动器（前后端）")
+    parser.add_argument("-a", "--host", default="0.0.0.0", help="后端绑定地址（默认 0.0.0.0）")
+    parser.add_argument("-p", "--port", type=int, default=8000, help="后端端口（默认 8000）")
+    args = parser.parse_args()
+
     print("Novel下载器 启动中...", flush=True)
 
     # 启动后端 (uvicorn)
     backend = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app",
-         "--host", "0.0.0.0", "--port", "8000"],
+         "--host", args.host, "--port", str(args.port)],
         cwd=str(ROOT),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
