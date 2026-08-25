@@ -11,7 +11,6 @@
 
 import argparse
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -21,10 +20,8 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 # ── 复用 app.config 的配置加载 ─────────────────────────────────
 from cli.config import (
-    load_main_config, load_site_config, load_format_configs, load_groups,
-    build_options, add_novel_to_group, ensure_novel_in_group,
-)
-from novelbase import create_engine, resolve_meta, get_source
+    load_main_config, load_site_config, load_format_configs, build_options, )
+from novelbase import create_engine, resolve_meta
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("novelbase.cli")
