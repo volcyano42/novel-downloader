@@ -1,8 +1,6 @@
 """导出器动态发现测试 — 内置格式 + NLD_PRIVATE_EXPORTERS 外部目录。"""
 import importlib
 
-import pytest
-
 import novelbase.exporter as exporter_mod
 
 

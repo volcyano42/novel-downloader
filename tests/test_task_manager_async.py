@@ -11,8 +11,6 @@
 import asyncio
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def test_run_download_is_coroutine():
     """下载流程是协程函数（asyncio 原生，不再走 threading.Thread）。"""

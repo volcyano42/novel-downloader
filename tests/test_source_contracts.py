@@ -4,9 +4,9 @@ from inspect import signature
 
 import pytest
 
+import novelbase.source as _source_mod
 from novelbase.source import capabilities, list_sources, resolve
 from novelbase.sources.contracts import CAPABILITY_META
-import novelbase.source as _source_mod
 
 
 # ═══════════════════════════════════════════════════════════
