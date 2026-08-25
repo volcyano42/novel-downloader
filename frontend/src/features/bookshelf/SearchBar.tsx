@@ -107,7 +107,9 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
     setQuery(prefill.query);
     if (prefill.platform) setPlatform(prefill.platform);
     setMode(prefill.mode || "requests");
-    if (prefill.variant) setVariant(prefill.variant);
+    // 始终同步 variant：历史条目的 variant 为空时清空，避免残留上一次选择的
+    // 变体（如 fanqie api 的 rain）与回填的 platform/mode 不匹配
+    setVariant(prefill.variant || undefined);
   }, [prefill?.nonce]);
 
   const clear = () => {
