@@ -7,10 +7,20 @@
 
 ## 开始前首先了解
 
+### Engine
+
 1. Engine 译为"引擎"，是获取数据的渠道之一，例如 `requests.get()`。目前有 `BrowserEngine`、`APIEngine`、`RequestsEngine` 三个类，对应三种模式（browser / api / requests）。每个 Engine 提供同步（`fetch_text` / `fetch_json`）与异步（`async_fetch_text` / `async_fetch_json`）两组接口；书源函数中使用异步接口
 2. Engine 支持的参数详情请看 `novelbase/core/options.py`
-3. 书源函数签名不可改变：程序运行时扫描 `novelbase/sources` 下所有书源和函数，并了解能力（如某种模式/变体是否支持搜索等），`novelbase/source.py` 的 `resolve()` 会通过 `inspect.signature` 校验必需参数名
-4. 书源只支持异步函数，不支持同步（见下方"函数签名约定"）
+
+### 书源
+1. 书源函数签名不可改变：程序运行时扫描 `novelbase/sources` 下所有书源和函数，并了解能力（如某种模式/变体是否支持搜索等），`novelbase/source.py` 的 `resolve()` 会通过 `inspect.signature` 校验必需参数名
+2. 书源只支持异步函数，不支持同步（见下方"函数签名约定"）
+
+### 变体
+
+1. 变体（variant）是同一模式（mode）下的一种具体实现。同一书源可以为同一模式提供多个变体：例如 `fanqie` 的 `api` 模式有 `oiapi`、`rain` 两个变体，各自拥有独立的代码目录（`api/oiapi/`、`api/rain/`）与站点配置块（`api.oiapi`、`api.rain`），互不影响
+2. 变体选择规则：某模式只有一个变体时自动使用，无需指定；有多个变体时须显式指定——CLI 用 `--variant` 参数（如 `python cli.py search --platform fanqie --mode api --variant oiapi "关键词"`），交互式 CLI 会弹出选项询问。未指定时 `novelbase/source.py` 的 `resolve()` 优先取 `default`，无 `default` 则取第一个可用变体
+3. 命名惯例：只有一个变体的模式统一命名为 `default`（如 `requests/default/`、`browser/default/`）
 
 ## 创建步骤
 
@@ -128,3 +138,24 @@ requests:
 
 - `dev new-variant` 会把 `{MODE}:` 下第一个已有 variant 的参数块复制给新 variant
 - 参数含义与默认值见 `novelbase/core/options.py` 与 `docs/project/config.md`
+
+## 验证书源可用
+
+实现函数后，直接用 CLI 验证（无需重启程序）：
+
+```bash
+# 搜索验证（指定模式与变体）
+python cli.py search --platform {NAME} --mode {MODE} --variant {VARIANT} "关键词"
+
+# 查看小说信息
+python cli.py info --url "https://..." --platform {NAME} --mode {MODE} --variant {VARIANT}
+```
+
+常见报错与原因：
+
+| 报错 | 原因 |
+|------|------|
+| `mode '...' not available for ...` / `variant '...' not available` | 书源未被正确扫描：检查目录结构与函数文件是否齐全 |
+| `TypeError`（await 同步函数） | 函数未写成 `async def`（书源只支持异步函数） |
+| `FeatureNotSupportedError("TODO")` | 该能力尚未实现（脚手架模板的默认行为），需实现对应函数 |
+| 找不到书源（`SourceNotFoundError`） | 书源名拼写错误，或站点配置/代码目录缺失 |
