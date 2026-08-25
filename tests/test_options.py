@@ -71,6 +71,10 @@ class TestBrowserOptions:
         o = BrowserOptions(extra_args=["--no-sandbox", "--remote-debugging-port=9222"])
         assert o.extra_args == ["--no-sandbox", "--remote-debugging-port=9222"]
 
+    def test_browser_options_auto_reconnect_default_false(self):
+        b = BrowserOptions()
+        assert b.auto_reconnect is False
+
 
 class TestExportOptions:
     def test_create(self):
@@ -126,6 +130,10 @@ class TestOptions:
         o = Options().set_browser_options(user_data_dir=None, viewport=None)
         assert o.browser.user_data_dir is None
         assert o.browser.viewport is None
+
+    def test_set_browser_options_auto_reconnect(self):
+        o = Options().set_browser_options(auto_reconnect=True)
+        assert o.browser.auto_reconnect is True
 
     def test_set_export(self):
         opt = ExportOptions(format="txt", output_path="/tmp/out")

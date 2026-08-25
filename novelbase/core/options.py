@@ -35,6 +35,7 @@ class BrowserOptions:
     user_data_dir: Path | str | None = None
     viewport: dict[str, int] | None = None
     extra_args: list[str] | None = None
+    auto_reconnect: bool = False   # 浏览器意外关闭时自动重建并重试
 
 @dataclass
 class StorageOptions:
@@ -99,11 +100,12 @@ class Options:
                                 headless: bool = False,
                                 user_data_dir: Path | str | None = None,
                                 viewport: dict[str, int] | None = None,
-                                extra_args: list[str] | None = None) -> "Options":
+                                extra_args: list[str] | None = None,
+                                auto_reconnect: bool = False) -> "Options":
             self._browser = BrowserOptions(browser_type=browser_type, delay=tuple(delay), timeout=timeout, retry_times=retry_times,
                                            backoff_factor=backoff_factor, headless=headless,
                                            user_data_dir=user_data_dir, viewport=viewport,
-                                           extra_args=extra_args)
+                                           extra_args=extra_args, auto_reconnect=auto_reconnect)
             return self
 
 
