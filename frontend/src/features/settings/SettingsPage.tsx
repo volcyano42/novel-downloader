@@ -161,7 +161,11 @@ function EngineSection({ mode }: { mode: string }) {
   const { data: siteCfg } = useSiteConfig(platform);
   const saveSite = useSaveSiteConfig(platform);
 
-  const engineCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
+  const rawModeCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
+  // browser/requests 是 variant 容器，表单操作 default variant；api 保持 variant 容器原样
+  const engineCfg = (mode === "api"
+    ? rawModeCfg
+    : ((rawModeCfg.default as Record<string, unknown> | undefined) ?? {}));
   const fields = ENGINE_FIELDS[mode] ?? [];
   // 优先用 siteCfg.api_variants（config 端点，含全部 variant 含 disabled）；
   // 远程访问/配置未初始化时 fallback 到 sources capabilities（enabled 的 api variant）
@@ -178,8 +182,9 @@ function EngineSection({ mode }: { mode: string }) {
   }, [siteCfg, sources, platform]);
   const hasVariants = mode === "api" && apiVariants.length > 0;
 
+  // 只服务 browser/requests 字段：保存到 default variant；api 走 ApiVariantsSection
   const updateField = useCallback((key: string, value: unknown) => {
-    saveSite.mutate({ [mode]: { [key]: value } });
+    saveSite.mutate({ [mode]: { default: { [key]: value } } });
   }, [mode, saveSite]);
 
   const renderField = (f: typeof fields[number]) => {

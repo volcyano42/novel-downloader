@@ -74,7 +74,7 @@ export interface GlobalConfig {
 }
 
 export interface SiteConfig {
-  browser: EngineOptions; requests: EngineOptions; api: EngineOptions;
+  browser: Record<string, EngineOptions>; requests: Record<string, EngineOptions>; api: Record<string, EngineOptions>;
   api_variants: string[];
 }
 
