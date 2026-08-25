@@ -17,6 +17,24 @@ def _db_objects(db_path) -> list[str]:
     return [r[0] for r in rows]
 
 
+def _schema_sql(db_path) -> dict[str, str]:
+    """表/索引 → 完整 CREATE 语句（归一化空白），结构级比较（含列定义）。"""
+    conn = sqlite3.connect(str(db_path))
+    rows = conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type IN ('table','index') "
+        "AND name NOT LIKE 'sqlite_%'"
+    ).fetchall()
+    conn.close()
+    return {name: " ".join(sql.split()) for name, sql in rows}
+
+
+def _user_version(db_path) -> int:
+    conn = sqlite3.connect(str(db_path))
+    v = conn.execute("PRAGMA user_version").fetchone()[0]
+    conn.close()
+    return v
+
+
 def _template_db() -> str:
     return str(init_config._get_root() / "template" / "storage" / "users" / "default" / "user_data.db")
 
@@ -38,15 +56,20 @@ def test_template_db_exists_with_empty_schema():
 
 
 def test_template_schema_matches_runtime():
-    """模板库 schema 与运行时 _SCHEMA_SQL 一致（防止模板与建表逻辑漂移）"""
+    """模板库 schema 与运行时一致（结构级：列 + 索引 + user_version，防止漂移）"""
     import tempfile
+
+    from shared.user_data import _migrate_search_history
 
     with tempfile.TemporaryDirectory() as td:
         runtime_db = f"{td}/runtime.db"
         conn = sqlite3.connect(runtime_db)
+        conn.row_factory = sqlite3.Row  # _migrate_search_history 依赖 r["name"]
         conn.executescript(_SCHEMA_SQL)
+        _migrate_search_history(conn)  # 与 _connection() 首次初始化后的状态一致
         conn.close()
-        assert _db_objects(runtime_db) == _db_objects(_template_db())
+        assert _schema_sql(runtime_db) == _schema_sql(_template_db())
+        assert _user_version(runtime_db) == _user_version(_template_db())
 
 
 def test_init_user_db_copies_template_once(tmp_path, monkeypatch):
