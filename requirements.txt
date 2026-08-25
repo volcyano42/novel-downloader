@@ -14,4 +14,3 @@ rich
 uvicorn[standard]>=0.30.0
 yarl
 python-dotenv>=1.0.0
-pycryptodome   # appapi（番茄官方 app API）：x-argus/x-ladon 签名依赖
