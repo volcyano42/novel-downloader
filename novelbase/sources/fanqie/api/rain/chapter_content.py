@@ -1,7 +1,6 @@
 from novelbase.core.exceptions import ChapterNotFoundError
-
-from ..._common import standardize_id
 from ._helpers import _api_url
+from ..._common import standardize_id
 
 
 async def chapter_content(chapter, engine, **kwargs):

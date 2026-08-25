@@ -1,5 +1,5 @@
-from ..._common import parse_chapter_list
 from novelbase.models.novel import Novel, Chapter
+from ..._common import parse_chapter_list
 
 
 async def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:

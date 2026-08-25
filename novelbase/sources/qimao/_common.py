@@ -1,6 +1,6 @@
 """qimao (qimao.com) shared parse functions."""
-import re
 import logging
+import re
 
 from bs4 import BeautifulSoup, Tag
 

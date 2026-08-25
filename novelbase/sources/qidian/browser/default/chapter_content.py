@@ -1,8 +1,8 @@
 from bs4 import BeautifulSoup
 
-from ..._common import parse_chapter_content
 from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
+from ..._common import parse_chapter_content
 
 
 async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:

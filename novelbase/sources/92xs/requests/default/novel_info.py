@@ -1,5 +1,6 @@
 """92xs novel_info — 解析 /book/{id}.html。"""
 from bs4 import BeautifulSoup
+
 from novelbase.models.novel import Novel, Illustration
 
 

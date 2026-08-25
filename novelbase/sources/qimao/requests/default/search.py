@@ -1,7 +1,7 @@
 """qimao requests - search."""
 
-from ..._common import _log, parse_search_result
 from novelbase.models.novel import SearchResult
+from ..._common import _log, parse_search_result
 
 
 async def search(query: str, engine, **kwargs) -> list[SearchResult]:

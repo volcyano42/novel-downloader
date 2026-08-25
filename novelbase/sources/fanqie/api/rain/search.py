@@ -1,7 +1,6 @@
 from box.box import Box
 
 from novelbase.models.novel import SearchResult
-
 from ._helpers import _api_url
 
 

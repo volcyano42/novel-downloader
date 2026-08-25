@@ -7,7 +7,6 @@ from typing import Any, Sequence, Iterator
 
 from box import Box
 
-
 _IMAGE_SIGNATURES: list[tuple[bytes, str]] = [
     (b'\x89PNG\r\n\x1a\n', "png"),
     (b'\xff\xd8', "jpeg"),

@@ -1,7 +1,7 @@
 """qimao requests - fetch chapter content."""
 
-from ..._common import parse_chapter_content
 from novelbase.models.novel import Chapter
+from ..._common import parse_chapter_content
 
 
 async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:

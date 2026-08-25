@@ -4,9 +4,8 @@ from box.box import Box
 
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
-
-from ..._common import standardize_id
 from ._helpers import _api_url
+from ..._common import standardize_id
 
 
 async def novel_info(url: str, engine, **kwargs):

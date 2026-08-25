@@ -1,9 +1,10 @@
 """qimao API (Rain) - fetch novel info."""
 
-from ..._common import _api_url, standardize_id
+from box import Box
+
 from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
-from box import Box
+from ..._common import _api_url, standardize_id
 
 
 async def novel_info(url: str, engine, **kwargs):

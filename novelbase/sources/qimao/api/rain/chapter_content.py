@@ -1,8 +1,8 @@
 """qimao API (Rain) - fetch chapter content."""
 
-from ..._common import _api_url
 from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
+from ..._common import _api_url
 
 
 async def chapter_content(chapter: Chapter, engine, **kwargs) -> Chapter | None:

@@ -1,8 +1,8 @@
 """qimao browser - fetch chapter list.
 Browser engine needs to click the catalog tab to trigger chapter loading."""
 
-from ..._common import parse_chapter_list, standardize_id
 from novelbase.models.novel import Chapter
+from ..._common import parse_chapter_list, standardize_id
 
 
 async def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:

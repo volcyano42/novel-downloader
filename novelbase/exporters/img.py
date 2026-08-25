@@ -1,7 +1,6 @@
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Any
+from typing import Any
 
 from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel

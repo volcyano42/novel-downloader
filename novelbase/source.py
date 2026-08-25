@@ -20,7 +20,6 @@ from pathlib import Path
 
 from .sources.contracts import CAPABILITY_META
 
-
 __all__ = [
     "capabilities",
     "resolve",

@@ -1,8 +1,8 @@
 """日志系统 — 模块导入时自动初始化，不暴露配置接口。"""
 import logging
 import re
-import threading
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 

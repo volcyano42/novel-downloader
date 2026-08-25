@@ -1,7 +1,8 @@
 """92xs 搜索 — POST 到 /modules/article/search.php。"""
 from bs4 import BeautifulSoup
-from novelbase.models.novel import SearchResult
+
 from novelbase.core.exceptions import NetworkError
+from novelbase.models.novel import SearchResult
 
 SEARCH_URL = "http://www.92xs.info/modules/article/search.php"
 

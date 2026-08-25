@@ -1,7 +1,7 @@
 """qimao browser - fetch novel info."""
 
-from ..._common import parse_novel_info, standardize_id
 from novelbase.models.novel import Novel, Illustration
+from ..._common import parse_novel_info, standardize_id
 
 
 async def novel_info(url: str, engine, **kwargs) -> Novel:

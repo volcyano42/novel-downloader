@@ -1,5 +1,6 @@
 """92xs chapter_content — 解析 /html/{book_id}/{ch_id}.html。"""
 from bs4 import BeautifulSoup
+
 from novelbase.models.novel import Chapter
 
 

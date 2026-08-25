@@ -1,7 +1,5 @@
-import asyncio
-
-from ..._common import parse_search_result
 from novelbase.models.novel import SearchResult
+from ..._common import parse_search_result
 
 
 async def search(query: str, engine, **kwargs) -> list[SearchResult]:

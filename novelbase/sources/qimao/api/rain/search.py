@@ -2,8 +2,8 @@
 
 from box import Box
 
-from ..._common import _api_url, _log
 from novelbase.models.novel import SearchResult
+from ..._common import _api_url, _log
 
 
 async def search(query: str, engine, **kwargs) -> list[SearchResult]:

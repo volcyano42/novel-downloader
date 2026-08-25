@@ -1,8 +1,8 @@
 """qimao API (Rain) - fetch chapter list."""
 
-from ..._common import _api_url, standardize_id
 from novelbase.core.exceptions import ChapterNotFoundError
 from novelbase.models.novel import Chapter
+from ..._common import _api_url, standardize_id
 
 
 async def chapter_list(url: str, engine, **kwargs) -> list[Chapter]:

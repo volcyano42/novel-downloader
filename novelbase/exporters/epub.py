@@ -6,7 +6,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Literal
 
 from ..core.options import ExportOptions
 from ..models.novel import Chapter, Novel, Illustration

@@ -19,6 +19,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterator, Sequence
+
 from .options import StorageOptions
 from ..models.novel import Novel, Chapter, Chapters, Illustration
 from ..utils.logger import get_logger
