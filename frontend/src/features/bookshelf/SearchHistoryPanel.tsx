@@ -46,6 +46,8 @@ export function SearchHistoryPanel({ onPick }: SearchHistoryPanelProps) {
                 >
                   <span className="truncate flex-1">{item.keyword}</span>
                   {item.platform && <span className="shrink-0 text-[10px] text-slate-300">{item.platform}</span>}
+                  {item.mode && <span className="shrink-0 text-[10px] text-slate-300">{item.mode}</span>}
+                  {item.variant && <span className="shrink-0 text-[10px] text-slate-300">{item.variant}</span>}
                 </button>
               ))}
             </div>
