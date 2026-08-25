@@ -109,6 +109,20 @@ def test_new_variant_no_template(monkeypatch, tmp_path, capsys):
     assert "没有可复制的 variant" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("variant", ["../evil", "a/b", "a:b", "a b", "bad*name"])
+def test_new_variant_invalid_name(monkeypatch, tmp_path, capsys, variant):
+    """非法 variant 名：退出码 1 且不产生任何文件（代码/配置）。"""
+    root, _ = _setup(monkeypatch, tmp_path, site_cfg=_SITE)
+    with pytest.raises(SystemExit) as exc:
+        cli.main._scaffold_variant("demo", "api", variant)
+    assert exc.value.code == 1
+    assert "含非法字符" in capsys.readouterr().err
+    # 不产生文件：代码目录下无新目录，站点配置未新增 variant
+    assert list((root / "demo").iterdir()) == []
+    site = cli.config.load_site_config("demo")
+    assert set(site["api"]) == {"oiapi", "rain"}
+
+
 def test_new_source_template_async(monkeypatch, tmp_path):
     root, _ = _setup(monkeypatch, tmp_path)
     cli.main._scaffold_source("demo", ["requests"])

@@ -11,6 +11,7 @@
 
 import argparse
 import asyncio
+import re
 import sys
 from pathlib import Path
 
@@ -428,8 +429,13 @@ def _scaffold_variant(source: str, mode: str, variant: str):
     """为已有书源新建变体脚手架：代码目录 + 站点配置块。
 
     校验链任一失败即报错退出（不产生任何文件）：
-    书源代码目录/站点配置缺失 → mode 不在配置 → variant 已存在 → 无模板 variant。
+    variant 名非法 → 书源代码目录/站点配置缺失 → mode 不在配置 → variant 已存在 → 无模板 variant。
     """
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", variant):
+        print(f"variant '{variant}' 含非法字符，仅允许字母/数字/下划线/连字符",
+              file=sys.stderr)
+        sys.exit(1)
+
     from cli.config import CONFIG_DIR, load_site_config, save_site_config
 
     source_dir = _SOURCES_ROOT / source
