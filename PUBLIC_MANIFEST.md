@@ -9,8 +9,8 @@
 ### 源码
 
 - `novelbase/**`
-  - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
-  - 保留：`novelbase/sources/fanqie/browser/**`、`novelbase/sources/fanqie/requests/**`
+  - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/rain/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
+  - 保留：`novelbase/sources/fanqie/api/oiapi/**`、`novelbase/sources/fanqie/browser/**`、`novelbase/sources/fanqie/requests/**`
 - `backend/**`
 - `frontend/**`
   - **排除**：`frontend/node_modules/**`、`frontend/dist/**`
@@ -55,4 +55,4 @@
 - `docs/learning/**`
 - `*.log`（构建日志）
 - `.reasonix/**`、`.codegraph/**`、`.superpowers/**`、`.refer/**`
-- 任何含 `api` 书源（oiapi/rain）、密钥字样、逆向/破解实现的内容
+- 任何含 `api` 书源（rain）、密钥字样、逆向/破解实现的内容

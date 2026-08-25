@@ -5,7 +5,7 @@
 
 1. 缺失检查：白名单（PUBLIC_MANIFEST.md）内文件在 public 缺失 → 报错
 2. 多余检查：public 里有清单外文件（敏感/杂项误迁）→ 报错（关键防线）
-3. 敏感扫描：public 内容出现敏感模式（oiapi/rain/key 等）→ 报错
+3. 敏感扫描：public 内容出现敏感模式（rain/key 等）→ 报错
 
 任一防线失败以非零退出码结束，阻止提交。
 """
@@ -47,7 +47,7 @@ EXCLUDE_PATTERNS = [
     "novelbase/sources/qidian/**",
     "novelbase/sources/qimao/**",
     "novelbase/sources/92xs/**",
-    "novelbase/sources/fanqie/api/**",
+    "novelbase/sources/fanqie/api/rain/**",
     "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
@@ -59,7 +59,7 @@ EXCLUDE_PATTERNS = [
     "docs/superpowers/**",
     "docs/session-prompt.md",
     "docs/learning/**",
-    # 依赖未公开书源的测试（public 无 qidian/qimao/92xs/fanqie-api）
+    # 依赖未公开书源的测试（public 无 qidian/qimao/92xs/fanqie-rain）
     "tests/test_source_async.py",
     "tests/test_source_contracts.py",
     "tests/test_browser_sources.py",
