@@ -1,19 +1,40 @@
 /** React Query hooks — 所有数据获取和变更操作 */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import type {ChapterBrief} from "@/api/endpoints";
 import {
-  listNovels, getMeta, deleteNovel, listChapters, getChapter,
-  searchDownload, fetchMeta, fetchChapterList, downloadChapters,
-  listTasks, pauseTask, resumeTask, deleteTask,
-  getGlobalConfig, saveGlobalConfig,
-  getGroups, saveGroups, getFavorites, addFavorite, removeFavorite,
-  getSiteConfig, saveSiteConfig,
-  getFormatConfig, saveFormatConfig,
-  downloadPlatforms, fetchSources,
-  triggerExport, exportTaskStatus,
-  getSearchHistory, addSearchHistory, deleteSearchHistory,
+  addFavorite,
+  addSearchHistory,
+  deleteNovel,
+  deleteSearchHistory,
+  deleteTask,
+  downloadChapters,
+  downloadPlatforms,
+  exportTaskStatus,
+  fetchChapterList,
+  fetchMeta,
+  fetchSources,
+  getChapter,
+  getFavorites,
+  getFormatConfig,
+  getGlobalConfig,
+  getGroups,
+  getMeta,
+  getSearchHistory,
+  getSiteConfig,
+  listChapters,
+  listNovels,
+  listTasks,
+  pauseTask,
+  removeFavorite,
+  resumeTask,
+  saveFormatConfig,
+  saveGlobalConfig,
+  saveGroups,
+  saveSiteConfig,
+  searchDownload,
+  triggerExport,
 } from "@/api/endpoints";
-import type { ChapterBrief } from "@/api/endpoints";
 
 // ── Queries ────────────────────────────────────────
 
@@ -190,8 +211,8 @@ export function useSearchHistory() {
 export function useAddSearchHistory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ platform, keyword }: { platform: string; keyword: string }) =>
-      addSearchHistory(platform, keyword),
+    mutationFn: ({ platform, keyword, mode, variant }: { platform: string; keyword: string; mode?: string; variant?: string }) =>
+      addSearchHistory(platform, keyword, mode ?? "", variant ?? ""),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["search-history"] }),
   });
 }

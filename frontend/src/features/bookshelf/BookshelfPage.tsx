@@ -1,19 +1,30 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ChevronDown, Heart } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { BookCard, BookCardSkeleton } from "./BookCard";
-import { SearchBar } from "./SearchBar";
-import { SearchHistoryPanel } from "./SearchHistoryPanel";
-import { SearchResultCard } from "./SearchResultCard";
-import { DownloadTask, DownloadTaskSkeleton } from "@/features/download/DownloadTask";
-import { SettingsView } from "@/features/settings/SettingsPage";
-import { useToast } from "@/components/Toast";
-import { useNovels, useGlobalConfig, useGroups, usePlatforms, useSources, useTasks, useSearch, useDeleteNovel, useFetchMeta, useFavorites, useAddSearchHistory } from "@/hooks/index";
-import { coverToUrl, type NovelMeta, type SearchResult } from "@/api/endpoints";
-import { pauseTask, resumeTask, deleteTask } from "@/api/endpoints";
-import { SessionCache } from "@/utils/sessionCache";
-import { notifyUser } from "@/utils/notify";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useNavigate} from "react-router-dom";
+import {ChevronDown, Heart} from "lucide-react";
+import {cn} from "@/lib/utils";
+import {BookCard, BookCardSkeleton} from "./BookCard";
+import {SearchBar} from "./SearchBar";
+import {SearchHistoryPanel} from "./SearchHistoryPanel";
+import {SearchResultCard} from "./SearchResultCard";
+import {DownloadTask, DownloadTaskSkeleton} from "@/features/download/DownloadTask";
+import {SettingsView} from "@/features/settings/SettingsPage";
+import {useToast} from "@/components/Toast";
+import {
+  useAddSearchHistory,
+  useDeleteNovel,
+  useFavorites,
+  useFetchMeta,
+  useGlobalConfig,
+  useGroups,
+  useNovels,
+  usePlatforms,
+  useSearch,
+  useSources,
+  useTasks
+} from "@/hooks/index";
+import {coverToUrl, deleteTask, type NovelMeta, pauseTask, resumeTask, type SearchResult} from "@/api/endpoints";
+import {SessionCache} from "@/utils/sessionCache";
+import {notifyUser} from "@/utils/notify";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -78,7 +89,7 @@ export default function BookshelfPage() {
   const searchVariantRef = useRef<string | undefined>(SessionCache.getVariant());
   const navigatingRef = useRef(false);
   const [searchCachedQuery, setSearchCachedQuery] = useState("");
-  const [prefill, setPrefill] = useState<{ nonce: number; query: string; platform?: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ nonce: number; query: string; platform?: string; mode?: string; variant?: string } | null>(null);
   const [resultTab, setResultTab] = useState<string>("all");
   const navigate = useNavigate();
 
@@ -133,7 +144,7 @@ export default function BookshelfPage() {
     SessionCache.setMode(mode);
     SessionCache.setVariant(variant);
     SessionCache.saveSearch(query, platform, mode, variant);
-    addHistoryMut.mutate({ platform, keyword: query.trim() });
+    addHistoryMut.mutate({ platform, mode, variant, keyword: query.trim() });
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
@@ -146,8 +157,8 @@ export default function BookshelfPage() {
     setSearchParams({ platform, query, mode, variant });
   }, [searchPlatform, navigate, toast, fetchMetaMut, addHistoryMut]);
 
-  const handleHistoryPick = useCallback((item: { platform: string; keyword: string }) => {
-    setPrefill({ nonce: Date.now(), query: item.keyword, platform: item.platform || undefined });
+  const handleHistoryPick = useCallback((item: { platform: string; keyword: string; mode?: string; variant?: string }) => {
+    setPrefill({ nonce: Date.now(), query: item.keyword, platform: item.platform || undefined, mode: item.mode || undefined, variant: item.variant || undefined });
   }, []);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {

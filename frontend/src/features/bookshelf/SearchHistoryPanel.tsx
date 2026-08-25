@@ -1,11 +1,11 @@
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { useSearchHistory, useDeleteSearchHistory } from "@/hooks/index";
+import {Trash2} from "lucide-react";
+import {useState} from "react";
+import {cn} from "@/lib/utils";
+import {useDeleteSearchHistory, useSearchHistory} from "@/hooks/index";
 
 interface SearchHistoryPanelProps {
   /** 点击历史条目（非删除模式）：回填搜索框，不自动搜索 */
-  onPick: (item: { platform: string; keyword: string }) => void;
+  onPick: (item: { platform: string; keyword: string; mode?: string; variant?: string }) => void;
 }
 
 export function SearchHistoryPanel({ onPick }: SearchHistoryPanelProps) {
@@ -41,7 +41,7 @@ export function SearchHistoryPanel({ onPick }: SearchHistoryPanelProps) {
               {g.items.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => (deleteMode ? deleteMut.mutate(item.id) : onPick({ platform: item.platform, keyword: item.keyword }))}
+                  onClick={() => (deleteMode ? deleteMut.mutate(item.id) : onPick({ platform: item.platform, keyword: item.keyword, mode: item.mode, variant: item.variant }))}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   <span className="truncate flex-1">{item.keyword}</span>

@@ -1,6 +1,6 @@
 /** 所有 API 端点 + 类型定义 — /api/v2 */
 
-import { apiGet, apiPost, apiPut, apiDelete } from "./client";
+import {apiDelete, apiGet, apiPost, apiPut} from "./client";
 
 // ── Types ──────────────────────────────────────────
 
@@ -262,7 +262,7 @@ export function removeFavorite(novelId: string) {
 // ── Search History ─────────────────────────────────
 
 export interface SearchHistoryItem {
-  id: number; platform: string; keyword: string; searched_at: string;
+  id: number; platform: string; mode: string; variant: string; keyword: string; searched_at: string;
 }
 
 export interface SearchHistoryGroup {
@@ -273,8 +273,8 @@ export function getSearchHistory() {
   return apiGet<{ history: SearchHistoryGroup[] }>("/history/search");
 }
 
-export function addSearchHistory(platform: string, keyword: string) {
-  return apiPost<{ status: string }>("/history/search", { platform, keyword });
+export function addSearchHistory(platform: string, keyword: string, mode: string, variant: string) {
+  return apiPost<{ status: string }>("/history/search", { platform, keyword, mode, variant });
 }
 
 export function deleteSearchHistory(historyId: number) {
