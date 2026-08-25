@@ -139,6 +139,8 @@ export function useSearch(params: {
     queryFn: () => searchDownload(params!),
     enabled: !!params && params.query.trim().length > 0,
     staleTime: 30_000,
+    // 搜索是用户主动的一次性操作，失败不自动重试（避免重复请求）
+    retry: 0,
   });
 }
 

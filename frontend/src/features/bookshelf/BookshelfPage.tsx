@@ -97,7 +97,7 @@ export default function BookshelfPage() {
   const [searchParams, setSearchParams] = useState<{
     platform: string; query: string; mode?: string; variant?: string;
   } | null>(null);
-  const { data: searchResults = [], isFetching: searching } = useSearch(searchParams);
+  const { data: searchResults = [], isFetching: searching, error: searchError } = useSearch(searchParams);
 
   // 切回搜索 tab 时恢复上次搜索 UI 状态（不自动搜索）
   useEffect(() => {
@@ -299,8 +299,17 @@ export default function BookshelfPage() {
           )}
           {searchParams && searchResults.length === 0 && !searching && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <p className="text-sm">未找到相关小说</p>
-              <p className="mt-1 text-xs text-slate-300">试试换个关键词或平台</p>
+              {searchError ? (
+                <>
+                  <p className="text-sm text-red-400">搜索失败：{searchError.message}</p>
+                  <p className="mt-1 text-xs text-slate-300">请尝试更换搜索模式或平台</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm">未找到相关小说</p>
+                  <p className="mt-1 text-xs text-slate-300">试试换个关键词或平台</p>
+                </>
+              )}
             </div>
           )}
           {searchResults.length > 0 && (() => {

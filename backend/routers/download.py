@@ -7,6 +7,7 @@ from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResu
 from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine
 from novelbase import resolve_meta, resolve_chapter_list, search
+from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import platform_from_url, resolve_book_url
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
@@ -46,6 +47,9 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
     try:
         results = await search(platform, query, engine)
+    except FeatureNotSupportedError as e:
+        # 该平台/模式组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
+        raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
     return [SearchResultData(title=r.title, author=r.author, url=r.url,

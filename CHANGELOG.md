@@ -40,6 +40,7 @@
 6. **前端 TypeScript 语法** — variant 缺符号、TooltipVariant 不存在、DownloadDialog 参数重名
 7. **Nuitka onefile 前端资源定位** — 改用 `__file__` 目录，修复 exe 访问 404
 8. **CLI 存储路径与 backend 不一致** — `cli.core._get_storage` 与 `cli.config.build_options` 硬编码 `sqlite:///app_data/storage/novels.db`（父目录），扫不到 `app_data/storage/novels/` 下的小说，交互式菜单"更新已有小说"误报"没有已下载的小说"；改为与 backend 统一使用 `shared.config.get_database_url()`，并修正 template/config 的 `storage.database_url`
+9. **搜索失败自动重试导致重复请求** — 搜索请求配置 `retry: 1`，不支持的平台/模式组合（如 qidian requests 搜索）返回 500 后自动重试一次，后端日志出现两条相同请求；改为搜索 `retry: 0`（用户主动操作失败不重试），后端将 `FeatureNotSupportedError` 转为 400 友好提示，前端搜索区展示真实错误信息（替代误导性的"未找到相关小说"）
 8. **便携版 Ctrl+C 退出** — Windows 去 pause、Linux/Termux 加 trap 清理
 
 ### 说明
