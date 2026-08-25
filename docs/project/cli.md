@@ -10,4 +10,5 @@
 | `novel list [--group g]` | 列出已下载小说（书架） |
 | `source list [--json]`（source/sources 均可） | 列出可用书源 |
 | `info --url <URL>` | 查看小说信息 |
-| `dev` | 开发工具（new-source / list-sources） |
+| `dev new-variant --source <name> --mode <mode> --variant <name>` | 为已有书源新建变体脚手架（代码 + 站点配置，三参数必填） |
+| `dev` | 开发工具（new-source / new-variant / list-sources） |
