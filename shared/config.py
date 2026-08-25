@@ -7,11 +7,11 @@ import shutil
 import sys
 from dataclasses import MISSING, fields
 from pathlib import Path
-from typing import Any
 
 import yaml
 
 from novelbase.core.options import BrowserOptions, RequestsOptions
+
 
 # ── 路径 ──
 def _get_app_data_dir() -> Path:

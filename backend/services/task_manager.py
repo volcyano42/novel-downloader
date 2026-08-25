@@ -10,9 +10,9 @@ import threading
 import time
 import uuid
 
+from backend.services.engine_manager import get_cached_engine
 from novelbase.core.exceptions import ChapterNotFoundError
 from shared.config import load_config, get_database_url
-from backend.services.engine_manager import get_cached_engine
 
 _log = logging.getLogger("backend.task_manager")
 

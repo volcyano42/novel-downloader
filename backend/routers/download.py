@@ -1,11 +1,12 @@
 """Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。"""
 
 from fastapi import APIRouter, HTTPException, Query
-from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
-from backend.services.engine_manager import get_cached_engine
-from backend.services import task_manager
+
 from backend.routers.storage import _cover_to_response as encode_cover
-from novelbase import resolve_meta, resolve_chapter_list, list_sources, search
+from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
+from backend.services import task_manager
+from backend.services.engine_manager import get_cached_engine
+from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.source import platform_from_url, resolve_book_url
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
@@ -31,8 +32,6 @@ def _resolve_url(raw: str) -> str:
 async def search_novels(platform: str = Query(...), query: str = Query(...),
                         mode: str = Query("browser"),
                         variant: str | None = Query(None)):
-    from novelbase.core.downloader import get_source
-
     engine = get_cached_engine("fanqie" if platform == "all" else platform, mode, variant=variant)
 
     if query.startswith("http://") or query.startswith("https://"):

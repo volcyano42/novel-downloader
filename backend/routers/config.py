@@ -1,7 +1,7 @@
 """Config 路由 — 拆分 config / groups / sites / formats 四个子资源。"""
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+
 import shared.config as config_service
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
