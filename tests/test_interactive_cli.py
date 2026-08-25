@@ -191,10 +191,11 @@ class TestMenus:
 
     def test_get_set_delay(self):
         from cli.menus import _get_delay, _set_delay
-        site_cfg = {"browser": {"delay": [1, 2]}}
+        site_cfg = {"browser": {"default": {"delay": [1, 2]}}}
         assert _get_delay(site_cfg, "browser") == (1.0, 2.0)
         _set_delay(site_cfg, "browser", 0.5, 1.5)
         assert _get_delay(site_cfg, "browser") == (0.5, 1.5)
+        assert _get_delay({}, "requests") == (3.0, 6.0)
 
     def test_get_delay_default(self):
         from cli.menus import _get_delay

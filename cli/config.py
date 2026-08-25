@@ -14,6 +14,8 @@ import yaml
 from novelbase.core.options import Options
 from novelbase.utils.logger import get_logger
 
+from shared.config import get_mode_variant_config
+
 _log = get_logger("cli.config")
 
 APP_DATA: Path | None = None
@@ -199,7 +201,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
     options.set_mode(mode)
 
     if mode == "browser":
-        browser_cfg = site_cfg.get("browser", {})
+        browser_cfg = get_mode_variant_config(site_cfg, "browser")
         user_data_dir = browser_cfg.get("user_data_dir", "")
         if user_data_dir:
             ud_path = Path(user_data_dir)
@@ -236,7 +238,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
                 break
 
     elif mode == "requests":
-        req_cfg = site_cfg.get("requests", {})
+        req_cfg = get_mode_variant_config(site_cfg, "requests")
         cookies_val = req_cfg.get("cookies")
         if isinstance(cookies_val, str) and cookies_val:
             cookies_dict = {}

@@ -94,7 +94,7 @@ def _settings_site(cfg: dict, platform: str, site_cfg: dict) -> None:
 
 def _settings_site_browser(cfg: dict, site_cfg: dict) -> None:
     """浏览器模式站点设置。"""
-    browser = site_cfg.setdefault("browser", {})
+    browser = site_cfg.setdefault("browser", {}).setdefault("default", {})
     while True:
         lo, hi = _get_delay(site_cfg, "browser")
         print(f"\n  浏览器设置:")
@@ -177,7 +177,7 @@ def _settings_site_api(cfg: dict, site_cfg: dict) -> None:
 
 def _settings_site_requests(cfg: dict, site_cfg: dict) -> None:
     """Requests 模式站点设置。"""
-    req = site_cfg.setdefault("requests", {})
+    req = site_cfg.setdefault("requests", {}).setdefault("default", {})
     while True:
         lo, hi = _get_delay(site_cfg, "requests")
         print(f"\n  Requests 设置:")
@@ -373,7 +373,7 @@ def do_delete() -> None:
 
 def _get_delay(site_cfg: dict, mode: str) -> tuple[float, float]:
     """获取某模式的当前延迟范围。"""
-    section = site_cfg.get(mode, {})
+    section = site_cfg.get(mode, {}).get("default", {})
     delay = section.get("delay", (3, 6))
     if isinstance(delay, list):
         delay = tuple(delay)
@@ -382,4 +382,4 @@ def _get_delay(site_cfg: dict, mode: str) -> tuple[float, float]:
 
 def _set_delay(site_cfg: dict, mode: str, lo: float, hi: float):
     """设置某模式的延迟范围。"""
-    site_cfg.setdefault(mode, {})["delay"] = [lo, hi]
+    site_cfg.setdefault(mode, {}).setdefault("default", {})["delay"] = [lo, hi]
