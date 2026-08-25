@@ -1,5 +1,5 @@
-import { Search, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {Loader2, Search} from "lucide-react";
+import {cn} from "@/lib/utils";
 
 interface SearchResultCardProps {
   title: string; author: string; description: string | null;

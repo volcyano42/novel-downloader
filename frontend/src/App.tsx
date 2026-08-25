@@ -1,9 +1,9 @@
-import { Routes, Route, useLocation, Navigate, Link } from "react-router-dom";
-import { useMemo, useState } from "react";
-import { BookOpen, Download, Settings, Library, Search as SearchIcon, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ToastProvider } from "@/components/Toast";
+import {Link, Navigate, Route, Routes, useLocation} from "react-router-dom";
+import {useMemo, useState} from "react";
+import {BookOpen, Download, Library, PanelLeftClose, PanelLeftOpen, Search as SearchIcon, Settings} from "lucide-react";
+import {cn} from "@/lib/utils";
+import {ErrorBoundary} from "@/components/ErrorBoundary";
+import {ToastProvider} from "@/components/Toast";
 import BookshelfPage from "@/features/bookshelf/BookshelfPage";
 import DetailPage from "@/features/detail/DetailPage";
 import ReaderPage from "@/features/reader/ReaderPage";

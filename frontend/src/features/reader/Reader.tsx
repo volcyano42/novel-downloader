@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, Type, List } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {ChevronLeft, ChevronRight, ExternalLink, List, Moon, Sun, Type} from "lucide-react";
+import {cn} from "@/lib/utils";
+import {Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger} from "@/components/ui/sheet";
 
 interface ImageData { raw_data: string | null; alt: string | null; insert: number | null; url: string | null; }
 interface TocItem { id: string; title: string; url?: string; }

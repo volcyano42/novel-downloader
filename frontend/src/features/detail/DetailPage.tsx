@@ -1,14 +1,27 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { BookOpen, ChevronLeft, ExternalLink, Download, X, RefreshCw, Image, ChevronDown } from "lucide-react";
-import { useNovelMeta, useRemoteChapters, useDownloadMutation, useGlobalConfig, compareChapters, useSources } from "@/hooks/index";
-import { fetchChapterList, coverToUrl, streamChapters, type NovelMeta, type ChapterBrief } from "@/api/endpoints";
-import { listChapters } from "@/api/endpoints";
-import { DownloadDialog } from "@/features/download/DownloadDialog";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { useToast } from "@/components/Toast";
-import { SessionCache } from "@/utils/sessionCache";
-import { getCachedChapters, setCachedChapters } from "@/utils/chapterCache";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useLocation, useNavigate, useParams} from "react-router-dom";
+import {BookOpen, ChevronDown, ChevronLeft, Download, ExternalLink, Image, RefreshCw, X} from "lucide-react";
+import {
+    compareChapters,
+    useDownloadMutation,
+    useGlobalConfig,
+    useNovelMeta,
+    useRemoteChapters,
+    useSources
+} from "@/hooks/index";
+import {
+    type ChapterBrief,
+    coverToUrl,
+    fetchChapterList,
+    listChapters,
+    type NovelMeta,
+    streamChapters
+} from "@/api/endpoints";
+import {DownloadDialog} from "@/features/download/DownloadDialog";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
+import {useToast} from "@/components/Toast";
+import {SessionCache} from "@/utils/sessionCache";
+import {getCachedChapters, setCachedChapters} from "@/utils/chapterCache";
 
 function platformFromUrl(url?: string): string {
   if (!url) return "fanqie";

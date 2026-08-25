@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { AlertTriangle, CheckCircle, Loader2, X, XCircle, RefreshCw, Pause, Play, ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import type { ChapterStatus } from "@/api/endpoints";
+import {useState} from "react";
+import {AlertTriangle, CheckCircle, ChevronDown, Loader2, Pause, Play, RefreshCw, X, XCircle} from "lucide-react";
+import {cn} from "@/lib/utils";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
+import type {ChapterStatus} from "@/api/endpoints";
 
 type TaskStatus = "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
 

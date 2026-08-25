@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Reader, ReaderSkeleton } from "./Reader";
-import { useChapters, useChapter, useNovelMeta } from "@/hooks/index";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {useNavigate, useParams} from "react-router-dom";
+import {Reader, ReaderSkeleton} from "./Reader";
+import {useChapter, useChapters, useNovelMeta} from "@/hooks/index";
 
 export default function ReaderPage() {
   const { novelId, chapterId } = useParams<{ novelId: string; chapterId: string }>();

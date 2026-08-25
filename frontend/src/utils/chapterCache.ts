@@ -1,6 +1,6 @@
 /** 章节列表缓存 — 用 sessionStorage 保留“content/time”之外的章节元数据。 */
 
-import type { ChapterBrief } from "@/api/endpoints";
+import type {ChapterBrief} from "@/api/endpoints";
 
 const PREFIX = "chaptersCache:";
 

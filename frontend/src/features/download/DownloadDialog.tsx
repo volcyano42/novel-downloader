@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { Download, Monitor, Globe, Zap, Loader2, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {useEffect, useState} from "react";
+import {Download, Globe, Loader2, Monitor, RefreshCw, Zap} from "lucide-react";
+import {cn} from "@/lib/utils";
 
 interface DownloadDialogProps {
   open: boolean; onClose: () => void;
