@@ -44,6 +44,9 @@ webui 的搜索历史目前每次搜索都会插入一条新记录，同一关�
 - 建表 SQL 增加列：`variant TEXT NOT NULL DEFAULT ''`。
 - `_ensure_schema` 增加列迁移：旧库检测 `variant` 列缺失时执行
   `ALTER TABLE search_history ADD COLUMN variant TEXT NOT NULL DEFAULT ''`。
+- 迁移填充 variant：旧数据无 `mode` 列，无法区分 api/browser，按平台整体处理——
+  `platform == 'fanqie'` 的记录统一填 `'rain'`（fanqie api 模式主 variant），
+  其余平台保持 `''`。
 - 迁移清理历史重复：按 `(platform, keyword, variant)` 分组，每组仅保留
   `searched_at` 最新（并列时 id 最大）的一条，其余删除。
 - 迁移后建唯一索引 `UNIQUE(platform, keyword, variant)`（清理前置，避免建索引失败）。
@@ -83,10 +86,12 @@ webui 的搜索历史目前每次搜索都会插入一条新记录，同一关�
 - 适配 `add_search_history` 新签名（第三参默认 `""`，旧调用不破坏）。
 - 新增去重用例：同键重复添加不新增行、`searched_at` 更新、行数不变；
   不同 variant 视为不同记录。
+- 迁移用例：旧表（无 variant 列）加列后，`fanqie` 记录 variant 为 `'rain'`、
+  其余平台为 `''`；重复记录被清理、唯一索引生效。
 
 ## 不做的事
 
-- 不记录 mode（variant 与 mode 的归属关系留待需要回填 variant 时再设计）。
+- 不记录 mode（旧数据因此无法按 mode 区分，fanqie 旧记录迁移时整体标 `rain`）。
 - 不回填 variant（保持现状）。
 - 不动收藏/分组等其它表。
 
@@ -94,4 +99,4 @@ webui 的搜索历史目前每次搜索都会插入一条新记录，同一关�
 
 - 仅搜索历史相关：`shared/user_data.py`、`backend/routers/history.py`、
   前端 3 个文件、1 个测试文件。
-- 旧库自动迁移（加列 + 清理重复 + 唯一索引），无需用户手动操作。
+- 旧库自动迁移（加列 → fanqie 填 `rain` → 清理重复 → 唯一索引），无需用户手动操作。
