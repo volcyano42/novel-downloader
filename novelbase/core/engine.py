@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import random
@@ -346,6 +347,40 @@ class BrowserEngine(Engine):
         """归还 page 到池（不 close，供后续复用）。"""
         self._idle_pages.append(page)
 
+    @staticmethod
+    def _is_reconnectable_error(e: Exception) -> bool:
+        """判定异常是否为「浏览器失效」类（仅此类触发自动重建）。"""
+        msg = str(e).lower()
+        name = type(e).__name__
+        if name in ("TargetClosedError", "PlaywrightConnectionError", "BrowserClosedError"):
+            return True
+        return "browser" in msg and "closed" in msg
+
+    async def _reset_browser(self) -> None:
+        """容错清理残留浏览器/上下文/playwright，并清空 page 池。"""
+        # Playwright 对象无 close()，只有 stop()（否则残留 driver 进程）
+        if self._playwright is not None:
+            try:
+                await self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+        for obj in (self._browser, self._context):
+            if obj is None:
+                continue
+            try:
+                await obj.close()
+            except Exception:
+                pass
+        self._browser = None
+        self._context = None
+        self._idle_pages.clear()
+
+    async def _reconnect_browser(self) -> None:
+        """重建浏览器实例（重置后走 _ensure_browser 懒启动路径）。"""
+        await self._reset_browser()
+        await self._ensure_browser()
+
     async def _fetch_with_page(self, page, url, skip_delay=False) -> str:
         """在给定 page 上带 retry/backoff 抓取文本（async 与同步独立会话共用）。"""
         for i in range(self.options.retry_times):
@@ -362,6 +397,8 @@ class BrowserEngine(Engine):
                 _log.debug("fetch_text ok: len=%s url=%s", len(html), mask_key(url[:120]))
                 return html
             except Exception as e:
+                if self.options.auto_reconnect and self._is_reconnectable_error(e):
+                    raise  # 浏览器失效 → 交给 async_fetch_text 层重建
                 backoff = self.options.backoff_factor * (2 ** i)
                 _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
                            i + 1, e, backoff)
@@ -387,10 +424,23 @@ class BrowserEngine(Engine):
         return result
 
     async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
-        """真异步：直接 await Playwright（不 to_thread）。"""
+        """真异步：直接 await Playwright（不 to_thread）；浏览器失效时按 auto_reconnect 重建。"""
         _log.debug("async_fetch_text start: url=%s", mask_key(url[:120]))
         await self._ensure_browser()
-        return await self._do_fetch_text(url, skip_delay=skip_delay, **kwargs)
+        for attempt in range(self.options.retry_times):
+            try:
+                return await self._do_fetch_text(url, skip_delay=skip_delay, **kwargs)
+            except Exception as e:
+                if not (self.options.auto_reconnect and self._is_reconnectable_error(e)):
+                    raise
+                _log.warning("浏览器失效(%s)，重建浏览器后重试 %s/%s: url=%s",
+                             e, attempt + 1, self.options.retry_times, mask_key(url[:120]))
+                await self._reconnect_browser()
+        _log.error("fetch_text exhausted reconnects: url=%s", mask_key(url[:120]))
+        raise NetworkError(
+            f"fetch_text failed after {self.options.retry_times} reconnects",
+            url=url,
+        )
 
     async def async_fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
         text = await self.async_fetch_text(url=url, skip_delay=skip_delay, **kwargs)
