@@ -10,6 +10,6 @@ mode: api
 name: Novel下载器
 storage:
   backend: sqlite
-  database_url: sqlite:///app_data/storage/novels/catalog.db
+  database_url: sqlite:///app_data/storage/novels/.dir
 export:
   formats: [epub]

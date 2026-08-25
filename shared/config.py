@@ -237,7 +237,9 @@ def load_fmt_config(fmt_name):
 
 # ── 数据库 URL ──
 def get_database_url():
-    return f"sqlite:///{APP_DATA / 'storage' / 'novels' / 'catalog.db'}"
+    # database_url 充当"目录定位器"：SQLiteStorage 取 parent 作为 base_dir，
+    # 文件本身（.dir 占位）从不创建，真正的库是 base_dir 下每本小说的 <id>.db。
+    return f"sqlite:///{APP_DATA / 'storage' / 'novels' / '.dir'}"
 
 # ── build_options（从旧 cli_lib/config.py 迁移，改为 import shared.user_data）──
 def build_options(cfg, site_cfg):
@@ -303,6 +305,6 @@ def build_options(cfg, site_cfg):
         )
 
     storage_cfg = cfg.get("storage", {})
-    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels/catalog.db"
+    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels/.dir"
     options.set_storage_options(backend="sqlite", database_url=database_url)
     return options
