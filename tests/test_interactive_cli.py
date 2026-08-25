@@ -116,3 +116,59 @@ class TestUi:
         labels = {"番茄 (fanqie)": "fanqie"}
         assert _platform_label(labels, "fanqie") == "番茄 (fanqie)"
         assert _platform_label(labels, "unknown") == "unknown"
+
+
+# ═══════════════════════════════════════════════════════════════
+# cli.notify 通知模块
+# ═══════════════════════════════════════════════════════════════
+
+class TestNotify:
+    def test_notify_empty_config(self, monkeypatch):
+        from cli import notify as mod
+        monkeypatch.setattr(mod, "bell", lambda *a, **k: None)
+        monkeypatch.setattr(mod, "system_notify", lambda *a, **k: None)
+        mod.notify({}, complete=1, incomplete=1)  # 不抛异常即通过
+
+    def test_notify_sound_none(self, monkeypatch):
+        from cli import notify as mod
+        calls = []
+        monkeypatch.setattr(mod, "bell", lambda *a, **k: calls.append("bell"))
+        monkeypatch.setattr(mod, "system_notify", lambda *a, **k: calls.append("system"))
+        mod.notify({"sound": "none"}, complete=1, incomplete=1)
+        assert calls == []
+
+    def test_notify_bell_on_complete(self, monkeypatch):
+        from cli import notify as mod
+        calls = []
+        monkeypatch.setattr(mod, "bell", lambda count=1, interval=0.15: calls.append(("bell", count)))
+        monkeypatch.setattr(mod, "system_notify", lambda *a, **k: calls.append("system"))
+        mod.notify({"sound": "bell"}, complete=2, incomplete=0)
+        assert calls == [("bell", 1)]
+
+    def test_notify_system_on_incomplete(self, monkeypatch):
+        from cli import notify as mod
+        calls = []
+        monkeypatch.setattr(mod, "bell", lambda *a, **k: calls.append("bell"))
+        monkeypatch.setattr(mod, "system_notify", lambda title, body="": calls.append(("system", title, body)))
+        mod.notify({"sound": "system"}, complete=0, incomplete=3)
+        assert calls[0][0] == "system"
+        assert "不完整章节" in calls[0][2]
+
+    def test_notify_disabled_flags(self, monkeypatch):
+        from cli import notify as mod
+        calls = []
+        monkeypatch.setattr(mod, "bell", lambda *a, **k: calls.append("bell"))
+        mod.notify({"sound": "bell", "on_complete": False, "on_incomplete": False},
+                   complete=1, incomplete=1)
+        assert calls == []
+
+    def test_system_notify_fallback_bell(self, monkeypatch):
+        from cli import notify as mod
+        import subprocess
+        calls = []
+        def boom(*a, **k):
+            raise Exception("powershell 不可用")
+        monkeypatch.setattr(subprocess, "run", boom)
+        monkeypatch.setattr(mod, "bell", lambda count=1, interval=0.15: calls.append(count))
+        mod.system_notify("标题")
+        assert calls == [1]
