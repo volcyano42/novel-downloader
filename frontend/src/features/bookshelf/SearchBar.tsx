@@ -1,7 +1,7 @@
-import { Search, X, Loader2, Link, BookOpen } from "lucide-react";
-import { useState, useEffect, type KeyboardEvent } from "react";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import {BookOpen, Link, Loader2, Search, X} from "lucide-react";
+import {type KeyboardEvent, useEffect, useState} from "react";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+import {cn} from "@/lib/utils";
 
 interface SearchBarProps {
   onSearch: (query: string, filters: SearchFilters) => void;
@@ -11,7 +11,7 @@ interface SearchBarProps {
   loading?: boolean;
   defaultQuery?: string;
   /** 外部回填（点击搜索历史）：nonce 变化时同步到内部 state，不触发搜索 */
-  prefill?: { nonce: number; query: string; platform?: string } | null;
+  prefill?: { nonce: number; query: string; platform?: string; mode?: string; variant?: string } | null;
   /** platform → mode → variants（browser/requests 也有 variant，如 default） */
   modeVariants?: Record<string, Record<string, string[]>>;
 }
@@ -101,11 +101,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
     }
   }, [hideApiMode, mode]);
 
-  // 点击搜索历史回填：nonce 变化时同步 keyword + platform（mode/variant 保持当前选择）
+  // 点击搜索历史回填：nonce 变化时同步 keyword + platform + mode + variant（mode 为空默认 requests）
   useEffect(() => {
     if (!prefill) return;
     setQuery(prefill.query);
     if (prefill.platform) setPlatform(prefill.platform);
+    setMode(prefill.mode || "requests");
+    if (prefill.variant) setVariant(prefill.variant);
   }, [prefill?.nonce]);
 
   const clear = () => {
