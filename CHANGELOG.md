@@ -12,6 +12,7 @@
 6. **收藏功能 + 分组迁 SQLite** — groups 从 YAML 迁移到 SQLite（`user_data.db`），新增收藏 API；共享层 `shared/`（config 单一数据源 + user_data 归位），backend/cli 均依赖 shared 而非互调
 7. **下载管理面板折叠章节队列** — 前端下载任务改为折叠面板，逐章实时进度 + 取消真正生效
 8. **`build-nuitka.sh`（Linux/Termux 版）** — 与 Windows build-nuitka.ps1 对应；Termux 分支后续移除（portable 替代）
+9. **搜索历史去重 + mode/variant 字段** — 搜索历史以 `(platform, keyword, mode, variant)` 为唯一键去重（重复搜索更新时间为最新，不新增行）；新增 `mode`/`variant` 列并自动迁移旧库（fanqie 旧记录标 `api`/`rain`，其余平台留空）；历史面板展示 mode/variant 徽标，点击历史回填完整恢复搜索条件（mode 为空时默认 requests）
 
 ### 重构
 
