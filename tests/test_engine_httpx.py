@@ -1,4 +1,3 @@
-import asyncio
 import httpx
 
 from novelbase import create_engine, Options
@@ -128,9 +127,6 @@ def test_api_engine_async_fetch_json_post(monkeypatch):
     assert result["ok"] is True
     assert result["data"]["token"] == "abc"  # params 合并进 post_data
     engine.close()
-
-
-import asyncio
 
 
 class FakePlaywright:
@@ -375,7 +371,8 @@ def test_browser_engine_failed_fetch_closes_page_not_return(monkeypatch):
     fake = FakePlaywright(monkeypatch)
     engine = _browser_engine()
 
-    async def fake_fail(page, url, skip_delay=False):
+    async def fake_fail(page, url, skip_delay=False, **kwargs):
+        # **kwargs 兼容 _do_fetch_text 传入的 abort_on_browser_close（测试替身不关心）
         raise RuntimeError("goto failed")
 
     monkeypatch.setattr(engine, "_fetch_with_page", fake_fail)
@@ -538,7 +535,6 @@ def test_api_engine_async_fetch_images_success_and_failure(monkeypatch):
 
 def test_browser_engine_async_fetch_images_uses_httpx_not_tab(monkeypatch):
     """BrowserEngine 图片下载用 httpx，不 new_tab / get_page。"""
-    import httpx
 
     class FakeResponse:
         def __init__(self, content): self.content = content
@@ -555,7 +551,6 @@ def test_browser_engine_async_fetch_images_uses_httpx_not_tab(monkeypatch):
     monkeypatch.setattr("novelbase.core.engine.httpx.AsyncClient", FakeAsyncClient)
 
     from novelbase.core.engine import BrowserEngine
-    from novelbase.core.options import BrowserOptions
     engine = BrowserEngine.__new__(BrowserEngine)  # 不触发 __init__（避免启动 Chromium）
     result = asyncio.run(engine.async_fetch_images(["http://a"]))
     assert result == [b"http://a"]

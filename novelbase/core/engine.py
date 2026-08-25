@@ -300,33 +300,36 @@ class BrowserEngine(Engine):
         if self._launch_lock is None:
             self._launch_lock = asyncio.Lock()
         async with self._launch_lock:
-            # double-check：并发首次调用时，后到者在锁内发现已启动则直接返回
-            if self._browser is not None or self._context is not None:
-                return
-            pw = _async_playwright()
-            self._playwright = await pw.start()
-            browser_type = getattr(self._playwright, self.options.browser_type, None)
-            if browser_type is None:
-                raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
-            if self.options.user_data_dir:
-                # 持久化上下文：launch_persistent_context 返回 context（自带 browser）
-                self._context = await browser_type.launch_persistent_context(
-                    str(self.options.user_data_dir),
-                    headless=self.options.headless,
-                    args=self.options.extra_args or [],
-                    viewport=self.options.viewport,
-                )
-                self._browser = self._context.browser
+            await self._ensure_browser_locked()
+
+    async def _ensure_browser_locked(self):
+        """锁内启动（调用方须已持有 _launch_lock）；double-check 后启动。"""
+        if self._browser is not None or self._context is not None:
+            return
+        pw = _async_playwright()
+        self._playwright = await pw.start()
+        browser_type = getattr(self._playwright, self.options.browser_type, None)
+        if browser_type is None:
+            raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
+        if self.options.user_data_dir:
+            # 持久化上下文：launch_persistent_context 返回 context（自带 browser）
+            self._context = await browser_type.launch_persistent_context(
+                str(self.options.user_data_dir),
+                headless=self.options.headless,
+                args=self.options.extra_args or [],
+                viewport=self.options.viewport,
+            )
+            self._browser = self._context.browser
+        else:
+            self._browser = await browser_type.launch(
+                headless=self.options.headless,
+                args=self.options.extra_args or [],
+            )
+            if self.options.viewport:
+                self._context = await self._browser.new_context(viewport=self.options.viewport)
             else:
-                self._browser = await browser_type.launch(
-                    headless=self.options.headless,
-                    args=self.options.extra_args or [],
-                )
-                if self.options.viewport:
-                    self._context = await self._browser.new_context(viewport=self.options.viewport)
-                else:
-                    self._context = await self._browser.new_context()
-            _log.info("BrowserEngine started: headless=%s", self.options.headless)
+                self._context = await self._browser.new_context()
+        _log.info("BrowserEngine started: headless=%s", self.options.headless)
 
     async def new_page(self):
         """懒启动后返回一个新的 Playwright page（供书源交互）。"""
@@ -377,11 +380,14 @@ class BrowserEngine(Engine):
         self._idle_pages.clear()
 
     async def _reconnect_browser(self) -> None:
-        """重建浏览器实例（重置后走 _ensure_browser 懒启动路径）。"""
-        await self._reset_browser()
-        await self._ensure_browser()
+        """重建浏览器实例（锁内 reset + ensure，避免并发任务互相破坏）。"""
+        if self._launch_lock is None:
+            self._launch_lock = asyncio.Lock()
+        async with self._launch_lock:
+            await self._reset_browser()
+            await self._ensure_browser_locked()
 
-    async def _fetch_with_page(self, page, url, skip_delay=False) -> str:
+    async def _fetch_with_page(self, page, url, skip_delay=False, *, abort_on_browser_close: bool = False) -> str:
         """在给定 page 上带 retry/backoff 抓取文本（async 与同步独立会话共用）。"""
         for i in range(self.options.retry_times):
             if i > 0:
@@ -397,8 +403,8 @@ class BrowserEngine(Engine):
                 _log.debug("fetch_text ok: len=%s url=%s", len(html), mask_key(url[:120]))
                 return html
             except Exception as e:
-                if self.options.auto_reconnect and self._is_reconnectable_error(e):
-                    raise  # 浏览器失效 → 交给 async_fetch_text 层重建
+                if abort_on_browser_close and self.options.auto_reconnect and self._is_reconnectable_error(e):
+                    raise  # 浏览器失效 → 交给 async_fetch_text 层重建（仅持久浏览器路径）
                 backoff = self.options.backoff_factor * (2 ** i)
                 _log.debug("fetch_text attempt %s failed: %s; backoff %.1fs",
                            i + 1, e, backoff)
@@ -412,7 +418,7 @@ class BrowserEngine(Engine):
     async def _do_fetch_text(self, url, skip_delay=False, **kwargs):
         page = await self._acquire_page()
         try:
-            result = await self._fetch_with_page(page, url, skip_delay=skip_delay)
+            result = await self._fetch_with_page(page, url, skip_delay=skip_delay, abort_on_browser_close=True)
         except Exception:
             # 抓取失败：page 可能已损坏（多次 goto 失败/浏览器异常），close 不归还
             try:

@@ -70,6 +70,10 @@ class FakePlaywright:
                 return self
             async def stop(self):
                 fake.calls.append(("pw_stop",))
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *exc):
+                fake.calls.append(("pw_stop",))
 
         import novelbase.core.engine as eng
         monkeypatch.setattr(eng, "_async_playwright", lambda: FakePW())
@@ -101,4 +105,31 @@ def test_no_reconnect_when_disabled(monkeypatch):
     with pytest.raises(NetworkError):
         asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
     assert fake.launch_count == 1, "auto_reconnect=False 不应重建"
+    engine.close()
+
+
+def test_concurrent_reconnects_are_safe(monkeypatch):
+    """两个任务并发触发重建：锁保护下最终引擎可用，不出现双重破坏。"""
+    fake = FakePlaywright(monkeypatch)
+    fake.fail_first_batch = True
+    engine = _engine(auto_reconnect=True)
+
+    async def _fetch():
+        return await engine.async_fetch_text("http://x", skip_delay=True)
+
+    async def _run():
+        return await asyncio.gather(_fetch(), _fetch())
+
+    results = asyncio.run(_run())
+    assert all(r == "<html>ok</html>" for r in results)
+    engine.close()
+
+
+def test_sync_fetch_text_keeps_retry_behavior(monkeypatch):
+    """同步 fetch_text（isolated session）auto_reconnect=True 时不退化：不直抛原始异常。"""
+    fake = FakePlaywright(monkeypatch)
+    fake.fail_always = True
+    engine = _engine(auto_reconnect=True)
+    with pytest.raises(NetworkError):
+        engine.fetch_text("http://x", skip_delay=True)
     engine.close()
