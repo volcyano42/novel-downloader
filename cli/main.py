@@ -94,8 +94,8 @@ def _parse_args() -> argparse.Namespace:
     np_list = np_sub.add_parser("list", help="列出已下载小说")
     np_list.add_argument("--group", "-g", default=None, help="按分组过滤")
 
-    # ── source（sources 为别名）──
-    sp = sub.add_parser("source", aliases=["sources"], help="书源管理")
+    # ── sources ──
+    sp = sub.add_parser("sources", help="书源管理")
     sp_sub = sp.add_subparsers(dest="source_command", required=True)
     sp_list = sp_sub.add_parser("list", help="列出可用书源")
     sp_list.add_argument("--json", action="store_true", help="JSON 输出")
@@ -414,7 +414,6 @@ def main():
         "export":   cmd_export,
         "delete":   cmd_delete,
         "novel":    cmd_novel,
-        "source":   cmd_source,
         "sources":  cmd_source,
         "info":     cmd_info,
         "dev":      cmd_dev,

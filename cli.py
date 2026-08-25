@@ -7,7 +7,7 @@
     python cli.py export --group default --format epub
     python cli.py delete --id <novel_id>
     python cli.py novel list [--group <g>]
-    python cli.py source list [--json]
+    python cli.py sources list [--json]
     python cli.py info --url "https://www.qimao.com/shuku/195958/"
     python cli.py dev new-source --name <name> / dev list-sources
 
