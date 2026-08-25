@@ -19,6 +19,9 @@ from novelbase.utils.logger import get_logger
 
 _log = get_logger("cli.interactive")
 
+# 会话内记住 (platform, mode) → variant 选择，避免每次创建引擎重复询问
+_variant_cache: dict[tuple[str, str], str] = {}
+
 
 def _platform_from_url(url: str) -> str:
     """从 URL 推断平台（数据驱动）。未知 URL 抛 ValueError。"""
@@ -28,11 +31,33 @@ def _platform_from_url(url: str) -> str:
     raise ValueError(f"未识别书源 URL: {url}")
 
 
+def _resolve_variant(platform: str, mode: str) -> str | None:
+    """解析当前 mode 的 variant：≤1 个直接用唯一项；多于一个时询问并会话级记住。"""
+    from cli.config import mode_variants, resolve_variant as _resolve
+    site_cfg = load_site_config(platform)
+    resolved = _resolve(site_cfg, mode, None)
+    if resolved is not None:
+        return resolved
+    variants = mode_variants(site_cfg, mode)
+    if len(variants) <= 1:
+        return variants[0] if variants else None
+    key = (platform, mode)
+    if key in _variant_cache:
+        return _variant_cache[key]
+    sel = _select(f"平台 {platform} 的 {mode} 模式有 {len(variants)} 个 variant，请选择", [(v, v) for v in variants])
+    if sel is None:
+        sel = variants[0]
+        print(f"未选择，使用默认 variant: {sel}")
+    _variant_cache[key] = sel
+    return sel
+
+
 def _get_engine(platform: str = "fanqie"):
-    """从当前配置创建引擎。"""
+    """从当前配置创建引擎（variant 按当前 mode 解析）。"""
     cfg = load_main_config()
     site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg)
+    mode = cfg.get("mode") or site_cfg.get("mode", "browser")
+    options = build_options(cfg, site_cfg, _resolve_variant(platform, mode))
     return create_engine(options)
 
 

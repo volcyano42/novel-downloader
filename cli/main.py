@@ -56,12 +56,16 @@ def _parse_args() -> argparse.Namespace:
     sp.add_argument("query", help="搜索关键词")
     sp.add_argument("--platform", "-p", default="fanqie", help="平台 (fanqie/qidian/qimao)")
     sp.add_argument("--mode", "-m", default="requests", help="模式 (requests/browser/api)")
+    sp.add_argument("--variant", default=None,
+                    help="variant 名（browser/requests 未指定默认 default；某模式多于一个 variant 时须显式指定）")
     sp.add_argument("--page", type=int, default=1, help="页码")
 
     # ── download ──
     dp = sub.add_parser("download", help="下载小说")
     dp.add_argument("--platform", "-p", default=None, help="平台（可从 URL 自动推断）")
     dp.add_argument("--mode", "-m", default="requests", help="模式")
+    dp.add_argument("--variant", default=None,
+                    help="variant 名（browser/requests 未指定默认 default；某模式多于一个 variant 时须显式指定）")
     dp.add_argument("--url", "-u", required=True, help="小说页面 URL")
     dp.add_argument("--group", "-g", default="default", help="分组名")
     dp.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
@@ -70,6 +74,8 @@ def _parse_args() -> argparse.Namespace:
     up = sub.add_parser("update", help="更新已下载小说")
     up.add_argument("--platform", "-p", default="fanqie", help="平台")
     up.add_argument("--mode", "-m", default="requests", help="模式")
+    up.add_argument("--variant", default=None,
+                    help="variant 名（browser/requests 未指定默认 default；某模式多于一个 variant 时须显式指定）")
     up.add_argument("--group", "-g", default="default", help="分组名")
     up.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
 
@@ -99,6 +105,8 @@ def _parse_args() -> argparse.Namespace:
     ip.add_argument("--url", "-u", required=True, help="小说页面 URL")
     ip.add_argument("--platform", "-p", default=None, help="平台（可从 URL 自动推断）")
     ip.add_argument("--mode", "-m", default="requests", help="模式")
+    ip.add_argument("--variant", default=None,
+                    help="variant 名（browser/requests 未指定默认 default；某模式多于一个 variant 时须显式指定）")
 
     # ── dev ──
     dv = sub.add_parser("dev", help="开发工具")
@@ -114,12 +122,28 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _get_engine(platform: str, mode: str):
-    """根据平台和引擎模式创建 engine。"""
+def _resolve_variant(platform: str, mode: str, variant: str | None) -> str | None:
+    """解析 variant：≤1 个时直接用唯一项；多于一个且未指定时提示 --variant 并列出所有名称。"""
+    from cli.config import mode_variants, resolve_variant as _resolve
+    site_cfg = load_site_config(platform)
+    resolved = _resolve(site_cfg, mode, variant)
+    if resolved is not None:
+        return resolved
+    variants = mode_variants(site_cfg, mode)
+    if len(variants) > 1:
+        print(f"平台 {platform} 的 {mode} 模式有 {len(variants)} 个 variant，请用 --variant 显式指定：")
+        for i, v in enumerate(variants, 1):
+            print(f"  {i}. {v}")
+        sys.exit(2)
+    return None
+
+
+def _get_engine(platform: str, mode: str, variant: str | None = None):
+    """根据平台、引擎模式和 variant 创建 engine。"""
     cfg = load_main_config()
     cfg["mode"] = mode
     site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg)
+    options = build_options(cfg, site_cfg, variant)
 
     # 注册导出格式 — 单格式模式
     format_configs = load_format_configs()
@@ -141,7 +165,10 @@ def _get_engine(platform: str, mode: str):
 
 
 def cmd_search(args):
-    engine, format_configs = _get_engine(args.platform, args.mode)
+    engine, format_configs = _get_engine(
+        args.platform, args.mode,
+        _resolve_variant(args.platform, args.mode, args.variant),
+    )
     try:
         from novelbase.core.downloader import search
         results = asyncio.run(search(args.platform, args.query, engine, page=args.page))
@@ -162,7 +189,11 @@ def cmd_search(args):
 
 
 def cmd_download(args):
-    engine, format_configs = _get_engine(_resolve_platform(args), args.mode)
+    platform = _resolve_platform(args)
+    engine, format_configs = _get_engine(
+        platform, args.mode,
+        _resolve_variant(platform, args.mode, args.variant),
+    )
     try:
         from cli.core import _do_download_inner
         asyncio.run(_do_download_inner(engine, args.url, args.group, format_configs,
@@ -172,7 +203,10 @@ def cmd_download(args):
 
 
 def cmd_update(args):
-    engine, format_configs = _get_engine(args.platform, args.mode)
+    engine, format_configs = _get_engine(
+        args.platform, args.mode,
+        _resolve_variant(args.platform, args.mode, args.variant),
+    )
     try:
         from cli.core import do_update
         asyncio.run(do_update(format_configs, max_workers=args.workers))
@@ -220,7 +254,11 @@ def cmd_export(args):
 
 
 def cmd_info(args):
-    engine, _ = _get_engine(_resolve_platform(args), args.mode)
+    platform = _resolve_platform(args)
+    engine, _ = _get_engine(
+        platform, args.mode,
+        _resolve_variant(platform, args.mode, args.variant),
+    )
     try:
         print(f"正在获取: {args.url}")
         novel = asyncio.run(resolve_meta(args.url, engine))

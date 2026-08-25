@@ -194,14 +194,42 @@ def add_novel_to_group(novel_id: str, group: str) -> bool:
     return _db_add(novel_id, group)
 
 
-def build_options(cfg: dict, site_cfg: dict) -> Options:
-    """Build Options from config dict — mode-specific branching like the original."""
+def mode_variants(site_cfg: dict, mode: str) -> list[str]:
+    """返回 site 配置中某 mode 的 variant 名列表（仅 dict 值）。"""
+    from shared.config import mode_variants as _mv
+    return _mv(site_cfg, mode)
+
+
+def resolve_variant(site_cfg: dict, mode: str, variant: str | None = None) -> str | None:
+    """解析应使用的 variant 名（与 mode 无关的通用规则）。
+
+    - variant 显式指定：校验存在，不存在抛 ValueError（列出可用项）
+    - 未指定且数量 ≤ 1：返回唯一 variant（无则 None）
+    - 未指定且数量 > 1：返回 None，由调用方决策（交互询问 / 非交互提示 --variant）
+    """
+    variants = mode_variants(site_cfg, mode)
+    if variant is not None:
+        if variant not in variants:
+            raise ValueError(
+                f"variant '{variant}' 不可用于 {mode} 模式，可用: {variants or '无'}")
+        return variant
+    if len(variants) == 1:
+        return variants[0]
+    return None
+
+
+def build_options(cfg: dict, site_cfg: dict, variant: str | None = None) -> Options:
+    """Build Options from config dict — mode-specific branching like the original.
+
+    variant: 显式指定 browser/requests/api 的 variant 名；None 时保持原行为
+    （browser/requests 优先 "default"，api 取第一个启用 provider）。
+    """
     options = Options()
     mode = cfg.get("mode") or site_cfg.get("mode", "browser")
     options.set_mode(mode)
 
     if mode == "browser":
-        browser_cfg = get_mode_variant_config(site_cfg, "browser")
+        browser_cfg = get_mode_variant_config(site_cfg, "browser", variant)
         user_data_dir = browser_cfg.get("user_data_dir", "")
         if user_data_dir:
             ud_path = Path(user_data_dir)
@@ -222,8 +250,16 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
 
     elif mode == "api":
         api_section = site_cfg.get("api", {})
-        for name, provider in api_section.items():
-            if isinstance(provider, dict) and provider.get("enabled", True):
+        if variant is not None:
+            provider = api_section.get(variant)
+            if not isinstance(provider, dict):
+                raise ValueError(
+                    f"API variant '{variant}' 不存在，可用: {list(api_section.keys())}")
+            providers = [(variant, provider)]
+        else:
+            providers = [(n, p) for n, p in api_section.items() if isinstance(p, dict)]
+        for name, provider in providers:
+            if provider.get("enabled", True):
                 env_key_name = f"{name.upper()}_API_KEY"
                 api_key = os.environ.get(env_key_name) or provider.get("key", "")
                 options.set_api_options(
@@ -238,7 +274,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
                 break
 
     elif mode == "requests":
-        req_cfg = get_mode_variant_config(site_cfg, "requests")
+        req_cfg = get_mode_variant_config(site_cfg, "requests", variant)
         cookies_val = req_cfg.get("cookies")
         if isinstance(cookies_val, str) and cookies_val:
             cookies_dict = {}
