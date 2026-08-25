@@ -32,6 +32,7 @@ class BrowserOptionsData(BaseModel):
     user_data_dir: str | None = None
     viewport: dict[str, int] | None = None
     extra_args: list[str] | None = None
+    auto_reconnect: bool = False
 
 
 class CreateEngineRequest(BaseModel):

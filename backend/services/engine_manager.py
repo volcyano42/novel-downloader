@@ -11,9 +11,9 @@ import threading
 import uuid
 
 from fastapi import HTTPException
-from shared.config import load_site_config, find_variant_options
-from novelbase import Options, create_engine
 
+from novelbase import Options, create_engine
+from shared.config import load_site_config, find_variant_options
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}
@@ -30,7 +30,6 @@ def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
     RequestsEngine:(platform, mode, "requests")
     """
     import hashlib
-    from novelbase.core.options import BrowserOptions
 
     if mode == "browser":
         site = load_site_config(platform)
@@ -160,6 +159,7 @@ def create_engine_for_request(platform: str,
             retry_times=_cfg("retry_times", 3),
             backoff_factor=_cfg("backoff_factor", 2),
             extra_args=_cfg("extra_args") or _linux_default_browser_args(),
+            auto_reconnect=_cfg("auto_reconnect", False),
         )
     elif mode == "requests":
         opts = opts.set_requests_options(
@@ -199,7 +199,8 @@ def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
         opts.set_browser_options(browser_type=b.browser_type, delay=b.delay, timeout=b.timeout,
                                  retry_times=b.retry_times, backoff_factor=b.backoff_factor,
                                  headless=b.headless, user_data_dir=b.user_data_dir, viewport=b.viewport,
-                                 extra_args=b.extra_args if hasattr(b, 'extra_args') and b.extra_args else _linux_default_browser_args())
+                                 extra_args=b.extra_args if hasattr(b, 'extra_args') and b.extra_args else _linux_default_browser_args(),
+                                 auto_reconnect=b.auto_reconnect if hasattr(b, "auto_reconnect") else False)
     return opts
 
 

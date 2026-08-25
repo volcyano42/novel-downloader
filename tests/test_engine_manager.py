@@ -57,3 +57,11 @@ def test_get_cached_engine_returns_cached(monkeypatch):
     assert result is fake
     assert len(created) == 0  # 缓存命中，不触发创建
     em._engine_cache.clear()
+
+
+def test_build_options_passes_auto_reconnect():
+    from backend.services.engine_manager import _build_options
+    from backend.schemas.engine import BrowserOptionsData
+    b = BrowserOptionsData(auto_reconnect=True)
+    opts = _build_options("browser", browser=b)
+    assert opts.browser.auto_reconnect is True

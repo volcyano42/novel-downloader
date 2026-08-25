@@ -215,6 +215,7 @@ def build_options(cfg: dict, site_cfg: dict) -> Options:
             backoff_factor=browser_cfg.get("backoff_factor", 2),
             delay=tuple(browser_cfg.get("delay", [3, 5])),
             viewport=browser_cfg.get("viewport"),
+            auto_reconnect=browser_cfg.get("auto_reconnect", False),
         )
 
     elif mode == "api":
