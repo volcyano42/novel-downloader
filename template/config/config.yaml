@@ -4,10 +4,7 @@ download:
     on_complete: true
     on_incomplete: true
     sound: bell
-log:
-  level: DEBUG
 mode: api
-name: Novel下载器
 storage:
   backend: sqlite
   database_url: sqlite:///app_data/storage/novels/.dir

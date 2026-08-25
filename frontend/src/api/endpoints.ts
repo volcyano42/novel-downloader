@@ -69,7 +69,7 @@ export interface NotifyConfig {
 }
 
 export interface GlobalConfig {
-  name: string; mode: string; max_workers: number; log_level: string;
+  mode: string; max_workers: number;
   notify: NotifyConfig;
 }
 

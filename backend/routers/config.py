@@ -13,13 +13,10 @@ _cfg_dir = config_service.CONFIG_DIR
 @router.get("")
 async def get_config():
     raw = config_service.load_config()
-    log = raw.get("log", {}) or {}
     dl = raw.get("download", {}) or {}
     return {
-        "name": raw.get("name", config_service.GLOBAL_DEFAULTS["name"]),
         "mode": raw.get("mode", config_service.GLOBAL_DEFAULTS["mode"]),
         "max_workers": dl.get("max_workers", config_service.GLOBAL_DEFAULTS["max_workers"]),
-        "log_level": log.get("level", config_service.GLOBAL_DEFAULTS["log_level"]),
         "notify": config_service.deep_merge(
             config_service.GLOBAL_DEFAULTS["notify"], dl.get("notify", {}),
         ),
@@ -30,10 +27,9 @@ async def get_config():
 async def save_config(body: dict):
     raw = config_service.load_config()
     changed = False
-    for key in ("name", "mode"):
-        if key in body and body[key] != raw.get(key):
-            raw[key] = body[key]
-            changed = True
+    if "mode" in body and body["mode"] != raw.get("mode"):
+        raw["mode"] = body["mode"]
+        changed = True
     dl = raw.setdefault("download", {})
     if "max_workers" in body:
         dl["max_workers"] = body["max_workers"]
@@ -43,9 +39,6 @@ async def save_config(body: dict):
         defaults = config_service.GLOBAL_DEFAULTS["notify"]
         # 清理与默认值相同的字段，避免前端原样回传时把默认值实体化写入 config.yaml
         dl["notify"] = {k: v for k, v in merged.items() if k not in defaults or v != defaults[k]}
-        changed = True
-    if "log_level" in body:
-        raw.setdefault("log", {})["level"] = body["log_level"]
         changed = True
     if changed:
         config_service.save_yaml(_cfg_dir / "config.yaml", raw)

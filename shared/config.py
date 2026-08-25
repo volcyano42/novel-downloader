@@ -65,10 +65,8 @@ ENGINE_DEFAULTS = {
 }
 
 GLOBAL_DEFAULTS = {
-    "name": "Novel下载器",
     "mode": "browser",
     "max_workers": 3,
-    "log_level": "DEBUG",
     "notify": {"on_complete": True, "on_incomplete": True, "sound": "bell"},
 }
 
