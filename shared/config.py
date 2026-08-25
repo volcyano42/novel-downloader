@@ -153,7 +153,10 @@ def load_platform_configs():
         raw = load_yaml(p)
         entry = {}
         for mode in ("browser", "requests"):
-            entry[mode] = deep_merge(ENGINE_DEFAULTS[mode], raw.get(mode, {}))
+            entry[mode] = {
+                v: deep_merge(ENGINE_DEFAULTS[mode], get_mode_variant_config(raw, mode, v))
+                for v in mode_variants(raw, mode)
+            }
         api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
         entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
         entry["api_variants"] = list(entry["api"].keys())
@@ -163,16 +166,50 @@ def load_platform_configs():
 def load_platform_raw(platform):
     return load_yaml(CONFIG_DIR / "sites" / f"{platform}.yaml")
 
+def get_mode_variant_config(site_cfg, mode, variant=None) -> dict:
+    """取 site 配置中某 mode 的 variant 配置。
+
+    variant=None → 优先 "default"，无 "default" 取第一个 dict 值。
+    非 dict 结构（扁平旧格式/标量）一律返回 {}（只支持新格式）。
+    """
+    mode_section = site_cfg.get(mode, {}) if isinstance(site_cfg, dict) else {}
+    if not isinstance(mode_section, dict):
+        return {}
+    if variant is not None and variant in mode_section:
+        cfg = mode_section[variant]
+        return cfg if isinstance(cfg, dict) else {}
+    if "default" in mode_section:
+        cfg = mode_section["default"]
+        return cfg if isinstance(cfg, dict) else {}
+    for v, cfg in mode_section.items():
+        if isinstance(cfg, dict):
+            return cfg
+    return {}
+
+
+def load_mode_config(platform, mode, variant=None) -> dict:
+    """从 sites/{platform}.yaml 加载某 mode 的 variant 配置（含 app_data 路径解析）。"""
+    site = load_site_config(platform)
+    return get_mode_variant_config(site, mode, variant)
+
+
+def mode_variants(site_cfg, mode) -> list[str]:
+    """返回某 mode 下的 variant 名列表（仅 dict 值）。"""
+    mode_section = site_cfg.get(mode, {}) if isinstance(site_cfg, dict) else {}
+    if not isinstance(mode_section, dict):
+        return []
+    return [k for k, v in mode_section.items() if isinstance(v, dict)]
+
 def find_variant_options(variant):
     sites_dir = CONFIG_DIR / "sites"
     if not sites_dir.is_dir():
         return None
     for p in sites_dir.glob("*.yaml"):
         site = load_yaml(p)
-        api = site.get("api", {})
-        if isinstance(api, dict) and variant in api:
-            if isinstance(api[variant], dict):
-                return api[variant]
+        for mode in ("api", "browser", "requests"):
+            cfg = get_mode_variant_config(site, mode, variant)
+            if cfg:
+                return cfg
     return None
 
 # ── formats ──
@@ -210,7 +247,7 @@ def build_options(cfg, site_cfg):
     options.set_mode(mode)
 
     if mode == "browser":
-        browser_cfg = site_cfg.get("browser", {})
+        browser_cfg = get_mode_variant_config(site_cfg, "browser")
         user_data_dir = browser_cfg.get("user_data_dir", "")
         if user_data_dir:
             ud_path = Path(user_data_dir)
@@ -243,7 +280,7 @@ def build_options(cfg, site_cfg):
                 )
                 break
     elif mode == "requests":
-        req_cfg = site_cfg.get("requests", {})
+        req_cfg = get_mode_variant_config(site_cfg, "requests")
         cookies_val = req_cfg.get("cookies")
         if isinstance(cookies_val, str) and cookies_val:
             cookies_dict = {}
