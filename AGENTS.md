@@ -12,11 +12,11 @@ python -c "from novelbase import *; print('OK')"
 python -m pytest tests/ -v --tb=short
 
 # 启动 CLI（交互式）
-python -m cli
+python main.py
 
 # 启动 CLI（非交互）
-python -m cli search --platform fanqie "关键词"
-python -m cli download --url "https://..." --mode requests
+python cli.py search --platform fanqie "关键词"
+python cli.py download --url "https://..." --mode requests
 
 # 启动 FastAPI 后端
 uvicorn backend.main:app --reload
