@@ -172,3 +172,30 @@ class TestNotify:
         monkeypatch.setattr(mod, "bell", lambda count=1, interval=0.15: calls.append(count))
         mod.system_notify("标题")
         assert calls == [1]
+
+
+# ═══════════════════════════════════════════════════════════════
+# cli.menus 菜单系统
+# ═══════════════════════════════════════════════════════════════
+
+class TestMenus:
+    def test_fmt_summary_empty(self):
+        from cli.menus import _fmt_summary
+        assert _fmt_summary({}) == "未设置"
+        assert _fmt_summary({"download": {}}) == "未设置"
+
+    def test_fmt_summary_enabled(self):
+        from cli.menus import _fmt_summary
+        cfg = {"download": {"formats": ["epub", "txt"]}}
+        assert _fmt_summary(cfg) == "epub, txt"
+
+    def test_get_set_delay(self):
+        from cli.menus import _get_delay, _set_delay
+        site_cfg = {"browser": {"delay": [1, 2]}}
+        assert _get_delay(site_cfg, "browser") == (1.0, 2.0)
+        _set_delay(site_cfg, "browser", 0.5, 1.5)
+        assert _get_delay(site_cfg, "browser") == (0.5, 1.5)
+
+    def test_get_delay_default(self):
+        from cli.menus import _get_delay
+        assert _get_delay({}, "requests") == (3.0, 6.0)
