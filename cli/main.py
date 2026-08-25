@@ -116,6 +116,11 @@ def _parse_args() -> argparse.Namespace:
     ns.add_argument("--name", required=True, help="书源名称")
     ns.add_argument("--modes", default="requests", help="模式列表，逗号分隔 (requests,browser,api)")
 
+    nv = dv_sub.add_parser("new-variant", help="为书源新建变体脚手架")
+    nv.add_argument("--source", required=True, help="书源名称")
+    nv.add_argument("--mode", required=True, help="模式 (api/browser/requests)")
+    nv.add_argument("--variant", required=True, help="新变体名称")
+
     ls = dv_sub.add_parser("list-sources", help="列出所有可用书源")
     ls.add_argument("--json", action="store_true", help="仅列出 JSON 规则源")
 
@@ -375,10 +380,27 @@ def cmd_dev(args):
     elif args.dev_command == "new-source":
         _scaffold_source(args.name, args.modes.split(","))
 
+    elif args.dev_command == "new-variant":
+        _scaffold_variant(args.source, args.mode, args.variant)
+
+
+_SOURCES_ROOT = Path(__file__).parent.parent / "novelbase" / "sources"
+
+# 脚手架函数清单与文件模板。
+# 必须保持 async def：novelbase/core/downloader.py 以 await fn(...) 调用书源函数。
+_SCAFFOLD_FUNCTIONS = ("search", "novel_info", "chapter_list", "chapter_content")
+
+_FUNC_TEMPLATE = (
+    '"""TODO: implement {fn} for {source}/{variant}."""\n'
+    'from novelbase.core.exceptions import FeatureNotSupportedError\n\n'
+    'async def {fn}(*args, **kwargs):\n'
+    '    raise FeatureNotSupportedError("TODO")\n'
+)
+
 
 def _scaffold_source(name: str, modes: list[str]):
     """生成新书源脚手架。"""
-    source_dir = Path(__file__).parent.parent / "novelbase" / "sources" / name
+    source_dir = _SOURCES_ROOT / name
     source_dir.mkdir(parents=True, exist_ok=True)
 
     (source_dir / "__init__.py").write_text(
@@ -392,17 +414,74 @@ def _scaffold_source(name: str, modes: list[str]):
         mode_dir.mkdir(exist_ok=True)
         (mode_dir / "__init__.py").touch()
 
-        for fn in ("search", "novel_info", "chapter_list", "chapter_content"):
+        for fn in _SCAFFOLD_FUNCTIONS:
             (mode_dir / f"{fn}.py").write_text(
-                f'"""TODO: implement {fn} for {name}/{mode}."""\n'
-                f'from novelbase.core.exceptions import FeatureNotSupportedError\n\n'
-                f'def {fn}(*args, **kwargs):\n'
-                f'    raise FeatureNotSupportedError("TODO")\n',
+                _FUNC_TEMPLATE.format(fn=fn, source=name, variant=mode),
                 encoding="utf-8")
 
     print(f"书源脚手架已创建: novelbase/sources/{name}/")
     for mode in modes:
         print(f"  {mode}/  search.py, novel_info.py, chapter_list.py, chapter_content.py")
+
+
+def _scaffold_variant(source: str, mode: str, variant: str):
+    """为已有书源新建变体脚手架：代码目录 + 站点配置块。
+
+    校验链任一失败即报错退出（不产生任何文件）：
+    书源代码目录/站点配置缺失 → mode 不在配置 → variant 已存在 → 无模板 variant。
+    """
+    from cli.config import CONFIG_DIR, load_site_config, save_site_config
+
+    source_dir = _SOURCES_ROOT / source
+    if not source_dir.is_dir():
+        print(f"书源 {source} 不存在，请先运行 dev new-source --name {source}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    site_path = CONFIG_DIR / "sites" / f"{source}.yaml"
+    if not site_path.exists():
+        print(f"书源 {source} 不存在，请先运行 dev new-source --name {source}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    site_cfg = load_site_config(source)
+    if mode not in site_cfg:
+        avail = ", ".join(str(k) for k in site_cfg) or "无"
+        print(f"mode '{mode}' 不在站点配置 {source} 中，可用 mode: {avail}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    variant_dir = source_dir / mode / variant
+    cfg_variant_exists = (
+        isinstance(site_cfg.get(mode), dict) and variant in site_cfg[mode])
+    if variant_dir.exists() or cfg_variant_exists:
+        print(f"variant '{variant}' 已存在（代码或配置）", file=sys.stderr)
+        sys.exit(1)
+
+    mode_section = site_cfg.get(mode)
+    template_key = None
+    if isinstance(mode_section, dict):
+        template_key = next(
+            (k for k, v in mode_section.items() if isinstance(v, dict)), None)
+    if template_key is None:
+        print(f"mode '{mode}' 下没有可复制的 variant，请先手动添加一个",
+              file=sys.stderr)
+        sys.exit(1)
+
+    variant_dir.mkdir(parents=True, exist_ok=True)
+    (variant_dir / "__init__.py").touch()
+    for fn in _SCAFFOLD_FUNCTIONS:
+        (variant_dir / f"{fn}.py").write_text(
+            _FUNC_TEMPLATE.format(fn=fn, source=source, variant=variant),
+            encoding="utf-8")
+
+    from copy import deepcopy
+    site_cfg[mode][variant] = deepcopy(site_cfg[mode][template_key])
+    save_site_config(source, site_cfg)
+
+    print(f"书源变体已创建: novelbase/sources/{source}/{mode}/{variant}/")
+    print("  search.py, novel_info.py, chapter_list.py, chapter_content.py")
+    print(f"站点配置已更新: app_data/config/sites/{source}.yaml → {mode}.{variant}")
 
 
 def main():
