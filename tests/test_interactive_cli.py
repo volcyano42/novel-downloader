@@ -199,3 +199,31 @@ class TestMenus:
     def test_get_delay_default(self):
         from cli.menus import _get_delay
         assert _get_delay({}, "requests") == (3.0, 6.0)
+
+
+# ═══════════════════════════════════════════════════════════════
+# cli.interactive 交互主循环
+# ═══════════════════════════════════════════════════════════════
+
+class TestInteractive:
+    def test_platform_from_url_fanqie(self):
+        from cli.interactive import _platform_from_url
+        assert _platform_from_url("https://fanqienovel.com/page/7123456789012345678") == "fanqie"
+
+    def test_platform_from_url_qidian(self):
+        from cli.interactive import _platform_from_url
+        assert _platform_from_url("https://www.qidian.com/book/1012345678/") == "qidian"
+
+    def test_platform_from_url_qimao(self):
+        from cli.interactive import _platform_from_url
+        assert _platform_from_url("https://www.qimao.com/shuku/195958/") == "qimao"
+
+    def test_platform_from_url_unknown_raises(self):
+        from cli.interactive import _platform_from_url
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            _platform_from_url("https://example.com/novel/1")
+
+    def test_platform_from_url_92xs_alias(self):
+        from cli.interactive import _platform_from_url
+        assert _platform_from_url("http://www.92xs.info/html/96850/35632400.html") == "92xs"
