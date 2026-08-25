@@ -25,8 +25,11 @@ python cli.py dev new-source --name {NAME}
 在 `novelbase/sources/{NAME}/` 下生成 `__init__.py`、`_common.py` 与 `requests/`（默认模式，可用 `--modes` 指定多个）目录，模式目录内含四个函数的 `async def` TODO 模板文件。
 
 > 注意：`new-source` 生成的脚手架在 `{mode}/` 根下直接放函数文件，而运行时按
-> `{mode}/{variant}/` 组织（见下），新建书源后需为每个模式补建 variant 子目录
-> （可手动调整，或对已有书源使用 `dev new-variant` 生成）。
+> `{mode}/{variant}/` 组织（见下），新建书源后需为每个模式补建 variant 子目录。
+> 可手动调整；也可先为书源创建站点配置 `app_data/config/sites/{NAME}.yaml`
+> （含对应 mode 块），再对**已有书源**使用 `dev new-variant` 生成代码脚手架。
+> `new-variant` 只把新变体追加到已存在的站点配置中，不会创建配置本身——新建
+> 书源若直接运行 `new-variant` 会因站点配置缺失而报"书源不存在"。
 
 ### 为已有书源新建变体
 
@@ -57,7 +60,7 @@ python cli.py dev new-variant --source {NAME} --mode {MODE} --variant {VARIANT}
 
 ```
 novelbase/sources/{name}/
-├── __init__.py              ← NAME / SHOW_NAME / HOSTS / ID_PATTERN / ORIGIN_ID_PATTERN
+├── __init__.py              ← NAME / SHOW_NAME / HOSTS（运行时仅读取这三个字段）
 ├── _common.py               ← 平台共享逻辑（签名、解析）
 ├── browser/{variant}/       ← 浏览器模式实现（如 fanqie/browser/default/）
 ├── requests/{variant}/      ← requests 模式实现（如 fanqie/requests/default/）
