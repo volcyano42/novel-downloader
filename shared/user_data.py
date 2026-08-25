@@ -82,7 +82,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_search_history(conn: sqlite3.Connection) -> None:
-    """search_history 迁移：加列 → fanqie 填充 → 清理重复 → 唯一索引。"""
+    """search_history 迁移：加列 → fanqie 填充 → 清理重复 → 唯一索引。
+
+    PRAGMA user_version 一次性守卫：迁移只执行一次；之后连接直接跳过，
+    避免 UPDATE 反复改写迁移后写入的 fanqie mode='' 新记录。
+    """
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(search_history)")}
     if "mode" not in cols:
         conn.execute("ALTER TABLE search_history ADD COLUMN mode TEXT NOT NULL DEFAULT ''")
@@ -108,6 +114,8 @@ def _migrate_search_history(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_search_history_dedup "
         "ON search_history(platform, keyword, mode, variant)"
     )
+    # 标记迁移完成（随本事务提交生效；异常回滚则下次可重试）
+    conn.execute("PRAGMA user_version = 1")
     conn.commit()
 
 

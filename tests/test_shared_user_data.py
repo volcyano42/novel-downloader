@@ -116,3 +116,18 @@ def test_search_history_migration_old_db(tmp_path, monkeypatch):
     # 唯一索引生效：同键写入走 UPSERT，不新增行
     user_data.add_search_history("fanqie", "斗破苍穹", "api", "rain")
     assert len(user_data.get_search_history()) == 2
+
+
+def test_search_history_migration_guard_keeps_new_records(tmp_path, monkeypatch):
+    """PRAGMA user_version 一次性守卫：迁移只执行一次，迁移后写入的 fanqie mode='' 记录不被改写。"""
+    db = tmp_path / "user_data.db"
+    monkeypatch.setattr(user_data, "DB_PATH", db)
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    user_data.get_search_history()  # 首次连接触发迁移
+    user_data.add_search_history("fanqie", "凡人修仙传", "")  # 迁移后写入的新记录（mode=''）
+    rows = user_data.get_search_history()  # 再次触发连接
+    fanqie = [r for r in rows if r["platform"] == "fanqie"]
+    assert len(fanqie) == 1
+    assert fanqie[0]["mode"] == ""
+    assert fanqie[0]["variant"] == ""
