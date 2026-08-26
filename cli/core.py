@@ -63,11 +63,18 @@ def _platform_from_url(url: str) -> str:
     raise ValueError(f"未识别书源 URL: {url}")
 
 
-def _get_engine(platform: str = "fanqie"):
-    """Create a fresh engine from current config."""
+def _get_engine(platform: str = "fanqie", mode: str | None = None,
+                variant: str | None = None):
+    """Create a fresh engine from current config.
+
+    mode/variant：指定时用于创建引擎（与 cli.main._get_engine 一致）；
+    缺省保持原行为（config.yaml 的 mode / variant 自动选择）。
+    """
     cfg = load_main_config()
+    if mode:
+        cfg["mode"] = mode
     site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg)
+    options = build_options(cfg, site_cfg, variant)
     return create_engine(options)
 
 
@@ -191,8 +198,13 @@ async def _do_download_inner(
 # ── Update ───────────────────────────────────────────
 
 
-async def do_update(format_configs: dict, max_workers: int = 3):
-    """非交互更新：全部已下载小说更新到最新章节。"""
+async def do_update(format_configs: dict, max_workers: int = 3,
+                    mode: str | None = None, variant: str | None = None):
+    """非交互更新：全部已下载小说更新到最新章节。
+
+    mode/variant：更新引擎的创建参数（如 --mode api --variant oiapi）；
+    None 时按每本小说平台使用 config 默认引擎。
+    """
     import asyncio
     from cli.config import get_novel_group
 
@@ -237,7 +249,7 @@ async def do_update(format_configs: dict, max_workers: int = 3):
     for i, novel in enumerate(targets, 1):
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
         platform = _platform_from_url(novel.url)
-        engine = _get_engine(platform)
+        engine = _get_engine(platform, mode, variant)
         try:
             remote_chapters = await resolve_chapter_list(novel.url, engine=engine)
             if not remote_chapters:

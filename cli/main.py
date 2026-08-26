@@ -209,15 +209,11 @@ def cmd_download(args):
 
 
 def cmd_update(args):
-    engine, format_configs = _get_engine(
-        args.platform, args.mode,
-        _resolve_variant(args.platform, args.mode, args.variant),
-    )
-    try:
-        from cli.core import do_update
-        asyncio.run(do_update(format_configs, max_workers=args.workers))
-    finally:
-        engine.close()
+    variant = _resolve_variant(args.platform, args.mode, args.variant)
+    format_configs = load_format_configs()
+    from cli.core import do_update
+    asyncio.run(do_update(format_configs, max_workers=args.workers,
+                          mode=args.mode, variant=variant))
 
 
 def cmd_export(args):
