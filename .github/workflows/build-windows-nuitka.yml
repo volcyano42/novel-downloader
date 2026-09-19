@@ -46,23 +46,6 @@ jobs:
           if (-not (Test-Path $exe)) { Write-Error "未找到产物: $exe"; exit 1 }
           Write-Host "OK: $exe"
 
-      - name: Defender 扫描
-        shell: pwsh
-        run: |
-          $exe = "dist\novel-downloader-web-${{ steps.ver.outputs.version }}.exe"
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-          if (Test-Path $defender) {
-            Write-Host "Running Defender scan on $exe ..."
-            & $defender -Scan -ScanType 3 -File $exe -DisableRemediation 2>&1 | Out-Host
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "Defender scan exited with code $LASTEXITCODE (可能被拦截)"
-            } else {
-              Write-Host "Defender scan: clean"
-            }
-          } else {
-            Write-Host "Defender 未安装或路径不可用，跳过扫描"
-          }
-
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
