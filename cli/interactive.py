@@ -314,7 +314,7 @@ def main():
             print("4. 🔁 重新导出")
             print("5. 🗑️  删除小说")
             print("6. ⚙️  设置")
-            print("7. 🌐 访问网站")
+            print("7. 🌐 访问平台")
             print("0. 🚪 退出")
 
             try:

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Android APK 版后端入口：注入 NLD_APP_DATA → 启动现有 FastAPI app → 挂载前端。
 
-健康检查不在此处自注册 /health：MainActivity 轮询 services/backend/main.py 中
+健康检查不在此处自注册 /health：MainActivity 轮询 backend/main.py 中
 注册于 SPA fallback 与根 mount 之前的 /api/v2/health（两种环境始终可达）；
 本模块注册的 /health 会被 SPA fallback（本地 frontend/dist 存在时）
 或根 StaticFiles mount 拦截，实际不可达。
