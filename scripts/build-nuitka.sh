@@ -2,7 +2,7 @@
 # Build Nuitka onefile: novel-downloader-web-{version}-{platform}
 # Linux x64/arm64（Termux 用 portable 见 build-portable.sh；Windows 用 build-nuitka.ps1）
 # Usage: ./build-nuitka.sh [-v <version>] [-r <retries>]
-# Requires: Python 3.10+, npm, gcc/clang
+# Requires: Python 3.10+, npm, gcc/clang, patchelf（Debian/Ubuntu: apt install patchelf；GitHub Actions runner 已预装）
 set -e
 cd "$(dirname "$0")/.."
 
@@ -75,12 +75,20 @@ echo "--- 生成书源 manifest ($(date +%H:%M:%S)) ---"
 echo "--- 安装 Nuitka ---"
 "$PYTHON" -m pip install nuitka
 
+# standalone/onefile 模式在 Linux 必需 patchelf（CI runner 预装；本地构建缺失时给出明确提示）
+if ! command -v patchelf >/dev/null 2>&1; then
+    echo "错误: 未找到 patchelf，Nuitka standalone 模式必需。请先安装："
+    echo "  Debian/Ubuntu: apt install patchelf"
+    echo "  CentOS/Fedora: dnf/yum install patchelf"
+    exit 1
+fi
+
 # ── 4. Nuitka 编译（自动重试）──
 NUITKA_ARGS=(
     -m nuitka
     --standalone
     --onefile
-    --static-libpython=yes
+    # 注意：不用 --static-libpython=yes —— 标准发行版 Python 无静态 libpython（仅 .so），该参数在 Linux 必失败；onefile 会自动打包动态库
     --assume-yes-for-downloads
     --jobs="$(nproc)"
     --include-package=novelbase
