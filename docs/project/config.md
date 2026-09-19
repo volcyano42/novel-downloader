@@ -13,7 +13,9 @@ export.formats: [epub]
 
 ## sites/*.yaml
 
-每个平台三个引擎段的配置（api/browser/requests），含 delay、retry_times、timeout、backoff_factor。fanqie 的 `api.oiapi.enabled` 设为 false。
+每个平台三个引擎段的配置（api/browser/requests）。api 为 variant 容器（如 `api.oiapi`/`api.rain`）；
+browser/requests 也嵌套一层 variant（当前唯一 `default`，如 `browser.default.headless`）。
+字段含 delay、retry_times、timeout、backoff_factor。fanqie 的 `api.oiapi.enabled` 设为 false。
 
 ## groups.yaml
 

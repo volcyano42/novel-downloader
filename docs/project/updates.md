@@ -192,334 +192,155 @@
 | `cf37537` | 跳过 `test_health_route_reachable_via_test_client`（CI 环境 `127.0.0.1` 不可达导致挂起）
 
 ---
-
-## 2026-08-06 变更（4 个提交）— 阅读页交互调整 + 配置简化
-
-| 短哈希 | 提交消息 |
-|--------|----------|
-| `01659f3` | refactor: 移除 API variant 的 enabled 字段，简化配置逻辑 |
-| `6c32b6c` | chore: app_data/ 脱离 git 跟踪，磁盘保留 |
-| `07c9d8f` | refactor: 移除阅读页左右滑动手势跳转章节 |
-| `5c6fb1a` | feat: 阅读页目录自动滚动到当前章节 |
-
 ---
 
-## 2026-08-11 变更（10 个提交）— 收藏功能 + 下载管理改造 + Nuitka manifest 方案
+## 2026-08-22 变更（15 个提交）
 
 | 短哈希 | 提交消息 |
 |--------|----------|
-| `400c62e` | fix: 修复前端 TypeScript 语法错误（variant 缺符号、TooltipVariant 不存在、DownloadDialog 参数重名） |
-| `707fb05` | feat: 恢复 Nuitka 打包方案（4.1.3 锁版本，与 portable 共存） |
-| `15c929b` | CI: 构建产物 artifact 添加 retention-days:3 防止配额溢出，gitignore 添加会话归档目录 |
-| `67de187` | 重构: groups 从 YAML 迁移到 SQLite，新增收藏功能 |
-| `39100c8` | 重构: 下载管理面板改为折叠章节队列，取消下载真正生效 |
-| `5a18ec8` | fix: 修复便携版 Ctrl+C 退出体验（Windows 去 pause、Linux/Termux 加 trap 清理） |
-| `fea52db` | 重构: 书源注册发现机制去硬编码，Nuitka 模式从 manifest 读取 |
-| `bb3111f` | 重构: build_manifest 移动到 utils/ |
-| `114431e` | 文档: 书源注册重构同步 + Phase 2 插件设计 |
+| `bf864af` | fix: 92xs 章节 id 从完整 URL 改为末尾数字段（修复前端路由/文件名兼容） |
+| `7fb30a4` | fix: 章节 SSE 异常终止不再显示不完整章节数（区分 [DONE] 与错误，留空白） |
+| `1e641b3` | fix: 详情页章节数省略号判断改用 loading\|\|streaming（本地书流式加载也会显示 ...） |
+| `54d9768` | feat: 详情页章节数加载中显示省略号占位（.../N 章） |
+| `b898cba` | feat: 详情页章节数在加载中显示省略号，完成后显示当前章节数 |
+| `2a9fb00` | fix: test_source_contracts 断言兼容本地新增 appapi variant（子集断言，CI 无此目录亦通过） |
+| `9e3e45b` | feat: user_data.db 空表模板加入 template/ 并接入 init_config 初始化 |
+| `ef2b983` | fix: 迁移脚本补 groups/bookmarks 表更新并新增 hash 输入测试 |
+| `5042e31` | refactor: 搜索框移除纯数字 id 平台猜测（hash id 非数字） |
+| `35811a8` | refactor: 退役 ID_PATTERN/ORIGIN_ID_PATTERN/BOOK_URL_TEMPLATE（hash id 不可反查） |
+| `2240f74` | refactor: 移除 get_source_for_id（resolve_chapter 走 url 回退） |
+| `9d0dbf2` | refactor: 删除 4 个 source 手动拼 id（id 改由 resolve_meta 中心生成） |
+| `5642bfe` | feat: resolve_meta 中心化生成 hash id 并冗余写入 extra.platform |
+| `1de5ff3` | refactor: Novel.id 加默认值并移除 origin_id 属性（hash id 无前缀可去） |
+| `a4b4a7d` | feat: 新增 canonical_book_url 与 make_novel_id（Novel.id hash 化工具） |
 
-### 按主题归纳
+### 🆔 Novel.id hash 化（核心重构，8 个提交）
+
+`Novel.id` 从「各 source 拼接平台前缀 + 源站 ID」改为「`sha256(canonical_book_url(novel.url, platform))[:32]`」中心化生成，彻底去掉前缀。
 
 | 提交 | 说明 |
 |------|------|
-| `67de187` | **收藏与分组**：groups 从 YAML 迁移到 SQLite（user_data.db），新增收藏功能（源自"搜索历史/书籍收藏"设计讨论） |
-| `39100c8` | **下载管理**：面板改为折叠章节队列，取消下载真正生效 |
-| `fea52db`/`bb3111f`/`114431e` | **Nuitka manifest 方案**：书源注册发现机制去硬编码，Nuitka 模式从 manifest 读取；`build_manifest.py` 归入 `utils/`；书源注册重构同步 + Phase 2 插件设计 |
-| `707fb05` | **恢复 Nuitka 打包**（4.1.3 锁版本，与 portable 共存） |
-| `400c62e` | 前端 TS 语法错误修复（variant 缺符号、TooltipVariant 不存在、DownloadDialog 参数重名） |
-| `15c929b` | CI artifact 加 retention-days:3 防配额溢出；gitignore 添加会话归档目录 |
+| `a4b4a7d` | 新增 `novelbase/utils/urls.py`：`canonical_book_url`（通用规范化 + 92xs/qidian 平台别名）+ `make_novel_id`（sha256[:32]），9 测试 |
+| `1de5ff3` | `Novel.id` 加默认值 `""` 并删除 `origin_id` 属性（hash 无前缀可去） |
+| `5642bfe` | `resolve_meta()` 中心化赋值 id + 冗余写入 `novel.extra["platform"]` |
+| `9d0dbf2` | 4 个 source 删除手动拼 id（含连锁测试修复 test_source_async.py） |
+| `2240f74` | `get_source_for_id` 退役，`resolve_chapter` 平台识别走 `get_source(chapter.url)` 回退 |
+| `35811a8` | `ID_PATTERN`/`ORIGIN_ID_PATTERN`/`BOOK_URL_TEMPLATE` 三件套退役；`resolve_book_url` 仅接受 http(s)；backend `/sources`、cli、前端类型同步 |
+| `5042e31` | 前端 SearchBar 移除纯数字 id 按位数猜平台 |
+| `ef2b983` | 迁移脚本补 groups/bookmarks 表 + 新增 hash 输入测试（最终审查 2 Important 修复） |
+
+**存量迁移**（2026-08-23 执行）：34 本 `.db` 重命名为 hash id，库内 `meta.id`/`illustrations.owner_id` 同步，`favorites`/`groups`/`bookmarks` 三表更新；5 个未下载书的幽灵条目经用户确认删除。迁移脚本 `novel-downloader-tools/scripts/migrate_novel_id.py`（含 rename 重试 + 先 rename 后 UPDATE + 显式 commit）。
+
+### 🗄️ user_data.db 空表模板（1 个提交）
+
+| 提交 | 说明 |
+|------|------|
+| `9e3e45b` | `template/storage/users/default/user_data.db` 空表模板（`shared/user_data.py` 提取 `_SCHEMA_SQL` 单一数据源）；`init_config.init_user_db()` 首次运行复制；测试 4 用例 |
+
+### 🖥️ 前端章节数显示（4 个提交，方案收敛为 SSE 异常留空白）
+
+| 提交 | 说明 |
+|------|------|
+| `b898cba`/`54d9768`/`1e641b3` | 省略号占位方案的三次迭代（加载中显示 .../N 章），最终废弃 |
+| `7fb30a4` | 最终方案：`streamChapters` 区分正常完成（`data: [DONE]`）与异常终止（非 200/流中断/网络错走 `onError`）；`DetailPage` SSE 异常时章节数留空白，不显示不完整章节数 |
+
+### 📄 92xs 章节 id（1 个提交）
+
+| 提交 | 说明 |
+|------|------|
+| `bf864af` | 92xs 章节 id 从完整 URL（`http://www.92xs.info/html/96850/35632400.html`）改为末尾数字段（`35632400`），修复前端路由 `/novel/{id}/{chapterId}` 被 `/` 截断；存量 1698 个章节 id 已迁移 |
+
+### 🧪 测试
+
+| 提交 | 说明 |
+|------|------|
+| `2a9fb00` | `test_source_contracts` 断言改为子集（兼容本地新增 appapi variant，CI 无此目录亦通过） |
+
+设计文档：`docs/superpowers/specs/2026-08-22-novel-id-hash-design.md`；实施计划：`docs/superpowers/plans/2026-08-22-novel-id-hash.md`。
 
 ---
-
-## 2026-08-12 变更（1 个提交）
-
-| 短哈希 | 提交消息 |
-|--------|----------|
-| `0c8abad` | feat: 直接访问 8000 端口始终可用（前端未构建时显示构建提示页） |
-
 ---
 
-## 2026-08-13 变更（21 个提交）— Engine httpx 迁移 + 异步化 + 目录重构
+## 2026-08-25 变更（BrowserOptions.auto_reconnect，4 个提交）
 
 | 短哈希 | 提交消息 |
 |--------|----------|
-| `ca1734b` | 文档: 目录结构重构设计（shared共享层 + storage分层 + 默认值单一数据源） |
-| `52e1ef3` | fix: docs/ 重新纳入 .gitignore，恢复不提交文档的约定 |
-| `1cdafa3` | 依赖: httpx 提升为主依赖，移除 requests/urllib3 |
-| `5260c17` | feat: 新增编码探测工具 detect_encoding（chardet，替代 apparent_encoding） |
-| `293625f` | 重构: RequestsEngine 换 httpx.Client，新增 async_fetch_text/json |
-| `f8de64e` | 重构: APIEngine 换 httpx.Client，新增 async_fetch_text/json |
-| `76c8382` | feat: BrowserEngine 新增 async_fetch_text/json（asyncio.to_thread 包装） |
-| `90e15a6` | feat: Engine 基类新增 async_fetch_text/json 抽象方法 |
-| `206bbd8` | 重构: 书源文件 requests 全量替换为 httpx |
-| `55186ba` | feat: 新增 shared 共享层（config 单一数据源 + user_data 归位） |
-| `216dfd1` | fix: .gitignore 排除 __init__.py（_*.py 规则误伤） |
-| `0ec51fe` | 重构: services/backend 上提为 backend/，跨层调用改走 shared |
-| `72a0c5f` | 清理: 删除空的 services/__init__.py 残留 |
-| `5bc0248` | 重构: services/frontend 上提为 frontend/ |
-| `b2405fc` | 重构: cli.py + cli_lib 合并为 cli/ 包，分组功能改走 shared |
-| `c57fc37` | 重构: 构建脚本收纳进 scripts/，新增 storage 迁移脚本 |
-| `e699380` | 文档: 更新 AGENTS.md 启动命令以匹配新目录结构 |
-| `14d1994` | fix: app.py 启动器改用 backend.main:app，清理残留旧路径 |
-| `0acd312` | fix: Android 构建脚本适配新目录结构，requirements 同步 httpx/chardet |
-| `17b6c44` | 清理: 更新残留注释中的旧路径引用 |
-| `9a07463` | test: 补 close 清理 AsyncClient 测试 |
+| `c30066c` | fix: 修复并发重建竞态与同步路径退化（锁内重建 + _fetch_with_page 区分路径） |
+| `aab9b8a` | feat: auto_reconnect 配置透传（sites yaml + 显式引擎 API + CLI） |
+| `527c800` | feat: BrowserEngine 支持浏览器失效自动重建（auto_reconnect） |
+| `f5a4057` | feat: BrowserOptions 新增 auto_reconnect 字段（默认 False） |
 
-### ⚡ Engine HTTP 层迁移到 httpx（5 个提交）
+### 🔄 浏览器自动重建（BrowserOptions.auto_reconnect）
 
-novelbase 的三种引擎（Requests/API/Browser）从 requests 全量迁移到 httpx：同步 `fetch_text`/`fetch_json` 用 `httpx.Client`，新增异步 `async_fetch_text`/`async_fetch_json` 用 `httpx.AsyncClient`（BrowserEngine 因 DrissionPage 同步库，用 `asyncio.to_thread` 包装）。
+browser 模式持久 Playwright 浏览器意外关闭（手关/崩溃/杀进程）时自动重建并重试当前抓取，避免直接 `NetworkError`。
 
 | 提交 | 说明 |
 |------|------|
-| `1cdafa3` | httpx 提升为主依赖，删除 requests/urllib3（pyproject.toml） |
-| `5260c17` | 新增 `detect_encoding`（chardet），替代 requests 的 apparent_encoding（httpx 无此属性） |
-| `293625f` | RequestsEngine 换 httpx.Client + 新增 async 方法 |
-| `f8de64e` | APIEngine 换 httpx + async 方法，保留 params 合并与 post_data 分支 |
-| `76c8382` | BrowserEngine 新增 async 方法（asyncio.to_thread 包装同步方法） |
-| `90e15a6` | Engine 基类新增 async_fetch_text/json 抽象方法 |
-| `206bbd8` | 9 个书源文件 requests → httpx（纯机械替换，签名不变） |
+| `f5a4057` | `BrowserOptions.auto_reconnect: bool = False`（默认关零退化）+ `set_browser_options` 透传 |
+| `527c800` | `_is_reconnectable_error`（类名白名单 + 消息特征）/ `_reset_browser`（playwright.stop + close + 清 page 池）/ `_reconnect_browser`；`_fetch_with_page` 遇失效异常 raise；`async_fetch_text` 重建级重试（retry_times，耗尽 NetworkError） |
+| `aab9b8a` | 配置透传：`BrowserOptionsData` + `engine_manager` 两处（sites yaml `auto_reconnect` / 显式引擎 `_build_options`）+ `cli/config.py` |
+| `c30066c` | 最终审查 2 Important 修复：`_ensure_browser_locked` 拆分（`_reconnect_browser` 在 `_launch_lock` 内 reset+ensure，消除并发重建竞态）；`_fetch_with_page` 加 `abort_on_browser_close` 参数区分持久/isolated 路径（同步路径不退化） |
 
-### 📁 目录结构重构（8 个提交）
-
-参考 golang-standards/project-layout 与 DeepSeek-Reasonix 的多客户端架构：`novelbase`（纯核心）→ `shared`（共享应用层）→ `backend`/`cli`/`frontend`（三个薄前端）。
-
-| 提交 | 说明 |
-|------|------|
-| `55186ba` | 新增 `shared/`：config.py（默认值单一数据源，从 novelbase options 派生）+ user_data.py（groups/favorites/search_history/bookmarks 归位） |
-| `0ec51fe` | `services/backend` → `backend/`，跨层调用（cli_lib.user_db）改走 shared |
-| `5bc0248` | `services/frontend` → `frontend/` |
-| `b2405fc` | `cli.py` + `cli_lib` → `cli/` 包，user_db 归 shared |
-| `c57fc37` | 构建脚本收纳进 `scripts/`，新增 `migrate_storage.py`（storage 分层迁移） |
-| `e699380` | AGENTS.md 启动命令同步新目录 |
-| `14d1994`/`0acd312`/`17b6c44` | 清理 app.py、Android 构建脚本、requirements.txt、注释中的旧路径/旧依赖残留 |
-
-### 🗄️ storage 分层（运行时迁移）
-
-`app_data/storage/` 分层为 `novels/`（31 本小说库）+ `users/default/`（用户数据 user_data.db），为未来多用户隔离预留结构。迁移脚本 `scripts/migrate_storage.py` 已执行，32 个 db 文件迁入新路径，端到端读取验证通过。
-
-### 🧪 测试补充
-
-| 提交 | 说明 |
-|------|------|
-| `9a07463` | 补 close 清理 AsyncClient 测试（懒加载后关闭 + 未加载时 close 不报错） |
-
-> 本批变更后测试 154 passed, 2 skipped。
+设计文档：`docs/superpowers/specs/2026-08-22-browser-auto-reconnect-design.md`；实施计划：`docs/superpowers/plans/2026-08-22-browser-auto-reconnect.md`。
 
 ---
-
-## 2026-08-13~17 变更（53 个提交）— 导出器契约 + 全链路异步化收尾 + BrowserEngine 换 Playwright + 前端 UI 修复
-
-> 基准：2026-08-13（`9a07463`）之后 dev 分支全部提交，日期 2026-08-13 ~ 08-17。版本号已至 **v4.4.0**。
-
-## 提交时间线（倒序）
-
-| 短哈希 | 提交消息 |
-|--------|----------|
-| `f601f3b` | 回退: 移除网页顶部全屏按钮（移动端 header + 桌面侧栏） |
-| `8744f6f` | 修复: 保存按钮手机端 offset 加大到 bottom-20，避免被底部导航栏遮挡 |
-| `61a8c02` | 修复: 下载任务所有状态均可展开查看章节（含已完成/失败） |
-| `fce80d4` | 修复: 下载对话框 API 模式默认选中首个 variant，避免未选导致下载不启动 |
-| `61d8854` | 修复: 保存按钮移动端不被 bottom nav 遮挡 + 保存时清理 notify 默认值字段 |
-| `af35753` | 性能: 书架列表封面返回缩略图（Illustration.thumbnail 等比缩小转 JPEG） |
-| `4b385d5` | 修复: 书籍卡片喜欢按钮移左上角 + 下载完成提示音（Web Audio bell） |
-| `b298c56` | 新增: 网页顶部全屏按钮（Fullscreen API，移动端 header + 桌面侧栏） |
-| `f78fbee` | 修复: 设置页 Range 点击区域加大、API variant 空值 fallback、删导出格式启用按钮 |
-| `6968916` | 修复: 章节对比模式标题加 min-w-0 截断 + 封面放大全黑背景锁滚动 |
-| `6b3eb0f` | 版本号 4.3.0 → 4.4.0 并更新 CHANGELOG |
-| `2aeacdc` | 重构: page 池去掉 max_pages 信号量，改纯懒加载复用 |
-| `e736ff5` | 重构: BrowserEngine 加 page 池复用，避免每次抓取新开 tab |
-| `7553e29` | 修复: DetailPage 章节状态 Tooltip 缺 TooltipProvider 包裹 |
-| `e67c054` | 构建: Windows portable 删 ChromeSetup.exe，统一 playwright install chromium |
-| `c51ca23` | 修复: Engine 加 aclose() 异步关闭，shutdown 时 await 释放浏览器进程 |
-| `d69b188` | 修复: BrowserEngine final review 问题（懒创建锁、同步 fetch_text 补 retry/backoff） |
-| `9341c07` | 构建: 排除项 drissionpage 换 playwright + Chrome 说明改 playwright install chromium |
-| `aa73e7f` | 重构: qidian/qimao browser 书源交互改 Playwright（去 to_thread） |
-| `6ff78c0` | 修复: BrowserEngine 换 Playwright 的 review 问题（persistent context、懒启动锁、browser_type 选择） |
-| `f7fbedf` | 重构: BrowserEngine 从 DrissionPage 换 Playwright（懒启动 + 真异步） |
-| `9a2ee9d` | refactor: build-nuitka.sh 删掉 Termux 分支，只保留 Linux x64/arm64 |
-| `a574289` | fix: build-nuitka.sh Termux 产物生成 start.sh（onefile 动态 libpython 需 LD_LIBRARY_PATH） |
-| `94fce10` | fix: 构建脚本补打包 shared 共享层（backend 依赖 shared.config/user_data） |
-| `ffc88cf` | fix: build-nuitka.sh 补依赖安装 + portable 裸包自举 |
-| `bce6a95` | fix: build-nuitka.sh 合并历史 build-web/build-termux 的 Termux 特殊处理 |
-| `96369dc` | feat: 新增 build-nuitka.sh（Linux/termux 版 Nuitka 单文件构建） |
-| `8d3bcd6` | fix: 构建脚本复制 template 而非 app_data（防敏感字段泄露）+ 修 services 旧路径 |
-| `e016189` | fix: 修复 termux 构建脚本路径（目录重构遗留）+ 新增本地预装脚本 |
-| `4c4dec3` | fix: engine_manager 缓存加锁，消除并发双创建引擎竞态 |
-| `524d863` | fix: 修 engine close() 泄漏 + async_fetch_json 补 NetworkError 包装 |
-| `6c912d9` | refactor: RequestsEngine 支持 post_data，92xs search 消除私有方法依赖 |
-| `72f7c1d` | fix: 恢复 resolve_changdunovel 并改 async（changdunovel 域名支持工具，非死代码） |
-| `119328c` | refactor: 去掉 search 无用的 page 参数 + 删除 resolve_changdunovel 死代码 |
-| `79ccd42` | fix: 修复暂停功能失效（wait() 反用 + 排队/收尾检查点） |
-| `a6751a1` | 修复: 下载进度条逐章实时推进 + engine 同步创建移出事件循环 |
-| `9498303` | fix(cli): cmd_search 对 async search 用 asyncio.run 包装，避免返回未消费 coroutine |
-| `16b80b7` | refactor: CLI 下载改 asyncio（asyncio.run + asyncio.gather） |
-| `e345637` | refactor: task_manager 改 asyncio 原生（asyncio.create_task + asyncio.Event） |
-| `7f59c90` | refactor: backend 路由直接 await async 函数，删除死 executor |
-| `58f1de5` | refactor: qidian/qimao/92xs 书源 async 化 + 封面下载归 engine |
-| `27c01bb` | refactor: fanqie 书源 async 化 + 图片下载归 engine.async_fetch_images |
-| `d889877` | refactor: downloader 四函数改 async def（search/resolve_meta/resolve_chapter_list/resolve_chapter） |
-| `f3aaebd` | feat: BrowserEngine 实现 async_fetch_images（httpx，不开标签页） |
-| `551c008` | test: 为 APIEngine 补 async_fetch_images 批量下载独立测试 |
-| `ab25230` | feat: Requests/API 引擎实现 async_fetch_images 批量图片下载 |
-| `39a7df5` | feat: Engine 基类新增 async_fetch_images 抽象方法 |
-| `87574bf` | refactor: 移除 list_exporter_options（register_export_options 已覆盖其用途） |
-| `4c15137` | feat: 导出器新增 list_exporter_formats / list_exporter_options 列表函数 |
-| `65a1c8b` | feat: 导出器新增契约（Protocol + 运行时签名校验） |
-| `6abe404` | feat: 导出器改为动态发现，支持 NLD_PRIVATE_EXPORTERS 外部自定义格式 |
-| `c13e3bb` | 重构: registry.py 改名 exporter.py 并上提到 novelbase 根目录 |
-| `a546464` | 重构: source 注册/发现函数从 registry 归一到 novelbase.source |
-
-## 按主题归纳
-
-### 📦 导出器契约与动态发现（6 个提交，08-13）
-
-| 提交 | 说明 |
-|------|------|
-| `a546464` | source 注册/发现函数从 registry 归一到 `novelbase.source` 命名空间 |
-| `c13e3bb` | `registry.py` 改名 `exporter.py` 并上提到 novelbase 根目录 |
-| `6abe404` | 导出器改为动态发现，支持 `NLD_PRIVATE_EXPORTERS` 外部自定义格式 |
-| `65a1c8b` | 导出器新增契约（Protocol + 运行时签名校验） |
-| `4c15137` | 新增 `list_exporter_formats` / `list_exporter_options` 列表函数 |
-| `87574bf` | 移除 `list_exporter_options`（`register_export_options` 已覆盖其用途） |
-
-### ⚡ async_fetch_images 图片批量下载（6 个提交，08-14）
-
-| 提交 | 说明 |
-|------|------|
-| `39a7df5` | Engine 基类新增 `async_fetch_images` 抽象方法 |
-| `ab25230` | Requests/API 引擎实现 `async_fetch_images` 批量图片下载 |
-| `551c008` | APIEngine 批量下载独立测试 |
-| `f3aaebd` | BrowserEngine 实现（httpx，不开标签页） |
-| `d889877` | downloader 四函数改 `async def`（search/resolve_meta/resolve_chapter_list/resolve_chapter） |
-| `27c01bb` | fanqie 书源 async 化 + 图片下载归 `engine.async_fetch_images` |
-
-### 🔄 全链路异步化收尾 + 引擎修复（12 个提交，08-15）
-
-| 提交 | 说明 |
-|------|------|
-| `58f1de5` | qidian/qimao/92xs 书源 async 化 + 封面下载归 engine |
-| `7f59c90` | backend 路由直接 `await` async 函数，删除死 executor |
-| `e345637` | task_manager 改 asyncio 原生（`asyncio.create_task` + `asyncio.Event`） |
-| `16b80b7` | CLI 下载改 asyncio（`asyncio.run` + `asyncio.gather`） |
-| `9498303` | `cmd_search` 对 async search 用 `asyncio.run` 包装，避免未消费 coroutine |
-| `a6751a1` | 下载进度条逐章实时推进 + engine 同步创建移出事件循环 |
-| `79ccd42` | 修复暂停功能失效（`wait()` 反用 + 排队/收尾检查点） |
-| `119328c` | 去掉 search 无用的 page 参数 + 删除 resolve_changdunovel 死代码 |
-| `72f7c1d` | 恢复 `resolve_changdunovel` 并改 async（changdunovel 域名支持工具，非死代码） |
-| `6c912d9` | RequestsEngine 支持 `post_data`，92xs search 消除私有方法依赖 |
-| `524d863` | 修 engine `close()` 泄漏 + `async_fetch_json` 补 NetworkError 包装 |
-| `4c4dec3` | engine_manager 缓存加锁，消除并发双创建引擎竞态 |
-
-### 🌐 BrowserEngine 从 DrissionPage 换 Playwright（8 个提交，08-16）
-
-> **重大变更**：browser 模式底层从 DrissionPage 迁移到 Playwright（懒启动 + 真异步），依赖、文档、书源交互全部同步。
-
-| 提交 | 说明 |
-|------|------|
-| `f7fbedf` | 核心重构：BrowserEngine 换 Playwright（懒启动 + 真异步） |
-| `6ff78c0` | review 问题：persistent context、懒启动锁、`browser_type` 选择 |
-| `aa73e7f` | qidian/qimao browser 书源交互改 Playwright（去 to_thread） |
-| `9341c07` | 构建排除项 drissionpage 换 playwright，Chrome 说明改 `playwright install chromium` |
-| `d69b188` | final review：懒创建锁、同步 `fetch_text` 补 retry/backoff |
-| `c51ca23` | Engine 加 `aclose()` 异步关闭，shutdown 时 await 释放浏览器进程 |
-| `e67c054` | Windows portable 删 ChromeSetup.exe，统一 `playwright install chromium` |
-| `e736ff5`/`2aeacdc` | BrowserEngine 加 page 池复用（懒加载，去掉 max_pages 信号量） |
-
-### 🛠️ Nuitka/Termux 构建脚本（8 个提交，08-16）
-
-| 提交 | 说明 |
-|------|------|
-| `e016189` | 修复 termux 构建脚本路径（目录重构遗留）+ 新增本地预装脚本 |
-| `8d3bcd6` | 构建脚本复制 template 而非 app_data（防敏感字段泄露）+ 修 services 旧路径 |
-| `96369dc` | 新增 `build-nuitka.sh`（Linux/termux 版 Nuitka 单文件构建） |
-| `bce6a95` | 合并历史 build-web/build-termux 的 Termux 特殊处理 |
-| `ffc88cf` | 补依赖安装 + portable 裸包自举 |
-| `94fce10` | 补打包 shared 共享层（backend 依赖 shared.config/user_data） |
-| `a574289` | Termux 产物生成 start.sh（onefile 动态 libpython 需 LD_LIBRARY_PATH） |
-| `9a2ee9d` | 删掉 Termux 分支，只保留 Linux x64/arm64 |
-
-### 🏷️ 版本号
-
-| 提交 | 说明 |
-|------|------|
-| `6b3eb0f` | 版本号 4.3.0 → **4.4.0** 并更新 CHANGELOG |
-
-### 🖥️ 前端 UI 修复（13 个提交，08-17）
-
-| 提交 | 说明 |
-|------|------|
-| `7553e29` | DetailPage 章节状态 Tooltip 缺 TooltipProvider 包裹 |
-| `6968916` | 章节对比模式标题加 min-w-0 截断 + 封面放大全黑背景锁滚动 |
-| `f78fbee` | 设置页 Range 点击区域加大、API variant 空值 fallback、删导出格式启用按钮 |
-| `b298c56` | 新增网页顶部全屏按钮（Fullscreen API，移动端 header + 桌面侧栏） |
-| `f601f3b` | **回退**：移除全屏按钮（b298c56 撤回） |
-| `4b385d5` | 书籍卡片喜欢按钮移左上角 + 下载完成提示音（Web Audio bell） |
-| `af35753` | 书架列表封面返回缩略图（`Illustration.thumbnail` 等比缩小转 JPEG） |
-| `61d8854`/`8744f6f` | 保存按钮移动端不被 bottom nav 遮挡（offset 加大到 bottom-20）+ 清理 notify 默认值字段 |
-| `fce80d4` | 下载对话框 API 模式默认选中首个 variant，避免未选导致下载不启动 |
-| `61a8c02` | 下载任务所有状态均可展开查看章节（含已完成/失败） |
-
-## 里程碑
-
-- **dev**（`f601f3b`，2026-08-17）：BrowserEngine 换 Playwright、全链路 async（downloader/task_manager/CLI/backend/书源）、`async_fetch_images` 图片批量下载、导出器契约重构、Nuitka 构建脚本、版本 **4.4.0**、前端移动端 UI 修复。
-- **main**（`6b3eb0f`，2026-08-17）：dev 已合并至 **v4.4.0**（合并点 = 版本号提交 `6b3eb0f`，含 8-06/8-11/8-12/8-13 全部变更）；**dev 领先 main 10 个提交**（8-17 前端 UI 修复，`f601f3b` 等，尚未合并 main）。
-- 本批变更后测试 **203 passed, 2 skipped**（新增 test_source_async / test_task_manager_async / test_exporter / test_engine_manager 等大量异步测试）。
-
-## 文件变更统计
-
-```
-84 files changed, 2723 insertions(+), 736 deletions(-)
-```
-
 ---
 
-## 2026-08-20 变更（4 个提交）— 16 项体验清单落地
+## 2026-08-25 变更（交互式 CLI 还原 + 搜索历史 mode/variant，13 个提交）
 
-> 基准：`f601f3b`（2026-08-17）之后 dev 分支全部提交，4 条均于 2026-08-20，已推送 origin/dev。来源：用户 16 项待办清单（brainstorming 流程分 D/B/C/A/E 五组实施）。
-
-### 提交时间线（倒序）
+### 🖥️ 交互式 CLI 还原（6 个提交）
 
 | 短哈希 | 提交消息 |
 |--------|----------|
-| `ad82893` | fix: 前端交互体验优化（书架/下载/详情/阅读/设置） |
-| `198dd2c` | feat: 前端搜索体系升级（搜索历史/封面图/variant 校验） |
-| `d36a975` | feat: 后端搜索历史 API 与搜索封面透传 |
-| `3976668` | feat: Novel.serial 为 0 时自动跟随本地章节数（92xs 等无总数书源） |
+| `034c633` | feat: 还原交互式 CLI 辅助层 cli/ui.py（去 box-drawing、无 ID 反查） |
+| `23e8b5c` | feat: 还原交互式 CLI 通知模块 cli/notify.py |
+| `bd14fbf` | feat: 还原交互式 CLI 设置/导出/删除菜单 cli/menus.py |
+| `90a2aba` | feat: 还原交互式 CLI 主循环 cli/interactive.py（适配 async/新 API） |
+| `0911044` | feat: 还原交互式 CLI 入口 main.py |
+| `1e15cb4` | fix: 交互式搜索关键词路径捕获 search 异常 |
 
-### 按主题归纳
+还原 2026-08-02 删除的交互式 CLI（`2c717f7`）：
 
-#### 🧩 Novel.serial 兜底（`3976668`）
+- **入口**：根目录 `main.py`（5 行）委托 `cli.interactive.main()`
+- **文件布局**：交互层并入 `cli/` 包（`interactive.py` 主循环 + `menus.py` 子菜单 + `ui.py` 辅助 + `notify.py` 通知），**不重建** `app/` 包；`cli/main.py`（非交互 argparse）、`cli/core.py`、`cli/config.py` 零改动，两入口并存
+- **novelbase 适配**：`resolve_meta`/`resolve_chapter_list`/`resolve_chapter`/`search` 均 async，同步主循环经 `asyncio.run()` 包装；`_platform_from_url` 改数据驱动（`novelbase.source.platform_from_url`）；`register_source`/`register_export_options` 新导入路径；删除 `_build_url_from_id`（id_pattern 已退役，hash id 不可反查）
+- **去方框**：主菜单 `┌─┐│├┤└┘` 方框、`───` 标题线、注释分隔符全部 box-drawing 装饰去除，改纯文字样式（rich 进度条保留）
+- 更新支持单选/全部：单选走 `interactive._update_one_async`，全部复用 `cli.core.do_update`
+- 测试：`tests/test_interactive_cli.py`（TestUi 21 / TestNotify 6 / TestMenus 4 / TestInteractive 6，共 36 用例）
 
-| 提交 | 说明 |
-|------|------|
-| `3976668` | `Novel` 新增 `_serial_auto` 标记：serial=0（如 92xs）且带章节时进入自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖。补 5 个用例 + 暂停测试时序修复（speed=0.05） |
+设计文档：`docs/superpowers/specs/2026-08-25-restore-interactive-cli-design.md`；实施计划：`docs/superpowers/plans/2026-08-25-restore-interactive-cli.md`。
 
-#### 📚 搜索历史 API（`d36a975`）
+### 🔍 搜索历史 mode/variant 链路（7 个提交）
 
-| 提交 | 说明 |
-|------|------|
-| `d36a975` | 新增 `backend/routers/history.py`：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；`shared/user_data.py` 新增 `delete_search_history`；`SearchResultData` 加 `cover_url` 并透传书源返回值；补 search_history 增查删测试 |
+| 短哈希 | 提交消息 |
+|--------|----------|
+| `6828bb8` | fix: search_history 迁移加 PRAGMA user_version 一次性守卫，避免重复执行改写新数据 |
+| `736b9a4` | feat: 前端搜索历史链路传递 mode/variant（记录 + 回填 + 面板回传） |
+| `fe1ff53` | feat: 搜索历史路由透传 mode/variant 字段 |
+| `9b9988f` | feat: 搜索历史回填恢复 mode/variant，mode 为空默认 requests |
+| `1ce034b` | feat: 搜索历史面板展示 mode/variant 徽标 |
+| `9952fa6` | docs: CHANGELOG 记录搜索历史去重 + mode/variant 字段功能 |
 
-#### 🔍 前端搜索体系（`198dd2c`）
+搜索历史记录/回填完整携带 `mode`/`variant` 字段：记录搜索时保存，回填时恢复原搜索模式与 variant（mode 为空默认 `requests`）；历史面板展示 mode/variant 徽标；迁移加 `PRAGMA user_version` 一次性守卫防止重复执行改写新数据。
 
-| 提交 | 说明 |
-|------|------|
-| `198dd2c` | 搜索历史面板（按天分组、垃圾桶删除模式、点击回填不自动搜、替代原 tips）；搜索结果封面缩略图（无封面降级放大镜）、评分移至作者行；API 模式未选 variant 抖动拦截（取消兜底）、variant 区独立成行修手机端错位；endpoints/hooks 新增 history 三件套 |
+## 2026-08-25 晚间变更（sites 配置 variant 感知 + CLI variant 选择，6 个提交）
 
-#### 🖥️ 前端交互体验（`ad82893`）
+### 🧩 sites 配置 variant 感知（5 个提交）
 
-| 提交 | 说明 |
-|------|------|
-| `ad82893` | 书架：收藏空态保留切换按钮（可返回）、收藏入口移入三点菜单；下载管理：任务逆序、加载骨架、下载开始改 toast 不跳转、完成态可展开全部章节；详情：本地模式骨架统一、封面弹窗恢复半透明去缩放；阅读页回顶强化；设置：取消保存按钮改自动保存+toast、apikey 输入框样式；导航改 Link 保持 SPA 历史 |
+| 短哈希 | 提交消息 |
+|--------|----------|
+| `9216bfd` | feat: shared.config 新增 variant 感知辅助（get_mode_variant_config/load_mode_config/mode_variants），find_variant_options 跨 mode 查找 |
+| `b5e4287` | feat: sites 配置 browser/requests 嵌套 default variant 层（template 4 平台） |
+| `5255d43` | refactor: CLI 配置读取改 variant 感知（build_options/交互菜单读写 default variant） |
+| `ad90aab` | refactor: backend 引擎创建与 config 路由改 variant 感知（sites 配置嵌套 default） |
+| `3f7d0aa` | feat: 前端设置页适配 sites 配置嵌套 variant（browser/requests 读写 default） |
 
-### 里程碑
+sites 配置统一为「mode → variant → 配置」三层：browser/requests 嵌套 `default` 层（如 `browser.default.headless`），api 的每个 provider（`oiapi`/`rain`）即 variant。shared.config 提供 variant 感知辅助；CLI/backend/前端设置页均改为 variant 感知读写。
 
-- **dev**（`ad82893`，2026-08-20）：16 项体验清单全部落地（D 组 #7 / B 组 #1/#2/#8/#13 / C 组 #1/#3/#5/#6 / A 组 #11/#14/#15 / E 组 #4/#10/#12）；#9 分组折叠按用户要求保持原状、#16 全屏按钮无残留。已推送 origin/dev。
-- **main**：仍停在 `6b3eb0f`（v4.4.0），**dev 领先 main 14 个提交**（8-17 的 10 个 + 本批 4 个）。
-- 本批变更后测试 **209 passed, 2 skipped**（新增 search_history 测试）。
+### 🎯 CLI 双入口 variant 选择（1 个提交）
 
-## 文件变更统计
+| 短哈希 | 提交消息 |
+|--------|----------|
+| `c06c46e` | feat: CLI 双入口支持 variant 选择（交互询问/非交互提示 --variant） |
 
-```
-21 files changed, 482 insertions(+), 176 deletions(-)
-```
+variant 选择规则（所有模式一致）：某模式只有一个 variant 时自动使用（browser/requests 未指定默认 `default`）；多于一个时——交互式 `main.py` 弹出菜单询问并会话级记住 `(platform, mode)`；非交互 `cli.py` 的 `search`/`download`/`update`/`info` 新增 `--variant` 参数，未指定时列出所有 variant 名称并提示后以退出码 2 退出。

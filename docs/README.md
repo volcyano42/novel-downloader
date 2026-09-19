@@ -1,6 +1,6 @@
 # novel-downloader 文档导航
 
-文档位于核心仓库 `D:\Linux\novel-downloader\novel-downloader\docs\`（2026-08-21 起**纳入 private 版本库**，公开迁移时 superpowers/session-prompt/learning 仍在红名单不迁 public）。
+外层容器 `D:\Linux\novel-downloader\docs\`(非 git 仓库,被 .gitignore 忽略,不入版本库)。核心仓库在 `D:\Linux\novel-downloader\novel-downloader\`。
 
 ## 会话速览(必读)
 
@@ -24,12 +24,6 @@
 | 文档 | 内容 |
 |------|------|
 | [conventions/git.md](conventions/git.md) | Git 提交纪律、分支管理、workflow 触发、版本号更新约定 |
-
-## 学习笔记(learning/)
-
-| 文档 | 内容 |
-|------|------|
-| [learning/asyncio.md](learning/asyncio.md) | asyncio 异步 API 详解（async/await、gather、Semaphore、Event、to_thread、httpx.AsyncClient），基于 novelbase 全异步化改造实战 |
 
 ## 构建与发布(build/)
 

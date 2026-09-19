@@ -4,7 +4,7 @@
 
 | 平台 | SHOW_NAME | 搜索 | URL 解析 | 章节列表 | 正文 | 模式 | 备注 |
 |------|-----------|------|----------|----------|------|------|------|
-| fanqie | 番茄 | ✅ | ✅ id_pattern+standardize_id | ✅ | ✅ | browser/requests/api(oiapi,rain) | 短链 changdunovel.com/t/ 需重定向 |
+| fanqie | 番茄 | ✅ | ✅ canonical_book_url | ✅ | ✅ | browser/requests/api(oiapi,rain) | 短链 changdunovel.com/t/ 需重定向 |
 | qidian | 起点 | ✅ | ✅ /book/ /info/ | 部分（JS 动态加载） | ✅ | browser/requests | 长 share URL 自动提取 book_id |
 | qimao | 七猫 | ✅ | ✅ /shuku/ | ✅ Rain API (4K+章) | ✅ | browser/requests/api(rain) | search 返回 data.books 格式 |
 | 92xs | 就爱文学 | ✅ | ✅ /book/{id}.html | ✅ | ✅ | requests | GBK→自动检测编码，无 API |
@@ -23,15 +23,26 @@
 NAME = "fanqie"
 SHOW_NAME = "番茄"
 HOSTS = ("fanqienovel.com", "changdunovel.com")
-ID_PATTERN = re.compile(r"^fanqie_(\d{19})$")           # 匹配带前缀 Novel.id
-ORIGIN_ID_PATTERN = re.compile(r"^\d{19}$")             # 匹配去前缀源站原始 ID（Novel.origin_id）
 ```
+
+## Novel.id 生成（2026-08-22 起）
+
+`Novel.id` 不再由各 source 拼接平台前缀，而是由 `resolve_meta()` 中心化生成：
+
+```
+Novel.id = sha256(canonical_book_url(novel.url, platform))[:32]   # 32 位 hex，无前缀
+novel.extra["platform"] = platform                                 # 冗余存平台（hash 不可反推）
+```
+
+- `canonical_book_url(url, platform)`（`novelbase/utils/urls.py`）做通用规范化（小写 scheme/host、去 query/fragment、去尾斜杠）+ 平台别名统一（92xs `/book/{id}.html`→`/html/{id}/`、qidian `/info/{id}/`→`/book/{id}/`）
+- `ID_PATTERN` / `ORIGIN_ID_PATTERN` / `BOOK_URL_TEMPLATE` / `get_source_for_id` 已退役删除（hash 不可逆，无法从 id 反查）；`resolve_book_url` 仅接受 http(s) 输入；`resolve_chapter` 平台识别走 `get_source(chapter.url)`
+- 92xs 章节 id 为 URL 末尾数字段（2026-08-22 起，修复前端路由被 `/` 截断）
 
 ## 目录结构
 
 ```
 sources/{name}/
-├── __init__.py           ← NAME/SHOW_NAME/HOSTS/ID_PATTERN/ORIGIN_ID_PATTERN
+├── __init__.py           ← NAME/SHOW_NAME/HOSTS（ID_PATTERN 等已退役）
 ├── _common.py            ← 平台共享逻辑（签名、解析）
 ├── browser/              ← search/novel_info/chapter_list/chapter_content.py（"default" variant）
 ├── requests/             ← 同上

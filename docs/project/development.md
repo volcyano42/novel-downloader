@@ -7,14 +7,14 @@
 python -c "from novelbase import *; print('OK')"
 
 # CLI 冒烟
-python cli.py source list
+python cli.py sources list
 python cli.py novel list
 
 # 前端编译
-cd services/frontend
+cd frontend
 npx tsc --noEmit --project tsconfig.app.json
 
-# 运行测试（125 passed）
+# 运行测试（280 passed / 2 skipped，2026-08-25 实测）
 python -m pytest tests/ -v --tb=short
 ```
 
