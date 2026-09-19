@@ -7,6 +7,12 @@ cd "$(dirname "$0")/.."
 # 1. 构建前端（frontend 在仓库根下，android/ 的上一级）
 (cd ../frontend && npm ci && npm run build)
 
+# 1b. 生成 Android 依赖清单：Chaquopy 的 pip 块只有 install/options（没有 exclude API），
+#     故改为安装预过滤清单。排除 browser 模式依赖：
+#       playwright（需下载浏览器内核，Android 不可用）、psutil（C 扩展，Android 无 wheel）
+grep -v -E "^(playwright|psutil)" ../requirements.txt > .req-android.txt
+echo "--- Android 依赖清单 ---"; cat .req-android.txt
+
 # 2. 复制 Python 运行时模块进 Chaquopy 打包目录（app/src/main/python/，构建产物不提交 git）
 #    server.py 运行时 import 链：backend.* / shared.* / init_config / template / 前端静态文件
 #    novelbase 通过 build.gradle.kts 的 install("file:../..") 以 pip 包安装，不在此复制
