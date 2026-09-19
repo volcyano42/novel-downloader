@@ -6,10 +6,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
-Push-Location $PSScriptRoot
+$PROJECT_ROOT = Join-Path $PSScriptRoot ".."
+Push-Location $PROJECT_ROOT
 
 try {
-    $distDir = Join-Path $PSScriptRoot "dist"
+    $distDir = Join-Path $PROJECT_ROOT "dist"
     $portableDir = Join-Path $distDir "portable"
     $pythonEmbedDir = Join-Path $portableDir "python"
 

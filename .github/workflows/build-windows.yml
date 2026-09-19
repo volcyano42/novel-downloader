@@ -33,7 +33,7 @@ jobs:
 
       - name: Build (引用 build-portable.ps1)
         timeout-minutes: 90
-        run: powershell -ExecutionPolicy Bypass -File ./build-portable.ps1 -Version ${{ steps.ver.outputs.version }}
+        run: powershell -ExecutionPolicy Bypass -File ./scripts/build-portable.ps1 -Version ${{ steps.ver.outputs.version }}
 
       - name: 校验产物
         shell: pwsh
@@ -83,7 +83,7 @@ jobs:
 
       - name: Build Nuitka
         timeout-minutes: 120
-        run: powershell -ExecutionPolicy Bypass -File ./build-nuitka.ps1 -Version ${{ steps.ver.outputs.version }}
+        run: powershell -ExecutionPolicy Bypass -File ./scripts/build-nuitka.ps1 -Version ${{ steps.ver.outputs.version }}
 
       - name: 校验产物
         shell: pwsh

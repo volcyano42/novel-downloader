@@ -22,8 +22,8 @@ jobs:
 
       - name: Build portable (引用 build-portable.sh)
         run: |
-          chmod +x build-portable.sh
-          ./build-portable.sh --platform linux-arm64 --version ${{ steps.ver.outputs.version }}
+          chmod +x scripts/build-portable.sh
+          ./scripts/build-portable.sh --platform linux-arm64 --version ${{ steps.ver.outputs.version }}
 
       - name: Upload portable
         uses: actions/upload-artifact@v4
