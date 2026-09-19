@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -21,7 +23,9 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = if (rootProject.file("keystore.properties").exists()) {
-                val props = java.util.Properties().apply {
+                // 必须 import java.util.Properties：KTS 里 `java` 是 Project.java 扩展（JavaPluginExtension），
+                // 写 java.util.Properties() 会报 `Unresolved reference: util`
+                val props = Properties().apply {
                     load(rootProject.file("keystore.properties").inputStream())
                 }
                 signingConfigs.create("release") {
