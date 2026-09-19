@@ -1,5 +1,5 @@
 import {BookOpen, Link, Loader2, Search, X} from "lucide-react";
-import {type KeyboardEvent, useEffect, useState} from "react";
+import {type KeyboardEvent, useEffect, useRef, useState} from "react";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
 import {cn} from "@/lib/utils";
 
@@ -49,14 +49,6 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
   const [variant, setVariant] = useState<string | undefined>();
   const [shakeVariant, setShakeVariant] = useState(false);
 
-  // 平台切换时自动切换到支持的模式
-  useEffect(() => {
-    if (!availableModes.includes(mode)) {
-      setMode(availableModes[0] ?? "browser");
-      setVariant(undefined);
-    }
-  }, [platform, tab]);
-
   // 平台选择后，使用该平台支持的模式；全平台用全局列表
   const platModes = platform !== "all" ? (platformModes[platform] ?? engineModes) : engineModes;
   // 标题搜索 + 全部/起点时去掉 API 模式（无 API variant 的平台）
@@ -64,6 +56,19 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
   const hideApiMode = tab === "title" && !hasApiVariant;
   const availableModes = hideApiMode ? platModes.filter(m => m !== "api") : platModes;
   const effectiveMode = availableModes.includes(mode) ? mode : availableModes[0] ?? "browser";
+
+  // 平台/标签切换时，若当前模式不再可用则回退到第一个可用模式。
+  // availableModes 每次渲染都是新数组、不能直接入依赖，故用 ref 读取最新值，
+  // 以保持原触发时机（依赖 mode 会与下面「URL 模式无 API 时切 browser」的 effect 互相覆盖）。
+  const latestModesRef = useRef({ availableModes, mode });
+  latestModesRef.current = { availableModes, mode };
+  useEffect(() => {
+    const { availableModes: modes, mode: current } = latestModesRef.current;
+    if (!modes.includes(current)) {
+      setMode(modes[0] ?? "browser");
+      setVariant(undefined);
+    }
+  }, [platform, tab]);
 
   const trigger = () => {
     const q = query.trim();
@@ -101,15 +106,20 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
     }
   }, [hideApiMode, mode]);
 
-  // 点击搜索历史回填：nonce 变化时同步 keyword + platform + mode + variant（mode 为空默认 requests）
+  // 点击搜索历史回填：只在 nonce 变化时同步一次 keyword + platform + mode + variant
+  // （mode 为空默认 requests）。prefill 是对象、每次渲染可能是新引用，直接入依赖
+  // 会让用户在输入框打字时被反复覆盖，故用 ref 读取最新值。
+  const prefillRef = useRef(prefill);
+  prefillRef.current = prefill;
   useEffect(() => {
-    if (!prefill) return;
-    setQuery(prefill.query);
-    if (prefill.platform) setPlatform(prefill.platform);
-    setMode(prefill.mode || "requests");
+    const p = prefillRef.current;
+    if (!p) return;
+    setQuery(p.query);
+    if (p.platform) setPlatform(p.platform);
+    setMode(p.mode || "requests");
     // 始终同步 variant：历史条目的 variant 为空时清空，避免残留上一次选择的
     // 变体（如 fanqie api 的 rain）与回填的 platform/mode 不匹配
-    setVariant(prefill.variant || undefined);
+    setVariant(p.variant || undefined);
   }, [prefill?.nonce]);
 
   const clear = () => {
@@ -139,13 +149,13 @@ export function SearchBar({ onSearch, platforms = [], engineModes = [], platform
   const urlEffectiveMode = urlModes.includes(mode) ? mode : urlModes[0] ?? "browser";
   const urlVariants = urlVariantsByMode[urlEffectiveMode] ?? [];
 
-  // URL 模式无 API 时自动切 browser
+  // URL 模式无 API 时自动切 browser；urlHideApi 是布尔值，可安全入依赖
   useEffect(() => {
     if (tab === "url" && urlHideApi && mode === "api") {
       setMode("browser");
       setVariant(undefined);
     }
-  }, [tab, effectiveUrlPlatform, mode]);
+  }, [tab, effectiveUrlPlatform, mode, urlHideApi]);
 
   return (
     <div className="flex flex-col gap-3">

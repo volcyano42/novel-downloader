@@ -23,7 +23,7 @@ import {
     useSiteConfig,
     useSources
 } from "@/hooks/index";
-import {useToast} from "@/components/Toast";
+import {useToast} from "@/components/toast-context";
 import type {GlobalConfig, SiteConfig} from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {

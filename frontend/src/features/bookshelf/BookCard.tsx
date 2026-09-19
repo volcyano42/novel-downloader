@@ -3,7 +3,7 @@ import {BookOpen, FileDown, Folder, FolderPlus, Heart, MoreHorizontal, Trash2} f
 import {cn} from "@/lib/utils";
 import {useExport, useFavorites, useGroups, useSaveGroups, useToggleFavorite} from "@/hooks/index";
 import {ExportDialog} from "@/features/download/ExportDialog";
-import {useToast} from "@/components/Toast";
+import {useToast} from "@/components/toast-context";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -111,7 +111,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
       toast(`导出失败：${(e as Error).message || "网络错误"}`, "error");
     }
     finally { setExporting(false); setShowExport(false); }
-  }, [novelId, exporting, exportMut, toast]);
+  }, [novelId, exporting, exportMut, toast, title]);
 
   const handleDelete = useCallback(() => {
     if (!novelId) return;

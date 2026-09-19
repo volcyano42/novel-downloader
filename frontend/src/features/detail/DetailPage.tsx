@@ -19,7 +19,7 @@ import {
 } from "@/api/endpoints";
 import {DownloadDialog} from "@/features/download/DownloadDialog";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
-import {useToast} from "@/components/Toast";
+import {useToast} from "@/components/toast-context";
 import {SessionCache} from "@/utils/sessionCache";
 import {getCachedChapters, setCachedChapters} from "@/utils/chapterCache";
 
@@ -133,7 +133,7 @@ export default function DetailPage() {
       ac.signal,
     );
     return () => ac.abort();
-  }, [novelId, showLocal]);
+  }, [novelId, showLocal, isRemote]);
 
   // 章节缓存：流完成后写回 sessionStorage
   useEffect(() => {
@@ -143,7 +143,10 @@ export default function DetailPage() {
     }
   }, [novelId, showLocal, streaming, localChapters]);
 
-  const remoteMerged = isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : [];
+  const remoteMerged = useMemo(
+    () => (isRemote && remoteChapters ? compareChapters(remoteChapters, localChapters) : []),
+    [isRemote, remoteChapters, localChapters],
+  );
   const merged = compareMode && checkMerged ? checkMerged : remoteMerged;
   const chapters = isRemote ? [] : localChapters;
   const showCompare = isRemote || compareMode;

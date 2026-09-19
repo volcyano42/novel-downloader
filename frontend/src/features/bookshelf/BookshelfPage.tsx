@@ -8,7 +8,7 @@ import {SearchHistoryPanel} from "./SearchHistoryPanel";
 import {SearchResultCard} from "./SearchResultCard";
 import {DownloadTask, DownloadTaskSkeleton} from "@/features/download/DownloadTask";
 import {SettingsView} from "@/features/settings/SettingsPage";
-import {useToast} from "@/components/Toast";
+import {useToast} from "@/components/toast-context";
 import {
   useAddSearchHistory,
   useDeleteNovel,

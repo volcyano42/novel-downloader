@@ -1,10 +1,8 @@
-import {createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState} from "react";
+import {type ReactNode, useCallback, useEffect, useRef, useState} from "react";
 import {AlertTriangle, CheckCircle, Info as InfoIcon, X, XCircle} from "lucide-react";
-
-type ToastLevel = "success" | "info" | "warning" | "error";
+import {ToastCtx, type ToastLevel} from "./toast-context";
 
 interface Toast { id: number; message: string; level: ToastLevel; createdAt: number; }
-interface ToastCtx { addToast: (msg: string, level?: ToastLevel) => void; }
 
 const DURATION = 4000;
 const MAX_VISIBLE = 4;
@@ -15,12 +13,6 @@ const levelStyles: Record<ToastLevel, { bg: string; border: string; text: string
   warning: { bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-700", icon: AlertTriangle },
   error:   { bg: "bg-red-50",   border: "border-red-200",   text: "text-red-700",   icon: XCircle },
 };
-
-const ToastCtx = createContext<ToastCtx>({ addToast: () => {} });
-
-export function useToast() {
-  return useContext(ToastCtx).addToast;
-}
 
 function ToastItem({ t, onDone }: { t: Toast; onDone: (id: number) => void }) {
   const style = levelStyles[t.level];

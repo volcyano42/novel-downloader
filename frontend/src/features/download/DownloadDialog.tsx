@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {Download, Globe, Loader2, Monitor, RefreshCw, Zap} from "lucide-react";
 import {cn} from "@/lib/utils";
 
@@ -26,22 +26,32 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
   const [variant, setVariant] = useState(initialVariant ?? "");
   const [loading, setLoading] = useState(false);
   const [shakeVariant, setShakeVariant] = useState(false);
+  // 本次打开是否已同步过初始值
+  const syncedRef = useRef(false);
 
   const variants = variantsByMode[mode] ?? [];
   const modes = (availableModes && availableModes.length > 0) ? availableModes : ["browser", "requests", "api"];
   const hasApiVariant = (variantsByMode["api"] ?? []).length > 0;
   const visibleModes = hasApiVariant ? modes : modes.filter(m => m !== "api");
 
+  // visibleModes / variantsByMode 每次渲染都是新引用，不能直接当依赖：
+  // 否则 effect 每次渲染都执行，会把用户刚点的 mode 重置回初始值（表现为「一点就弹回」）。
+  // 只在「刚打开」或「当前模式已被移除」时同步，其余情况保留用户的选择。
   useEffect(() => {
-    if (open) {
-      const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
-      setMode(defaultMode);
-      const defaultVariants = variantsByMode[defaultMode] ?? [];
-      setVariant(initialVariant ?? (defaultVariants.length > 0 ? defaultVariants[0] : ""));
-      setLoading(false);
-      setShakeVariant(false);
+    if (!open) {
+      syncedRef.current = false;
+      return;
     }
-  }, [open, initialMode, initialVariant, visibleModes, variantsByMode]);
+    const modeRemoved = visibleModes.length > 0 && !visibleModes.includes(mode);
+    if (syncedRef.current && !modeRemoved) return;
+    syncedRef.current = true;
+    const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
+    setMode(defaultMode);
+    const defaultVariants = variantsByMode[defaultMode] ?? [];
+    setVariant(initialVariant ?? (defaultVariants.length > 0 ? defaultVariants[0] : ""));
+    setLoading(false);
+    setShakeVariant(false);
+  }, [open, mode, initialMode, initialVariant, visibleModes, variantsByMode]);
 
   const handleStart = () => {
     // 多 variant 未选 → 抖动拦截（单 variant 自动选，不校验）
