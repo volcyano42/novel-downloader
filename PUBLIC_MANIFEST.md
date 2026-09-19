@@ -11,6 +11,8 @@
 - `novelbase/**`
   - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/rain/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
   - 保留：`novelbase/sources/fanqie/api/oiapi/**`、`novelbase/sources/fanqie/browser/**`、`novelbase/sources/fanqie/requests/**`
+
+> **机器可读清单**：全部排除项（白名单内排除 + 红名单工具项）以 `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude` 为唯一数据源，`check_public.py` 从此读取，本文件的排除列表需与其保持一致。
 - `backend/**`
 - `frontend/**`
   - **排除**：`frontend/node_modules/**`、`frontend/dist/**`
@@ -29,13 +31,13 @@
 
 - `README.md`
 - `LICENSE`
-- `pyproject.toml`
+- ~~`pyproject.toml`~~（不迁移：版本元数据由 public 自行维护，不在迁移清单内）
 - `requirements.txt`
 - ~~`CHANGELOG.md`~~（不迁移：公开仓库 changelog 从 1.0.0 空开始）
 
 ## 迁移规则
 
-- **版本号改写**：迁移后 `novelbase/__init__.py` 的 `__version__` 必须与 `pyproject.toml` 的 `version` 一致（public 当前 1.0.0）；`check_public.py` 防线 4 会校验，不一致报 `[版本]` 错误
+- **版本号**：`pyproject.toml` 不迁移，public 的版本由 `novelbase/__init__.py` 的 `__version__` 与 public 自行维护的 `pyproject.toml` 决定；迁移时无需改写版本号
 
 ### 文档
 
