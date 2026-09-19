@@ -8,9 +8,15 @@ cd "$(dirname "$0")/.."
 (cd ../frontend && npm ci && npm run build)
 
 # 1b. 生成 Android 依赖清单：Chaquopy 的 pip 块只有 install/options（没有 exclude API），
-#     故改为安装预过滤清单。排除 browser 模式依赖：
-#       playwright（需下载浏览器内核，Android 不可用）、psutil（C 扩展，Android 无 wheel）
-grep -v -E "^(playwright|psutil)" ../requirements.txt > .req-android.txt
+#     故安装「预过滤 + 版本固定」的清单：
+#       - 排除 playwright（需下载浏览器内核）、psutil（C 扩展）、pillow-heif（Chaquopy 仓库无 wheel）
+#       - pin 到 chaquo.com/pypi-13.1 里存在 cp311/arm64 wheel 的版本（否则 pip 取 PyPI sdist 编译失败）
+#       - uvicorn[standard] 的 C/Rust extras（httptools/uvloop/watchfiles）不可用 → 用纯 uvicorn
+#       - 追加 pydantic<2：pydantic-core 是 Rust 扩展、无 Android wheel（Chaquopy 官方建议 v1）
+grep -v -E "^(playwright|psutil|pillow-heif)" ../requirements.txt \
+  | sed -E 's/^uvicorn\[standard\].*/uvicorn/; s/^lxml$/lxml==5.3.0/; s/^Pillow$/Pillow==11.0.0/; s/^yarl$/yarl==1.9.3/; s/^PyYAML$/PyYAML==6.0.3/' \
+  > .req-android.txt
+echo "pydantic<2" >> .req-android.txt
 echo "--- Android 依赖清单 ---"; cat .req-android.txt
 
 # 2. 复制 Python 运行时模块进 Chaquopy 打包目录（app/src/main/python/，构建产物不提交 git）
