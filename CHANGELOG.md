@@ -1,5 +1,24 @@
 # 更新日志
 
+## v4.4.1
+
+### 修复
+
+1. **前端 hooks 依赖缺陷** — `DownloadDialog` 初始化 effect 依赖每次渲染都重建的 `visibleModes`/`variantsByMode`，父组件重渲染会把刚选中的模式重置回初始值（点 API 后界面闪回 browser）：改为仅在对话框打开时同步一次。`BookCard` 导出文件名 `useCallback` 缺 `title` 依赖；`DetailPage` 章节流 effect 缺 `isRemote` 依赖；`SearchBar` URL 模式漏 `urlHideApi` 依赖
+2. **`build-nuitka.sh` Linux 构建修正** — 去掉 `--static-libpython=yes`（标准发行版 Python 无静态 libpython，该参数在 Linux 必失败；onefile 会自动打包动态库），并补 `patchelf` 预检与安装提示
+3. **构建脚本/workflow 适配 `scripts/` 目录** — `build-portable.ps1` 改用 `$PROJECT_ROOT`（`$PSScriptRoot/..`）解析仓库根与 `dist/`；`build-windows.yml`、`build-linux-x64.yml`、`build-linux-arm64.yml` 的脚本调用补 `scripts/` 前缀
+
+### 重构
+
+1. **workflow 分层：Windows portable 与 Nuitka 拆开** — Nuitka onefile 从 `build-windows.yml` 拆出为独立 `build-windows-nuitka.yml`（仅 `workflow_dispatch` 手动触发），`build-windows.yml` 只保留 portable；两种产物不再共用一个 workflow。`build-dist.yml` 行为不变（仍是一键全平台 portable）
+2. **迁移校验唯一数据源** — 非迁移文件清单改由私有仓库 `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude` 提供，`check_public.py` 不再硬编码排除项，并移除版本一致性防线（public 版本号自维护、`pyproject.toml` 不再迁移）；`PUBLIC_MANIFEST.md` 同步
+3. **前端非组件导出拆分** — 拆出 `toast-context.ts` 与 `button-variants.ts`，修复 Vite Fast Refresh 失效（改该文件时整页刷新而非热更新）
+
+### 变更
+
+1. **文档维护边界** — 私有仓库不再维护 `README.md`/`CONTRIBUTING.md`/`docs/add_source.md`（由公开仓库 `novel-crawler` 维护），`pyproject.toml` 同步去掉 `readme` 声明；`cli.py`/`cli/interactive.py` 文案与公开仓库对齐
+2. **删除遗留 PyPI 上传脚本** `build-pypi.ps1`/`build-pypi.sh`
+
 ## v4.4.0
 
 ### 新增
