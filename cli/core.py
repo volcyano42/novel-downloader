@@ -208,12 +208,10 @@ async def _do_download_inner(
 # ── Update ───────────────────────────────────────────
 
 
-async def do_update(format_configs: dict, max_workers: int = 3,
-                    mode: str | None = None, variant: str | None = None):
+async def do_update(format_configs: dict, max_workers: int = 3):
     """非交互更新：全部已下载小说更新到最新章节。
 
-    mode/variant：更新引擎的创建参数（如 --mode api --variant oiapi）；
-    None 时按每本小说平台使用 config 默认引擎。
+    按每本小说的 `source_name` 建引擎；无法确定书源的旧书跳过并提示。
     """
     import asyncio
     from cli.config import get_novel_group
