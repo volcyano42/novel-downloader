@@ -9,10 +9,8 @@ router = APIRouter(prefix="/api/v2/history", tags=["history"])
 
 
 class SearchHistoryAddRequest(BaseModel):
-    platform: str = ""
+    source_name: str = ""
     keyword: str
-    mode: str = ""
-    variant: str = ""
 
 
 def _date_label(d: date) -> str:
@@ -45,9 +43,7 @@ async def get_search_history(limit: int = 50):
             grouped.append(current)
         current["items"].append({
             "id": row["id"],
-            "platform": row.get("platform") or "",
-            "mode": row.get("mode") or "",
-            "variant": row.get("variant") or "",
+            "source_name": row.get("source_name") or "",
             "keyword": row.get("keyword") or "",
             "searched_at": searched_at,
         })
@@ -61,7 +57,7 @@ async def add_search_history(body: SearchHistoryAddRequest):
         raise HTTPException(400, "搜索关键词不能为空")
     from shared.user_data import add_search_history as _add
 
-    _add(body.platform, keyword, body.mode, body.variant)
+    _add(body.source_name, keyword)
     return {"status": "ok"}
 
 

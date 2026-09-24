@@ -31,8 +31,8 @@ def test_search_history_add_get_delete(tmp_path, monkeypatch):
 
     assert user_data.get_search_history() == []
 
-    user_data.add_search_history("fanqie", "斗破苍穹")
-    user_data.add_search_history("qidian", "凡人修仙传")
+    user_data.add_search_history("fanqie-api-rain", "斗破苍穹")
+    user_data.add_search_history("qidian-browser-default", "凡人修仙传")
     rows = user_data.get_search_history()
     assert len(rows) == 2
     # 同秒插入时 searched_at 相同、顺序不确定，只断言集合
@@ -48,46 +48,29 @@ def test_search_history_add_get_delete(tmp_path, monkeypatch):
     assert rows[0]["id"] != target_id  # 剩下的是未被删的那条
 
 
-def test_search_history_dedup_same_key_upsert(tmp_path, monkeypatch):
-    """同键 (platform, keyword, mode, variant) 重复添加不新增行，只更新 searched_at。"""
-    db = tmp_path / "user_data.db"
-    monkeypatch.setattr(user_data, "DB_PATH", db)
+def test_search_history_uses_source_name(tmp_path, monkeypatch):
+    """唯一键 (source_name, keyword)：同书源同词 upsert，不同书源各自保留。"""
+    from shared import user_data
+
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
     monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
-
-    user_data.add_search_history("fanqie", "斗破苍穹", "api", "rain")
-    user_data.add_search_history("fanqie", "斗破苍穹", "api", "rain")
+    user_data.add_search_history("fanqie-api-rain", "斗破")
+    user_data.add_search_history("fanqie-api-rain", "斗破")  # 同键 upsert
+    user_data.add_search_history("92xs-requests-default", "斗破")
     rows = user_data.get_search_history()
-    assert len(rows) == 1
-    assert rows[0]["mode"] == "api"
-    assert rows[0]["variant"] == "rain"
-    assert rows[0]["keyword"] == "斗破苍穹"
+    assert len(rows) == 2
+    assert {r["source_name"] for r in rows} == {"fanqie-api-rain", "92xs-requests-default"}
+    assert "mode" not in rows[0] and "variant" not in rows[0] and "platform" not in rows[0]
 
 
-def test_search_history_dedup_mode_variant_distinct(tmp_path, monkeypatch):
-    """不同 mode/variant 的相同关键词各自保留一条。"""
-    db = tmp_path / "user_data.db"
-    monkeypatch.setattr(user_data, "DB_PATH", db)
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
-
-    user_data.add_search_history("fanqie", "斗破苍穹", "api", "rain")
-    user_data.add_search_history("fanqie", "斗破苍穹", "api", "oiapi")
-    user_data.add_search_history("fanqie", "斗破苍穹", "browser", "")
-    rows = user_data.get_search_history()
-    assert len(rows) == 3
-    assert {(r["mode"], r["variant"]) for r in rows} == {
-        ("api", "rain"), ("api", "oiapi"), ("browser", ""),
-    }
-
-
-def test_search_history_migration_old_db(tmp_path, monkeypatch):
-    """旧库（无 mode/variant 列）迁移：加列、fanqie 填 api/rain、其余留空、清理重复、唯一索引生效。"""
+def test_search_history_old_schema_dropped_rebuilt(tmp_path, monkeypatch):
+    """旧库（含 platform 列）打开时 drop 重建为空的新表（不迁移旧数据）。"""
     import sqlite3
 
     db = tmp_path / "user_data.db"
     monkeypatch.setattr(user_data, "DB_PATH", db)
     monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
 
-    # 预置旧版表结构 + 数据（fanqie 两条重复）
     conn = sqlite3.connect(str(db))
     conn.executescript("""
         CREATE TABLE search_history (
@@ -96,38 +79,16 @@ def test_search_history_migration_old_db(tmp_path, monkeypatch):
             keyword      TEXT NOT NULL,
             searched_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
         );
-        INSERT INTO search_history(platform, keyword) VALUES ('fanqie', '斗破苍穹');
-        INSERT INTO search_history(platform, keyword) VALUES ('fanqie', '斗破苍穹');
-        INSERT INTO search_history(platform, keyword) VALUES ('qidian', '凡人修仙传');
+        INSERT INTO search_history(platform, keyword) VALUES ('fanqie', '斗破');
     """)
     conn.commit()
     conn.close()
 
-    rows = user_data.get_search_history()  # 触发 _connection → _ensure_schema 迁移
-    fanqie_rows = [r for r in rows if r["platform"] == "fanqie"]
-    qidian_rows = [r for r in rows if r["platform"] == "qidian"]
-    assert len(fanqie_rows) == 1, "fanqie 重复记录应被清理为一条"
-    assert fanqie_rows[0]["mode"] == "api"
-    assert fanqie_rows[0]["variant"] == "rain"
-    assert len(qidian_rows) == 1
-    assert qidian_rows[0]["mode"] == ""
-    assert qidian_rows[0]["variant"] == ""
+    # 首次连接触发 drop 重建，旧数据不保留
+    assert user_data.get_search_history() == []
 
-    # 唯一索引生效：同键写入走 UPSERT，不新增行
-    user_data.add_search_history("fanqie", "斗破苍穹", "api", "rain")
-    assert len(user_data.get_search_history()) == 2
-
-
-def test_search_history_migration_guard_keeps_new_records(tmp_path, monkeypatch):
-    """PRAGMA user_version 一次性守卫：迁移只执行一次，迁移后写入的 fanqie mode='' 记录不被改写。"""
-    db = tmp_path / "user_data.db"
-    monkeypatch.setattr(user_data, "DB_PATH", db)
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
-
-    user_data.get_search_history()  # 首次连接触发迁移
-    user_data.add_search_history("fanqie", "凡人修仙传", "")  # 迁移后写入的新记录（mode=''）
-    rows = user_data.get_search_history()  # 再次触发连接
-    fanqie = [r for r in rows if r["platform"] == "fanqie"]
-    assert len(fanqie) == 1
-    assert fanqie[0]["mode"] == ""
-    assert fanqie[0]["variant"] == ""
+    # 新表可用且唯一键为 (source_name, keyword)
+    user_data.add_search_history("fanqie-api-rain", "斗破")
+    rows = user_data.get_search_history()
+    assert len(rows) == 1
+    assert rows[0]["source_name"] == "fanqie-api-rain"

@@ -43,11 +43,10 @@ _SCHEMA_SQL = """
 
     CREATE TABLE IF NOT EXISTS search_history (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        platform     TEXT NOT NULL,
-        mode         TEXT NOT NULL DEFAULT '',
-        variant      TEXT NOT NULL DEFAULT '',
+        source_name  TEXT NOT NULL,
         keyword      TEXT NOT NULL,
-        searched_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        searched_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        UNIQUE(source_name, keyword)
     );
     CREATE INDEX IF NOT EXISTS idx_search_history_time
         ON search_history(searched_at DESC);
@@ -68,55 +67,20 @@ _SCHEMA_SQL = """
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """建表 + 迁移 groups.yaml。"""
     # ── 建表 ──
+    # 旧库（按 platform/mode/variant 存）不迁移：检出旧列 platform 时整表 drop，
+    # 由 executescript 按新 (source_name, keyword) 结构重建（一次性，见 spec §7）。
+    old_cols = {r[1] for r in conn.execute("PRAGMA table_info(search_history)")}
+    if "platform" in old_cols:
+        conn.execute("DROP TABLE search_history")
+        conn.commit()
     conn.executescript(_SCHEMA_SQL)
     conn.commit()
-
-    # ── 迁移 search_history（加列 / fanqie 填充 / 去重 / 唯一索引）──
-    _migrate_search_history(conn)
 
     # ── 迁移 groups.yaml → groups 表（仅首次，表为空且 yaml 存在时）──
     cur = conn.execute("SELECT COUNT(*) FROM groups")
     if cur.fetchone()[0] == 0 and GROUPS_YAML.exists():
         _log.info("migrating groups.yaml → user_data.db")
         _migrate_groups_yaml(conn)
-
-
-def _migrate_search_history(conn: sqlite3.Connection) -> None:
-    """search_history 迁移：加列 → fanqie 填充 → 清理重复 → 唯一索引。
-
-    PRAGMA user_version 一次性守卫：迁移只执行一次；之后连接直接跳过，
-    避免 UPDATE 反复改写迁移后写入的 fanqie mode='' 新记录。
-    """
-    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
-        return
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(search_history)")}
-    if "mode" not in cols:
-        conn.execute("ALTER TABLE search_history ADD COLUMN mode TEXT NOT NULL DEFAULT ''")
-    if "variant" not in cols:
-        conn.execute("ALTER TABLE search_history ADD COLUMN variant TEXT NOT NULL DEFAULT ''")
-    # 旧数据无 mode 信息：fanqie 按 api 模式处理（主 variant rain），其余平台留空
-    conn.execute(
-        "UPDATE search_history SET mode = 'api', variant = 'rain' "
-        "WHERE platform = 'fanqie' AND mode = ''"
-    )
-    # 清理重复：每组保留 searched_at 最新（并列取 id 最大）一条
-    conn.execute("""
-        DELETE FROM search_history WHERE id NOT IN (
-            SELECT id FROM (
-                SELECT id, ROW_NUMBER() OVER (
-                    PARTITION BY platform, keyword, mode, variant
-                    ORDER BY searched_at DESC, id DESC
-                ) AS rn FROM search_history
-            ) WHERE rn = 1
-        )
-    """)
-    conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_search_history_dedup "
-        "ON search_history(platform, keyword, mode, variant)"
-    )
-    # 标记迁移完成（随本事务提交生效；异常回滚则下次可重试）
-    conn.execute("PRAGMA user_version = 1")
-    conn.commit()
 
 
 def _migrate_groups_yaml(conn: sqlite3.Connection) -> None:
@@ -243,14 +207,14 @@ def is_favorite(novel_id: str) -> bool:
 
 # ═══════════════════════════════ Search History ═══════════════════════════════
 
-def add_search_history(platform: str, keyword: str, mode: str = "", variant: str = "") -> None:
+def add_search_history(source_name: str, keyword: str) -> None:
     conn = _connection()
     conn.execute(
-        """INSERT INTO search_history(platform, keyword, mode, variant, searched_at)
-           VALUES (?, ?, ?, ?, datetime('now','localtime'))
-           ON CONFLICT(platform, keyword, mode, variant)
+        """INSERT INTO search_history(source_name, keyword, searched_at)
+           VALUES (?, ?, datetime('now','localtime'))
+           ON CONFLICT(source_name, keyword)
            DO UPDATE SET searched_at = datetime('now','localtime')""",
-        (platform, keyword, mode, variant),
+        (source_name, keyword),
     )
     conn.commit()
 

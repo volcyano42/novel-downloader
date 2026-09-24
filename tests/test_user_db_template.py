@@ -59,14 +59,10 @@ def test_template_schema_matches_runtime():
     """模板库 schema 与运行时一致（结构级：列 + 索引 + user_version，防止漂移）"""
     import tempfile
 
-    from shared.user_data import _migrate_search_history
-
     with tempfile.TemporaryDirectory() as td:
         runtime_db = f"{td}/runtime.db"
         conn = sqlite3.connect(runtime_db)
-        conn.row_factory = sqlite3.Row  # _migrate_search_history 依赖 r["name"]
-        conn.executescript(_SCHEMA_SQL)
-        _migrate_search_history(conn)  # 与 _connection() 首次初始化后的状态一致
+        conn.executescript(_SCHEMA_SQL)  # 与 _connection() 首次初始化后的状态一致
         conn.close()
         assert _schema_sql(runtime_db) == _schema_sql(_template_db())
         assert _user_version(runtime_db) == _user_version(_template_db())
