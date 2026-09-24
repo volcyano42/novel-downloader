@@ -5,7 +5,7 @@ import {useDeleteSearchHistory, useSearchHistory} from "@/hooks/index";
 
 interface SearchHistoryPanelProps {
   /** 点击历史条目（非删除模式）：回填搜索框，不自动搜索 */
-  onPick: (item: { platform: string; keyword: string; mode?: string; variant?: string }) => void;
+  onPick: (item: { source_name: string; keyword: string }) => void;
 }
 
 export function SearchHistoryPanel({ onPick }: SearchHistoryPanelProps) {
@@ -41,13 +41,11 @@ export function SearchHistoryPanel({ onPick }: SearchHistoryPanelProps) {
               {g.items.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => (deleteMode ? deleteMut.mutate(item.id) : onPick({ platform: item.platform, keyword: item.keyword, mode: item.mode, variant: item.variant }))}
+                  onClick={() => (deleteMode ? deleteMut.mutate(item.id) : onPick({ source_name: item.source_name, keyword: item.keyword }))}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   <span className="truncate flex-1">{item.keyword}</span>
-                  {item.platform && <span className="shrink-0 text-[10px] text-slate-300">{item.platform}</span>}
-                  {item.mode && <span className="shrink-0 text-[10px] text-slate-300">{item.mode}</span>}
-                  {item.variant && <span className="shrink-0 text-[10px] text-slate-300">{item.variant}</span>}
+                  {item.source_name && <span className="shrink-0 text-[10px] text-slate-300">{item.source_name}</span>}
                 </button>
               ))}
             </div>

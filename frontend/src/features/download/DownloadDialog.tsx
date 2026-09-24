@@ -1,67 +1,37 @@
-import {useEffect, useRef, useState} from "react";
-import {Download, Globe, Loader2, Monitor, RefreshCw, Zap} from "lucide-react";
+import {useEffect, useState} from "react";
+import {Download, Globe, Loader2, RefreshCw} from "lucide-react";
 import {cn} from "@/lib/utils";
 
 interface DownloadDialogProps {
   open: boolean; onClose: () => void;
   novelTitle: string; chapterCount: number;
   dialogMode?: "download" | "check";
-  initialMode?: string;
-  initialVariant?: string;
-  availableModes?: string[];
-  variantsByMode?: Record<string, string[]>;
-  onStart: (mode: string, variant?: string) => void;
+  /** 可选书源名列表（来自 `/download/sources`） */
+  sources?: string[];
+  /** 默认选中的书源 */
+  initialSource?: string;
+  onStart: (source: string) => void;
 }
 
-const MODE_ICONS: Record<string, typeof Monitor> = { browser: Monitor, requests: Globe, api: Zap };
-const MODE_LABELS: Record<string, string> = { browser: "Browser", requests: "Requests", api: "API" };
-const MODE_DESCS: Record<string, string> = {
-  browser: "模拟浏览器，最稳定",
-  requests: "直接 HTTP 请求，最快",
-  api: "第三方接口",
-};
-
-export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialogMode = "download", initialMode, initialVariant, availableModes, variantsByMode = {}, onStart }: DownloadDialogProps) {
-  const [mode, setMode] = useState(initialMode ?? "browser");
-  const [variant, setVariant] = useState(initialVariant ?? "");
+export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialogMode = "download", sources = [], initialSource, onStart }: DownloadDialogProps) {
+  const [source, setSource] = useState(initialSource ?? sources[0] ?? "");
   const [loading, setLoading] = useState(false);
-  const [shakeVariant, setShakeVariant] = useState(false);
-  // 本次打开是否已同步过初始值
-  const syncedRef = useRef(false);
 
-  const variants = variantsByMode[mode] ?? [];
-  const modes = (availableModes && availableModes.length > 0) ? availableModes : ["browser", "requests", "api"];
-  const hasApiVariant = (variantsByMode["api"] ?? []).length > 0;
-  const visibleModes = hasApiVariant ? modes : modes.filter(m => m !== "api");
-
-  // visibleModes / variantsByMode 每次渲染都是新引用，不能直接当依赖：
-  // 否则 effect 每次渲染都执行，会把用户刚点的 mode 重置回初始值（表现为「一点就弹回」）。
-  // 只在「刚打开」或「当前模式已被移除」时同步，其余情况保留用户的选择。
+  // 打开时同步一次：保留仍在列表中的当前选择，否则回退到 initialSource / 第一项。
   useEffect(() => {
-    if (!open) {
-      syncedRef.current = false;
-      return;
-    }
-    const modeRemoved = visibleModes.length > 0 && !visibleModes.includes(mode);
-    if (syncedRef.current && !modeRemoved) return;
-    syncedRef.current = true;
-    const defaultMode = initialMode && visibleModes.includes(initialMode) ? initialMode : visibleModes[0] ?? "browser";
-    setMode(defaultMode);
-    const defaultVariants = variantsByMode[defaultMode] ?? [];
-    setVariant(initialVariant ?? (defaultVariants.length > 0 ? defaultVariants[0] : ""));
+    if (!open) return;
+    setSource(prev => {
+      if (prev && sources.includes(prev)) return prev;
+      if (initialSource && sources.includes(initialSource)) return initialSource;
+      return sources[0] ?? "";
+    });
     setLoading(false);
-    setShakeVariant(false);
-  }, [open, mode, initialMode, initialVariant, visibleModes, variantsByMode]);
+  }, [open, initialSource, sources]);
 
   const handleStart = () => {
-    // 多 variant 未选 → 抖动拦截（单 variant 自动选，不校验）
-    if (variants.length > 1 && !variant) {
-      setShakeVariant(true);
-      setTimeout(() => setShakeVariant(false), 400);
-      return;
-    }
+    if (!source) return;
     setLoading(true);
-    onStart(mode, variant || undefined);
+    onStart(source);
   };
 
   if (!open) return null;
@@ -73,55 +43,29 @@ export function DownloadDialog({ open, onClose, novelTitle, chapterCount, dialog
         <h2 className="text-base font-semibold text-slate-800 mb-1">{dialogMode === "check" ? "检查更新设置" : "下载设置"}</h2>
         <p className="text-xs text-slate-500 mb-4 truncate">{dialogMode === "check" ? novelTitle : `${novelTitle} · ${chapterCount} 章`}</p>
 
+        <p className="text-[11px] text-slate-400 mb-2">选择书源</p>
         <div className="space-y-2 mb-4">
-          {visibleModes.map(id => {
-            const Icon = MODE_ICONS[id] ?? Globe;
-            return (
-              <button key={id} onClick={() => { setMode(id); setVariant((variantsByMode[id] ?? [])[0] ?? ""); }}
-                className={cn(
-                  "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                  mode === id
-                    ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
-                    : "border-white/20 bg-white/60 hover:border-slate-200"
-                )}>
-                <Icon className={cn("h-5 w-5 shrink-0", mode === id ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
-                <div className="min-w-0 flex-1">
-                  <span className={cn("text-sm font-medium", mode === id ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{MODE_LABELS[id] ?? id}</span>
-                  <p className="text-[11px] text-slate-400">{MODE_DESCS[id] ?? ""}</p>
-                </div>
-              </button>
-            );
-          })}
+          {sources.map(name => (
+            <button key={name} onClick={() => setSource(name)}
+              className={cn(
+                "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                source === name
+                  ? "border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/15"
+                  : "border-white/20 bg-white/60 hover:border-slate-200"
+              )}>
+              <Globe className={cn("h-5 w-5 shrink-0", source === name ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
+              <span className={cn("text-sm font-medium truncate", source === name ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{name}</span>
+            </button>
+          ))}
+          {sources.length === 0 && <p className="py-2 text-xs text-slate-400">无可用书源，请在设置中启用书源</p>}
         </div>
-
-      {variants.length > 1 && (
-        <div className={cn(
-          "mb-4 rounded-xl border px-4 py-3 transition-colors",
-          shakeVariant
-            ? "border-red-300 bg-red-50 animate-shake"
-            : "border-indigo-200 bg-indigo-50/50"
-        )}>
-          <p className="text-[11px] text-slate-400 mb-2">{mode === "api" ? "选择提供商" : "选择变体"}</p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {variants.map(p => (
-              <span key={p} onClick={() => { setVariant(prev => prev === p ? "" : p); }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors",
-                  variant === p
-                    ? "bg-indigo-500 text-white"
-                    : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
-                )}>{p}</span>
-            ))}
-          </div>
-        </div>
-      )}
 
         <div className="flex gap-2">
           <button onClick={onClose}
             className="flex-1 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
             取消
           </button>
-          <button onClick={handleStart} disabled={loading}
+          <button onClick={handleStart} disabled={loading || !source}
             className="flex-1 rounded-xl bg-indigo-500 text-white py-2.5 text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} /> : dialogMode === "check" ? <RefreshCw className="h-4 w-4" strokeWidth={2} /> : <Download className="h-4 w-4" strokeWidth={2} />}
             {loading ? "启动中..." : dialogMode === "check" ? "开始检查" : `开始下载 (${chapterCount}章)`}

@@ -4,7 +4,6 @@ import {BookOpen, ChevronDown, ChevronLeft, Download, ExternalLink, Image, Refre
 import {
     compareChapters,
     useDownloadMutation,
-    useGlobalConfig,
     useNovelMeta,
     useRemoteChapters,
     useSources
@@ -20,17 +19,7 @@ import {
 import {DownloadDialog} from "@/features/download/DownloadDialog";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import {useToast} from "@/components/toast-context";
-import {SessionCache} from "@/utils/sessionCache";
 import {getCachedChapters, setCachedChapters} from "@/utils/chapterCache";
-
-function platformFromUrl(url?: string): string {
-  if (!url) return "fanqie";
-  if (url.includes("fanqienovel.com") || url.includes("changdunovel.com")) return "fanqie";
-  if (url.includes("qidian.com")) return "qidian";
-  if (url.includes("qimao.com")) return "qimao";
-  if (url.includes("92xs.info")) return "92xs";
-  return "fanqie";
-}
 
 interface MergedChapter {
   remote: ChapterBrief;
@@ -41,30 +30,19 @@ export default function DetailPage() {
   const { novelId } = useParams<{ novelId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const st = location.state as { remoteUrl?: string; searchMode?: string; searchVariant?: string; meta?: NovelMeta } | null;
+  const st = location.state as { remoteUrl?: string; source?: string; meta?: NovelMeta } | null;
   const remoteUrl = st?.remoteUrl;
-  const searchMode = st?.searchMode ?? "browser";
-  const searchVariant = st?.searchVariant;
+  const source = st?.source;
   const toast = useToast();
 
   const { data: localMeta, isLoading: metaLoading } = useNovelMeta(novelId);
   // 有 state 中的 remoteUrl，或本地 meta 404（小说未下载）→ 远程模式
   const isRemote = !!remoteUrl || (!metaLoading && !localMeta);
-  // 远程模式缺 URL 时从 novelId 推断（纯数字 ID → 番茄）
-  const effectiveRemoteUrl = remoteUrl || (isRemote && /^\d+$/.test(novelId!) ? `https://fanqienovel.com/page/${novelId}` : undefined);
-  const plat = platformFromUrl(st?.meta?.url ?? effectiveRemoteUrl ?? localMeta?.url);
+  const effectiveRemoteUrl = remoteUrl;
   const { data: sources } = useSources();
-  const sourceCaps = sources?.[plat]?.capabilities ?? {};
-  const platModes = Object.keys(sourceCaps);
-  const platVariantsByMode: Record<string, string[]> = {};
-  for (const [m, variants] of Object.entries(sourceCaps)) {
-    if (variants && typeof variants === "object" && !Array.isArray(variants)) {
-      platVariantsByMode[m] = Object.keys(variants).filter(k => k !== "");
-    }
-  }
-  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, searchMode, searchVariant);
+  const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
+  const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, source);
   const downloadMut = useDownloadMutation();
-  const { data: globalConfig } = useGlobalConfig();
 
   const novel = st?.meta ?? localMeta ?? null;
 
@@ -231,13 +209,11 @@ export default function DetailPage() {
   };
 
   const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
-  const [savedMode, setSavedMode] = useState("");
-  const [savedVariant, setSavedVariant] = useState("");
 
-  const runCheckUpdate = useCallback(async (mode: string, variant?: string) => {
+  const runCheckUpdate = useCallback(async (src: string) => {
     setChecking(true);
     try {
-      const remote = await fetchChapterList(novelId!, effectiveRemoteUrl ?? novel?.url ?? "", mode, variant);
+      const remote = await fetchChapterList(novelId!, effectiveRemoteUrl ?? novel?.url ?? "", src);
       if (!remote.length) { toast("远端无章节数据"); return; }
       let localAll: ChapterBrief[];
       try {
@@ -256,7 +232,7 @@ export default function DetailPage() {
     finally { setChecking(false); }
   }, [novelId, effectiveRemoteUrl, novel?.url, toast]);
 
-  const runDownloadLocal = useCallback((mode: string, variant?: string) => {
+  const runDownloadLocal = useCallback((src: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = localChapters
       .filter(c => selectedIds.has(c.id))
@@ -265,16 +241,14 @@ export default function DetailPage() {
       novelId,
       chapters: selected,
       title: novel?.title ?? novelId,
-      mode,
-      variant,
+      source: src,
       novelUrl: novel?.url,
-      platform: platformFromUrl(novel?.url),
     });
     setSelectedIds(new Set());
     toast(`「${novel?.title ?? novelId}」已开始下载`, "success");
   }, [novelId, selectedIds, localChapters, novel?.title, novel?.url, toast, downloadMut]);
 
-  const runDownload = useCallback((mode: string, variant?: string) => {
+  const runDownload = useCallback((src: string) => {
     if (!novelId || selectedIds.size === 0) return;
     const selected = merged
       .filter(mc => selectedIds.has(mc.remote.id))
@@ -283,43 +257,30 @@ export default function DetailPage() {
       novelId,
       chapters: selected,
       title: novel?.title ?? novelId,
-      mode,
-      variant,
+      source: src,
       novelUrl: novel?.url,
-      platform: platformFromUrl(novel?.url),
     });
     setSelectedIds(new Set());
     toast(`「${novel?.title ?? novelId}」已开始下载`, "success");
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, toast, downloadMut]);
 
   const handleCheckUpdate = useCallback(() => {
-    // 优先用本 session 选过的模式，兜底用 Settings 中的全局配置
-    const mode = sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser";
-    const variant = sessionStorage.getItem("nd:variant") ?? undefined;
-    setSavedMode(mode);
-    setSavedVariant(variant ?? "");
     setDialogVariant("check");
-  }, [globalConfig?.mode]);
+  }, []);
 
   const handleDownloadClick = useCallback(() => {
-    setSavedMode(sessionStorage.getItem("nd:mode") ?? globalConfig?.mode ?? "browser");
-    setSavedVariant(sessionStorage.getItem("nd:variant") ?? "");
     setDialogVariant("download");
-  }, [globalConfig?.mode]);
+  }, []);
 
-  const handleDialogConfirm = useCallback((mode: string, variant?: string) => {
-    setSavedMode(mode);
-    setSavedVariant(variant ?? "");
-    SessionCache.setMode(mode);
-    SessionCache.setVariant(variant);
+  const handleDialogConfirm = useCallback((src: string) => {
     const v = dialogVariant;
     setDialogVariant(null);
     if (v === "check") {
-      runCheckUpdate(mode, variant);
+      runCheckUpdate(src);
     } else if (showCompare) {
-      runDownload(mode, variant);
+      runDownload(src);
     } else {
-      runDownloadLocal(mode, variant);
+      runDownloadLocal(src);
     }
   }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
 
@@ -485,8 +446,7 @@ export default function DetailPage() {
 
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         dialogMode={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
-        initialMode={savedMode} initialVariant={savedVariant}
-        availableModes={platModes} variantsByMode={platVariantsByMode}
+        sources={sourceNames} initialSource={source}
         onStart={handleDialogConfirm} />
     </div>
   );

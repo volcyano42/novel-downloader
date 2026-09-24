@@ -17,7 +17,6 @@ import {
   useGlobalConfig,
   useGroups,
   useNovels,
-  usePlatforms,
   useSearch,
   useSources,
   useTasks
@@ -42,60 +41,29 @@ export default function BookshelfPage() {
   const { data: globalConfig } = useGlobalConfig();
   const { data: groups = {} } = useGroups();
   const { data: favorites = [] } = useFavorites();
-  const { data: platforms = [] } = usePlatforms();
   const { data: tasks = [], isLoading: tasksLoading } = useTasks(activeNav === "downloads");
   const toast = useToast();
   const deleteNovelMut = useDeleteNovel();
   const fetchMetaMut = useFetchMeta();
   const addHistoryMut = useAddSearchHistory();
 
-  // sources capabilities for SearchBar（platform → mode → variants）
+  // 全部书源名（URL 直达手选 + 结果分组）
   const { data: sources } = useSources();
-  const modeVariants = useMemo(() => {
-    const map: Record<string, Record<string, string[]>> = {};
-    if (sources) {
-      for (const [name, info] of Object.entries(sources)) {
-        const caps = info.capabilities as Record<string, Record<string, unknown> | string[]>;
-        const byMode: Record<string, string[]> = {};
-        for (const [mode, variants] of Object.entries(caps)) {
-          if (variants && typeof variants === "object" && !Array.isArray(variants)) {
-            byMode[mode] = Object.keys(variants).filter(k => k !== "");
-          }
-        }
-        map[name] = byMode;
-      }
-    }
-    return map;
-  }, [sources]);
-
-  // all modes union for "all" platform
-  const platformModes = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    if (sources) {
-      for (const [name, info] of Object.entries(sources)) {
-        map[name] = Object.keys(info.capabilities);
-      }
-    }
-    return map;
-  }, [sources]);
-  const allEngineModes = useMemo(() => Object.values(platformModes).flat().filter((m, i, a) => a.indexOf(m) === i), [platformModes]);
+  const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
 
   // local state
   const searchQuery = "";
-  const searchPlatform = "fanqie";
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const searchModeRef = useRef(SessionCache.getMode());
-  const searchVariantRef = useRef<string | undefined>(SessionCache.getVariant());
   const navigatingRef = useRef(false);
   const [searchCachedQuery, setSearchCachedQuery] = useState("");
-  const [prefill, setPrefill] = useState<{ nonce: number; query: string; platform?: string; mode?: string; variant?: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ nonce: number; query: string; source?: string } | null>(null);
   const [resultTab, setResultTab] = useState<string>("all");
   const navigate = useNavigate();
 
   // search — using React Query
   const [searchParams, setSearchParams] = useState<{
-    platform: string; query: string; mode?: string; variant?: string;
+    query: string; source?: string;
   } | null>(null);
   const { data: searchResults = [], isFetching: searching, error: searchError } = useSearch(searchParams);
 
@@ -103,14 +71,7 @@ export default function BookshelfPage() {
   useEffect(() => {
     if (activeNav !== "search") return;
     const cached = SessionCache.getSearchParams();
-    if (cached) {
-      searchModeRef.current = SessionCache.getMode();
-      searchVariantRef.current = SessionCache.getVariant();
-      setSearchCachedQuery(cached.query);
-    } else {
-      const q = SessionCache.getSearchQuery();
-      if (q) setSearchCachedQuery(q);
-    }
+    if (cached) setSearchCachedQuery(cached.query);
   }, [activeNav]);
 
   // tasks notification
@@ -134,47 +95,42 @@ export default function BookshelfPage() {
   }, [tasks, toast, refetchNovels, globalConfig?.notify?.sound]);
 
 
-  const handleOnlineSearch = useCallback(async (query: string, filters?: { platform?: string; mode?: string; variant?: string }) => {
+  const handleOnlineSearch = useCallback(async (query: string, source?: string) => {
     if (!query.trim()) { setSearchParams(null); SessionCache.clearSearch(); return; }
-    const platform = filters?.platform || searchPlatform;
-    const mode = filters?.mode ?? "browser";
-    const variant = filters?.variant;
-    searchModeRef.current = mode;
-    searchVariantRef.current = variant 
-    SessionCache.setMode(mode);
-    SessionCache.setVariant(variant);
-    SessionCache.saveSearch(query, platform, mode, variant);
-    addHistoryMut.mutate({ platform, mode, variant, keyword: query.trim() });
+    SessionCache.saveSearch(query, source);
+    addHistoryMut.mutate({ source_name: source ?? "", keyword: query.trim() });
 
     const isUrlOrId = query.startsWith("http://") || query.startsWith("https://") || /^\d+$/.test(query);
     if (isUrlOrId) {
+      if (!source) { toast("URL 直达需选择书源"); return; }
       try {
-        const meta = await fetchMetaMut.mutateAsync({ url: query, mode, variant });
-        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, searchMode: mode, searchVariant: variant, meta } });
+        const meta = await fetchMetaMut.mutateAsync({ url: query, source });
+        navigate(`/search/${meta.id}`, { state: { remoteUrl: query, source, meta } });
       } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); }
       return;
     }
-    setSearchParams({ platform, query, mode, variant });
-  }, [searchPlatform, navigate, toast, fetchMetaMut, addHistoryMut]);
+    setSearchParams({ query, source });
+  }, [navigate, toast, fetchMetaMut, addHistoryMut]);
 
-  const handleHistoryPick = useCallback((item: { platform: string; keyword: string; mode?: string; variant?: string }) => {
-    setPrefill({ nonce: Date.now(), query: item.keyword, platform: item.platform || undefined, mode: item.mode || undefined, variant: item.variant || undefined });
+  const handleHistoryPick = useCallback((item: { source_name: string; keyword: string }) => {
+    setPrefill({ nonce: Date.now(), query: item.keyword, source: item.source_name || undefined });
   }, []);
 
   const handleGoToNovel = useCallback(async (result: SearchResult) => {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
     setNavigatingId(result.url);
+    const source = result.source_name;
     const idMatch = result.url.match(/\/(page|book|info|shuku)\/(\d+)/);
     const maybeId = idMatch ? idMatch[2] : null;
     const local = maybeId ? novels.find(n => n.id === maybeId) : undefined;
     if (local) {
-      navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchVariant: searchVariantRef.current, meta: local } });
+      navigate(`/search/${local.id}`, { state: { remoteUrl: result.url, source, meta: local } });
       return;
     }
     try {
-      const meta = await fetchMetaMut.mutateAsync({ url: result.url, mode: searchModeRef.current, variant: searchVariantRef.current });
-      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, searchMode: searchModeRef.current, searchVariant: searchVariantRef.current, meta } });
+      const meta = await fetchMetaMut.mutateAsync({ url: result.url, source });
+      navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, source, meta } });
     } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate, novels, fetchMetaMut, toast]);
 
@@ -293,7 +249,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} platforms={platforms} engineModes={allEngineModes} modeVariants={modeVariants} platformModes={platformModes} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
+          <SearchBar onSearch={handleOnlineSearch} sources={sourceNames} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
           {!searchParams && !searching && (
             <SearchHistoryPanel onPick={handleHistoryPick} />
           )}
@@ -302,32 +258,31 @@ export default function BookshelfPage() {
               {searchError ? (
                 <>
                   <p className="text-sm text-red-400">搜索失败：{searchError.message}</p>
-                  <p className="mt-1 text-xs text-slate-300">请尝试更换搜索模式或平台</p>
+                  <p className="mt-1 text-xs text-slate-300">请检查书源配置</p>
                 </>
               ) : (
                 <>
                   <p className="text-sm">未找到相关小说</p>
-                  <p className="mt-1 text-xs text-slate-300">试试换个关键词或平台</p>
+                  <p className="mt-1 text-xs text-slate-300">试试换个关键词</p>
                 </>
               )}
             </div>
           )}
           {searchResults.length > 0 && (() => {
-            const isAllPlatform = searchParams?.platform === "all";
-            const PLATFORM_TABS = [
+            // 并发搜索（未指定书源）时结果跨多个书源，按 source_name 分组 tab
+            const showSourceTabs = !searchParams?.source && sourceNames.length > 0;
+            const SOURCE_TABS = [
               { id: "all", label: "全部" },
-              ...platforms.map(p => ({ id: p.id, label: p.label })),
+              ...sourceNames.map(name => ({ id: name, label: name })),
             ];
-            const grouped = isAllPlatform ? searchResults.filter(r => resultTab === "all" || r.platform === resultTab) : searchResults;
-            const counts: Record<string, number> | null = isAllPlatform
-              ? { all: searchResults.length, ...Object.fromEntries(platforms.map(p => [p.id, searchResults.filter(r => r.platform === p.id).length])) }
-              : null;
-            const activeTab = isAllPlatform ? resultTab : "all";
+            const grouped = showSourceTabs && resultTab !== "all" ? searchResults.filter(r => r.source_name === resultTab) : searchResults;
+            const counts: Record<string, number> = { all: searchResults.length, ...Object.fromEntries(sourceNames.map(name => [name, searchResults.filter(r => r.source_name === name).length])) };
+            const activeTab = showSourceTabs ? resultTab : "all";
             return (
               <>
-                {isAllPlatform && (
+                {showSourceTabs && (
                   <div className="flex flex-wrap gap-1 self-start rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-                    {PLATFORM_TABS.map(t => (
+                    {SOURCE_TABS.map(t => (
                       <button key={t.id} onClick={() => setResultTab(t.id)}
                         className={cn(
                           "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
@@ -335,7 +290,7 @@ export default function BookshelfPage() {
                             ? "bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-slate-200"
                             : "text-slate-500 hover:text-slate-700 dark:text-slate-400",
                         )}>
-                        {t.label}{counts ? ` (${counts[t.id]})` : ""}
+                        {t.label}{` (${counts[t.id]})`}
                       </button>
                     ))}
                   </div>

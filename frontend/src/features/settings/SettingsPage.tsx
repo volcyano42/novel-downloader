@@ -1,30 +1,16 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {
-    Bell,
-    ChevronDown,
-    Download,
-    Eye,
-    EyeOff,
-    Gauge,
-    Globe,
-    Layers,
-    Monitor,
-    Package,
-    Settings,
-    Zap
-} from "lucide-react";
+import {Bell, ChevronDown, Gauge, Globe, Layers, Monitor, Package, Settings, Zap} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {
     useFormatConfig,
-    usePlatforms,
     useSaveFormatConfig,
     useSaveGlobalConfig,
-    useSaveSiteConfig,
-    useSiteConfig,
+    useSaveSourceConfig,
+    useSourceConfig,
     useSources
 } from "@/hooks/index";
 import {useToast} from "@/components/toast-context";
-import type {GlobalConfig, SiteConfig} from "@/api/endpoints";
+import type {GlobalConfig} from "@/api/endpoints";
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -108,16 +94,28 @@ function Section({ icon: Icon, title, children }: { icon: typeof Settings; title
   );
 }
 
-
-
 const MODE_META: Record<string, { label: string; icon: typeof Settings; desc: string }> = {
   browser: { label: "Browser", icon: Monitor, desc: "模拟浏览器，最稳定" },
   requests: { label: "Requests", icon: Globe, desc: "直接 HTTP，最快" },
   api: { label: "API", icon: Zap, desc: "第三方接口" },
 };
-const KNOWN_MODE_ORDER = ["browser", "requests", "api"] as const;
 
-const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggle" | "num" | "select" | "range-delay" | "text"; key: string; opts?: { value: string; label: string }[]; min?: number; max?: number; unit?: string }[]> = {
+const CAP_LABELS: Record<string, string> = {
+  search: "搜索",
+  novel_info: "书籍信息",
+  chapter_list: "章节列表",
+  chapter_content: "章节内容",
+};
+
+type EngineField = {
+  label: string; desc?: string;
+  type: "toggle" | "num" | "select" | "range-delay" | "text";
+  key: string;
+  opts?: { value: string; label: string }[];
+  min?: number; max?: number; unit?: string;
+};
+
+const ENGINE_FIELDS: Record<string, EngineField[]> = {
   browser: [
     { key: "headless", label: "无头模式", desc: "后台静默运行，不弹窗口", type: "toggle" },
     { key: "browser_type", label: "浏览器类型", type: "select", opts: [{ value: "chromium", label: "Chromium" }, { value: "firefox", label: "Firefox" }, { value: "webkit", label: "WebKit" }] },
@@ -128,83 +126,63 @@ const ENGINE_FIELDS: Record<string, { label: string; desc?: string; type: "toggl
     { key: "backoff_factor", label: "退避因子", desc: "重试间隔倍增系数", type: "num", min: 1, max: 10 },
   ],
   requests: [
+    { key: "headers", label: "请求头", desc: "JSON 格式，如 {\"Cookie\": \"…\"}", type: "text" },
     { key: "delay", label: "请求延迟", desc: "两章之间随机等待", type: "range-delay", min: 0, max: 30, unit: "秒" },
     { key: "timeout", label: "超时", desc: "单次请求最长等待", type: "num", min: 5, max: 120, unit: "秒" },
     { key: "retry_times", label: "重试次数", type: "num", min: 0, max: 10 },
     { key: "backoff_factor", label: "退避因子", desc: "重试间隔倍增系数", type: "num", min: 1, max: 10 },
   ],
-  api: [],
+  api: [
+    { key: "key", label: "API Key", type: "text" },
+    { key: "delay", label: "请求延迟", desc: "两章之间随机等待", type: "range-delay", min: 0, max: 30, unit: "秒" },
+    { key: "timeout", label: "超时", desc: "单次请求最长等待", type: "num", min: 5, max: 120, unit: "秒" },
+    { key: "retry_times", label: "重试次数", type: "num", min: 0, max: 10 },
+    { key: "backoff_factor", label: "退避因子", desc: "重试间隔倍增系数", type: "num", min: 1, max: 10 },
+  ],
 };
 
-function EngineSection({ mode }: { mode: string }) {
-  const { data: platforms = [] } = usePlatforms();
+/** 按书源编辑配置：选书源 → 逐能力段（cap → mode）渲染表单，落 `/config/sources/{name}`。 */
+function SourceSection() {
   const { data: sources } = useSources();
-  // 只显示支持当前 mode 的平台（不支持的 mode 在 capabilities 中没有 key）
-  const supported = useMemo(() => {
-    if (!sources) return platforms;
-    return platforms.filter(p => {
-      const caps = sources[p.id]?.capabilities;
-      return caps ? caps[mode] !== undefined : false;
-    });
-  }, [platforms, sources, mode]);
+  const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
+  const [source, setSource] = useState("");
+  const [open, setOpen] = useState(true);
 
-  const [platform, setPlatform] = useState<string>(supported[0]?.id ?? "fanqie");
-  const [engineOpen, setEngineOpen] = useState(false);
-
-  // mode 或数据变化后，若当前平台不支持该 mode，自动切到第一个支持的平台
+  // 数据变化后保证有合法选中：无选择或已失效时回退到第一项
   useEffect(() => {
-    if (supported.length > 0 && !supported.some(p => p.id === platform)) {
-      setPlatform(supported[0].id);
-    }
-  }, [supported, platform]);
+    if (!source && sourceNames.length > 0) setSource(sourceNames[0]);
+    else if (source && !sourceNames.includes(source)) setSource(sourceNames[0] ?? "");
+  }, [sourceNames, source]);
 
-  const { data: siteCfg } = useSiteConfig(platform);
-  const saveSite = useSaveSiteConfig(platform);
+  const { data: cfg } = useSourceConfig(source || undefined);
+  const saveSource = useSaveSourceConfig(source);
 
-  const rawModeCfg = (siteCfg?.[mode as keyof SiteConfig] as Record<string, unknown> | undefined) ?? {};
-  // browser/requests 是 variant 容器，表单操作 default variant；api 保持 variant 容器原样
-  const engineCfg = (mode === "api"
-    ? rawModeCfg
-    : ((rawModeCfg.default as Record<string, unknown> | undefined) ?? {}));
-  const fields = ENGINE_FIELDS[mode] ?? [];
-  // 优先用 siteCfg.api_variants（config 端点，含全部 variant 含 disabled）；
-  // 远程访问/配置未初始化时 fallback 到 sources capabilities（enabled 的 api variant）
-  const apiVariants: string[] = useMemo(() => {
-    const fromSite = siteCfg?.api_variants ?? [];
-    if (fromSite.length > 0) return fromSite;
-    if (sources) {
-      const caps = sources[platform]?.capabilities;
-      if (caps?.api && typeof caps.api === "object" && !Array.isArray(caps.api)) {
-        return Object.keys(caps.api).filter(k => k !== "");
-      }
-    }
-    return [];
-  }, [siteCfg, sources, platform]);
-  const hasVariants = mode === "api" && apiVariants.length > 0;
+  const caps = cfg?.capabilities ?? {};
+  const merged = cfg?.config ?? {};
 
-  // 只服务 browser/requests 字段：保存到 default variant；api 走 ApiVariantsSection
-  const updateField = useCallback((key: string, value: unknown) => {
-    saveSite.mutate({ [mode]: { default: { [key]: value } } });
-  }, [mode, saveSite]);
+  const updateField = (cap: string, key: string, value: unknown) => {
+    saveSource.mutate({ config: { [cap]: { [key]: value } } });
+  };
 
-  const renderField = (f: typeof fields[number]) => {
-    const val = engineCfg[f.key];
+  const renderField = (cap: string, f: EngineField) => {
+    const val = (merged[cap] as unknown as Record<string, unknown> | undefined)?.[f.key];
+    const set = (value: unknown) => updateField(cap, f.key, value);
     switch (f.type) {
       case "toggle":
-        return <Toggle checked={!!val} onChange={v => updateField(f.key, v)} />;
+        return <Toggle checked={!!val} onChange={v => set(v)} />;
       case "select":
-        return <Select value={String(val ?? f.opts![0].value)} onChange={v => updateField(f.key, v)} options={f.opts!} />;
+        return <Select value={String(val ?? f.opts![0].value)} onChange={v => set(v)} options={f.opts!} />;
       case "num":
-        return <Num value={Number(val) || 0} onChange={v => updateField(f.key, v)} min={f.min} max={f.max} unit={f.unit} />;
+        return <Num value={Number(val) || 0} onChange={v => set(v)} min={f.min} max={f.max} unit={f.unit} />;
       case "text":
-        return <TextField value={String(val ?? "")} onChange={v => updateField(f.key, v)} />;
+        return <TextField value={String(val ?? "")} onChange={v => set(v)} />;
       case "range-delay":
         return (
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <input type="number" value={(val as number[])?.[0] ?? 3} onChange={e => updateField("delay", [Number(e.target.value), (val as number[])?.[1] ?? 5])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[0] ?? 3} onChange={e => set([Number(e.target.value), (val as number[])?.[1] ?? 5])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span>~</span>
-            <input type="number" value={(val as number[])?.[1] ?? 5} onChange={e => updateField("delay", [(val as number[])?.[0] ?? 3, Number(e.target.value)])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[1] ?? 5} onChange={e => set([(val as number[])?.[0] ?? 3, Number(e.target.value)])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span className="text-[11px] text-slate-400">{f.unit}</span>
           </div>
@@ -213,80 +191,48 @@ function EngineSection({ mode }: { mode: string }) {
   };
 
   return (
-    <Section icon={Layers} title="平台引擎设置">
-      <div className="flex gap-1.5 py-2.5">
-        {supported.map(({ id, label }) => (
-          <button key={id} onClick={() => setPlatform(id)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${platform === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
-            {label}
+    <Section icon={Layers} title="书源配置">
+      <div className="flex flex-wrap gap-1.5 py-2.5">
+        {sourceNames.map(name => (
+          <button key={name} onClick={() => setSource(name)}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+              source === name
+                ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400"
+                : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400",
+            )}>
+            {name}
           </button>
         ))}
-        {supported.length === 0 && (
-          <span className="py-2 text-xs text-slate-400">当前模式没有支持的平台</span>
-        )}
+        {sourceNames.length === 0 && <span className="py-2 text-xs text-slate-400">暂无书源</span>}
       </div>
-      <div>
-        <button onClick={() => setEngineOpen(!engineOpen)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
-          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${engineOpen ? "" : "-rotate-90"}`} strokeWidth={1.5} />
-          {supported.find(p => p.id === platform)?.label} · {MODE_META[mode]?.label ?? mode} 选项
-        </button>
-        {engineOpen && fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(f)}</Row>)}
-        {engineOpen && hasVariants && (
-          <ApiVariantsSection engineCfg={engineCfg} mode={mode} variants={apiVariants} saveSite={saveSite} />
-        )}
-      </div>
+      {cfg && (
+        <div>
+          <Row label="启用" desc="关闭后不参与并发搜索">
+            <Toggle checked={cfg.enabled} onChange={v => saveSource.mutate({ enabled: v })} />
+          </Row>
+          <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} strokeWidth={1.5} />
+            {source} · 能力配置
+          </button>
+          {open && Object.entries(caps).map(([cap, mode]) => {
+            const fields = ENGINE_FIELDS[mode] ?? [];
+            const meta = MODE_META[mode];
+            return (
+              <div key={cap} className="border-t border-slate-100 dark:border-slate-800/50 pt-2 mt-2">
+                <div className="flex items-center gap-2 py-1">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
+                  {meta && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">{meta.label}</span>}
+                </div>
+                {fields.length === 0
+                  ? <p className="py-1 text-[11px] text-slate-400">该能力无可配置项</p>
+                  : fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(cap, f)}</Row>)}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Section>
-  );
-}
-
-function ApiVariantsSection({ engineCfg, mode, variants, saveSite }: {
-  engineCfg: Record<string, unknown>;
-  mode: string;
-  variants: string[];
-  saveSite: ReturnType<typeof useSaveSiteConfig>;
-}) {
-  const [variant, setVariant] = useState(variants[0]);
-  const pCfg = (engineCfg[variant] as Record<string, unknown> | undefined) ?? {};
-  const [showKey, setShowKey] = useState(false);
-
-  const updateVariant = (key: string, value: unknown) => {
-    saveSite.mutate({ [mode]: { [variant]: { [key]: value } } });
-  };
-
-  return (
-    <div className="border-t border-slate-100 dark:border-slate-800/50 pt-2 mt-2">
-      <div className="flex gap-1.5 py-2">
-        {variants.map(p => (
-          <button key={p} onClick={() => setVariant(p)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium uppercase transition-all ${variant === p ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
-            {p}
-          </button>
-        ))}
-      </div>
-      <Row label="KEY">
-        <div className="flex items-center gap-1">
-          <input type="text" placeholder="在此输入 API Key" value={String(pCfg.key ?? "")} onChange={e => updateVariant("key", e.target.value)}
-            className={cn("w-40 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-300 transition-opacity", showKey ? "opacity-100" : "opacity-0 pointer-events-none")} />
-          <button onClick={() => setShowKey(!showKey)}
-            className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0">
-            {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </Row>
-      <Row label="请求延迟">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <input type="number" value={(pCfg.delay as number[])?.[0] ?? 3} onChange={e => updateVariant("delay", [Number(e.target.value), (pCfg.delay as number[])?.[1] ?? 5])}
-            className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300" />
-          <span>~</span>
-          <input type="number" value={(pCfg.delay as number[])?.[1] ?? 5} onChange={e => updateVariant("delay", [(pCfg.delay as number[])?.[0] ?? 3, Number(e.target.value)])}
-            className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300" />
-          <span className="text-[11px] text-slate-400">秒</span>
-        </div>
-      </Row>
-      <Row label="超时"><Num value={Number(pCfg.timeout) || 30} onChange={v => updateVariant("timeout", v)} min={5} max={120} unit="秒" /></Row>
-      <Row label="重试次数"><Num value={Number(pCfg.retry_times) || 3} onChange={v => updateVariant("retry_times", v)} min={0} max={10} /></Row>
-      <Row label="退避因子" desc="重试间隔倍增系数"><Num value={Number(pCfg.backoff_factor) || 2} onChange={v => updateVariant("backoff_factor", v)} min={1} max={10} /></Row>
-    </div>
   );
 }
 
@@ -348,21 +294,6 @@ interface SettingsViewProps {
 export function SettingsView({ globalConfig, onUpdate }: SettingsViewProps) {
   const saveGlobal = useSaveGlobalConfig();
   const toast = useToast();
-  const { data: sources } = useSources();
-  // 模式列表从 sources capabilities 动态生成（同搜索页），已知模式固定顺序
-  const modeOptions = useMemo(() => {
-    const set = new Set<string>();
-    if (sources) {
-      for (const info of Object.values(sources)) {
-        for (const m of Object.keys(info.capabilities)) set.add(m);
-      }
-    }
-    const ordered: string[] = KNOWN_MODE_ORDER.filter(m => set.has(m));
-    for (const m of set) if (!(KNOWN_MODE_ORDER as readonly string[]).includes(m)) ordered.push(m);
-    return ordered;
-  }, [sources]);
-  const availableModes = modeOptions.length > 0 ? modeOptions : [...KNOWN_MODE_ORDER];
-  const mode = availableModes.includes(globalConfig.mode) ? globalConfig.mode : availableModes[0];
 
   const updateGlobal = useCallback((key: string, value: unknown) => {
     saveGlobal.mutateAsync({ ...globalConfig, [key]: value })
@@ -373,24 +304,7 @@ export function SettingsView({ globalConfig, onUpdate }: SettingsViewProps) {
 
   return (
     <div className="mx-auto max-w-[640px] space-y-4">
-      <Section icon={Download} title="下载引擎">
-        <Row label="下载模式">
-          <div className="flex gap-1.5">
-            {availableModes.map(id => {
-              const meta = MODE_META[id] ?? { label: id, icon: Zap, desc: "" };
-              const Icon = meta.icon;
-              return (
-                <button key={id} onClick={() => updateGlobal("mode", id)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${mode === id ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400" : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400"}`}>
-                  <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />{meta.label}
-                </button>
-              );
-            })}
-          </div>
-        </Row>
-      </Section>
-
-      <EngineSection mode={mode} />
+      <SourceSection />
 
       <Section icon={Gauge} title="并发与性能">
         <Row label="并发线程数" desc="同时下载的章节数">
