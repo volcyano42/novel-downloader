@@ -344,6 +344,22 @@ class TestInteractive:
         mod.do_download("https://x/1", "默认", {})
         assert seen == {"source_name": "a-x-default", "url": "https://x/1"}
 
+    def test_do_download_cancel_returns(self, monkeypatch, capsys):
+        from cli import interactive as mod
+        import cli.core as core
+        called = []
+
+        async def fake_inner(*a, **k):
+            called.append(True)
+
+        monkeypatch.setattr(mod, "list_sources", lambda: ["a-x-default", "b-y-default"])
+        monkeypatch.setattr(mod, "_select", lambda *a, **k: None)  # 用户取消选源
+        monkeypatch.setattr(mod, "_text_input", lambda *a, **k: None)
+        monkeypatch.setattr(core, "_do_download_inner", fake_inner)
+        mod.do_download("https://x/1", "默认", {})
+        assert called == []                     # 取消不得回退首源、不得触发下载
+        assert "已取消" in capsys.readouterr().out
+
     def test_update_one_async_uses_source_name(self, monkeypatch, capsys):
         import asyncio
         from cli import interactive as mod

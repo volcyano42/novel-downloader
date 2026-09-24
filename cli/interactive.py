@@ -137,7 +137,10 @@ def do_download(
     if not source_names:
         print("没有可用书源")
         return
-    source_name = _select("选择书源", [(n, n) for n in source_names]) or source_names[0]
+    source_name = _select("选择书源", [(n, n) for n in source_names])
+    if not source_name:
+        print("已取消选择书源")
+        return
     engines = _make_engines(source_name)
     try:
         g = _text_input(f"归入分组 [{group}]")
