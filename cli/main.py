@@ -28,21 +28,26 @@ from novelbase.utils.logger import get_logger
 _log = get_logger("novelbase.cli")
 
 
-def _platform_from_url(url: str) -> str:
-    """从 URL 推断平台（数据驱动）。"""
-    from novelbase.source import platform_from_url
-    plat = platform_from_url(url)
-    if plat:
-        return plat
-    raise ValueError(f"未识别书源 URL: {url}")
-
-
 def _resolve_platform(args) -> str:
-    """解析平台：优先用 --platform，否则从 URL 推断。"""
+    """解析站点名：优先 --platform；否则 core 已无 URL→书源推断能力，需显式指定。"""
     if getattr(args, "platform", None):
         return args.platform
     url = getattr(args, "url", "")
-    return _platform_from_url(url) if url else "fanqie"
+    if url:
+        raise SystemExit(
+            "无法从 URL 自动推断书源（core 已移除该能力），请用 --platform 指定站点名，"
+            f"如 --platform fanqie：{url}"
+        )
+    return "fanqie"
+
+
+def _source_name(platform: str, mode: str, variant: str | None) -> str:
+    """(站点名, mode, variant) → 确定的 source_name（书源名）。"""
+    from novelbase.source import resolve_source_name
+    try:
+        return resolve_source_name(platform, mode, variant)
+    except KeyError as e:
+        raise SystemExit(str(e))
 
 
 def _parse_args() -> argparse.Namespace:
@@ -171,13 +176,12 @@ def _get_engine(platform: str, mode: str, variant: str | None = None):
 
 
 def cmd_search(args):
-    engine, format_configs = _get_engine(
-        args.platform, args.mode,
-        _resolve_variant(args.platform, args.mode, args.variant),
-    )
+    variant = _resolve_variant(args.platform, args.mode, args.variant)
+    source_name = _source_name(args.platform, args.mode, variant)
+    engine, format_configs = _get_engine(args.platform, args.mode, variant)
     try:
         from novelbase.core.downloader import search
-        results = asyncio.run(search(args.platform, args.query, engine, page=args.page))
+        results = asyncio.run(search([source_name], args.query, lambda m: engine, page=args.page))
         if not results:
             print("未找到任何结果")
             return
@@ -196,14 +200,13 @@ def cmd_search(args):
 
 def cmd_download(args):
     platform = _resolve_platform(args)
-    engine, format_configs = _get_engine(
-        platform, args.mode,
-        _resolve_variant(platform, args.mode, args.variant),
-    )
+    variant = _resolve_variant(platform, args.mode, args.variant)
+    source_name = _source_name(platform, args.mode, variant)
+    engine, format_configs = _get_engine(platform, args.mode, variant)
     try:
         from cli.core import _do_download_inner
-        asyncio.run(_do_download_inner(engine, args.url, args.group, format_configs,
-                                       max_workers=args.workers))
+        asyncio.run(_do_download_inner(source_name, args.url, args.group, format_configs,
+                                       max_workers=args.workers, engines=lambda m: engine))
     finally:
         engine.close()
 
@@ -257,13 +260,12 @@ def cmd_export(args):
 
 def cmd_info(args):
     platform = _resolve_platform(args)
-    engine, _ = _get_engine(
-        platform, args.mode,
-        _resolve_variant(platform, args.mode, args.variant),
-    )
+    variant = _resolve_variant(platform, args.mode, args.variant)
+    source_name = _source_name(platform, args.mode, variant)
+    engine, _ = _get_engine(platform, args.mode, variant)
     try:
         print(f"正在获取: {args.url}")
-        novel = asyncio.run(resolve_meta(args.url, engine))
+        novel = asyncio.run(resolve_meta(args.url, source_name, lambda m: engine))
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
@@ -334,30 +336,30 @@ def cmd_novel(args):
 
 def cmd_source(args):
     """书源管理。"""
-    from novelbase.source import register_source
+    from novelbase.source import list_sources, capabilities
 
     if args.source_command != "list":
         return
 
-    sources = register_source()
+    names = list_sources()
     if args.json:
         import json
         payload = {
             name: {
-                "name": meta.get("name"),
-                "show_name": meta.get("show_name", name),
-                "hosts": list(meta.get("hosts", ())),
+                "name": name,
+                "show_name": name,
+                "capabilities": capabilities(name),
             }
-            for name, meta in sources.items()
+            for name in names
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
-    print(f"可用书源 ({len(sources)}):")
-    for name, meta in sources.items():
-        show = meta.get("show_name", name)
-        hosts = ", ".join(meta.get("hosts", ()))
-        print(f"  - {name} ({show})   hosts: {hosts}")
+    print(f"可用书源 ({len(names)}):")
+    for name in names:
+        caps = capabilities(name)
+        cap_str = ", ".join(f"{c}:{m}" for c, m in caps.items()) or "无"
+        print(f"  - {name}   capabilities: {cap_str}")
 
 
 def cmd_dev(args):

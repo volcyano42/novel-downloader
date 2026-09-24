@@ -21,23 +21,25 @@ _log = get_logger("cli.interactive")
 
 
 def _get_engine(source_name: str = "fanqie", mode: str | None = None):
-    """从当前配置创建引擎。mode 缺省时按 config 或书源能力推断。"""
-    from novelbase.source import capabilities
+    """从当前配置创建引擎。source_name 决定站点与 variant；mode 缺省按 config/能力推断。"""
+    from novelbase.source import capabilities, split_source_name
 
     cfg = load_main_config()
-    site_cfg = load_site_config(source_name)
+    site, _, variant = split_source_name(source_name)
+    site_cfg = load_site_config(site)
     if mode is None:
         caps = capabilities(source_name)
         mode = cfg.get("mode") or next(iter(caps.values()), None)
     if mode:
         cfg["mode"] = mode
-    options = build_options(cfg, site_cfg)
+    options = build_options(cfg, site_cfg, variant or None)
     return create_engine(options)
 
 
 def _make_engines(source_name: str):
     """构造 engines 解析器：`engines(mode) -> engine`（按 mode 懒建并缓存）。
 
+    缓存暴露为 `_engines.cache`，便于调用方结束时 close 所有引擎。
     最小实现；完整改造（并发全启用书源搜索、手选书源交互）留后续 CLI 计划。
     """
     cache: dict[str, object] = {}
@@ -47,6 +49,7 @@ def _make_engines(source_name: str):
             cache[mode] = _get_engine(source_name, mode)
         return cache[mode]
 
+    _engines.cache = cache  # type: ignore[attr-defined]
     return _engines
 
 
@@ -113,18 +116,22 @@ def do_download(
     if not source_names:
         print("没有可用书源")
         return
-    platform = _select("选择书源", [(n, n) for n in source_names]) or source_names[0]
-    engine = _get_engine(platform)
+    source_name = _select("选择书源", [(n, n) for n in source_names]) or source_names[0]
+    engines = _make_engines(source_name)
     try:
         g = _text_input(f"归入分组 [{group}]")
         if g:
             group = g
         asyncio.run(_do_download_inner(
-            engine, url, group, format_configs,
-            max_workers=max_workers, skip_delay=True,
+            source_name, url, group, format_configs,
+            max_workers=max_workers, skip_delay=True, engines=engines,
         ))
     finally:
-        engine.close()
+        for eng in getattr(engines, "cache", {}).values():
+            try:
+                eng.close()
+            except Exception:
+                pass
 
 
 # -- Update ---------------------------------------------------
@@ -237,17 +244,19 @@ def do_update(format_configs: dict, max_workers: int = 3):
 def do_visit_site() -> None:
     """用 BrowserEngine 打开所选平台网站。"""
     from novelbase import create_engine as _create_engine
+    from novelbase.source import split_source_name
 
     sources = list_sources()
-    platform = _select("选择书源", [(n, n) for n in sources])
-    if not platform:
+    source_name = _select("选择书源", [(n, n) for n in sources])
+    if not source_name:
         return
     # source.json 已无 hosts，无法推断首页 → 用占位 URL
-    url = f"https://{platform}"
+    url = f"https://{source_name}"
 
+    site, _, variant = split_source_name(source_name)
     cfg = load_main_config()
-    site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg)
+    site_cfg = load_site_config(site)
+    options = build_options(cfg, site_cfg, variant or None)
     options.set_mode("browser")
     engine = _create_engine(options)
 

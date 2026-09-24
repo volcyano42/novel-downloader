@@ -54,13 +54,22 @@ def _get_storage():
     return _storage
 
 
-def _platform_from_url(url: str) -> str:
-    """从 URL 推断平台（数据驱动）。"""
-    from novelbase.source import platform_from_url
-    plat = platform_from_url(url)
-    if plat:
-        return plat
-    raise ValueError(f"未识别书源 URL: {url}")
+def _make_engines(source_name: str):
+    """构造 engines(mode)->engine（按书源名解析站点/variant，懒建并缓存）。
+
+    缓存暴露为 `_engines.cache`，便于调用方在结束时 close 所有引擎。
+    """
+    from novelbase.source import split_source_name
+    site, _, variant = split_source_name(source_name)
+    cache: dict[str, object] = {}
+
+    def _engines(mode: str):
+        if mode not in cache:
+            cache[mode] = _get_engine(site, mode, variant or None)
+        return cache[mode]
+
+    _engines.cache = cache  # type: ignore[attr-defined]
+    return _engines
 
 
 def _get_engine(platform: str = "fanqie", mode: str | None = None,
@@ -82,17 +91,23 @@ def _get_engine(platform: str = "fanqie", mode: str | None = None,
 
 
 async def _do_download_inner(
-    engine, url: str, group: str,
+    source_name: str, url: str, group: str,
     format_configs: dict, max_workers: int = 3, skip_delay: bool=False,
-    skip_export: bool = True,
+    skip_export: bool = True, engines=None,
 ) -> None:
-    """Core download flow (engine provided). Non-interactive: 全量下载。"""
+    """Core download flow（按书源名分发）。Non-interactive: 全量下载。
+
+    engines：`engines(mode)->engine` 解析器；缺省时按 source_name 懒建。
+    """
     import asyncio
+
+    if engines is None:
+        engines = _make_engines(source_name)
 
     # 1. Get metadata
     print("正在获取小说信息...")
     try:
-        novel = await resolve_meta(url, engine=engine, skip_delay=skip_delay)
+        novel = await resolve_meta(url, source_name, engines, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取小说信息失败: {e}")
         return
@@ -101,7 +116,7 @@ async def _do_download_inner(
     # 2. Get chapter list
     print("正在获取章节列表...")
     try:
-        chapters = await resolve_chapter_list(novel.url, engine=engine, skip_delay=skip_delay)
+        chapters = await resolve_chapter_list(novel.url, source_name, engines, skip_delay=skip_delay)
     except Exception as e:
         print(f"获取章节列表失败: {e}")
         return
@@ -141,7 +156,7 @@ async def _do_download_inner(
     async def _download_one(ch) -> tuple[bool, str, str]:
         async with sem:
             try:
-                resolved = await resolve_chapter(ch, engine=engine)
+                resolved = await resolve_chapter(ch, source_name, engines)
                 if resolved is None:
                     return False, ch.title, "章节内容为空"
                 storage.save_chapter(novel, resolved)
@@ -248,10 +263,13 @@ async def do_update(format_configs: dict, max_workers: int = 3,
     updated = 0
     for i, novel in enumerate(targets, 1):
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
-        platform = _platform_from_url(novel.url)
-        engine = _get_engine(platform, mode, variant)
+        source_name = getattr(novel, "source_name", "") or novel.extra.get("platform", "")
+        if not source_name:
+            print("  无法确定书源，跳过（请重新下载该小说以记录书源）")
+            continue
+        engines = _make_engines(source_name)
         try:
-            remote_chapters = await resolve_chapter_list(novel.url, engine=engine)
+            remote_chapters = await resolve_chapter_list(novel.url, source_name, engines)
             if not remote_chapters:
                 print("  无法获取远程章节")
                 continue
@@ -271,7 +289,7 @@ async def do_update(format_configs: dict, max_workers: int = 3,
             async def _dl(ch):
                 async with sem:
                     try:
-                        resolved = await resolve_chapter(ch, engine=engine)
+                        resolved = await resolve_chapter(ch, source_name, engines)
                         if resolved:
                             storage.save_chapter(novel, resolved)
                             return True
@@ -287,6 +305,10 @@ async def do_update(format_configs: dict, max_workers: int = 3,
         except Exception as e:
             print(f"  更新失败: {e}")
         finally:
-            engine.close()
+            for eng in getattr(engines, "cache", {}).values():
+                try:
+                    eng.close()
+                except Exception:
+                    pass
 
     print(f"\n更新完成: 共更新 {updated} 章")
