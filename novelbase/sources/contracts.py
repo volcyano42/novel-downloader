@@ -46,16 +46,15 @@ class ChapterContentFunc(Protocol):
 # 能力元数据 — 单一数据源
 # ═══════════════════════════════════════════════════════════════════
 #
-# key:     能力名（与源目录中的 .py 文件名一致）
-#   file_stem:       文件名 stem（不含 .py）
+# key:     能力名（= 文件名 = 函数名，均不含 .py）
 #   required_params: resolve() 运行时签名校验所需的参数名
 #
 # 注意: 这是能力 *类型* 的元数据，不是源平台列表。
 # 源平台通过文件系统扫描动态发现，不在任何地方硬编码。
 
 CAPABILITY_META: dict[str, dict] = {
-    "search":          {"file_stem": "search",          "required_params": ("query",   "engine")},
-    "novel_info":      {"file_stem": "novel_info",      "required_params": ("url",     "engine")},
-    "chapter_list":    {"file_stem": "chapter_list",    "required_params": ("url",     "engine")},
-    "chapter_content": {"file_stem": "chapter_content", "required_params": ("chapter", "engine")},
+    "search":          {"required_params": ("query",   "engine")},
+    "novel_info":      {"required_params": ("url",     "engine")},
+    "chapter_list":    {"required_params": ("url",     "engine")},
+    "chapter_content": {"required_params": ("chapter", "engine")},
 }

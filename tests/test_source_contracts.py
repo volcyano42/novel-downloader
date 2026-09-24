@@ -204,3 +204,21 @@ def search(query: str, engine, **kwargs):
         monkeypatch.setattr(src_mod, "_PRIVATE_SOURCES_ROOT", "/nonexistent/path")
         caps = capabilities("fanqie")
         assert "api" in caps  # 内置仍正常
+
+
+from novelbase.sources.contracts import CAPABILITY_META
+
+
+def test_capability_meta_keys_are_file_stems():
+    """能力名 = 文件名 = 函数名；meta 里不再有 file_stem 字段。"""
+    assert set(CAPABILITY_META) == {"search", "novel_info", "chapter_list", "chapter_content"}
+    for name, meta in CAPABILITY_META.items():
+        assert "file_stem" not in meta
+        assert "required_params" in meta
+
+
+def test_required_params_unchanged():
+    assert CAPABILITY_META["search"]["required_params"] == ("query", "engine")
+    assert CAPABILITY_META["novel_info"]["required_params"] == ("url", "engine")
+    assert CAPABILITY_META["chapter_list"]["required_params"] == ("url", "engine")
+    assert CAPABILITY_META["chapter_content"]["required_params"] == ("chapter", "engine")

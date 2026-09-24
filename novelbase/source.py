@@ -186,7 +186,7 @@ def _scan_capabilities(pkg_dir: Path) -> dict[str, dict[str, list[str]]]:
             if sub.is_dir() and not sub.name.startswith("_") and sub.name != "__pycache__":
                 funcs: list[str] = []
                 for func_name, meta in CAPABILITY_META.items():
-                    if (sub / f"{meta['file_stem']}.py").exists():
+                    if (sub / f"{func_name}.py").exists():
                         funcs.append(func_name)
                 if funcs:
                     variants[sub.name] = funcs
@@ -253,7 +253,7 @@ def resolve(name: str, mode: str, function: str, variant: str | None = None):
     meta = CAPABILITY_META.get(function)
     if meta is None:
         raise ValueError(f"unknown function {function!r}. Known: {list(CAPABILITY_META)}")
-    file_stem = meta["file_stem"]
+    file_stem = function
 
     # 查找 variant 来源：先内置，后私有
     _sources = [Path(__file__).parent / "sources" / name]
