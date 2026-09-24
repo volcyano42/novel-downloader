@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 from cli.config import (
-    load_main_config, load_groups, load_site_config, add_novel_to_group,
-    build_options,
+    load_main_config, load_groups, add_novel_to_group, build_options,
 )
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, export,
@@ -55,35 +54,31 @@ def _get_storage():
 
 
 def _make_engines(source_name: str):
-    """构造 engines(mode)->engine（按书源名解析站点/variant，懒建并缓存）。
+    """构造 engines(mode)->engine（按书源名懒建并缓存）。
 
     缓存暴露为 `_engines.cache`，便于调用方在结束时 close 所有引擎。
     """
-    from novelbase.source import split_source_name
-    site, _, variant = split_source_name(source_name)
     cache: dict[str, object] = {}
 
     def _engines(mode: str):
         if mode not in cache:
-            cache[mode] = _get_engine(site, mode, variant or None)
+            cache[mode] = _get_engine(source_name, mode)
         return cache[mode]
 
     _engines.cache = cache  # type: ignore[attr-defined]
     return _engines
 
 
-def _get_engine(platform: str = "fanqie", mode: str | None = None,
-                variant: str | None = None):
-    """Create a fresh engine from current config.
+def _get_engine(source_name: str, mode: str | None = None):
+    """按书源名创建引擎；mode 缺省取书源首个能力声明的 mode。
 
-    mode/variant：指定时用于创建引擎（与 cli.main._get_engine 一致）；
-    缺省保持原行为（config.yaml 的 mode / variant 自动选择）。
+    与 `cli.main._get_engine` 统一：配置来自 `shared.config` 的三层合并。
     """
-    cfg = load_main_config()
-    if mode:
-        cfg["mode"] = mode
-    site_cfg = load_site_config(platform)
-    options = build_options(cfg, site_cfg, variant)
+    if mode is None:
+        from novelbase.source import capabilities
+        caps = capabilities(source_name)
+        mode = next(iter(caps.values()), "browser")
+    options = build_options(source_name, mode)
     return create_engine(options)
 
 
@@ -263,7 +258,7 @@ async def do_update(format_configs: dict, max_workers: int = 3,
     updated = 0
     for i, novel in enumerate(targets, 1):
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
-        source_name = getattr(novel, "source_name", "") or novel.extra.get("platform", "")
+        source_name = getattr(novel, "source_name", "")
         if not source_name:
             print("  无法确定书源，跳过（请重新下载该小说以记录书源）")
             continue

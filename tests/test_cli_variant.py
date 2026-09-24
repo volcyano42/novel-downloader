@@ -1,127 +1,21 @@
-"""CLI variant 解析与 build_options 的 variant 感知测试。
+"""cli.config 按书源构建 Options 的回归测试。
 
-规则：variant 数量 ≤1 时直接使用唯一项；多于 1 个时——
-- 交互式 CLI（main.py → cli/interactive）：询问用户选择，会话级记住
-- 非交互 CLI（cli.py → cli/main）：未指定 --variant 时提示并列出所有名称后退出
+variant 概念已随「书源扁平化」取消：Options 由
+`cli.config.build_options(source_name, mode)` 按书源三层合并配置构建，
+不再有 `mode_variants` / `resolve_variant` 辅助，也不再按 (cfg, site_cfg, variant) 组装。
 """
-import pytest
-
 import cli.config
-import cli.main
 
 
-def _site(browser=None, requests=None, api=None) -> dict:
-    cfg = {}
-    if browser is not None:
-        cfg["browser"] = browser
-    if requests is not None:
-        cfg["requests"] = requests
-    if api is not None:
-        cfg["api"] = api
-    return cfg
+def test_build_options_by_source(monkeypatch):
+    import cli.config
+    monkeypatch.setattr("shared.config.merged_source_config",
+                        lambda n: {"search": {"mode": "requests", "timeout": 42}})
+    opts = cli.config.build_options("92xs-requests-default", "requests")
+    assert opts.mode == "requests"
 
 
-# ── cli.config.resolve_variant ──
-
-
-def test_resolve_variant_single_browser_returns_it():
-    site = _site(browser={"default": {"headless": True}})
-    assert cli.config.resolve_variant(site, "browser") == "default"
-
-
-def test_resolve_variant_single_api_returns_it():
-    site = _site(api={"rain": {"key": ""}})
-    assert cli.config.resolve_variant(site, "api") == "rain"
-
-
-def test_resolve_variant_multiple_unset_returns_none():
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    assert cli.config.resolve_variant(site, "api") is None
-
-
-def test_resolve_variant_multiple_explicit():
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    assert cli.config.resolve_variant(site, "api", "rain") == "rain"
-
-
-def test_resolve_variant_missing_raises():
-    site = _site(api={"oiapi": {"key": ""}})
-    with pytest.raises(ValueError):
-        cli.config.resolve_variant(site, "api", "nope")
-
-
-def test_resolve_variant_none_available():
-    assert cli.config.resolve_variant({}, "api") is None
-
-
-# ── cli.config.build_options 的 variant 感知 ──
-
-
-def test_build_options_api_explicit_variant():
-    site = _site(api={
-        "oiapi": {"key": "k1", "timeout": 30},
-        "rain": {"key": "k2", "timeout": 99},
-    })
-    opts = cli.config.build_options({"mode": "api"}, site, "rain")
-    assert opts.mode == "api"
-    assert opts.api.timeout == 99
-
-
-def test_build_options_api_unset_takes_first_enabled():
-    site = _site(api={
-        "oiapi": {"key": "k1", "timeout": 7},
-        "rain": {"key": "k2", "timeout": 99, "enabled": False},
-    })
-    opts = cli.config.build_options({"mode": "api"}, site)
-    # variant 名不再进字段；用 provider 独有的 timeout 区分「选中第一个启用 provider」
-    assert opts.api.timeout == 7
-
-
-def test_build_options_api_missing_variant_raises():
-    site = _site(api={"oiapi": {"key": ""}})
-    with pytest.raises(ValueError):
-        cli.config.build_options({"mode": "api"}, site, "nope")
-
-
-def test_build_options_browser_explicit_variant():
-    site = _site(browser={
-        "default": {"headless": True},
-        "rain": {"headless": False},
-    })
-    opts = cli.config.build_options({"mode": "browser"}, site, "rain")
-    assert opts.browser.headless is False
-
-
-def test_build_options_browser_unset_prefers_default():
-    site = _site(browser={
-        "default": {"headless": True},
-        "rain": {"headless": False},
-    })
-    opts = cli.config.build_options({"mode": "browser"}, site)
-    assert opts.browser.headless is True
-
-
-# ── 非交互 CLI（cli.main._resolve_variant）──
-
-
-def test_main_resolve_variant_multiple_requires_flag(capsys, monkeypatch):
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    monkeypatch.setattr(cli.main, "load_site_config", lambda p: site)
-    with pytest.raises(SystemExit) as exc:
-        cli.main._resolve_variant("fanqie", "api", None)
-    assert exc.value.code == 2
-    out = capsys.readouterr().out
-    assert "--variant" in out
-    assert "oiapi" in out and "rain" in out
-
-
-def test_main_resolve_variant_single_defaults(monkeypatch):
-    site = _site(browser={"default": {"headless": True}})
-    monkeypatch.setattr(cli.main, "load_site_config", lambda p: site)
-    assert cli.main._resolve_variant("fanqie", "browser", None) == "default"
-
-
-def test_main_resolve_variant_explicit(monkeypatch):
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    monkeypatch.setattr(cli.main, "load_site_config", lambda p: site)
-    assert cli.main._resolve_variant("fanqie", "api", "rain") == "rain"
+def test_variant_helpers_removed():
+    import cli.config
+    assert not hasattr(cli.config, "resolve_variant")
+    assert not hasattr(cli.config, "mode_variants")

@@ -42,23 +42,26 @@ def test_cli_get_storage_lists_downloaded_novels(tmp_path, monkeypatch):
 
 
 def test_cli_build_options_default_storage_matches_shared(tmp_path, monkeypatch):
-    """cli build_options 在配置未指定 storage.database_url 时，默认与 backend 一致。"""
+    """cli build_options 的 storage 默认与 backend 一致（共享 get_database_url）。"""
     import cli.config
 
     monkeypatch.setattr(shared_config, "APP_DATA", tmp_path)
 
-    options = cli.config.build_options({"mode": "browser"}, {})
+    options = cli.config.build_options("92xs-requests-default", "requests")
     assert options.storage is not None
     assert options.storage.database_url == shared_config.get_database_url()
 
 
-def test_cli_build_options_honors_explicit_storage_config(tmp_path, monkeypatch):
-    """cli build_options 尊重显式配置的 storage.database_url。"""
+def test_cli_build_options_storage_is_single_source(tmp_path, monkeypatch):
+    """storage 是单一来源：站点/合并配置里的 storage 段不再影响 cli 的 Options。"""
     import cli.config
 
-    explicit = "sqlite:////custom/path/novels.db"
-    options = cli.config.build_options(
-        {"mode": "browser", "storage": {"database_url": explicit}}, {},
+    monkeypatch.setattr(shared_config, "APP_DATA", tmp_path)
+    monkeypatch.setattr(
+        "shared.config.merged_source_config",
+        lambda n: {"search": {"storage": {"database_url": "sqlite:////custom/novels.db"}}},
     )
+
+    options = cli.config.build_options("92xs-requests-default", "requests")
     assert options.storage is not None
-    assert options.storage.database_url == explicit
+    assert options.storage.database_url == shared_config.get_database_url()
