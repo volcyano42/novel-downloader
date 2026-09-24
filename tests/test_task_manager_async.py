@@ -188,7 +188,11 @@ def test_pause_at_tail_does_not_skip(monkeypatch):
         r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
         tid = r["task_id"]
         t = tm._tasks[tid]
-        await asyncio.sleep(0.02)  # 3 章都已开始下载（还没完成）
+        # 3 章都已开始下载（还没完成）：轮询等待（主 mode 预热经 to_thread，起步有延迟）
+        for _ in range(400):
+            if all(c.get("status") != "pending" for c in t["chapters"]):
+                break
+            await asyncio.sleep(0.005)
         assert tm.pause_task(tid) is True  # 此时 status == downloading
         # 等 3 章都下载完（优雅暂停：当前章跑完）
         await asyncio.sleep(0.12)
@@ -204,3 +208,45 @@ def test_pause_at_tail_does_not_skip(monkeypatch):
         assert t["status"] == "completed", t
 
     asyncio.run(_run())
+
+
+def test_run_download_prewarms_primary_mode_off_event_loop(monkeypatch):
+    """主 mode 引擎在解析前经 asyncio.to_thread 预热（防事件循环阻塞回归）。
+
+    断言 get_cached_engine 以 (source_name, 该源 novel_info 声明的 mode) 被调用，
+    且该调用发生在非主线程（即 to_thread 的 worker），而非事件循环线程。
+    """
+    import threading
+    from backend.services import task_manager as tm
+
+    chapters = _chapters(1)
+    _install_mocks(monkeypatch, chapters)
+
+    engine = MagicMock()
+    engine.mode = "requests"
+    main_thread = threading.current_thread()
+    seen: dict = {}
+
+    def _record(source_name, mode):
+        seen[(source_name, mode)] = threading.current_thread()
+        return engine
+
+    monkeypatch.setattr(tm, "get_cached_engine", _record)
+    tm._tasks.clear()
+
+    async def _run():
+        r = tm.create_task("fanqie_1", chapters, "测试",
+                           source_name="92xs-requests-default")
+        tid = r["task_id"]
+        for _ in range(500):
+            if tm._tasks[tid]["status"] in ("completed", "failed", "partial"):
+                break
+            await asyncio.sleep(0.01)
+        assert tm._tasks[tid]["status"] == "completed", tm._tasks[tid]
+
+    asyncio.run(_run())
+
+    # 预热门是「该源 novel_info 能力声明的 mode」（92xs-requests-default → requests）
+    assert ("92xs-requests-default", "requests") in seen, seen
+    assert seen[("92xs-requests-default", "requests")] is not main_thread, \
+        "主 mode 预热必须经 asyncio.to_thread 移出事件循环线程"

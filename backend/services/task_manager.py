@@ -29,6 +29,7 @@ async def _run_download(task: dict, source_name: str):
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
+    from novelbase.source import capabilities
 
     # engines(mode)->engine 解析器：按书源能力声明的 mode 惰性取引擎。
     # get_cached_engine(source_name, mode) 带缓存，命中即复用同一实例。
@@ -38,6 +39,17 @@ async def _run_download(task: dict, source_name: str):
         if m not in engines_cache:
             engines_cache[m] = get_cached_engine(source_name, m)
         return engines_cache[m]
+
+    # 主 mode 预热：get_cached_engine 是同步调用，browser 模式首次创建会启动
+    # Chromium，若首次创建落在事件循环线程会阻塞整个 FastAPI（含其它任务、
+    # 暂停/取消接口）数秒。resolve_meta/resolve_chapter 在事件循环里同步求值
+    # engines(mode)，故先用 to_thread 把「该源 novel_info 能力声明的 mode」
+    # （即解析将首先用到的 mode）建到缓存，移出事件循环线程。
+    _caps = capabilities(source_name)
+    primary_mode = _caps.get("novel_info") or next(iter(_caps.values()), None)
+    if primary_mode:
+        engines_cache[primary_mode] = await asyncio.to_thread(
+            get_cached_engine, source_name, primary_mode)
 
     try:
         store = create_storage(StorageOptions(
