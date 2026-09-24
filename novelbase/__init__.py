@@ -3,7 +3,6 @@ from .core.downloader import (
     resolve_chapter_list,
     resolve_chapter,
     export,
-    get_source,
     get_exporters,
     get_exporter_options,
     search,
@@ -37,7 +36,7 @@ __version__ = "4.4.1"
 
 def list_sources():
     """列出所有可用 source 名称。"""
-    from .core.downloader import list_sources as _ls
+    from .source import list_sources as _ls
     return _ls()
 
 
@@ -47,7 +46,6 @@ __all__ = [
     "resolve_chapter",
     "export",
     "create_engine",
-    "get_source",
     "get_exporters",
     "get_exporter_options",
     "search",
