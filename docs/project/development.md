@@ -14,7 +14,7 @@ python cli.py novel list
 cd frontend
 npx tsc --noEmit --project tsconfig.app.json
 
-# 运行测试（280 passed / 2 skipped，2026-08-25 实测）
+# 运行测试（389 passed / 1 skipped，2026-09-25 实测）
 python -m pytest tests/ -v --tb=short
 ```
 
@@ -23,7 +23,7 @@ python -m pytest tests/ -v --tb=short
 - Windows 10/11 (PowerShell) 或 Linux（含 Termux）
 - Python 3.10+（3.13 开发环境）
 - Node 24.15, npm 11.14
-- DrissionPage Chromium 可用（桌面端）
+- Playwright Chromium 可用（`playwright install chromium`，桌面端）
 - pip 依赖见 requirements.txt / pyproject.toml
 
 ## 衍生产物（novel-downloader-tools/）
