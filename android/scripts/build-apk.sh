@@ -12,9 +12,10 @@ cd "$(dirname "$0")/.."
 #       - 排除 playwright（需下载浏览器内核）、psutil（C 扩展）、pillow-heif（Chaquopy 仓库无 wheel）
 #       - pin 到 chaquo.com/pypi-13.1 里存在 cp311/arm64 wheel 的版本（否则 pip 取 PyPI sdist 编译失败）
 #       - uvicorn[standard] 的 C/Rust extras（httptools/uvloop/watchfiles）不可用 → 用纯 uvicorn
+#       - pin fastapi：0.121+ 起要求 pydantic>=2.9，与 pydantic<2 冲突（0.115-0.120 的约束仍是 pydantic<3）
 #       - 追加 pydantic<2：pydantic-core 是 Rust 扩展、无 Android wheel（Chaquopy 官方建议 v1）
 grep -v -E "^(playwright|psutil|pillow-heif)" ../requirements.txt \
-  | sed -E 's/^uvicorn\[standard\].*/uvicorn/; s/^lxml$/lxml==5.3.0/; s/^Pillow$/Pillow==11.0.0/; s/^yarl$/yarl==1.9.3/; s/^PyYAML$/PyYAML==6.0.3/' \
+  | sed -E 's/^uvicorn\[standard\].*/uvicorn/; s/^fastapi.*/fastapi==0.120.0/; s/^lxml$/lxml==5.3.0/; s/^Pillow$/Pillow==11.0.0/; s/^yarl$/yarl==1.9.3/; s/^PyYAML$/PyYAML==6.0.3/' \
   > .req-android.txt
 echo "pydantic<2" >> .req-android.txt
 echo "--- Android 依赖清单 ---"; cat .req-android.txt
