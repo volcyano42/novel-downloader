@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.routers.storage import _cover_to_response as encode_cover
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from backend.services import task_manager
-from backend.services.engine_manager import get_cached_engine, get_cached_engine_for_source
+from backend.services.engine_manager import get_cached_engine
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources
@@ -30,8 +30,8 @@ def _require_source(source: str | None, url: str) -> str:
 
 
 def _engines_for(source_name: str):
-    """构造 engines(mode)->engine（按书源名解析站点/variant，懒建并缓存）。"""
-    return lambda mode: get_cached_engine_for_source(source_name, mode)
+    """构造 engines(mode)->engine（按书源名 + mode 懒建并缓存）。"""
+    return lambda mode: get_cached_engine(source_name, mode)
 
 
 def _resolve_url(raw: str) -> str:
@@ -60,7 +60,7 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
     # "all" → 全部书源（复刻旧 search(platform="all") 语义）；否则单书源。
     if platform == "all":
         sources = list_sources()
-        engines = lambda m: get_cached_engine("fanqie", m, variant=None)
+        engines = lambda m: get_cached_engine("fanqie", m)
     else:
         source_name = _pick_source(platform, mode, variant)
         sources = [source_name]

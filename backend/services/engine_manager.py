@@ -1,19 +1,17 @@
-"""引擎工厂 — 按 platform + mode + variant 从 sites/{platform}.yaml 创建引擎。
+"""引擎工厂 — 按 book source(source_name) + 能力声明的 mode 建引擎。
 
-职责：读取配置 → 构建 Options → create_engine。
-生命周期由调用方管理（用完必须 close）。
+职责：读取三层合并配置 → 构建 Options → create_engine。
+生命周期由调用方管理（用完必须 close）；缓存键 = (source_name, mode)。
 """
 
 import json
-import os
 import sys
 import threading
-import uuid
 
 from fastapi import HTTPException
 
 from novelbase import Options, create_engine
-from shared.config import load_site_config
+from shared.config import merged_source_config
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}
@@ -22,41 +20,46 @@ _engine_cache: dict[str, object] = {}
 _engine_lock = threading.Lock()
 
 
-def _fingerprint(platform: str, mode: str, variant: str | None = None) -> str:
-    """生成缓存键。
+def _capability_for_mode(source_name: str, mode: str) -> str | None:
+    """按 mode 反查书源的能力段名（同名多段取 manifest 声明序第一个）。"""
+    from novelbase.source import capabilities
+    for cap, cap_mode in capabilities(source_name).items():
+        if cap_mode == mode:
+            return cap
+    return None
 
-    BrowserEngine: (platform, mode, browser_type, user_data_dir, viewport, headless)
-    APIEngine:     (platform, mode, variant)
-    RequestsEngine:(platform, mode, "requests")
+
+def _fingerprint(source_name: str, mode: str) -> str:
+    """生成缓存键（书源名 + mode）。
+
+    BrowserEngine: (source_name, mode, browser_type, user_data_dir, viewport, headless)
+    API/RequestsEngine: (source_name, mode)
     """
     import hashlib
 
     if mode == "browser":
-        site = load_site_config(platform)
-        mode_cfg = get_mode_variant_config(site, mode, variant)
-        vp = mode_cfg.get("viewport")
+        merged = merged_source_config(source_name)
+        cap = _capability_for_mode(source_name, mode)
+        cfg = merged.get(cap, {}) if cap else {}
+        vp = cfg.get("viewport")
         raw = (
-            f"{platform}|{mode}|{mode_cfg.get('browser_type','chromium')}|"
-            f"{mode_cfg.get('user_data_dir','')}|"
+            f"{source_name}|{mode}|{cfg.get('browser_type','chromium')}|"
+            f"{cfg.get('user_data_dir','')}|"
             f"{json.dumps(vp, sort_keys=True) if vp else ''}|"
-            f"{mode_cfg.get('headless', True)}"
+            f"{cfg.get('headless', True)}"
         )
-    elif mode == "api" and variant:
-        raw = f"{platform}|{mode}|{variant}"
     else:
-        raw = f"{platform}|{mode}|requests"
+        raw = f"{source_name}|{mode}"
     return hashlib.md5(raw.encode()).hexdigest()
 
 
-def get_cached_engine(platform: str,
-                      mode: str = "browser",
-                      variant: str | None = None):
-    """从缓存取引擎，缓存未命中则创建。
+def get_cached_engine(source_name: str, mode: str = "browser"):
+    """从缓存取引擎，缓存未命中则创建。缓存键 = (source_name, mode)。
 
     首次创建后复用，不再每次 close。调用方不再负责生命周期。
     通过 invalidate_engine 或在 lifespan shutdown 时统一清理。
     """
-    key = _fingerprint(platform, mode, variant)
+    key = _fingerprint(source_name, mode)
     # 快速路径：缓存命中不加锁（高频，无副作用）
     engine = _engine_cache.get(key)
     if engine is not None:
@@ -67,34 +70,20 @@ def get_cached_engine(platform: str,
         engine = _engine_cache.get(key)
         if engine is not None:
             return engine
-        engine = create_engine_for_request(platform, mode, variant)
+        engine = create_engine_for_request(source_name, mode)
         _engine_cache[key] = engine
         return engine
 
 
-async def invalidate_engine(platform: str,
-                            mode: str = "browser",
-                            variant: str | None = None) -> bool:
+async def invalidate_engine(source_name: str, mode: str = "browser") -> bool:
     """关闭并移除指定引擎（配置更新时调用）。"""
-    key = _fingerprint(platform, mode, variant)
+    key = _fingerprint(source_name, mode)
     with _engine_lock:
         engine = _engine_cache.pop(key, None)
     if engine:
         await engine.aclose()
         return True
     return False
-
-
-def get_cached_engine_for_source(source_name: str, mode: str):
-    """按书源名取/建缓存引擎：从 source_name 解析站点名与 variant。
-
-    书源名约定 `{platform}-{mode}-{variant}`（见 `novelbase.source.split_source_name`），
-    站点名即 `sites/{platform}.yaml`。供 downloader 的 `engines(mode)->engine`
-    解析器复用。
-    """
-    from novelbase.source import split_source_name
-    platform, _, variant = split_source_name(source_name)
-    return get_cached_engine(platform, mode, variant=variant or None)
 
 
 async def clear_engine_cache():
@@ -104,10 +93,6 @@ async def clear_engine_cache():
         _engine_cache.clear()
     for engine in engines:
         await engine.aclose()
-
-
-# ── 显式引擎实例（手动创建，key 为 engine_id）──
-_explicit_engines: dict[str, dict] = {}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -120,40 +105,29 @@ def _linux_default_browser_args() -> list[str] | None:
         return ["--no-sandbox", "--disable-gpu", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
     return None
 
-def create_engine_for_request(platform: str,
-                              mode: str = "browser",
-                              variant: str | None = None):
-    """从 sites/{platform}.yaml 读取配置，创建引擎实例。
+def create_engine_for_request(source_name: str, mode: str = "browser"):
+    """按书源名 + 能力声明的 mode，从三层合并配置创建引擎实例。
 
-    每个请求调用一次，用完必须调用 engine.close() 释放资源。
+    配置取自 `merged_source_config(source_name)` 中 mode 对应能力段（能力段名由
+    `capabilities(source_name)` 反查）。每个请求调用一次，用完必须 close 释放资源。
     """
-    site = load_site_config(platform)
-    mode_cfg = get_mode_variant_config(site, mode, variant)
+    merged = merged_source_config(source_name)
+    cap = _capability_for_mode(source_name, mode)
+    cfg: dict = merged.get(cap, {}) if cap else {}
 
-    _cfg = lambda k, default=None: mode_cfg.get(k, default)
+    _cfg = lambda k, default=None: cfg.get(k, default)
 
-    # ── API 模式：自动发现 platform 首个启用 variant ──
-    if mode == "api" and not variant:
-        api_section = site.get("api", {}) if isinstance(site.get("api"), dict) else {}
-        for name, prov in api_section.items():
-            if isinstance(prov, dict):
-                variant = name
-                break
-        if not variant:
-            raise HTTPException(400, f"平台 {platform} 的 API 模式没有启用任何 variant，请在站点配置中启用（如 oiapi/rain）或改用 requests/browser 模式")
-
-    if mode == "api" and variant:
-        prov_cfg = find_variant_options(variant)
-        if prov_cfg is None:
-            raise HTTPException(400, f"API variant '{variant}' 未启用或不存在，请在站点配置中启用它")
-        key = os.environ.get(f"{variant.upper()}_API_KEY", "") or prov_cfg.get("key", "")
+    # ── API 模式 ──
+    if mode == "api":
+        if cap is None:
+            raise HTTPException(400, f"书源 {source_name} 未声明 api 能力，无法创建 api 引擎")
         opts = Options().set_mode("api").set_api_options(
-            key=key,
-            delay=tuple(prov_cfg.get("delay", [3, 5])),
-            timeout=prov_cfg.get("timeout", 30),
-            retry_times=prov_cfg.get("retry_times", 3),
-            backoff_factor=prov_cfg.get("backoff_factor", 2),
-            params=prov_cfg.get("params"),
+            key=cfg.get("key", ""),
+            delay=tuple(cfg.get("delay", [3, 5])),
+            timeout=cfg.get("timeout", 30),
+            retry_times=cfg.get("retry_times", 3),
+            backoff_factor=cfg.get("backoff_factor", 2),
+            params=cfg.get("params"),
         )
         return create_engine(opts)
 
@@ -183,104 +157,5 @@ def create_engine_for_request(platform: str,
             retry_times=_cfg("retry_times", 3),
             backoff_factor=_cfg("backoff_factor", 2),
         )
-    elif mode == "api":
-        raise HTTPException(400, f"平台 {platform} 的 API 模式没有可用的 variant，请在站点配置中启用一个")
 
     return create_engine(opts)
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 显式引擎（手动管理 — 保留现有 API）
-# ═══════════════════════════════════════════════════════════════════
-
-def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
-    """从 Pydantic 数据构建 Options 对象。"""
-    opts = Options().set_mode(mode)
-    if mode == "api" and api:
-        a = api
-        opts.set_api_options(delay=a.delay, timeout=a.timeout,
-                             retry_times=a.retry_times, backoff_factor=a.backoff_factor,
-                             key=a.key, params=a.params)
-    elif mode == "requests" and requests:
-        r = requests
-        opts.set_requests_options(headers=r.headers, delay=r.delay, timeout=r.timeout,
-                                  retry_times=r.retry_times, backoff_factor=r.backoff_factor,
-                                  cookies=r.cookies, proxies=r.proxies)
-    elif mode == "browser" and browser:
-        b = browser
-        opts.set_browser_options(browser_type=b.browser_type, delay=b.delay, timeout=b.timeout,
-                                 retry_times=b.retry_times, backoff_factor=b.backoff_factor,
-                                 headless=b.headless, user_data_dir=b.user_data_dir, viewport=b.viewport,
-                                 extra_args=b.extra_args if hasattr(b, 'extra_args') and b.extra_args else _linux_default_browser_args(),
-                                 auto_reconnect=b.auto_reconnect if hasattr(b, "auto_reconnect") else False)
-    return opts
-
-
-def _build_sub_options(mode: str, api=None, requests=None, browser=None):
-    """从 Pydantic 数据构建子选项对象（APIOptions/RequestsOptions/BrowserOptions）。"""
-    from novelbase.core.options import APIOptions, RequestsOptions, BrowserOptions
-    if mode == "api" and api:
-        a = api
-        return APIOptions(delay=a.delay, timeout=a.timeout,
-                          retry_times=a.retry_times, backoff_factor=a.backoff_factor,
-                          key=a.key, params=a.params)
-    elif mode == "requests" and requests:
-        r = requests
-        return RequestsOptions(headers=r.headers, delay=r.delay, timeout=r.timeout,
-                               retry_times=r.retry_times, backoff_factor=r.backoff_factor,
-                               cookies=r.cookies, proxies=r.proxies)
-    elif mode == "browser" and browser:
-        b = browser
-        return BrowserOptions(browser_type=b.browser_type, delay=b.delay, timeout=b.timeout,
-                              retry_times=b.retry_times, backoff_factor=b.backoff_factor,
-                              headless=b.headless, user_data_dir=b.user_data_dir,
-                              viewport=b.viewport, extra_args=b.extra_args)
-    return None
-
-
-def list_explicit_engines() -> list[dict]:
-    return [
-        {"id": eid, "mode": info["mode"], "platform": info.get("platform", "")}
-        for eid, info in _explicit_engines.items()
-    ]
-
-
-def create_explicit_engine(mode: str, platform: str = "",
-                           api=None, requests=None, browser=None) -> dict:
-    engine_id = str(uuid.uuid4())[:8]
-    opts = _build_options(mode, api, requests, browser)
-    engine = create_engine(opts)
-    _explicit_engines[engine_id] = {"engine": engine, "platform": platform, "mode": mode}
-    return {"id": engine_id, "mode": mode, "platform": platform}
-
-
-def get_explicit_engine(engine_id: str) -> dict | None:
-    info = _explicit_engines.get(engine_id)
-    if not info:
-        return None
-    return {"id": engine_id, "mode": info["mode"], "platform": info.get("platform", "")}
-
-
-def update_explicit_engine(engine_id: str, mode: str,
-                           api=None, requests=None, browser=None) -> dict | None:
-    info = _explicit_engines.get(engine_id)
-    if not info:
-        return None
-    sub_opts = _build_sub_options(mode, api, requests, browser)
-    if sub_opts is None:
-        return None
-    info["engine"].update_options(sub_opts)
-    info["mode"] = mode
-    return {"id": engine_id, "mode": mode, "platform": info.get("platform", "")}
-
-
-async def delete_explicit_engine(engine_id: str) -> bool:
-    info = _explicit_engines.pop(engine_id, None)
-    if info:
-        eng = info["engine"]
-        if hasattr(eng, "aclose"):
-            await eng.aclose()
-        elif hasattr(eng, "close"):
-            eng.close()
-        return True
-    return False
