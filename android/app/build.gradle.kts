@@ -12,7 +12,9 @@ android {
 
     defaultConfig {
         applicationId = "com.novel.downloader"
-        minSdk = 21
+        // minSdk 24：Chaquopy 只接受 tag <= app minSdk 的 wheel，而 lxml / PyYAML
+        // 在 chaquo.com/pypi-13.1 里只有 android_24 的 cp311 wheel（官方 17.0 也把 24 定为最低要求）
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
