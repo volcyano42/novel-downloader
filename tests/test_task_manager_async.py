@@ -26,7 +26,7 @@ def test_create_task_returns_id_and_schedules_coroutine(monkeypatch):
     async def _run():
         ran = asyncio.Event()
 
-        async def _stub(task, mode, variant, platform):
+        async def _stub(task, source_name):
             task["_stub_ran"] = True
             ran.set()
 
@@ -34,7 +34,7 @@ def test_create_task_returns_id_and_schedules_coroutine(monkeypatch):
         tid = tm.create_task(
             "fanqie_1",
             [{"id": "c1", "url": "http://x", "title": "t", "order": 0}],
-            "test", mode="requests",
+            "test", source_name="92xs-requests-default",
         )
         assert tid  # 返回了 task_id
         assert tid["task_id"] in tm._tasks
@@ -48,7 +48,7 @@ def test_create_task_returns_id_and_schedules_coroutine(monkeypatch):
 
 def _install_mocks(monkeypatch, chapters, speed: float = 0.01):
     """把书源/引擎/存储替换为异步 mock，返回并发统计容器。speed 为每章下载耗时。"""
-    from backend.services import engine_manager
+    from backend.services import task_manager as tm
     from novelbase.models.novel import Novel
 
     engine = MagicMock()
@@ -76,7 +76,7 @@ def _install_mocks(monkeypatch, chapters, speed: float = 0.01):
     monkeypatch.setattr("novelbase.core.downloader.resolve_meta", fake_resolve_meta)
     monkeypatch.setattr("novelbase.core.downloader.resolve_chapter", fake_resolve_chapter)
     monkeypatch.setattr("novelbase.core.storage.create_storage", lambda opts: store)
-    monkeypatch.setattr(engine_manager, "get_cached_engine", lambda *a, **kw: engine)
+    monkeypatch.setattr(tm, "get_cached_engine", lambda *a, **kw: engine)
     return stats
 
 
@@ -96,7 +96,7 @@ def test_full_download_lifecycle(monkeypatch):
     tm._tasks.clear()
 
     async def _run():
-        r = tm.create_task("fanqie_1", chapters, "测试", mode="requests")
+        r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
         tid = r["task_id"]
         for _ in range(500):
             if tm._tasks[tid]["status"] in ("completed", "failed", "partial"):
@@ -126,7 +126,7 @@ def test_resume_failed_task_restarts_coroutine(monkeypatch):
                 {"id": c["id"], "url": c["url"], "title": c["title"], "order": c["order"],
                  "status": "failed"} for c in chapters],
             "novel_url": "", "_pause": asyncio.Event(), "_cancel": asyncio.Event(),
-            "_mode": "requests", "_variant": None, "_platform": "fanqie",
+            "_source": "92xs-requests-default",
         }
         tm._tasks["t_resume"] = task
         assert tm.resume_task("t_resume") is True
@@ -152,7 +152,7 @@ def test_pause_freezes_progress_until_resume(monkeypatch):
     tm._tasks.clear()
 
     async def _run():
-        r = tm.create_task("fanqie_1", chapters, "测试", mode="requests")
+        r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
         tid = r["task_id"]
         t = tm._tasks[tid]
         await asyncio.sleep(0.02)  # 让部分章节开始
@@ -185,7 +185,7 @@ def test_pause_at_tail_does_not_skip(monkeypatch):
     tm._tasks.clear()
 
     async def _run():
-        r = tm.create_task("fanqie_1", chapters, "测试", mode="requests")
+        r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
         tid = r["task_id"]
         t = tm._tasks[tid]
         await asyncio.sleep(0.02)  # 3 章都已开始下载（还没完成）

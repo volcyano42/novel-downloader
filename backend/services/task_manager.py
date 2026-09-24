@@ -23,30 +23,20 @@ _tasks: dict[str, dict] = {}
 _tasks_lock = threading.Lock()
 
 
-async def _run_download(task: dict, mode: str, variant: str | None, platform: str):
-    """下载协程：创建 engines 解析器 → 并发下载章节 → 收尾状态，支持暂停/取消。"""
+async def _run_download(task: dict, source_name: str):
+    """下载协程：按书源取引擎 → 并发下载章节 → 收尾状态，支持暂停/取消。"""
     from novelbase import resolve_meta, resolve_chapter
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
-    from novelbase.source import split_source_name
 
-    # 前端传的 platform 现在即书源名（source_name）。
-    source_name = platform
-    site, _, name_variant = split_source_name(source_name)
-    eff_variant = name_variant or variant
-
-    # engines(mode)->engine 解析器：预建主 mode 的引擎，其余 mode 惰性补齐。
-    # get_cached_engine 是同步调用，browser 模式首次创建会启动 Chromium，
-    # 用 to_thread 移出事件循环，避免阻塞整个 FastAPI 事件循环数秒。
-    primary_mode = mode or "browser"
+    # engines(mode)->engine 解析器：按书源能力声明的 mode 惰性取引擎。
+    # get_cached_engine(source_name, mode) 带缓存，命中即复用同一实例。
     engines_cache: dict[str, object] = {}
-    engines_cache[primary_mode] = await asyncio.to_thread(
-        get_cached_engine, site, primary_mode, variant=eff_variant)
 
     def engines(m: str):
         if m not in engines_cache:
-            engines_cache[m] = get_cached_engine(site, m, variant=eff_variant)
+            engines_cache[m] = get_cached_engine(source_name, m)
         return engines_cache[m]
 
     try:
@@ -207,8 +197,7 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
 
 
 def create_task(novel_id: str, chapters: list[dict], title: str,
-                mode: str = "browser", variant: str | None = None,
-                novel_url: str = "", platform: str = "fanqie") -> dict:
+                source_name: str = "", novel_url: str = "") -> dict:
     task_id = str(uuid.uuid4())[:8]
     # 给每章加初始状态
     ch_data = [
@@ -223,7 +212,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
         "chapters": ch_data, "novel_url": novel_url,
         "_pause": asyncio.Event(),
         "_cancel": asyncio.Event(),
-        "_mode": mode, "_variant": variant, "_platform": platform,
+        "_source": source_name,
     }
     with _tasks_lock:
         _tasks[task_id] = task
@@ -231,7 +220,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
     # create_task 是同步 def，但被 async 路由调用 → 事件循环正在运行，
     # 通过 get_running_loop() 拿当前 loop，把下载协程调度进去。
     loop = asyncio.get_running_loop()
-    loop.create_task(_run_download(task, mode, variant, platform))
+    loop.create_task(_run_download(task, source_name))
     return {"task_id": task_id, "total": len(chapters)}
 
 
@@ -296,10 +285,7 @@ def resume_task(task_id: str) -> bool:
         for c in task["chapters"]:
             c["status"] = "pending"
         loop = asyncio.get_running_loop()
-        loop.create_task(_run_download(
-            task, task.get("_mode", "browser"), task.get("_variant"),
-            task.get("_platform", "fanqie"),
-        ))
+        loop.create_task(_run_download(task, task.get("_source", "")))
         return True
     return False
 
