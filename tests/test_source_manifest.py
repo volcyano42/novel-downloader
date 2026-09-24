@@ -110,3 +110,17 @@ def test_capability_files_both_ways(tmp_path):
     m2 = load_manifest(d2)
     with pytest.raises(ManifestError, match="novel_info"):
         check_capability_files(d2, m2)
+
+
+def test_common_nonempty_without_capability_sections(tmp_path):
+    """common 非空但 default_config 零能力段 → ManifestError（而非 TypeError）。"""
+    m = {
+        "source_name": "demo-empty",
+        "enabled": True,
+        "common": {"timeout": 30},
+        "default_config": {},
+    }
+    d = _write(tmp_path, m)
+    with pytest.raises(ManifestError, match="common"):
+        load_manifest(d)
+

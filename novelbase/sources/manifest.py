@@ -72,6 +72,11 @@ def load_manifest(source_dir: Path) -> dict[str, Any]:
     # 2) common 的字段必须对所有出现的能力 mode 都合法（各 mode 字段集的交集）
     if common:
         modes = set(effective.values())
+        if not modes:
+            # common 非空但 default_config 未声明任何能力段 → 无 mode 可校验
+            raise ManifestError(
+                f"{path} 的 common 非空但 default_config 未声明任何能力段"
+            )
         allowed_common = set.intersection(*(set(MODE_FIELDS[m]) for m in modes))
         for key in common:
             if key not in allowed_common:
