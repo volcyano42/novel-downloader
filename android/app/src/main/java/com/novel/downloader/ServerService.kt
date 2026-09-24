@@ -10,6 +10,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import kotlin.concurrent.thread
 
 class ServerService : Service() {
@@ -42,8 +43,12 @@ class ServerService : Service() {
         if (pythonThread?.isAlive != true) {
             pythonThread = thread(name = "python-server") {
                 try {
-                    // 阻塞运行 uvicorn（server.py 内 uvicorn.run）
-                    Python.start(ServerService::class.java, "server")
+                    // 启动 Chaquopy 解释器（Python.start 只接受 Python.Platform），
+                    // 再显式调用 server.py 的 _start()（阻塞跑 uvicorn；模块级 __main__ 分支在 Chaquopy 下不会触发）
+                    if (!Python.isStarted()) {
+                        Python.start(AndroidPlatform(this@ServerService))
+                    }
+                    Python.getInstance().getModule("server").callAttr("_start")
                 } catch (t: Throwable) {
                     stopSelf()
                 }

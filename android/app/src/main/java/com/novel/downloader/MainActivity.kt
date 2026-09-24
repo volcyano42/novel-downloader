@@ -45,7 +45,7 @@ class MainActivity : AppCompatActivity() {
                     } else if (SystemClock.elapsedRealtime() - pollStart > HEALTH_TIMEOUT_MS) {
                         Toast.makeText(this@MainActivity, R.string.backend_not_ready, Toast.LENGTH_LONG).show()
                     } else {
-                        mainHandler.postDelayed(this@healthPoll, HEALTH_POLL_MS)
+                        mainHandler.postDelayed(healthPoll, HEALTH_POLL_MS)
                     }
                 }
             }.start()
