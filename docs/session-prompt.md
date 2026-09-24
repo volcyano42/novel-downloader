@@ -22,7 +22,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-25：**379 passed, 1 skipped**（本机实测，约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）。此前基线为 313 passed（2026-09-24 扁平化重构前）。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-25（扁平化 followup 收口后）：**389 passed, 1 skipped, 0 failed**（本机实测，约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc --noEmit` = 0 错。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
@@ -53,7 +53,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **BrowserOptions extra_args**（2026-08-05）：支持传入额外 Chromium 命令行参数（如 `--remote-debugging-port`），解决 Termux SSH 等无桌面环境的 browser 模式可用性问题
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
-- **已知中间态**（2026-09-25，书源扁平化 **core 层**完成的直接后果；完整 backend/CLI/前端改造属后续计划）：① backend `/download/platform`、`/download/sources`、`/download/detect` 返回的 `hosts` 为空、`platform` 恒 `None`，**前端 URL 识别当前不可用**（前端需补 `source` 参数，后端已留可选 query 对接点）；② `source.json` 的 `enabled` 字段**暂无消费者**（没有调用方真的「并发全部启用书源」）；③ 实现层对**重复 `source_name` 无检测**（只有测试层校验唯一性）；④ `novel.extra["platform"]` 键名保留（数据兼容）。完整清单与理由见 `.superpowers/sdd/2026-09-24-source-flattening-core/progress.md`
+- **中间态收口状态**（2026-09-25 扁平化 followup 完成后）：core 层遗留的中间态**已基本收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**（不再有 `hosts` 为空 / `platform` 恒 `None`）；`source.json` 的 `enabled` **已有消费者**（`shared.config.enabled_source_names()` 驱动 search / 后端 `/config/sources/{name}`）；前端 mode/variant 两级选择器**已删除**（搜索改「已启用书源并发」，URL 解析改「手选书源」，新增**书源管理页 `/sources`**）。**仍待收口**：① 未知 `source_name` 请求 `/api/v2/config/sources/{name}` 返回 500（`is_source_enabled` 对未知源抛 `KeyError`，未做 404 兜底）；② 前端 URL **自动**匹配书源仍缺（core 已删 `platform_from_url`，`source` 参数改由用户手选）；③ 实现层对**重复 `source_name` 无检测**（只有测试层校验唯一性）；④ `novel.extra["platform"]` 键名保留（值为 `source_name`，数据兼容）。完整清单见 `.superpowers/sdd/2026-09-24-source-flattening-core/progress.md` 与 `.superpowers/sdd/2026-09-25-followup/`
 - **分支状态**（2026-09-25）：main = **v4.4.0**（`ef7f21d`，2026-08-17 后仅 CHANGELOG 补充）；**dev 领先 origin/dev 27 个提交（未推送，用户 2026-09-25 明确选择留在本地）**——含书源扁平化 core 层 23 个提交（`7ccb608`..`2c694b9`）与之前的 4 个；未合并 main
 
 ## 文档索引
@@ -63,7 +63,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 | 入口 | [README.md](README.md) | 全部文档导航 |
 | 项目基础 | [project/overview.md](project/overview.md) | 概述、目录结构、架构速览、测试状态 |
 | 项目基础 | [project/cli.md](project/cli.md) | CLI 命令一览 |
-| 项目基础 | [project/sources.md](project/sources.md) | 平台 source 状态 + 注册机制 |
+| 项目基础 | [project/sources.md](project/sources.md) | 书源机制（source.json / 4 个公共 API / 能力声明） |
 | 项目基础 | [project/config.md](project/config.md) | 配置文件说明 |
 | 项目基础 | [project/development.md](project/development.md) | 验证命令、开发环境、衍生产物 |
 | 项目约定 | [conventions/git.md](conventions/git.md) | Git 提交/分支/workflow/版本号约定 |

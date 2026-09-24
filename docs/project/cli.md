@@ -1,44 +1,45 @@
 # CLI 命令
 
-## 非交互入口（python cli.py）
+## 非交互入口（`python cli.py`）
 
 | 命令 | 用途 |
 |------|------|
-| `search "关键词" --platform fanqie` | 搜索 |
-| `download --url <URL>` | 下载小说（全量，非交互） |
-| `update` | 更新全部已下载小说 |
+| `search "关键词" [--source <source_name>] [--page N]` | 搜索（省略 `--source` = 并发全部启用书源） |
+| `download --source <source_name> --url <URL> [--group g] [--workers n]` | 下载小说（全量，非交互） |
+| `update [--group g] [--workers n]` | 更新全部已下载小说 |
 | `export --group default --format epub` | 导出组内小说（直接导出，无交互菜单） |
 | `delete --id <novel_id>` | 删除小说（含章节/封面，移出分组） |
 | `novel list [--group g]` | 列出已下载小说（书架） |
 | `sources list [--json]` | 列出可用书源 |
-| `info --url <URL>` | 查看小说信息 |
-| `dev` | 开发工具（new-source / list-sources） |
+| `info --source <source_name> --url <URL>` | 查看小说信息 |
+| `dev new-source --name <source_name> [--modes requests,browser,api] [--no-config]` | 创建新书源脚手架 |
+| `dev list-sources` | 列出全部可用书源 |
 
-### 模式与 variant
+### 书源与模式
 
-`search` / `download` / `update` / `info` 支持：
-
-- `--platform/-p`：平台（fanqie/qidian/qimao/92xs；`download`/`info` 可从 URL 自动推断）
-- `--mode/-m`：requests / browser / api（默认 requests）
-- `--variant`：指定 variant 名（见下方选择规则）
-
-variant 选择规则（对所有模式一致）：
-
-- 某模式只有一个 variant 时自动使用；browser/requests 未指定时默认 `default`
-- 某模式多于一个 variant 时（如 fanqie 的 api 有 `oiapi`/`rain`）：
-  - 显式指定 `--variant`：使用指定项，不存在则报错并列出可用项
-  - 未指定 `--variant`：提示需显式指定，列出所有 variant 名称后以退出码 2 退出
+- `--source/-s`：书源名 `source_name`（如 `fanqie-requests-default`）。
+- **mode 由书源自己在 `source.json` 里声明，用户不再选**——旧的 `--platform/-p`、
+  `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。
+- `search` 省略 `--source` 时**并发全部启用书源**（`shared.config.enabled_source_names()`）；
+  单个源失败静默跳过，并在结果里标注来源 `source_name`。
+- `download` / `info` 的 `--source` 必填：core 已删 URL→书源推断，无法自动识别 URL 归属。
+- `dev new-source` 生成**一层结构**（`__init__.py` + `source.json` + 4 能力文件），默认同时写
+  `app_data/config/sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 已删除。
 
 示例：
 
 ```bash
-python cli.py search "斗破苍穹" --platform fanqie --mode api --variant rain
-python cli.py download --url "https://..." --mode browser
+python cli.py search "斗破苍穹"                            # 并发全部启用书源
+python cli.py search "斗破苍穹" --source fanqie-requests-default
+python cli.py download --source fanqie-browser-default --url "https://..."
+python cli.py info --source 92xs-requests-default --url "https://..."
 ```
 
-## 交互式入口（python main.py）
+## 交互式入口（`python main.py`）
 
-主菜单执行搜索/下载/更新时按当前 mode 解析 variant：
+主菜单搜索/下载的选书源行为：
 
-- 只有一个 variant：直接使用（browser/requests 默认 `default`）
-- 多于一个 variant：弹出选择菜单询问用户，选择结果在本次会话内记住（同一平台不再重复询问），取消则回退第一个 variant 并提示
+- **搜索**：输入关键词 → 并发全部启用书源，结果标注来源后由用户选择；输入 URL →
+  由用户从全部书源中**手选书源**（core 无 URL→书源推断）。
+- **下载**：由用户**手选书源**。
+- 交互式入口**不再有 mode/variant 选择菜单**（旧的「按当前 mode 解析 variant」逻辑已删除）。

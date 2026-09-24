@@ -1,6 +1,8 @@
 # 书源独立打包插件 — 设计草案
 
 > **状态**：设计草案，未实现。Phase 1 已完成硬编码兜底移除 + manifest 机制，Phase 2 将在适当时机实现。
+>
+> *（2026-09-25 注）API 名称已按书源扁平化后的 `novelbase/source.py` 对齐：入口是 `source.resolve(source_name, capability) -> (fn, mode)`，旧 `registry.resolve(name, mode, function)` / `register_source()` 已随扁平化删除。*
 
 
 ## 目标
@@ -13,7 +15,7 @@
 ┌─────────────────────────┐
 │  主程序 (novel-downloader)  │
 │                         │
-│  registry.resolve()     │
+│  source.resolve()       │
 │       ↓                 │
 │  本地内置源 → import_module  │
 │  插件源     → RPC 代理函数   │
@@ -73,11 +75,11 @@
 | api | ✅ | 同上 |
 | browser | ❌ | 浏览器进程在主进程，跨进程不可传递 |
 
-**处理**：`resolve()` 对 browser 模式的插件书源抛出明确错误："browser 模式不支持插件源，请使用内置源或切换到 requests/api 模式"。
+**处理**：`resolve(source_name, capability)` 对 browser 模式的插件书源抛出明确错误："browser 模式不支持插件源，请使用内置源或切换到 requests/api 模式"。
 
 ## 进程生命周期
 
-1. **按需启动**：首次 `resolve(name, mode, fn)` 时启动插件进程，缓存进程句柄。
+1. **按需启动**：首次 `resolve(source_name, capability)` 时启动插件进程，缓存进程句柄。
 2. **空闲回收**：插件进程 30 分钟无调用则自动退出。
 3. **主程序退出**：主进程退出时发送 `{"jsonrpc":"2.0","method":"shutdown"}` 并等待 3 秒，超时则强制 kill。
 4. **崩溃恢复**：插件进程意外退出时，下一次调用自动重启（最多 3 次重启，超过则标记插件不可用）。
@@ -97,14 +99,14 @@ app_data/plugins/
 └── ...
 ```
 
-插件命名约定：`{platform}_{mode}.exe`。`list_sources()` 扫描插件目录自动发现插件源，合并到内置源列表。
+插件命名约定：`{source_name}.exe`（`source_name` 已含模式，如 `fanqie-requests-default.exe`）。`list_sources()` 扫描插件目录自动发现插件源，合并到内置源列表。
 
 ## 实现要点
 
-1. **proxy 函数**：`SourceProxy(name, mode)` 类，实现与内置源函数相同签名，内部用 `subprocess.Popen` + stdin/stdout JSON-RPC 通信。
+1. **proxy 函数**：`SourceProxy(source_name, capability)` 类，实现与内置源函数相同签名，内部用 `subprocess.Popen` + stdin/stdout JSON-RPC 通信。
 2. **插件编译**：每个书源编译时生成独立的 `plugin_main.py`（只含该源 + 轻量 HTTP 引擎，不含 DrissionPage/浏览器），Nuitka onefile 打包。
 3. **engine_config 序列化**：只传 dict（headers/cookies/timeout），不传 Engine 对象。插件内部 `create_engine(engine_config)` 创建自己的引擎实例。
-4. **注册表扩展**：`register_source()` 扫描 `app_data/plugins/` 目录，将发现的插件源合并到返回结果。
+4. **发现扩展**：扩展 `novelbase/source.py` 的 `list_sources()` / `resolve()`，扫描 `app_data/plugins/` 目录，将发现的插件源合并进返回结果（旧 `register_source()` 已随扁平化删除）。
 
 ## 未解决的问题
 

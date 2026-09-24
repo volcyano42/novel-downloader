@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本 v4.2.3（已发布 tag）；dev 当前 v4.4.0。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（main 已发布 v4.4.0，dev 领先）。
 
 ## 目录结构（2026-08-02 重组后）
 
@@ -27,25 +27,23 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 ```
 novelbase/          ← 核心库（source 驱动，引擎/存储/下载/导出）
   core/               engine.py, downloader.py, storage.py, options.py, exceptions.py
-  sources/            fanqie/, qidian/, qimao/, 92xs/
-    fanqie/             browser/ requests/ api/(oiapi/ rain/)
-    qidian/             browser/ requests/
-    qimao/              browser/ requests/ api/(rain/)
-    92xs/                requests/
-    每个 mode/variant 下: search.py, novel_info.py, chapter_list.py, chapter_content.py
+  sources/            一层书源目录（{source_dir}/，如 fanqie_requests_default/）
+    每个书源            __init__.py + source.json + 4 个能力文件
+                        (search.py / novel_info.py / chapter_list.py / chapter_content.py)
   models/             Novel, Chapter, Chapters, Illustration, SearchResult（models/novel.py）
   exporters/          export() 纯函数（txt, epub, img；base.py/contracts.py）
   utils/              logger.py, hooks.py, encoding.py, urls.py, template_utils.py, build_manifest.py
-  source.py           ← 公共 API（capabilities/resolve/list_sources）
+  source.py           ← 公共 API（list_sources / get_manifest / capabilities / resolve）
   sources/contracts.py ← Protocol 契约 + CAPABILITY_META 单一数据源
+  sources/manifest.py  ← source.json 加载与校验
 
 backend/              FastAPI 入口 (main.py) + 内嵌前端静态文件 serve
-  routers/          download.py, storage.py, export.py, config.py, engine.py, history.py
+  routers/          download.py, storage.py, export.py, config.py, history.py
   services/         task_manager.py, engine_manager.py
-  schemas/          download.py, storage.py, export.py, export_config.py, engine.py
+  schemas/          download.py, storage.py, export.py, export_config.py
 
 frontend/             React SPA (Vite)
-  src/features/     bookshelf/, detail/, download/, settings/, reader/
+  src/features/     bookshelf/, detail/, download/, reader/, settings/, sources/
   src/hooks/        useNovels, useChapters, useDownload, useConfig, useSources …
   src/api/          endpoints.ts（API 函数）, client.ts（fetch 封装）
   src/components/   Toast, ErrorBoundary, UI 组件库 (alert-dialog, button, dropdown-menu, select, sheet, tooltip)
@@ -62,7 +60,7 @@ app.py                ← 统一启动器（一键启动前后端，Ctrl+C 优�
 shared/               config.py, user_data.py（跨端共享：配置加载 / 用户数据库模板）
 
 app_data/
-  config/             config.yaml, sites/*.yaml, groups.yaml, formats/*.yaml
+  config/             config.yaml, sites/{source_name}.yaml, formats/*.yaml
   storage/            novels.db（SQLite，每本小说一个独立 .db 文件）
   exports/            导出输出目录
 tests/                check_imports.py, test_downloader.py, test_export_config.py, test_models.py,
@@ -76,4 +74,4 @@ android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新�
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-08-25：全量 280 passed / 2 skipped（Docker `nld-test:3.11` 干净 worktree 实测）；新增 `tests/test_interactive_cli.py` 36 用例。此前：2026-08-05 test_source_contracts 从 8 增至 13（新增 TestPrivateSources 5 个测试，1 个因 monkeypatch 超时暂 skip）。
+> 2026-09-25（书源扁平化收口后本机实测）：`python -m pytest tests/ -q` = **389 passed, 1 skipped, 0 failed**（约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）。前端 `npx tsc --noEmit --project tsconfig.app.json` = 0 错。
