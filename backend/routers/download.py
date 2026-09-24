@@ -1,4 +1,8 @@
-"""Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。"""
+"""Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。
+
+契约（spec §3.1）：`source` Query 即 `source_name`；`/search` 的 `source` 为空时并发
+全部启用书源（`shared.config.enabled_source_names()`）；MODE 由书源自声明，用户不再传。
+"""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -8,18 +12,10 @@ from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.source import resolve_book_url, list_sources
+from novelbase.source import resolve_book_url, list_sources, capabilities
+from shared.config import enabled_source_names, is_source_enabled
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
-
-
-def _pick_source(platform: str, mode: str | None, variant: str | None) -> str:
-    """把请求中的 platform 标识解析为确定的 source_name。
-
-    最小过渡：书源名 = `platform` 直通（T7 会把本函数整体删除、`source` Query 直通
-    `source_name`，届时对旧「站点名 + mode/variant」的兼容彻底消失）。
-    """
-    return platform
 
 
 def _require_source(source: str | None, url: str) -> str:
@@ -30,8 +26,25 @@ def _require_source(source: str | None, url: str) -> str:
 
 
 def _engines_for(source_name: str):
-    """构造 engines(mode)->engine（按书源名 + mode 懒建并缓存）。"""
+    """构造 engines(mode)->engine（按书源名 + 能力声明的 mode 懒建并缓存）。"""
     return lambda mode: get_cached_engine(source_name, mode)
+
+
+def _engines_for_sources(sources: list[str]):
+    """多书源并发搜索用的 engines(mode)->engine：每个 mode 取声明它的首个书源。
+
+    `novelbase.core.search` 的 engines 只按 mode 调用（`downloader.py:39` 的
+    `engines(mode)`，不带 source_name），故多书源只能共享一个解析器；同一 mode 的多个
+    书源共享引擎（与既有 `tests/test_downloader.py` 的 `_engines` 约定一致）。不同 mode
+    时按书源声明分派，避免用错书源的 cookies/user_data_dir 等配置。
+    """
+    mode_source: dict[str, str] = {}
+    for name in sources:
+        mode = capabilities(name).get("search")
+        if mode and mode not in mode_source:
+            mode_source[mode] = name
+    fallback = sources[0] if sources else ""
+    return lambda mode: get_cached_engine(mode_source.get(mode, fallback), mode)
 
 
 def _resolve_url(raw: str) -> str:
@@ -43,32 +56,32 @@ def _resolve_url(raw: str) -> str:
 
 
 @router.get("/search")
-async def search_novels(platform: str = Query(...), query: str = Query(...),
-                        mode: str = Query("browser"),
-                        variant: str | None = Query(None)):
+async def search_novels(query: str = Query(...), source: str = Query(""),
+                        page: int = Query(1)):
     if query.startswith("http://") or query.startswith("https://"):
-        source_name = _pick_source(platform, mode, variant)
+        # URL 直达：source 必填（core 无 URL→书源推断能力）。
+        source_name = _require_source(source, query)
+        url = _resolve_url(query)
         try:
-            url = _resolve_url(query)
             novel = await resolve_meta(url, source_name, _engines_for(source_name))
-            return [SearchResultData(title=novel.title, author=novel.author,
-                                     url=novel.url, description=novel.description,
-                                     extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
         except Exception as e:
             raise HTTPException(500, str(e))
+        return [SearchResultData(title=novel.title, author=novel.author,
+                                 url=novel.url, description=novel.description,
+                                 source_name=source_name,
+                                 extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
 
-    # "all" → 全部书源（复刻旧 search(platform="all") 语义）；否则单书源。
-    if platform == "all":
-        sources = list_sources()
-        engines = lambda m: get_cached_engine("fanqie", m)
+    # 关键字搜索：source 空 → 并发全部启用书源；否则单书源。
+    if source:
+        sources = [source]
+        engines = _engines_for(source)
     else:
-        source_name = _pick_source(platform, mode, variant)
-        sources = [source_name]
-        engines = _engines_for(source_name)
+        sources = enabled_source_names()
+        engines = _engines_for_sources(sources)
     try:
-        results = await search(sources, query, engines)
+        results = await search(sources, query, engines, page=page)
     except FeatureNotSupportedError as e:
-        # 该平台/模式组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
+        # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -81,11 +94,9 @@ async def search_novels(platform: str = Query(...), query: str = Query(...),
 
 
 @router.post("/novel")
-async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"),
-                     variant: str | None = Query(None),
-                     source: str | None = Query(None)):
+async def resolve_meta_route(body: FetchMetaRequest, source: str = Query("")):
     url = _resolve_url(body.url)
-    source_name = _pick_source(_require_source(source, url), mode, variant)
+    source_name = _require_source(source, url)
     try:
         novel = await resolve_meta(url, source_name, _engines_for(source_name))
     except Exception as e:
@@ -98,11 +109,9 @@ async def resolve_meta_route(body: FetchMetaRequest, mode: str = Query("browser"
 
 
 @router.get("/novel/{novel_id}")
-async def get_remote_novel(novel_id: str, url: str = Query(...),
-                           mode: str = Query("browser"), variant: str | None = Query(None),
-                           source: str | None = Query(None)):
+async def get_remote_novel(novel_id: str, url: str = Query(...), source: str = Query("")):
     url = _resolve_url(url)
-    source_name = _pick_source(_require_source(source, url), mode, variant)
+    source_name = _require_source(source, url)
     try:
         novel = await resolve_meta(url, source_name, _engines_for(source_name))
     except Exception as e:
@@ -115,10 +124,9 @@ async def get_remote_novel(novel_id: str, url: str = Query(...),
 
 @router.get("/novel/{novel_id}/chapters")
 async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
-                             mode: str = Query("browser"), variant: str | None = Query(None),
-                             source: str | None = Query(None)):
+                                     source: str = Query("")):
     url = _resolve_url(url)
-    source_name = _pick_source(_require_source(source, url), mode, variant)
+    source_name = _require_source(source, url)
     try:
         chapters = await resolve_chapter_list(url, source_name, _engines_for(source_name))
     except Exception as e:
@@ -129,14 +137,12 @@ async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
 
 @router.post("/novel/{novel_id}/chapter")
 async def download_chapters(novel_id: str, body: list[DownloadChapterRequest],
-                            title: str = Query(""), mode: str = Query("browser"),
-                            variant: str | None = Query(None),
-                            novel_url: str = Query(""),
-                            platform: str = Query("fanqie")):
+                            title: str = Query(""), source: str = Query(""),
+                            novel_url: str = Query("")):
+    source_name = _require_source(source, novel_url)
     chapters_data = [{"id": ch.id, "url": ch.url, "title": ch.title,
                        "order": ch.order, "volume": ch.volume} for ch in body]
-    return task_manager.create_task(novel_id, chapters_data, title,
-                                    mode, variant, novel_url, platform)
+    return task_manager.create_task(novel_id, chapters_data, title, source_name, novel_url)
 
 
 @router.get("/tasks")
@@ -165,39 +171,14 @@ async def delete_task(task_id: str):
     return {"status": "ok"}
 
 
-@router.get("/platform")
-async def list_platforms():
-    from novelbase.source import list_sources
-    return [{"id": name, "label": name} for name in list_sources()]
-
-
 @router.get("/sources")
 async def list_all_sources():
-    """返回所有 source 及其完整能力矩阵。"""
-    from novelbase.source import list_sources
-    from novelbase.source import capabilities as _caps
-    result = {}
-    for name in list_sources():
-        result[name] = {
-            "hosts": [],
-            "show_name": name,
-            "capabilities": _caps(name),
-        }
-    return result
+    """返回全部书源（含未启用）的扁平能力矩阵与启用状态。
 
-
-# ── Detect ────────────────────────────────────────────
-
-@router.post("/detect")
-async def detect_platform(body: dict):
-    """根据 URL 或 ID 推断平台和完整 URL。前端 URL 猜测逻辑的后端实现。"""
-    raw: str = body.get("raw", "")
-    if not raw:
-        raise HTTPException(400, "缺少 raw 字段")
-    from novelbase.source import resolve_book_url
-    # core 已删 platform_from_url：无法自动识别书源，仅返回规范化 URL
-    try:
-        url = resolve_book_url(raw)
-        return {"platform": None, "url": url}
-    except ValueError:
-        return {"platform": None}
+    `capabilities(name)` 直出 `{capability: mode}`；`enabled` = 三层读取结果
+    （用户层覆盖出厂值，见 `shared.config.is_source_enabled`）。
+    """
+    return {
+        name: {"capabilities": capabilities(name), "enabled": is_source_enabled(name)}
+        for name in list_sources()
+    }
