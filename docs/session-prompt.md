@@ -22,7 +22,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-08-20：**209 passed, 2 skipped**（本机实测；含 search_history、source_async、task_manager_async 等异步测试）。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-25：**379 passed, 1 skipped**（本机实测，约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）。此前基线为 313 passed（2026-09-24 扁平化重构前）。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
@@ -34,31 +34,27 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **版本号更新** 用户明确要求更新版本时，同步更新 `CHANGELOG.md`（新增 `## v{版本}` 段落）与项目版本号（`pyproject.toml` + `novelbase/__init__.py`）；若版本号不确定，先询问用户
 - **状态管理** 前端用 `@tanstack/react-query`，不再手动 `useEffect` 加载
 - **SSE** 章节流式推送（`GET /api/v2/novel/{id}/chapters/stream`）
-- **引擎** 三种模式：`browser`（**Playwright**，2026-08-16 从 DrissionPage 迁移）、`requests`（httpx）、`api`（Rain.ink 代理）
+- **引擎** 三种模式：`browser`（**Playwright**，2026-08-16 从 DrissionPage 迁移）、`requests`（httpx）、`api`（Rain.ink 代理）。**mode 由书源自己在 `source.json` 里声明**，用户不再选 mode（2026-09-25）
 - **存储** SQLite，每本书独立 `.db` 文件，包含 meta/chapters/illustrations 表
 - **Rain API** key 在配置文件中，fanqie 和 qimao 各有独立 key
-- **配置** `app_data/config/config.yaml` 控制下载并发、通知等
+- **配置** `app_data/config/config.yaml` 控制下载并发、通知等；**逐书源配置**在 `app_data/config/sites/{source_name}.yaml`（2026-09-25 起旧 `sites/*.yaml` 不迁移，用户重配）
 - **BS4 选择器** 使用 `select_one`/`select`（CSS 选择器），不用 `find`/`find_all`
-- **搜索** `platform="all"` 全平台搜索，结果按平台分组，失败平台静默跳过
-- **SearchResult** 有 `platform: str` 字段，`search()` 函数统一打标签
-- **搜索缓存** SessionCache 存完整搜索参数（query/platform/mode/variant），切回 tab 自动恢复
-- **下载器 API** `skip_delay=False` 参数通过 `**kwargs` 传递到底层函数
-- **Source 架构** `source.resolve(name, mode, function, variant?)` 动态分发到底层函数（`novelbase.source` 命名空间）；`source.capabilities()` 统一返回 `dict[str, dict[str, list[str]]]`（单 variant mode 用 `"default"` key）；`variant=None` 时默认取 `"default"`
-- **CLI** `python -m cli`（`cli/` 包，2026-08-13 由 cli.py + cli_lib 合并；argparse 子命令）
+- **书源（Source）架构**（2026-09-25 扁平化后）：`novelbase/sources/{dir}/` **一层**目录，每个书源含空 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件（`search.py` / `novel_info.py` / `chapter_list.py` / `chapter_content.py`）。`novelbase/source.py` 只暴露 4 个函数：`list_sources()` / `get_manifest(source_name)` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)`。**`platform` 概念已彻底移除**（`platform_from_url` / `register_source` / `NAME` / `SHOW_NAME` / `HOSTS` 全部删除）；书源**没有中文显示名**，界面与日志统一显示 `source_name`（如 `fanqie-requests-default`）。**不设 `_common.py`**：各书源自包含，共享逻辑内联进需要它的能力文件（明确接受书源间重复的代价）
+- **书源 `source.json` 规范**：`source_name` 唯一 id（也是 `sites/{source_name}.yaml` 的文件名）；`enabled` 出厂开关（**api 类默认 `false`，requests/browser 默认 `true`**）；顶层 `common` 段并入每个能力段（能力段覆盖 `common`，且 `common` 的字段必须对**所有出现的 mode** 合法）；**能力段存在 ⇔ 同名 `.py` 文件存在**，不一致直接报 `ManifestError`；字段命名全链用 `retry_times`
+- **下载器 API**（2026-09-25 新签名）：`async search(sources, query, engines, **kwargs)` / `resolve_meta(url, source_name, engines, **kwargs)` / `resolve_chapter_list(url, source_name, engines, **kwargs)` / `resolve_chapter(chapter, source_name, engines, **kwargs)`。`engines` 是 `engines(mode) -> engine` 解析器，由调用方按 `capabilities(source_name)` 懒建并复用；`skip_delay=False` 仍经 `**kwargs` 传递到底层函数
+- **搜索** 按书源并发（`search(sources, ...)`），失败书源静默跳过；`SearchResult.source_name` 由 **downloader 分发层统一打标**（书源侧不写死，直接调书源 `search()` 会得到空 `source_name`）
+- **SearchResult** 字段为 `source_name: str`（旧 `platform` 已删；`Novel` 也新增 `source_name: str = ""` 标记来源）
+- **搜索缓存** SessionCache 存 `query` / `source_name`（`mode`/`variant` 概念已取消）
 - **Novel.id = sha256(url)、库内 meta.id = url**（2026-09-24 改，取代 2026-08-22 的 `hash(canonical url)`）：对外标识（模型字段 / 磁盘文件名 / API / 前端 / CLI）= `sha256(url)[:32]`；库内 `meta.id` 列存**书源返回的 url 原样**（不做规范化，可按 url 查书）。`canonical_book_url` 及其平台特例（92xs/qidian）已删除，url 归一由书源负责——core 不再承载站点知识
-- **不做 url 规范化**（2026-09-24）：同一本书的不同 url 形态会得到不同 id（如 92xs 的 `/book/{id}.html` 与 `/html/{id}/`），入库与后续使用须保持同一形态
+- **不做 url 规范化**（2026-09-24）：同一本书的不同 url 形态会得到不同 id（如 92xs 的 `/book/{id}.html` 与 `/html/{id}/`），入库与后续使用须保持同一形态。**重构不得改变书源返回的 url**（变更 = 已有书籍 id 漂移）；`tests/test_novel_id_stability.py` 用 AST 快照兜底
 - **导出器** 纯函数 `export()`，无类实例状态（BASEExporter 已删除）
-- **SHOW_NAME** 每个 source 有中文显示名，`register_source()` 返回 `{name: {name, show_name, hosts}}`
-- **前端动态平台** 模式/方案从 `GET /api/v2/download/sources` 动态获取，不硬编码
-- **encoding 参数** `engine.fetch_text(url, encoding=...)` 可指定编码，默认自动检测（`apparent_encoding`）
-- **Android APK**（2026-08-02 落地，**2026-09-24 首次构建成功** run `35975357459`）：`android/` 目录 + `build-apk.yml` workflow，用 **Chaquopy 嵌入 Python**（插件 15.0.1，wheel 仓库 `chaquo.com/pypi-13.1`；见 [build/android-apk.md](build/android-apk.md)）。硬约束：**`minSdk 24`**（pip 只接受 tag ≤ minSdk 的 wheel，`lxml`/`PyYAML` 只有 `android_24`）、**必须 `pydantic<2`**（`pydantic-core` 是 Rust 无 Android wheel）且 `fastapi` pin `==0.120.0`、**依赖排除不能写 `pip { exclude }`**（无此 API）而由 `build-apk.sh` 生成 `android/.req-android.txt`、public 无 `pyproject.toml` 故 `novelbase` 走源码复制；产物**未签名**（缺 `KEYSTORE_*` secrets）、**真机启动未验证**；musl 构建仍移除
-- **本机不构建任何平台产物**（2026-08-02 确认）：构建全走 CI workflow；衍生产物（email_downloader.py、调试脚本）放 novel-downloader-tools/
-- **variant 命名**（2026-08-05）：`capabilities()` 第二层 key 统一命名为 variant（替代旧 provider），语义为 "同一 mode 下的不同实现/方案"；单实现 mode（browser/requests）用 `"default"` 占位；`resolve()` 签名 `variant=None` 默认取 `"default"`。向后端 API 传送的 Query 参数同理改为 `variant`，前端 sessionStorage key `nd:variant`
-- **私有源隔离**（2026-08-05）：环境变量 `NLD_PRIVATE_SOURCES` 指向外部私有目录（镜像 `sources/{name}/` 结构），`capabilities()` 自动合并，`resolve()` 从私有目录动态加载。公开仓库不包含敏感实现（如逆向/破解），本地开发设 env var 即可使用全部功能
+- **私有源隔离**（2026-08-05，2026-09-25 适配新结构）：环境变量 `NLD_PRIVATE_SOURCES` 指向外部私有目录（镜像新的 `sources/{dir}/` 结构，走 `spec_from_file_location` 加载，因它在包外），与内置书源合并，**同名能力内置优先**。公开仓库不包含敏感实现（如逆向/破解），本地开发设 env var 即可使用全部功能
+- **Nuitka 编译链路**：`python -m novelbase.utils.build_manifest` 遍历 `sources/*/source.json` 生成 `novelbase/utils/_manifest.py`（`SOURCES`，键 = 目录名；`SOURCE_DIRS`，映射 `source_name → 目录名`）；`source.py` 的 `_is_compiled()` 分支读它。两个 `build-nuitka` 脚本本身无需改
 - **BrowserOptions extra_args**（2026-08-05）：支持传入额外 Chromium 命令行参数（如 `--remote-debugging-port`），解决 Termux SSH 等无桌面环境的 browser 模式可用性问题
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
-- **分支状态**（2026-08-20）：main = **v4.4.0**（`6b3eb0f`，2026-08-17）；**dev 领先 main 14 个提交**（8-17 前端 10 个 + 8-20 体验清单 4 个，已推送 origin/dev，未合并 main）
+- **已知中间态**（2026-09-25，书源扁平化 **core 层**完成的直接后果；完整 backend/CLI/前端改造属后续计划）：① backend `/download/platform`、`/download/sources`、`/download/detect` 返回的 `hosts` 为空、`platform` 恒 `None`，**前端 URL 识别当前不可用**（前端需补 `source` 参数，后端已留可选 query 对接点）；② `source.json` 的 `enabled` 字段**暂无消费者**（没有调用方真的「并发全部启用书源」）；③ 实现层对**重复 `source_name` 无检测**（只有测试层校验唯一性）；④ `novel.extra["platform"]` 键名保留（数据兼容）。完整清单与理由见 `.superpowers/sdd/2026-09-24-source-flattening-core/progress.md`
+- **分支状态**（2026-09-25）：main = **v4.4.0**（`ef7f21d`，2026-08-17 后仅 CHANGELOG 补充）；**dev 领先 origin/dev 27 个提交（未推送，用户 2026-09-25 明确选择留在本地）**——含书源扁平化 core 层 23 个提交（`7ccb608`..`2c694b9`）与之前的 4 个；未合并 main
 
 ## 文档索引
 
