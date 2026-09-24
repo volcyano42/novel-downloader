@@ -17,7 +17,7 @@ from fastapi import HTTPException
 
 from backend.routers import download as dl
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest
-from novelbase.models.novel import Chapters, Novel
+from novelbase.models.novel import Chapters, Novel, SearchResult
 
 
 def _patch_engine_factory(monkeypatch):
@@ -51,6 +51,7 @@ def test_sources_include_disabled(monkeypatch):
 
 
 def test_search_empty_source_uses_enabled(monkeypatch):
+    """空 source → 对每个启用书源各发一次 search(...)，每次只带该源。"""
     monkeypatch.setattr(dl, "enabled_source_names", lambda: ["a-x-default", "b-y-default"])
     called = []
 
@@ -60,7 +61,7 @@ def test_search_empty_source_uses_enabled(monkeypatch):
 
     monkeypatch.setattr(dl, "search", fake_search)
     asyncio.run(dl.search_novels(query="关键词", source=""))
-    assert called == [["a-x-default", "b-y-default"]]
+    assert sorted(called) == [["a-x-default"], ["b-y-default"]]
 
 
 def test_search_single_source_binds_engine(monkeypatch):
@@ -76,6 +77,51 @@ def test_search_single_source_binds_engine(monkeypatch):
     asyncio.run(dl.search_novels(query="关键词", source="92xs-requests-default"))
     assert captured["sources"] == ["92xs-requests-default"]
     assert seen == [("92xs-requests-default", "requests")]
+
+
+def test_parallel_same_mode_uses_per_source_engine(monkeypatch):
+    """并发多个同 mode 书源时，每个源必须拿到自己的引擎（修复共享首个源引擎的缺陷）。"""
+    monkeypatch.setattr(dl, "enabled_source_names",
+                        lambda: ["a-requests-default", "b-requests-default"])
+    engine_calls = []
+    monkeypatch.setattr(dl, "get_cached_engine",
+                        lambda name, mode: engine_calls.append((name, mode)) or f"engine:{name}")
+
+    per_source_engine = {}
+
+    async def fake_search(sources, query, engines, **kw):
+        assert len(sources) == 1, f"每源应各发一次单源 search，实际 {sources}"
+        name = sources[0]
+        per_source_engine[name] = engines("requests")
+        return (SearchResult(title=name, author="x", url=f"https://x/{name}",
+                             source_name=name),)
+
+    monkeypatch.setattr(dl, "search", fake_search)
+    out = asyncio.run(dl.search_novels(query="关键词", source=""))
+
+    # 修复前：两个源都会拿到共享解析器里「首个源」(a) 的引擎。
+    assert per_source_engine == {"a-requests-default": "engine:a-requests-default",
+                                 "b-requests-default": "engine:b-requests-default"}
+    assert sorted(engine_calls) == [("a-requests-default", "requests"),
+                                    ("b-requests-default", "requests")]
+    assert {r.source_name for r in out} == {"a-requests-default", "b-requests-default"}
+
+
+def test_parallel_one_source_fails_others_survive(monkeypatch):
+    """单个源抛错时不影响其它源（复刻 core 的单源静默跳过）。"""
+    monkeypatch.setattr(dl, "enabled_source_names",
+                        lambda: ["bad-requests-default", "good-requests-default"])
+    monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
+
+    async def fake_search(sources, query, engines, **kw):
+        if sources[0] == "bad-requests-default":
+            raise RuntimeError("boom")
+        return (SearchResult(title="ok", author="a", url="https://x/1",
+                             source_name=sources[0]),)
+
+    monkeypatch.setattr(dl, "search", fake_search)
+    out = asyncio.run(dl.search_novels(query="关键词", source=""))
+    assert [r.source_name for r in out] == ["good-requests-default"]
 
 
 def test_url_search_requires_source(monkeypatch):

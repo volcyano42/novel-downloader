@@ -4,6 +4,8 @@
 全部启用书源（`shared.config.enabled_source_names()`）；MODE 由书源自声明，用户不再传。
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.routers.storage import _cover_to_response as encode_cover
@@ -30,23 +32,6 @@ def _engines_for(source_name: str):
     return lambda mode: get_cached_engine(source_name, mode)
 
 
-def _engines_for_sources(sources: list[str]):
-    """多书源并发搜索用的 engines(mode)->engine：每个 mode 取声明它的首个书源。
-
-    `novelbase.core.search` 的 engines 只按 mode 调用（`downloader.py:39` 的
-    `engines(mode)`，不带 source_name），故多书源只能共享一个解析器；同一 mode 的多个
-    书源共享引擎（与既有 `tests/test_downloader.py` 的 `_engines` 约定一致）。不同 mode
-    时按书源声明分派，避免用错书源的 cookies/user_data_dir 等配置。
-    """
-    mode_source: dict[str, str] = {}
-    for name in sources:
-        mode = capabilities(name).get("search")
-        if mode and mode not in mode_source:
-            mode_source[mode] = name
-    fallback = sources[0] if sources else ""
-    return lambda mode: get_cached_engine(mode_source.get(mode, fallback), mode)
-
-
 def _resolve_url(raw: str) -> str:
     """将输入转为完整 URL（数据驱动）。"""
     try:
@@ -71,20 +56,25 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
                                  source_name=source_name,
                                  extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
 
-    # 关键字搜索：source 空 → 并发全部启用书源；否则单书源。
+    # 关键字搜索：source 空 → 并发全部启用书源（每源各绑定自己的引擎）；否则单书源。
     if source:
-        sources = [source]
-        engines = _engines_for(source)
+        try:
+            results = await search([source], query, _engines_for(source), page=page)
+        except FeatureNotSupportedError as e:
+            # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(500, str(e))
     else:
-        sources = enabled_source_names()
-        engines = _engines_for_sources(sources)
-    try:
-        results = await search(sources, query, engines, page=page)
-    except FeatureNotSupportedError as e:
-        # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(500, str(e))
+        async def _search_one(name: str):
+            # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。
+            try:
+                return await search([name], query, _engines_for(name), page=page)
+            except Exception:
+                # 复刻 core.search 的「单源失败静默跳过」：某源出错不影响其它源。
+                return ()
+        groups = await asyncio.gather(*(_search_one(n) for n in enabled_source_names()))
+        results = [r for group in groups for r in group]
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
                              source_name=getattr(r, 'source_name', ''),
