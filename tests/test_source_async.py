@@ -54,10 +54,10 @@ def _chapter() -> Chapter:
 # ═══════════════════════════════════════════════════════════
 
 _FANQIE_CAP_MODULES = {
-    "requests": "novelbase.sources.fanqie.requests.default",
-    "browser": "novelbase.sources.fanqie.browser.default",
-    "oiapi": "novelbase.sources.fanqie.api.oiapi",
-    "rain": "novelbase.sources.fanqie.api.rain",
+    "requests": "novelbase.sources.fanqie_requests_default",
+    "browser": "novelbase.sources.fanqie_browser_default",
+    "oiapi": "novelbase.sources.fanqie_api_oiapi",
+    "rain": "novelbase.sources.fanqie_api_rain",
 }
 
 
@@ -106,7 +106,9 @@ class TestParseChapterContentReturnsTuple:
     """parse_chapter_content 返回 (Chapter, img_urls)，不下载字节。"""
 
     def test_returns_chapter_and_empty_urls(self):
-        from novelbase.sources.fanqie._common import parse_chapter_content
+        from novelbase.sources.fanqie_requests_default.chapter_content import (
+            parse_chapter_content,
+        )
         ch = _chapter()
         chapter, img_urls = parse_chapter_content(_PLAIN_HTML, ch)
         assert chapter is ch
@@ -117,7 +119,9 @@ class TestParseChapterContentReturnsTuple:
         assert chapter.images == ()
 
     def test_collects_img_urls_without_bytes(self):
-        from novelbase.sources.fanqie._common import parse_chapter_content
+        from novelbase.sources.fanqie_requests_default.chapter_content import (
+            parse_chapter_content,
+        )
         ch = _chapter()
         chapter, img_urls = parse_chapter_content(_IMG_HTML, ch)
         assert len(img_urls) == 1
@@ -139,7 +143,7 @@ class TestFanqieImagesViaEngine:
 
     def test_chapter_content_assembles_illustrations_via_engine(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.fanqie.requests.default.chapter_content")
+        mod = import_module("novelbase.sources.fanqie_requests_default.chapter_content")
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(return_value=_IMG_HTML)
         engine.async_fetch_images = AsyncMock(return_value=[b"\x89PNG\r\n\x1a\nfake"])
@@ -157,7 +161,7 @@ class TestFanqieImagesViaEngine:
 
     def test_novel_info_downloads_cover_via_engine(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.fanqie.requests.default.novel_info")
+        mod = import_module("novelbase.sources.fanqie_requests_default.novel_info")
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(return_value=_NOVEL_HTML)
         engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
@@ -233,12 +237,12 @@ class TestQidianQimao92xsCapabilitiesAreAsync:
     """qidian/qimao/92xs 各 mode/variant 的四个能力函数全部 async def。"""
 
     _CAP_MODULES = {
-        "qidian_requests": "novelbase.sources.qidian.requests.default",
-        "qidian_browser": "novelbase.sources.qidian.browser.default",
-        "qimao_requests": "novelbase.sources.qimao.requests.default",
-        "qimao_browser": "novelbase.sources.qimao.browser.default",
-        "qimao_rain": "novelbase.sources.qimao.api.rain",
-        "92xs_requests": "novelbase.sources.92xs.requests.default",
+        "qidian_requests": "novelbase.sources.qidian_requests_default",
+        "qidian_browser": "novelbase.sources.qidian_browser_default",
+        "qimao_requests": "novelbase.sources.qimao_requests_default",
+        "qimao_browser": "novelbase.sources.qimao_browser_default",
+        "qimao_rain": "novelbase.sources.qimao_api_rain",
+        "92xs_requests": "novelbase.sources.92xs_requests_default",
     }
 
     def test_all_capabilities_are_async(self):
@@ -256,7 +260,7 @@ class TestQidianCoverViaEngine:
 
     def test_requests_novel_info_downloads_cover_via_engine(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.qidian.requests.default.novel_info")
+        mod = import_module("novelbase.sources.qidian_requests_default.novel_info")
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(return_value=_QIDIAN_NOVEL_HTML)
         engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
@@ -279,7 +283,7 @@ class TestQimaoCoverAndBrowserChapterList:
 
     def test_rain_novel_info_downloads_cover_via_engine(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.qimao.api.rain.novel_info")
+        mod = import_module("novelbase.sources.qimao_api_rain.novel_info")
         engine = MagicMock()
         engine.options.key = "test-key"
         engine.async_fetch_json = AsyncMock(return_value=_QIMAO_RAIN_NOVEL_JSON)
@@ -298,7 +302,7 @@ class TestQimaoCoverAndBrowserChapterList:
 
     def test_browser_chapter_list_clicks_catalog_tab(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.qimao.browser.default.chapter_list")
+        mod = import_module("novelbase.sources.qimao_browser_default.chapter_list")
         engine = MagicMock()
         page = MagicMock()
         page.goto = AsyncMock()
@@ -327,7 +331,7 @@ class Test92xsCapabilities:
 
     def test_search_posts_to_search_endpoint(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.92xs.requests.default.search")
+        mod = import_module("novelbase.sources.92xs_requests_default.search")
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(return_value=_92XS_SEARCH_HTML)
 
@@ -348,7 +352,7 @@ class Test92xsCapabilities:
 
     def test_search_returns_empty_on_http_error(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.92xs.requests.default.search")
+        mod = import_module("novelbase.sources.92xs_requests_default.search")
         from novelbase.core.exceptions import NetworkError
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(side_effect=NetworkError("boom"))
@@ -359,7 +363,7 @@ class Test92xsCapabilities:
 
     def test_novel_info_downloads_cover_via_engine(self):
         from importlib import import_module
-        mod = import_module("novelbase.sources.92xs.requests.default.novel_info")
+        mod = import_module("novelbase.sources.92xs_requests_default.novel_info")
         engine = MagicMock()
         engine.async_fetch_text = AsyncMock(return_value=_92XS_NOVEL_HTML)
         engine.async_fetch_images = AsyncMock(return_value=[b"cover-bytes"])
