@@ -1,0 +1,23 @@
+{
+  "source_name": "qidian-browser-default",
+  "enabled": true,
+  "common": {
+    "mode": "browser",
+    "timeout": 30,
+    "retry_times": 3,
+    "delay": [3, 5],
+    "backoff_factor": 2,
+    "browser_type": "chromium",
+    "headless": false,
+    "user_data_dir": "",
+    "viewport": {},
+    "extra_args": [],
+    "auto_reconnect": false
+  },
+  "default_config": {
+    "search": {},
+    "novel_info": {},
+    "chapter_list": {},
+    "chapter_content": {}
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "source_name": "fanqie-requests-default",
+  "enabled": true,
+  "common": {
+    "mode": "requests",
+    "timeout": 30,
+    "retry_times": 3,
+    "delay": [3, 5],
+    "backoff_factor": 2,
+    "headers": {"User-Agent": "Mozilla/5.0 ..."},
+    "cookies": {},
+    "proxies": {}
+  },
+  "default_config": {
+    "search": {},
+    "novel_info": {},
+    "chapter_list": {},
+    "chapter_content": {}
+  }
+}

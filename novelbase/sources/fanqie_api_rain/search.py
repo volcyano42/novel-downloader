@@ -1,0 +1,57 @@
+from box.box import Box
+
+from novelbase.models.novel import SearchResult
+
+
+def _api_url(engine, **params) -> str:
+    key = engine.options.key
+    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    base = f"https://v3.rain.ink/fanqie/?apikey={key}"
+    return f"{base}&{qs}" if qs else base
+
+
+async def search(query: str, engine, **kwargs) -> list:
+    page = kwargs.pop("page", 1)
+    results: list[SearchResult] = []
+    offset = (page - 1) * 10
+    url = _api_url(engine, type=1, keywords=query, page=offset)
+    content = await engine.async_fetch_json(url, **kwargs)
+
+    if content.get("code") != 0 and str(content.get("code")) != "0":
+        return []
+
+    books = None
+    if "search_tabs" in content:
+        for tab in content["search_tabs"]:
+            if tab.get("data") is not None:
+                books = tab["data"]
+                break
+    if books is None:
+        books = content.get("data")
+
+    if not books or not isinstance(books, list):
+        return []
+
+    for item in books:
+        if "book_data" in item and isinstance(item["book_data"], list) and len(item["book_data"]) > 0:
+            book = item["book_data"][0]
+        else:
+            book = item
+
+        book_id = book.get("book_id")
+        book_url = f"https://fanqienovel.com/page/{book_id}"
+        book_name = book.get("book_name")
+        author = book.get("author")
+        description = book.get("abstract")
+
+        extra = Box(rating=book.get('score'))
+
+        results.append(SearchResult(
+            title=book_name,
+            author=author,
+            url=book_url,
+            description=description,
+            cover_url=book.get("thumb_url") or None,
+            extra=extra
+        ))
+    return results
