@@ -14,8 +14,6 @@ import yaml
 from novelbase.core.options import Options
 from novelbase.utils.logger import get_logger
 
-from shared.config import get_mode_variant_config
-
 _log = get_logger("cli.config")
 
 APP_DATA: Path | None = None

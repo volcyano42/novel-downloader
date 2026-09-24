@@ -2,7 +2,6 @@ download:
   max_workers: 3
   notify:
     sound: none
-mode: api
 storage:
   backend: sqlite
   database_url: sqlite:///app_data/storage/novels/.dir

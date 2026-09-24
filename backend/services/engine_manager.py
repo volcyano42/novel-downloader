@@ -13,7 +13,7 @@ import uuid
 from fastapi import HTTPException
 
 from novelbase import Options, create_engine
-from shared.config import load_site_config, find_variant_options, get_mode_variant_config
+from shared.config import load_site_config
 
 # ── 引擎缓存（全局，request 级别复用）──
 _engine_cache: dict[str, object] = {}

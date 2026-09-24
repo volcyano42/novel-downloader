@@ -1,49 +1,53 @@
-"""site 配置 variant 感知辅助函数测试。"""
-import pytest
+"""site 配置三层合并（merged_source_config）测试。
 
-from shared.config import (
-    get_mode_variant_config, mode_variants, load_mode_config,
-)
-
-
-def _site():
-    return {
-        "browser": {"default": {"headless": False, "timeout": 30}},
-        "requests": {"default": {"timeout": 30}},
-        "api": {"oiapi": {"key": ""}, "rain": {"key": ""}},
-    }
+三层：ENGINE_DEFAULTS[mode]（系统默认）→ source.json.default_config[cap]（书源出厂）
+→ sites/{source_name}.yaml[cap]（用户层）。未知书源返回 {}。
+"""
+from shared import config as sc
 
 
-def test_get_mode_variant_config_default():
-    assert get_mode_variant_config(_site(), "browser") == {"headless": False, "timeout": 30}
-
-
-def test_get_mode_variant_config_named():
-    assert get_mode_variant_config(_site(), "api", "rain") == {"key": ""}
-
-
-def test_get_mode_variant_config_first_when_no_default():
-    site = {"browser": {"alpha": {"a": 1}, "beta": {"b": 2}}}
-    assert get_mode_variant_config(site, "browser") == {"a": 1}
-
-
-def test_get_mode_variant_config_non_dict_returns_empty():
-    assert get_mode_variant_config({"browser": {"default": "scalar"}}, "browser") == {}
-    assert get_mode_variant_config({"browser": None}, "browser") == {}
-    assert get_mode_variant_config({}, "browser") == {}
-
-
-def test_mode_variants_lists_dict_keys_only():
-    assert mode_variants(_site(), "browser") == ["default"]
-    assert mode_variants(_site(), "api") == ["oiapi", "rain"]
-    assert mode_variants({"browser": {"default": "scalar"}}, "browser") == []
-
-
-def test_load_mode_config(tmp_path, monkeypatch):
-    import shared.config as sc
-    site_file = tmp_path / "sites" / "fanqie.yaml"
-    site_file.parent.mkdir(parents=True)
-    site_file.write_text(
-        "browser:\n  default:\n    timeout: 42\n", encoding="utf-8")
+def test_merged_source_config_unknown_source_returns_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
-    assert load_mode_config("fanqie", "browser") == {"timeout": 42}
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {})
+    assert sc.merged_source_config("nope") == {}
+
+
+def test_merged_source_config_engine_defaults_then_manifest(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
+        "default_config": {"search": {"mode": "requests", "timeout": 30, "retry_times": 7}},
+    })
+    merged = sc.merged_source_config("demo-requests-default")
+    # 第 1 层 ENGINE_DEFAULTS["requests"] 提供的字段仍在
+    assert merged["search"]["backoff_factor"] == sc.ENGINE_DEFAULTS["requests"]["backoff_factor"]
+    # 第 2 层 manifest 覆盖
+    assert merged["search"]["timeout"] == 30
+    assert merged["search"]["retry_times"] == 7
+    assert merged["search"]["mode"] == "requests"
+
+
+def test_merged_source_config_user_layer_overrides(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
+        "default_config": {"search": {"mode": "requests", "timeout": 30, "retry_times": 3}},
+    })
+    sc.save_site_config("demo-requests-default", {"search": {"timeout": 99}})
+    merged = sc.merged_source_config("demo-requests-default")
+    assert merged["search"]["timeout"] == 99
+    # 用户层未覆盖的字段保留第 2 层值
+    assert merged["search"]["retry_times"] == 3
+
+
+def test_merged_source_config_user_mode_is_ignored(monkeypatch, tmp_path):
+    """用户层不决定 mode；即使写了 mode 也忽略，mode 恒取书源声明。"""
+    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
+        "default_config": {"search": {"mode": "requests"}},
+    })
+    sc.save_site_config("demo-requests-default", {"search": {"mode": "browser", "timeout": 5}})
+    merged = sc.merged_source_config("demo-requests-default")
+    assert merged["search"]["mode"] == "requests"
+    assert merged["search"]["timeout"] == 5

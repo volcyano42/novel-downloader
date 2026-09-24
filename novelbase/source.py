@@ -27,7 +27,7 @@ from .sources.contracts import CAPABILITY_META
 from .sources.manifest import ManifestError, check_capability_files, load_manifest
 
 __all__ = ["list_sources", "get_manifest", "capabilities", "resolve",
-           "resolve_book_url", "split_source_name", "resolve_source_name"]
+           "resolve_book_url"]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
 
@@ -193,43 +193,3 @@ def resolve_book_url(raw: str) -> str:
     if raw.startswith("http://") or raw.startswith("https://"):
         return raw
     raise ValueError(f"无法识别书源或 ID 格式: {raw}")
-
-
-def split_source_name(source_name: str) -> tuple[str, str, str]:
-    """把书源名拆成 `(platform, mode, variant)`。
-
-    命名约定（见 `docs/superpowers/specs/2026-09-24-book-source-flattening-design.md`）：
-    `source_name == f"{platform}-{mode}-{variant}"`，三段由 `-` 连接，
-    其中 `platform` 即站点配置名（`app_data/config/sites/{platform}.yaml`）。
-    段数不足时后段返回空串（如 `"fanqie"` → `("fanqie", "", "")`）。
-    """
-    parts = source_name.split("-")
-    if len(parts) >= 3:
-        return parts[0], parts[1], "-".join(parts[2:])
-    if len(parts) == 2:
-        return parts[0], parts[1], ""
-    return source_name, "", ""
-
-
-def resolve_source_name(platform: str, mode: str | None = None,
-                        variant: str | None = None) -> str:
-    """把「站点名/书源名 + 可选 mode/variant」解析为确定的 source_name。
-
-    - `platform` 已是书源名 → 原样返回
-    - 否则按 `{platform}-{mode}` 前缀匹配；给出 `variant` 时须精确命中
-    - 无任何匹配 → `KeyError`
-    """
-    names = list_sources()
-    if platform in names:
-        return platform
-    prefix = platform if not mode else f"{platform}-{mode}"
-    if mode and variant:
-        exact = f"{prefix}-{variant}"
-        if exact in names:
-            return exact
-    matches = [n for n in names if n.startswith(prefix + "-")]
-    if not matches:
-        raise KeyError(
-            f"未知书源: {platform!r}（mode={mode!r}, variant={variant!r}）"
-        )
-    return matches[0]

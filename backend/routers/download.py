@@ -8,7 +8,7 @@ from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine, get_cached_engine_for_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.source import resolve_book_url, list_sources, resolve_source_name
+from novelbase.source import resolve_book_url, list_sources
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -16,13 +16,10 @@ router = APIRouter(prefix="/api/v2/download", tags=["download"])
 def _pick_source(platform: str, mode: str | None, variant: str | None) -> str:
     """把请求中的 platform 标识解析为确定的 source_name。
 
-    前端 `/download/platform` 现在返回 source_name；同时兼容「站点名 + mode/variant」
-    的旧风格（`resolve_source_name` 按前缀匹配）。无匹配 → 400。
+    最小过渡：书源名 = `platform` 直通（T7 会把本函数整体删除、`source` Query 直通
+    `source_name`，届时对旧「站点名 + mode/variant」的兼容彻底消失）。
     """
-    try:
-        return resolve_source_name(platform, mode, variant)
-    except KeyError as e:
-        raise HTTPException(400, str(e))
+    return platform
 
 
 def _require_source(source: str | None, url: str) -> str:

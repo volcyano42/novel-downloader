@@ -65,7 +65,6 @@ ENGINE_DEFAULTS = {
 }
 
 GLOBAL_DEFAULTS = {
-    "mode": "browser",
     "max_workers": 3,
     "notify": {"on_complete": True, "on_incomplete": True, "sound": "bell"},
 }
@@ -141,74 +140,47 @@ def save_site_config(platform, site_cfg):
     with (CONFIG_DIR / "sites" / f"{platform}.yaml").open("w", encoding="utf-8") as f:
         yaml.dump(site_cfg, f, allow_unicode=True, default_flow_style=False)
 
-def load_platform_configs():
-    result = {}
-    sites_dir = CONFIG_DIR / "sites"
-    if not sites_dir.is_dir():
-        return result
-    for p in sites_dir.glob("*.yaml"):
-        platform = p.stem
-        raw = load_yaml(p)
-        entry = {}
-        for mode in ("browser", "requests"):
-            entry[mode] = {
-                v: deep_merge(ENGINE_DEFAULTS[mode], get_mode_variant_config(raw, mode, v))
-                for v in mode_variants(raw, mode)
-            }
-        api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
-        entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
-        entry["api_variants"] = list(entry["api"].keys())
-        result[platform] = entry
-    return result
+def _user_site_cfg(source_name: str) -> dict:
+    """读取用户层 sites/{source_name}.yaml（原始 dict，不做 app_data 路径解析）。"""
+    return load_yaml(CONFIG_DIR / "sites" / f"{source_name}.yaml")
 
-def load_platform_raw(platform):
-    return load_yaml(CONFIG_DIR / "sites" / f"{platform}.yaml")
 
-def get_mode_variant_config(site_cfg, mode, variant=None) -> dict:
-    """取 site 配置中某 mode 的 variant 配置。
+def merged_source_config(source_name: str) -> dict[str, dict]:
+    """三层合并某书源的逐能力配置。
 
-    variant=None → 优先 "default"，无 "default" 取第一个 dict 值。
-    非 dict 结构（扁平旧格式/标量）一律返回 {}（只支持新格式）。
+    返回 `{capability: 该能力段三层合并后的完整字段}`；未知书源返回 `{}`。
+    三层：ENGINE_DEFAULTS[mode]（系统默认）→ `source.json.default_config[cap]`（书源出厂，
+    已含 `common` 合并）→ `sites/{source_name}.yaml[cap]`（用户层）。
+    用户层不决定 mode：合并前从用户层段剔除 `mode` 键，mode 恒取书源声明。
     """
-    mode_section = site_cfg.get(mode, {}) if isinstance(site_cfg, dict) else {}
-    if not isinstance(mode_section, dict):
+    from novelbase.source import capabilities, get_manifest
+    caps = capabilities(source_name)
+    if not caps:
         return {}
-    if variant is not None and variant in mode_section:
-        cfg = mode_section[variant]
-        return cfg if isinstance(cfg, dict) else {}
-    if "default" in mode_section:
-        cfg = mode_section["default"]
-        return cfg if isinstance(cfg, dict) else {}
-    for v, cfg in mode_section.items():
-        if isinstance(cfg, dict):
-            return cfg
-    return {}
+    manifest = get_manifest(source_name)
+    user = _user_site_cfg(source_name)
+    out: dict[str, dict] = {}
+    for cap, mode in caps.items():
+        base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
+        user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
+        user_cap = {k: v for k, v in user_cap.items() if k != "mode"}  # mode 恒取书源声明
+        out[cap] = deep_merge(base, user_cap)
+    return out
 
 
-def load_mode_config(platform, mode, variant=None) -> dict:
-    """从 sites/{platform}.yaml 加载某 mode 的 variant 配置（含 app_data 路径解析）。"""
-    site = load_site_config(platform)
-    return get_mode_variant_config(site, mode, variant)
+def is_source_enabled(source_name: str) -> bool:
+    """书源是否启用：用户层顶层 `enabled` 覆盖 `source.json` 的出厂值。"""
+    from novelbase.source import get_manifest
+    user = _user_site_cfg(source_name)
+    if isinstance(user.get("enabled"), bool):
+        return user["enabled"]
+    return bool(get_manifest(source_name).get("enabled", False))
 
 
-def mode_variants(site_cfg, mode) -> list[str]:
-    """返回某 mode 下的 variant 名列表（仅 dict 值）。"""
-    mode_section = site_cfg.get(mode, {}) if isinstance(site_cfg, dict) else {}
-    if not isinstance(mode_section, dict):
-        return []
-    return [k for k, v in mode_section.items() if isinstance(v, dict)]
-
-def find_variant_options(variant):
-    sites_dir = CONFIG_DIR / "sites"
-    if not sites_dir.is_dir():
-        return None
-    for p in sites_dir.glob("*.yaml"):
-        site = load_yaml(p)
-        for mode in ("api", "browser", "requests"):
-            cfg = get_mode_variant_config(site, mode, variant)
-            if cfg:
-                return cfg
-    return None
+def enabled_source_names() -> list[str]:
+    """排序后的启用书源 source_name 列表（「启用集」的唯一入口）。"""
+    from novelbase.source import list_sources
+    return sorted(n for n in list_sources() if is_source_enabled(n))
 
 # ── formats ──
 def load_format_configs():
@@ -239,16 +211,29 @@ def get_database_url():
     # 文件本身（.dir 占位）从不创建，真正的库是 base_dir 下每本小说的 <id>.db。
     return f"sqlite:///{APP_DATA / 'storage' / 'novels' / '.dir'}"
 
-# ── build_options（从旧 cli_lib/config.py 迁移，改为 import shared.user_data）──
-def build_options(cfg, site_cfg):
-    from novelbase.core.options import Options
-    options = Options()
-    mode = cfg.get("mode") or site_cfg.get("mode", "browser")
-    options.set_mode(mode)
+# ── build_options（按 source_name + mode 从三层合并配置组 Options）──
+def build_options(source_name: str, mode: str) -> Options:
+    """按书源名 + mode 组 Options，字段取自 `merged_source_config(source_name)` 的对应能力段。
 
+    能力段由 mode 反查（`capabilities(source_name)` 里 mode 匹配的能力段；一个书源的各
+    能力段通常同 mode）。未知书源 / 无匹配段时退回 `ENGINE_DEFAULTS[mode]`。
+    """
+    from novelbase.core.options import Options
+    from novelbase.source import capabilities
+
+    merged = merged_source_config(source_name)
+    caps = capabilities(source_name)
+    cfg: dict = {}
+    for cap, cap_mode in caps.items():
+        if cap_mode == mode:
+            cfg = merged.get(cap, {})
+            break
+    if not cfg:
+        cfg = dict(ENGINE_DEFAULTS.get(mode, {}))
+
+    options = Options().set_mode(mode)
     if mode == "browser":
-        browser_cfg = get_mode_variant_config(site_cfg, "browser")
-        user_data_dir = browser_cfg.get("user_data_dir", "")
+        user_data_dir = cfg.get("user_data_dir", "")
         if user_data_dir:
             ud_path = Path(user_data_dir)
             if not ud_path.is_absolute():
@@ -256,32 +241,26 @@ def build_options(cfg, site_cfg):
         else:
             ud_path = None
         options.set_browser_options(
-            headless=browser_cfg.get("headless", False),
+            headless=cfg.get("headless", False),
             user_data_dir=str(ud_path) if ud_path else None,
-            timeout=browser_cfg.get("timeout", 30),
-            retry_times=browser_cfg.get("retry_times", 3),
-            backoff_factor=browser_cfg.get("backoff_factor", 2),
-            delay=tuple(browser_cfg.get("delay", [3, 5])),
-            viewport=browser_cfg.get("viewport"),
+            timeout=cfg.get("timeout", 30),
+            retry_times=cfg.get("retry_times", 3),
+            backoff_factor=cfg.get("backoff_factor", 2),
+            delay=tuple(cfg.get("delay", [3, 5])),
+            viewport=cfg.get("viewport"),
+            auto_reconnect=cfg.get("auto_reconnect", False),
         )
     elif mode == "api":
-        api_section = site_cfg.get("api", {})
-        for name, provider in api_section.items():
-            if isinstance(provider, dict) and provider.get("enabled", True):
-                env_key_name = f"{name.upper()}_API_KEY"
-                api_key = os.environ.get(env_key_name) or provider.get("key", "")
-                options.set_api_options(
-                    key=api_key,
-                    timeout=provider.get("timeout", 30),
-                    retry_times=provider.get("retry_times", 3),
-                    backoff_factor=provider.get("backoff_factor", 2),
-                    delay=tuple(provider.get("delay", [3, 5])),
-                    params=provider.get("params", {}),
-                )
-                break
+        options.set_api_options(
+            key=cfg.get("key", ""),
+            timeout=cfg.get("timeout", 30),
+            retry_times=cfg.get("retry_times", 3),
+            backoff_factor=cfg.get("backoff_factor", 2),
+            delay=tuple(cfg.get("delay", [3, 5])),
+            params=cfg.get("params", {}),
+        )
     elif mode == "requests":
-        req_cfg = get_mode_variant_config(site_cfg, "requests")
-        cookies_val = req_cfg.get("cookies")
+        cookies_val = cfg.get("cookies")
         if isinstance(cookies_val, str) and cookies_val:
             cookies_dict = {}
             for item in cookies_val.split(";"):
@@ -293,16 +272,14 @@ def build_options(cfg, site_cfg):
         elif not isinstance(cookies_val, dict):
             cookies_val = None
         options.set_requests_options(
-            headers=req_cfg.get("headers"),
+            headers=cfg.get("headers"),
             cookies=cookies_val,
-            proxies=req_cfg.get("proxies"),
-            timeout=req_cfg.get("timeout", 30),
-            retry_times=req_cfg.get("retry_times", 3),
-            backoff_factor=req_cfg.get("backoff_factor", 2),
-            delay=tuple(req_cfg.get("delay", [3, 5])),
+            proxies=cfg.get("proxies"),
+            timeout=cfg.get("timeout", 30),
+            retry_times=cfg.get("retry_times", 3),
+            backoff_factor=cfg.get("backoff_factor", 2),
+            delay=tuple(cfg.get("delay", [3, 5])),
         )
 
-    storage_cfg = cfg.get("storage", {})
-    database_url = storage_cfg.get("database_url", "") or "sqlite:///app_data/storage/novels/.dir"
-    options.set_storage_options(backend="sqlite", database_url=database_url)
+    options.set_storage_options(backend="sqlite", database_url=get_database_url())
     return options

@@ -91,25 +91,3 @@ def test_compiled_mode_reads_manifest(monkeypatch):
     assert s.list_sources() == ["demo-requests-default"]
     assert s.capabilities("demo-requests-default") == {"search": "requests"}
     assert s.get_manifest("demo-requests-default")["enabled"] is True
-
-
-def test_split_source_name():
-    from novelbase.source import split_source_name
-    assert split_source_name("fanqie-requests-default") == ("fanqie", "requests", "default")
-    assert split_source_name("qimao-api-rain") == ("qimao", "api", "rain")
-    assert split_source_name("92xs-requests-default") == ("92xs", "requests", "default")
-    assert split_source_name("fanqie") == ("fanqie", "", "")
-
-
-def test_resolve_source_name():
-    from novelbase.source import resolve_source_name
-    # 已是书源名 → 原样
-    assert resolve_source_name("fanqie-requests-default") == "fanqie-requests-default"
-    # 站点名 + mode → 该 mode 的唯一书源
-    assert resolve_source_name("fanqie", "requests") == "fanqie-requests-default"
-    # 站点名 + mode + variant → 精确命中
-    assert resolve_source_name("fanqie", "api", "rain") == "fanqie-api-rain"
-    # api 无 variant → 取该站点首个 api 书源
-    assert resolve_source_name("fanqie", "api").startswith("fanqie-api-")
-    with pytest.raises(KeyError):
-        resolve_source_name("nope", "requests")
