@@ -364,3 +364,21 @@ class TestSearchResult:
         r = SearchResult(title="t", author="a")
         assert r.url is None
         assert r.description is None
+
+
+def test_novel_has_source_name_default_empty():
+    n = Novel(title="t", url="https://x/y", id="abc", serial=0, author="a", description="d")
+    assert n.source_name == ""
+
+
+def test_novel_loads_tolerates_missing_source_name():
+    """旧 JSON 没有 source_name 字段也能加载（setattr 兜底）。"""
+    n = Novel.loads(title="t", url="https://x/y", id="abc", serial=0,
+                    author="a", description="d")
+    assert n.source_name == ""
+
+
+def test_search_result_uses_source_name():
+    r = SearchResult(title="t", author="a")
+    assert r.source_name == ""
+    assert not hasattr(r, "platform")

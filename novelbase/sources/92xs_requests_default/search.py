@@ -45,7 +45,6 @@ async def search(query: str, engine, **kwargs) -> list[SearchResult]:
             author=tds[2].get_text(strip=True),
             url=url,
             description=tds[1].get_text(strip=True),      # 最新章节
-            platform="92xs",
         ))
 
     return results
