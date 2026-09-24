@@ -1,5 +1,25 @@
 # 更新日志
 
+## Unreleased（书源扁平化收口）
+
+> 2026-09-25 dev 分支：书源模型从「四层目录（platform/mode/variant）+ registry 硬编码兜底」
+> 扁平化为「一层目录 + `source.json`」，backend / CLI / 前端 / 配置全面改到 `source_name` 维度。
+> 本条为**未发布**变更汇总，发布时另起 `## v{版本}` 段落。
+
+### 变更
+
+1. **书源扁平化为一层 + `source.json`** — `novelbase/sources/{dir}/` 一层目录，每源含 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件；`platform` / `SHOW_NAME` / `HOSTS` / `NAME` / `variant` / `register_source()` / `platform_from_url()` / `canonical_book_url()` 全部移除。`novelbase/source.py` 只暴露 `list_sources` / `get_manifest` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)`
+2. **CLI 参数改按书源** — `--platform/--mode/--variant` 改为 `--source`（`source_name`）；`search` 省略 `--source` 时并发全部启用书源；`dev new-source` 生成新一层结构并默认写 `sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 与 `do_visit_site`（访问平台）删除
+3. **删除废弃路由** — `/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 删除；下载路由统一以 `source` Query 表达书源，`source` 为空 = 并发全部启用书源
+4. **配置改按书源 + 三层合并** — 逐书源配置改为 `sites/{source_name}.yaml`（顶层 `enabled` 覆盖 `source.json` 出厂值），三层合并由 `shared.config.merged_source_config()` 提供；新增 `/api/v2/config/sources/{source_name}`（GET 三层合并 / PUT 只写用户层）；全局 `mode` 设置项删除
+5. **前端删除 mode/variant 两级选择器** — 搜索改「已启用书源并发」，URL 解析改「手选书源」；新增**书源管理页** `/sources`（按书源编辑，含 `enabled` 开关）
+6. **Novel.id 改 `sha256(url)[:32]`** — 取代旧的 `hash(canonical url)`；库内 `meta.id` 存书源返回的 url 原样；不再做 url 规范化（92xs/qidian 平台特例随 core 站点知识一并删除）
+7. **`storage` 段成为死配置** — 实现恒取 `shared.config.get_database_url()`，`config.yaml` 的 `storage.backend` / `storage.database_url` 不再生效（模板保留仅为兼容旧文件）
+
+### 不迁移
+
+- `sites/{platform}.yaml`（`fanqie.yaml` / `qidian.yaml` / `qimao.yaml` / `92xs.yaml`）与旧的 `search_history`（platform/mode/variant 维度）**不做迁移**，用户按新 `source_name` 重新配置、历史重新积累
+
 ## v4.4.1
 
 ### 修复
