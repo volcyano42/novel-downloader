@@ -33,7 +33,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val healthPoll = object : Runnable {
+    // 显式标注类型：healthPoll 在自身初始化表达式（run() 内 postDelayed）中被引用，
+    // 不标注会导致 Kotlin 类型推断自循环（Type checking has run into a recursive problem）
+    private val healthPoll: Runnable = object : Runnable {
         override fun run() {
             // 同步 HTTP 健康检查放后台线程，避免阻塞主线程（最坏 2s）
             Thread {
