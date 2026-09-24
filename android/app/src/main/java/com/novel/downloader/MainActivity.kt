@@ -47,7 +47,8 @@ class MainActivity : AppCompatActivity() {
                     } else if (SystemClock.elapsedRealtime() - pollStart > HEALTH_TIMEOUT_MS) {
                         Toast.makeText(this@MainActivity, R.string.backend_not_ready, Toast.LENGTH_LONG).show()
                     } else {
-                        mainHandler.postDelayed(healthPoll, HEALTH_POLL_MS)
+                        // this = 该匿名 Runnable 自身；初始化表达式内不能引用 healthPoll（会被判未初始化）
+                        mainHandler.postDelayed(this, HEALTH_POLL_MS)
                     }
                 }
             }.start()
