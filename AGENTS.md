@@ -31,8 +31,10 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 ## Key Conventions
 
 - **API v2** 响应格式 `{ok, message, data}`，无分页
-- **Registry 动态分发** `registry.resolve(name, mode, function, provider?)` → 底层函数，`FUNC_FILE_MAP` 映射逻辑名到实际文件名
-- **Source** 函数直接放在 `sources/{platform}/{mode}/{provider}/` 下
+- **书源契约** 书源 = `novelbase/sources/{dir}/`，身份在 `source.json`，能力在 `{capability}.py`。
+  对外 API：`list_sources()` / `get_manifest(name)` / `capabilities(name) -> {capability: mode}` / `resolve(name, capability) -> (fn, mode)`。
+  `source_name`（source.json 里）与目录名解耦；目录名是合法 Python 标识符，能力通过 `import_module("novelbase.sources.{dir}.{capability}")` 加载。
+  新增书源：建目录 + 空 `__init__.py` + `source.json` + 4 个能力文件，无注册表改动。
 - **引擎三种模式** `browser`（Playwright）、`requests`（httpx）、`api`（Rain.ink 代理）
 - **前端状态** `@tanstack/react-query`，不用手动 `useEffect` 加载
 - **SSE 章节流** `GET /api/v2/novel/{id}/chapters/stream`
