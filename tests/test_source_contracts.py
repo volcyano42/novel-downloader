@@ -1,6 +1,7 @@
 """测试 source 能力契约：签名校验、CAPABILITY_META 一致性、capabilities 输出、私有源。"""
 import json
 from inspect import signature
+from pathlib import Path
 
 import pytest
 
@@ -74,9 +75,29 @@ class TestCapabilitiesOutput:
         assert "fanqie-api-rain" in names and "fanqie" not in names
 
     def test_source_names_unique(self):
-        """source_name 唯一性（spec:254）：所有书源的 source_name 互不重复。"""
-        names = list_sources()
-        assert len(names) == len(set(names))
+        """source_name 唯一性（spec:254）。
+
+        注意：不能直接对 `list_sources()` 去重后再断言 len 相等——该函数内部用
+        set 收集，返回值恒已去重，那样断言恒真。这里绕过它，直接扫目录读
+        `source.json['source_name']` 再查重复。
+        """
+        roots = [_source_mod._SOURCES_DIR]
+        if _source_mod._PRIVATE_SOURCES_ROOT:
+            roots.append(Path(_source_mod._PRIVATE_SOURCES_ROOT))
+        names: list[str] = []
+        for root in roots:
+            root = Path(root)
+            if not root.is_dir():
+                continue
+            for entry in sorted(root.iterdir()):
+                if not entry.is_dir() or entry.name.startswith("_"):
+                    continue
+                manifest = entry / "source.json"
+                if not manifest.is_file():
+                    continue
+                names.append(json.loads(manifest.read_text(encoding="utf-8"))["source_name"])
+        duplicated = sorted({n for n in names if names.count(n) > 1})
+        assert not duplicated, f"重复的 source_name: {duplicated}"
 
 
 def test_private_source_merged(tmp_path, monkeypatch):
@@ -100,8 +121,71 @@ def test_private_source_merged(tmp_path, monkeypatch):
 
 
 def test_builtin_wins_over_private(tmp_path, monkeypatch):
-    """同名书源的同名能力文件：内置优先于私有。"""
+    """同名书源的同名能力文件：内置优先于私有。
+
+    必须在私有侧真的放一个**同名目录 + 可区分的 search 实现**，否则「私有优先」
+    与「内置优先」结果相同，测试无区分力。
+    """
     import novelbase.source as s
+
+    d = tmp_path / "92xs_requests_default"   # 与内置目录同名
+    d.mkdir()
+    (d / "source.json").write_text(json.dumps({
+        "source_name": "92xs-requests-default",
+        "enabled": True,
+        "default_config": {"search": {"mode": "requests"}},
+    }, ensure_ascii=False), encoding="utf-8")
+    (d / "search.py").write_text(
+        "PRIVATE_MARKER = 'private'\n"
+        "async def search(query, engine, **kwargs):\n"
+        "    return ('private',)\n",
+        encoding="utf-8",
+    )
+
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
-    fn, _ = s.resolve("92xs-requests-default", "search")
+    fn, mode = s.resolve("92xs-requests-default", "search")
+
+    # 拿到的是内置模块的实现，而非刚写入的私有文件（私有模块名形如
+    # novelbase_private.sources.92xs_requests_default.search）
     assert fn.__module__ == "novelbase.sources.92xs_requests_default.search"
+    assert fn.__module__ != "novelbase_private.sources.92xs_requests_default.search"
+    assert mode == "requests"
+
+
+def test_private_dir_not_exist_graceful(monkeypatch):
+    """私有目录不存在时静默跳过：内置源仍正常。"""
+    import novelbase.source as s
+    monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", "/nonexistent/path")
+    assert s.capabilities("92xs-requests-default") == {
+        "search": "requests", "novel_info": "requests",
+        "chapter_list": "requests", "chapter_content": "requests",
+    }
+
+
+def test_no_env_returns_only_builtin(monkeypatch):
+    """未设置 NLD_PRIVATE_SOURCES 时只列出内置 10 个书源。"""
+    import novelbase.source as s
+    monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", None)
+    names = s.list_sources()
+    assert len(names) == 10
+    assert set(names) == {
+        "92xs-requests-default", "fanqie-api-oiapi", "fanqie-api-rain",
+        "fanqie-browser-default", "fanqie-requests-default",
+        "qidian-browser-default", "qidian-requests-default",
+        "qimao-api-rain", "qimao-browser-default", "qimao-requests-default",
+    }
+
+
+def test_capability_meta_keys_are_file_stems():
+    """能力名 = 文件名 = 函数名；meta 里不再有 file_stem 字段。"""
+    assert set(CAPABILITY_META) == {"search", "novel_info", "chapter_list", "chapter_content"}
+    for name, meta in CAPABILITY_META.items():
+        assert "file_stem" not in meta
+        assert "required_params" in meta
+
+
+def test_required_params_unchanged():
+    assert CAPABILITY_META["search"]["required_params"] == ("query", "engine")
+    assert CAPABILITY_META["novel_info"]["required_params"] == ("url", "engine")
+    assert CAPABILITY_META["chapter_list"]["required_params"] == ("url", "engine")
+    assert CAPABILITY_META["chapter_content"]["required_params"] == ("chapter", "engine")
