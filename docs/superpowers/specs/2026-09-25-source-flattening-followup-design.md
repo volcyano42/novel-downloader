@@ -221,6 +221,7 @@ def enabled_source_names() -> list[str]:
 | `load_site_config(platform)` / `save_site_config` | `shared/config.py:132,139` | 保留签名，语义=按 `source_name`（仅文档措辞） |
 | `load_platform_configs` | `shared/config.py:144-162` | **删除**（全库无调用点，grep 仅命中定义；其实现依赖已删的 `get_mode_variant_config`/`mode_variants`） |
 | `load_platform_raw` | `shared/config.py:164-165` | **删除**（全库无调用点） |
+| `build_options(cfg, site_cfg)` | `shared/config.py:243-308` | **删除**（T1 核对补记：全库无调用点，grep 仅命中定义及 `dist/portable` 打包产物副本；其实现依赖已删的 `get_mode_variant_config`，属与 `load_platform_configs` 同类的死代码） |
 | `_migrate_search_history` 旧迁移 + `platform='fanqie'` 硬编码 | `shared/user_data.py:84-119` | 删除；`search_history` drop 重建新 schema（§7） |
 | `add_search_history(platform, keyword, mode, variant)` | `shared/user_data.py:246-255` | 改 `add_search_history(source_name, keyword)` |
 | `search_history` 表定义 | `shared/user_data.py:44-51` | 改：`source_name TEXT NOT NULL` + `keyword TEXT NOT NULL`，唯一键 `(source_name, keyword)` |
