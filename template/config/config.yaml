@@ -2,6 +2,8 @@ download:
   max_workers: 3
   notify:
     sound: none
+# 已废弃 / 不可配置：storage 恒取 shared.config.get_database_url()
+# （= {APP_DATA}/storage/novels/），下方 backend / database_url 改动不生效，仅为兼容旧文件保留。
 storage:
   backend: sqlite
   database_url: sqlite:///app_data/storage/novels/.dir
