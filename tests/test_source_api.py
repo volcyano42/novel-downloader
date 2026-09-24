@@ -72,3 +72,22 @@ def test_get_manifest_checks_capability_files(tmp_path, monkeypatch):
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
     with pytest.raises(ManifestError):
         s.get_manifest("demo-requests-default")
+
+
+def test_compiled_mode_reads_manifest(monkeypatch):
+    """编译模式（__compiled__ 在 globals）下，list_sources/get_manifest 走 _manifest。"""
+    import novelbase.source as s
+
+    fake_sources = {"demo_requests_default": {
+        "source_name": "demo-requests-default",
+        "enabled": True,
+        "default_config": {"search": {"mode": "requests"}},
+    }}
+    monkeypatch.setattr(s, "_is_compiled", lambda: True)
+    monkeypatch.setattr(s, "_compiled_sources", lambda: fake_sources)
+    monkeypatch.setattr(s, "_compiled_dir_by_source",
+                        lambda: {"demo-requests-default": "demo_requests_default"})
+
+    assert s.list_sources() == ["demo-requests-default"]
+    assert s.capabilities("demo-requests-default") == {"search": "requests"}
+    assert s.get_manifest("demo-requests-default")["enabled"] is True
