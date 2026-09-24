@@ -51,7 +51,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **SHOW_NAME** 每个 source 有中文显示名，`register_source()` 返回 `{name: {name, show_name, hosts, id_pattern, origin_id_pattern, ...}}`
 - **前端动态平台** 模式/方案从 `GET /api/v2/download/sources` 动态获取，不硬编码
 - **encoding 参数** `engine.fetch_text(url, encoding=...)` 可指定编码，默认自动检测（`apparent_encoding`）
-- **Android APK 已恢复**（2026-08-02，用户决定）：`android/` 目录 + `build-apk.yml` workflow 重新落地，用 **Chaquopy 嵌入 Python**（见 [build/android-apk.md](build/android-apk.md)）；musl 构建仍移除。旧结论"Android 已彻底移除"作废，改为本条目
+- **Android APK**（2026-08-02 落地，**2026-09-24 首次构建成功** run `35975357459`）：`android/` 目录 + `build-apk.yml` workflow，用 **Chaquopy 嵌入 Python**（插件 15.0.1，wheel 仓库 `chaquo.com/pypi-13.1`；见 [build/android-apk.md](build/android-apk.md)）。硬约束：**`minSdk 24`**（pip 只接受 tag ≤ minSdk 的 wheel，`lxml`/`PyYAML` 只有 `android_24`）、**必须 `pydantic<2`**（`pydantic-core` 是 Rust 无 Android wheel）且 `fastapi` pin `==0.120.0`、**依赖排除不能写 `pip { exclude }`**（无此 API）而由 `build-apk.sh` 生成 `android/.req-android.txt`、public 无 `pyproject.toml` 故 `novelbase` 走源码复制；产物**未签名**（缺 `KEYSTORE_*` secrets）、**真机启动未验证**；musl 构建仍移除
 - **本机不构建任何平台产物**（2026-08-02 确认）：构建全走 CI workflow；衍生产物（email_downloader.py、调试脚本）放 novel-downloader-tools/
 - **variant 命名**（2026-08-05）：`capabilities()` 第二层 key 统一命名为 variant（替代旧 provider），语义为 "同一 mode 下的不同实现/方案"；单实现 mode（browser/requests）用 `"default"` 占位；`resolve()` 签名 `variant=None` 默认取 `"default"`。向后端 API 传送的 Query 参数同理改为 `variant`，前端 sessionStorage key `nd:variant`
 - **私有源隔离**（2026-08-05）：环境变量 `NLD_PRIVATE_SOURCES` 指向外部私有目录（镜像 `sources/{name}/` 结构），`capabilities()` 自动合并，`resolve()` 从私有目录动态加载。公开仓库不包含敏感实现（如逆向/破解），本地开发设 env var 即可使用全部功能

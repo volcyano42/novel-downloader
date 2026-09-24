@@ -344,3 +344,37 @@ sites 配置统一为「mode → variant → 配置」三层：browser/requests 
 | `c06c46e` | feat: CLI 双入口支持 variant 选择（交互询问/非交互提示 --variant） |
 
 variant 选择规则（所有模式一致）：某模式只有一个 variant 时自动使用（browser/requests 未指定默认 `default`）；多于一个时——交互式 `main.py` 弹出菜单询问并会话级记住 `(platform, mode)`；非交互 `cli.py` 的 `search`/`download`/`update`/`info` 新增 `--variant` 参数，未指定时列出所有 variant 名称并提示后以退出码 2 退出。
+
+
+---
+
+## 2026-09-24 Android APK 构建打通（`build-apk` 首次成功）
+
+> 背景：`build-apk.yml` 自 2026-08-02 落地起**从未成功跑过一次**（两库历史 run 数均为 0）。2026-09-19~24 逐层剥开 8 处阻塞后，公开库 `novel-crawler` 的 build-apk 首次构建成功：run `35975357459` → `success`，artifact `novel-crawler-apk-dev`（≈28.6 MB，未签名）。
+
+### 阻塞链（按暴露顺序）
+
+| # | 层 | 现象 | 修复 |
+|---|----|------|------|
+| 1 | Gradle KTS | 用 `#` 当注释（Kotlin 只能 `//`）→ `Script compilation errors: 19 errors` | 改为 `//` |
+| 2 | Chaquopy API | `pip { exclude("x") }` —— Chaquopy 的 `pip` 块只有 `install`/`options`，**没有 `exclude`** → `Unresolved reference` | 改由 `build-apk.sh` 生成预过滤清单 `android/.req-android.txt` |
+| 3 | Gradle KTS | `java.util.Properties()`：KTS 里 `java` 被解析为 `Project.java` 扩展而非包名 → `Unresolved reference: util` | `import java.util.Properties` + `Properties()` |
+| 4 | Chaquopy wheel | `lxml`/`PyYAML` 的 cp311 wheel 只有 `android_24` tag，app `minSdk=21` → pip 回退 PyPI sdist → 编译失败（缺 libxml2/libxslt） | `minSdk 21 → 24` |
+| 5 | 依赖冲突 | `fastapi 0.141.1` 要求 `pydantic>=2.9`，与第 4 步引入的 `pydantic<2` 冲突 | pin `fastapi==0.120.0` |
+| 6 | Kotlin | `Python.start(ServerService::class.java, "server")` —— Chaquopy 只接受 `Python.Platform`，且模块不会以 `__main__` 方式执行 | `Python.start(AndroidPlatform(this@ServerService))` + `getModule("server").callAttr("_start")` |
+| 7 | Kotlin | `this@healthPoll`（标签不存在） | 直接引用 `healthPoll` 字段 |
+| 8 | Kotlin | 显式标注 `healthPoll: Runnable` 后又触发「属性初始化表达式自引用」 | `run()` 内改用 `this`（匿名 Runnable 自身） |
+
+### 关键结论
+
+- **Chaquopy wheel tag 规则**：pip 只接受 tag ≤ app `minSdk` 的 wheel；`android_24` 的包在 `minSdk=21` 下匹配不上，会回退 sdist 源码编译（Android 上必然失败）。Chaquopy 17.0 已把 **24 定为官方最低要求**（24 也是其 build-wheel 默认 API level）。
+- **pydantic v2 在 Android 上不可用**：`pydantic-core` 是 Rust 扩展、PyPI 无 Android wheel，ChaquoPy 官方建议装 `pydantic<2`（v1 纯 Python）。为此 `backend/schemas/export_config.py` 做了 **v1/v2 双兼容**（`field_validator`/`model_config` ↔ `validator`/`class Config`），桌面端行为不变（v1.10.26 与 v2.13.4 两端实测一致）。
+- **public 仓库没有 `pyproject.toml`**（`PUBLIC_MANIFEST.md` 规定 public 自维护版本元数据），而 `android/app/build.gradle.kts` 里 `install("file:../..")` 需要它 → 公开库必然报 `Directory '.' is not installable`。改为由 `build-apk.sh` 复制 `novelbase/` 源码进 `src/main/python/`（与 `backend/`、`shared/` 同法）。
+- **Android 依赖清单在 `build-apk.sh` 第 1b 步生成**：排除 `playwright`/`psutil`/`pillow-heif`（Chaquopy 仓库无 wheel），pin `lxml==5.3.0`、`Pillow==11.0.0`、`yarl==1.9.3`、`PyYAML==6.0.3`、`fastapi==0.120.0`，`uvicorn[standard]` → `uvicorn`（去 C/Rust extras），追加 `pydantic<2`。
+
+### 遗留
+
+- APK **未签名**（未配置 `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` secrets）→ 仅可用于侧载测试；产物名跟随 `inputs.version`（不传则为 `-dev`）。
+- **真机启动未验证**（Chaquopy 首次解压 → uvicorn 起服务 → WebView 加载）；**私有库未触发构建验证**（代码已同步修复）。
+- `buildPython 3.12.3` 与 app Python 3.11 不匹配 → `.pyc` 预编译被跳过（仅警告，运行时可解释执行）。
+- APK 内 `versionName` 仍是 gradle 硬编码（public `1.0.1` / private `1.0.0`），未与项目版本联动。
