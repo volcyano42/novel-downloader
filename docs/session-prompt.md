@@ -45,10 +45,10 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **下载器 API** `skip_delay=False` 参数通过 `**kwargs` 传递到底层函数
 - **Source 架构** `source.resolve(name, mode, function, variant?)` 动态分发到底层函数（`novelbase.source` 命名空间）；`source.capabilities()` 统一返回 `dict[str, dict[str, list[str]]]`（单 variant mode 用 `"default"` key）；`variant=None` 时默认取 `"default"`
 - **CLI** `python -m cli`（`cli/` 包，2026-08-13 由 cli.py + cli_lib 合并；argparse 子命令）
-- **Novel.origin_id** 只读属性，值为去掉 `{website}_` 前缀的源站原始 ID（如 `fanqie_7123...` → `7123...`）
-- **ORIGIN_ID_PATTERN** 每个 source 新增，匹配去前缀的 origin_id（`ID_PATTERN` 匹配带前缀 Novel.id，两者并存）
+- **Novel.id = sha256(url)、库内 meta.id = url**（2026-09-24 改，取代 2026-08-22 的 `hash(canonical url)`）：对外标识（模型字段 / 磁盘文件名 / API / 前端 / CLI）= `sha256(url)[:32]`；库内 `meta.id` 列存**书源返回的 url 原样**（不做规范化，可按 url 查书）。`canonical_book_url` 及其平台特例（92xs/qidian）已删除，url 归一由书源负责——core 不再承载站点知识
+- **不做 url 规范化**（2026-09-24）：同一本书的不同 url 形态会得到不同 id（如 92xs 的 `/book/{id}.html` 与 `/html/{id}/`），入库与后续使用须保持同一形态
 - **导出器** 纯函数 `export()`，无类实例状态（BASEExporter 已删除）
-- **SHOW_NAME** 每个 source 有中文显示名，`register_source()` 返回 `{name: {name, show_name, hosts, id_pattern, origin_id_pattern, ...}}`
+- **SHOW_NAME** 每个 source 有中文显示名，`register_source()` 返回 `{name: {name, show_name, hosts}}`
 - **前端动态平台** 模式/方案从 `GET /api/v2/download/sources` 动态获取，不硬编码
 - **encoding 参数** `engine.fetch_text(url, encoding=...)` 可指定编码，默认自动检测（`apparent_encoding`）
 - **Android APK**（2026-08-02 落地，**2026-09-24 首次构建成功** run `35975357459`）：`android/` 目录 + `build-apk.yml` workflow，用 **Chaquopy 嵌入 Python**（插件 15.0.1，wheel 仓库 `chaquo.com/pypi-13.1`；见 [build/android-apk.md](build/android-apk.md)）。硬约束：**`minSdk 24`**（pip 只接受 tag ≤ minSdk 的 wheel，`lxml`/`PyYAML` 只有 `android_24`）、**必须 `pydantic<2`**（`pydantic-core` 是 Rust 无 Android wheel）且 `fastapi` pin `==0.120.0`、**依赖排除不能写 `pip { exclude }`**（无此 API）而由 `build-apk.sh` 生成 `android/.req-android.txt`、public 无 `pyproject.toml` 故 `novelbase` 走源码复制；产物**未签名**（缺 `KEYSTORE_*` secrets）、**真机启动未验证**；musl 构建仍移除
