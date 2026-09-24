@@ -1,6 +1,8 @@
-"""qimao browser - search."""
+"""qimao requests - search."""
 
 import logging
+
+from bs4 import BeautifulSoup
 
 from novelbase.models.novel import SearchResult
 

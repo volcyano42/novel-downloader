@@ -2,6 +2,8 @@
 
 import logging
 
+from bs4 import BeautifulSoup
+
 from novelbase.models.novel import SearchResult
 
 

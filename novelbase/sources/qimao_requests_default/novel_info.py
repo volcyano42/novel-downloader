@@ -1,9 +1,10 @@
-"""qimao browser - fetch novel info."""
+"""qimao requests - fetch novel info."""
 
 import re
 
 from bs4 import BeautifulSoup
 
+from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
 
 

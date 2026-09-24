@@ -8,7 +8,7 @@ import re
 from bs4 import BeautifulSoup
 
 from novelbase.core.exceptions import ChapterNotFoundError
-from novelbase.models.novel import Chapter
+from novelbase.models.novel import Chapter, Chapters
 
 
 def standardize_id(ref):

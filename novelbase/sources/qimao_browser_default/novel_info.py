@@ -4,6 +4,7 @@ import re
 
 from bs4 import BeautifulSoup
 
+from novelbase.core.exceptions import NovelNotFoundError
 from novelbase.models.novel import Novel, Illustration
 
 

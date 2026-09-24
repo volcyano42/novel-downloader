@@ -1,7 +1,8 @@
 """qimao browser - fetch chapter content."""
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
+from novelbase.core.exceptions import ChapterNotFoundError, ParseError
 from novelbase.models.novel import Chapter
 
 
