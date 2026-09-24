@@ -129,3 +129,10 @@ def test_get_cached_engine_for_source_parses_name(monkeypatch):
     assert seen == {"platform": "qimao", "mode": "api", "variant": "rain"}
     assert em.get_cached_engine_for_source("92xs-requests-default", "requests") == "E"
     assert seen == {"platform": "92xs", "mode": "requests", "variant": "default"}
+
+
+def test_search_result_data_uses_source_name():
+    from backend.schemas import SearchResultData
+    r = SearchResultData(title="t", author="a", url="http://x", source_name="92xs-requests-default")
+    assert r.source_name == "92xs-requests-default"
+    assert not hasattr(r, "platform")
