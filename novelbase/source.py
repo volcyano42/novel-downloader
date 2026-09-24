@@ -1,313 +1,194 @@
 """Source 能力发现与动态分发（公共 API）。
 
-本模块是 source 子系统的唯一入口，负责：
-- 元数据注册：register_source() / list_sources()
-- 能力发现：capabilities(name)
-- 动态分发：resolve(name, mode, function, variant=None)
-- URL 识别：platform_from_url() / resolve_book_url()
+书源 = `novelbase/sources/{dir}/`，身份与出厂配置在 `source.json`，能力在 `{capability}.py`。
+本模块对外只有 4 个函数 + 1 个 URL 入口：
 
-新增源平台：直接在 sources/ 下创建目录/文件即可，零注册表修改。
+- `list_sources()`                        所有书源名（source.json 的 source_name）
+- `get_manifest(source_name)`             `source.json` 内容
+- `capabilities(source_name)`             `{capability: mode}`
+- `resolve(source_name, capability)`      `(函数, mode)`
+- `resolve_book_url(raw)`                 把输入规范成完整 URL
 
-私有源：设置环境变量 NLD_PRIVATE_SOURCES 指向外部目录，镜像 sources/{name}/
-结构，capabilities/resolve 自动合并。公开仓库不包含私有实现。
+键约定：`source_name` 与目录名解耦（目录名是合法标识符的磁盘位置，source_name 是
+`source.json` 里的唯一 id，形如 `fanqie-api-rain`）。本模块所有公开 API 均以
+`source_name` 为键；目录名只在 `import_module` 时使用。
+
+私有源：`NLD_PRIVATE_SOURCES` 指向的目录镜像 `sources/{dir}/`，同名书源目录里
+已存在的能力文件优先用内置，缺失的用私有实现补齐。
 """
 
 import os
-import threading
 from importlib import import_module, util as importlib_util
 from inspect import signature
 from pathlib import Path
+from typing import Callable
 
 from .sources.contracts import CAPABILITY_META
+from .sources.manifest import ManifestError, check_capability_files, load_manifest
 
-__all__ = [
-    "capabilities",
-    "resolve",
-    "list_sources",
-    "register_source",
-    "platform_from_url",
-    "resolve_book_url",
-]
+__all__ = ["list_sources", "get_manifest", "capabilities", "resolve", "resolve_book_url"]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
 
-_lock = threading.Lock()
-_cache_source: dict[str, dict] | None = None
+_SOURCES_DIR = Path(__file__).parent / "sources"
 
 
 def _is_compiled() -> bool:
-    """检测是否为 Nuitka/PyInstaller 编译产物。"""
+    """Nuitka/PyInstaller 产物里 `__compiled__` 会出现在模块 globals。"""
     return "__compiled__" in globals()
 
 
-# ═══════════════════════════════════════════════════════════════════
-# 元数据注册（source 名 / hosts 等）
-# ═══════════════════════════════════════════════════════════════════
-
-def _scan_sources() -> dict[str, dict]:
-    """扫描 sources/ 目录，收集每个 source 的 NAME / SHOW_NAME / HOSTS 等。
-
-    Returns:
-        {module_name: {"name": ..., "show_name": ..., "hosts": ...}}
-    """
-    result = {}
-    pkg_dir = Path(__file__).parent / "sources"
-    if not pkg_dir.exists():
-        return result
-
-    for entry in sorted(os.listdir(pkg_dir)):
-        if entry.startswith("_") or entry == "__pycache__":
-            continue
-        entry_path = pkg_dir / entry
-        if not entry_path.is_dir() or not (entry_path / "__init__.py").exists():
-            continue
-        module_name = entry
-        try:
-            module = import_module(f".sources.{module_name}", __package__)
-            result[module_name] = {
-                "name": getattr(module, "NAME", module_name),
-                "show_name": getattr(module, "SHOW_NAME", module_name),
-                "hosts": getattr(module, "HOSTS", ()),
-            }
-        except ImportError as e:
-            print(f"load source failed {module_name} reason: {e}")
-
-    return result
+def _compiled_sources() -> dict[str, dict]:
+    """编译模式下的书源表：{目录名: source.json 内容}。"""
+    from .utils import _manifest
+    return _manifest.SOURCES
 
 
-def _load_manifest_sources() -> dict[str, dict]:
-    """从 _manifest.py 加载书源数据（Nuitka 模式）。"""
-    try:
-        from .utils import _manifest
-        return _manifest._flat_sources()
-    except ImportError:
-        return {}
+def _compiled_dir_by_source() -> dict[str, str]:
+    """编译模式下的 {source_name: 目录名} 映射（供 import_module 用）。"""
+    from .utils import _manifest
+    return _manifest.SOURCE_DIRS
 
 
-def register_source() -> dict[str, dict]:
-    """返回所有已注册的 source 元数据。Nuitka 模式从 manifest 读取。"""
-    global _cache_source
-    if _cache_source is not None:
-        return _cache_source
-    with _lock:
-        if _cache_source is not None:
-            return _cache_source
-        if _is_compiled():
-            _cache_source = _load_manifest_sources()
-        else:
-            _cache_source = _scan_sources()
-    return _cache_source
+def _iter_source_dirs(source_name: str) -> list[tuple[Path, bool]]:
+    """按 source_name 反查目录（(路径, 是否内置)），内置在前、私有在后。"""
+    dirs: list[tuple[Path, bool]] = []
+    if _SOURCES_DIR.is_dir():
+        for entry in sorted(_SOURCES_DIR.iterdir()):
+            if not entry.is_dir() or entry.name.startswith("_") or not (entry / "source.json").is_file():
+                continue
+            try:
+                if load_manifest(entry).get("source_name") == source_name:
+                    dirs.append((entry, True))
+            except ManifestError:
+                continue
+    if _PRIVATE_SOURCES_ROOT:
+        p = Path(_PRIVATE_SOURCES_ROOT)
+        if p.is_dir():
+            for entry in sorted(p.iterdir()):
+                if entry.is_dir() and not entry.name.startswith("_") and (entry / "source.json").is_file():
+                    try:
+                        if load_manifest(entry).get("source_name") == source_name:
+                            dirs.append((entry, False))
+                    except ManifestError:
+                        continue
+    return dirs
 
 
 def list_sources() -> list[str]:
-    """列出所有可用源名称（开发模式目录扫描，编译模式 manifest）。"""
+    """列出内置 + 私有书源的 source_name（去重排序）。"""
     if _is_compiled():
-        try:
-            from .utils import _manifest
-            return list(_manifest._SOURCES.keys())
-        except ImportError:
-            return []
-    pkg_dir = Path(__file__).parent / "sources"
-    if not pkg_dir.exists():
-        return []
-    result: list[str] = []
-    for entry in sorted(pkg_dir.iterdir()):
-        if entry.name.startswith("_") or not entry.is_dir() or not (entry / "__init__.py").exists():
-            continue
-        result.append(entry.name)
-    return result
+        return sorted(m["source_name"] for m in _compiled_sources().values())
+    names: set[str] = set()
+    roots: list[Path] = []
+    if _SOURCES_DIR.is_dir():
+        roots.append(_SOURCES_DIR)
+    if _PRIVATE_SOURCES_ROOT:
+        p = Path(_PRIVATE_SOURCES_ROOT)
+        if p.is_dir():
+            roots.append(p)
+    for root in roots:
+        for entry in sorted(root.iterdir()):
+            if not entry.is_dir() or entry.name.startswith("_") or not (entry / "source.json").is_file():
+                continue
+            try:
+                names.add(load_manifest(entry)["source_name"])
+            except ManifestError:
+                continue
+    return sorted(names)
 
 
-def platform_from_url(url: str) -> str | None:
-    """从 URL 推断平台名称，基于已注册书源的 hosts 匹配。"""
-    sources = register_source()
-    for name, meta in sources.items():
-        for host in meta.get("hosts", ()):
-            if host in url:
-                return name
-    return None
+def get_manifest(source_name: str) -> dict:
+    """返回书源的 `source.json` 内容（内置优先；非编译模式校验能力段 ⇔ .py 文件）。"""
+    if _is_compiled():
+        dirname = _compiled_dir_by_source().get(source_name)
+        if dirname is None or dirname not in _compiled_sources():
+            raise KeyError(f"unknown source: {source_name}")
+        return _compiled_sources()[dirname]
+    dirs = _iter_source_dirs(source_name)
+    if not dirs:
+        raise KeyError(f"unknown source: {source_name}")
+    d, _ = dirs[0]
+    manifest = load_manifest(d)
+    check_capability_files(d, manifest)  # spec 规则 1：能力段 ⇔ .py 文件双向一致
+    return manifest
+
+
+def capabilities(source_name: str) -> dict[str, str]:
+    """返回 `{capability: mode}`；书源不存在或声明非法时返回 `{}`。"""
+    try:
+        manifest = get_manifest(source_name)
+    except (KeyError, ManifestError):
+        return {}
+    return {cap: section["mode"] for cap, section in manifest.get("default_config", {}).items()}
+
+
+def _resolve_import(source_name: str, capability: str, dirname: str):
+    """按目录名 import 能力模块并返回函数。"""
+    module_path = f"novelbase.sources.{dirname}.{capability}"
+    try:
+        module = import_module(module_path)
+    except ImportError as e:
+        raise ImportError(f"Failed to resolve {module_path}: {e}") from e
+    fn = getattr(module, capability, None)
+    if fn is None:
+        raise ImportError(f"{module_path} 里没有名为 {capability} 的函数")
+    return fn
+
+
+def resolve(source_name: str, capability: str):
+    """动态加载并返回 `(函数, 该能力的 mode)`。"""
+    meta = CAPABILITY_META.get(capability)
+    if meta is None:
+        raise ValueError(f"unknown capability {capability!r}. Known: {list(CAPABILITY_META)}")
+
+    mode = capabilities(source_name).get(capability)
+    if mode is None:
+        raise ValueError(f"{source_name} 未声明能力 {capability!r}")
+
+    if _is_compiled():
+        # 编译模式：能力模块已被 --include-package=novelbase.sources 打进产物，
+        # 文件系统里没有 .py 可查，直接按目录名 import
+        dirname = _compiled_dir_by_source().get(source_name)
+        if dirname is None:
+            raise ImportError(f"unknown source: {source_name}")
+        fn = _resolve_import(source_name, capability, dirname)
+    else:
+        fn = None
+        for d, is_builtin in _iter_source_dirs(source_name):
+            if is_builtin:
+                # 内置：import_module；同名能力内置优先，内置缺失再试私有补齐
+                try:
+                    fn = _resolve_import(source_name, capability, d.name)
+                except ImportError:
+                    continue
+            else:
+                # 私有：在包外（NLD_PRIVATE_SOURCES），必须走 spec_from_file_location（spec:163）
+                candidate = d / f"{capability}.py"
+                if not candidate.is_file():
+                    continue
+                module_name = f"novelbase_private.sources.{d.name}.{capability}"
+                spec = importlib_util.spec_from_file_location(module_name, str(candidate))
+                if spec is None or spec.loader is None:
+                    raise ImportError(f"Failed to load spec from {candidate}")
+                module = importlib_util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                fn = getattr(module, capability, None)
+            if fn is not None:
+                break
+        if fn is None:
+            raise ImportError(f"{source_name} 缺少能力文件 {capability}.py")
+
+    sig = signature(fn)
+    missing = [p for p in meta["required_params"] if p not in sig.parameters]
+    if missing:
+        raise ValueError(f"{source_name}.{capability} 签名缺少参数: {missing}. 当前签名: {list(sig.parameters)}")
+    return fn, mode
 
 
 def resolve_book_url(raw: str) -> str:
-    """将输入转为完整 URL。
-
-    - 已是完整 URL 则直接返回
-    - 其他输入（含 hash id）无法识别时报 ValueError
-    """
+    """把输入规范成完整 URL（仅接受 http(s)；无法识别时抛 ValueError）。"""
     raw = raw.strip()
     if raw.startswith("http://") or raw.startswith("https://"):
         return raw
     raise ValueError(f"无法识别书源或 ID 格式: {raw}")
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 能力发现 + 动态分发
-# ═══════════════════════════════════════════════════════════════════
-
-def _load_manifest_capabilities(name: str) -> dict[str, dict[str, list[str]]]:
-    """Nuitka 模式从 manifest 加载能力矩阵。"""
-    try:
-        from .utils import _manifest
-        return _manifest._SOURCES.get(name, {}).get("modes", {})
-    except ImportError:
-        return {}
-
-
-def _scan_source_dirs(name: str) -> list[Path]:
-    """返回所有 source 目录路径（内置 + 私有）。
-
-    私有目录路径由 NLD_PRIVATE_SOURCES 环境变量指定，结构镜像 sources/{name}/。
-    内置目录始终排在前面。
-    """
-    dirs = [Path(__file__).parent / "sources" / name]
-    if _PRIVATE_SOURCES_ROOT:
-        private_dir = Path(_PRIVATE_SOURCES_ROOT) / name
-        if private_dir.is_dir():
-            dirs.append(private_dir)
-    return dirs
-
-
-def _scan_capabilities(pkg_dir: Path) -> dict[str, dict[str, list[str]]]:
-    """扫描单个 source 目录，返回 {mode: {variant: [functions]}}。
-
-    目录不存在时返回空 dict。
-    """
-    if not pkg_dir.is_dir():
-        return {}
-
-    result: dict[str, dict[str, list[str]]] = {}
-    for mode_dir in sorted(pkg_dir.iterdir()):
-        if not mode_dir.is_dir() or mode_dir.name.startswith("_") or mode_dir.name == "__pycache__":
-            continue
-        mode = mode_dir.name
-
-        variants: dict[str, list[str]] = {}
-        for sub in sorted(mode_dir.iterdir()):
-            if sub.is_dir() and not sub.name.startswith("_") and sub.name != "__pycache__":
-                funcs: list[str] = []
-                for func_name, meta in CAPABILITY_META.items():
-                    if (sub / f"{func_name}.py").exists():
-                        funcs.append(func_name)
-                if funcs:
-                    variants[sub.name] = funcs
-
-        # 无 fallback：mode 必须用 variant 子目录组织（如 default/），
-        # 直接放在 mode 根的文件不再被识别
-        if variants:
-            result[mode] = variants
-
-    return result
-
-
-def capabilities(name: str) -> dict[str, dict[str, list[str]]]:
-    """扫描内置 + 私有 source 目录，返回合并后的可用能力矩阵。
-
-    返回结构统一为 {mode: {variant: [functions]}}。
-    无 variant 子目录的 mode 使用 "default" 作为 variant key。
-    私有源的同名 variant 覆盖内置源（允许本地覆盖/补丁）。
-    Nuitka 编译后目录扫描失败时退回硬编码矩阵。
-
-    >>> capabilities("fanqie")
-    {"api": {"oiapi": [...], "rain": [...]},
-     "browser": {"default": [...]},
-     "requests": {"default": [...]}}
-
-    无该 mode 则不出现 key；source 不存在返回空 dict。
-    """
-    merged: dict[str, dict[str, list[str]]] = {}
-    for pkg_dir in _scan_source_dirs(name):
-        caps = _scan_capabilities(pkg_dir)
-        for mode, variants in caps.items():
-            if mode not in merged:
-                merged[mode] = {}
-            merged[mode].update(variants)  # 私有源覆盖同名 variant
-    # Nuitka: 目录扫描失败（exe 内无 .py 文件），从 manifest 读取
-    if not merged and _is_compiled():
-        merged = _load_manifest_capabilities(name)
-    return merged
-
-
-def resolve(name: str, mode: str, function: str, variant: str | None = None):
-    """动态 import 并返回同步函数。
-
-    >>> fn = resolve("fanqie", "api", "search", "oiapi")
-    >>> results = fn("关键词", engine)
-
-    variant 为 None 时优先取 "default"，无 "default" 则取第一个可用 variant；
-    无 variant 子目录的 mode 使用 "default" 或省略 variant。
-
-    内置源优先用 import_module 加载；私有源用 spec_from_file_location 加载。
-    """
-    caps = capabilities(name)
-    if mode not in caps:
-        raise ValueError(f"mode {mode!r} not available for {name!r}. Available: {list(caps)}")
-
-    mode_caps = caps[mode]
-    variant_keys = list(mode_caps.keys())
-
-    if variant is None:
-        variant = "default" if "default" in mode_caps else variant_keys[0]
-    elif variant not in mode_caps:
-        raise ValueError(f"variant {variant!r} not available for {name}/{mode}. Available: {variant_keys}")
-
-    meta = CAPABILITY_META.get(function)
-    if meta is None:
-        raise ValueError(f"unknown function {function!r}. Known: {list(CAPABILITY_META)}")
-    file_stem = function
-
-    # 查找 variant 来源：先内置，后私有
-    _sources = [Path(__file__).parent / "sources" / name]
-    if _PRIVATE_SOURCES_ROOT:
-        _sources.append(Path(_PRIVATE_SOURCES_ROOT) / name)
-
-    found = False
-    for src_dir in _sources:
-        # 统一 variant 子目录结构：mode/variant/stem.py（无 default 根 fallback）
-        candidate = src_dir / mode / variant / f"{file_stem}.py"
-        if candidate.is_file():
-            found = True
-            break
-
-    if not found:
-        # Nuitka: .py 文件不存在（编译进 exe），直接试 import_module
-        if src_dir == _sources[0]:
-            module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
-            try:
-                module = import_module(module_path)
-                fn = getattr(module, file_stem)
-            except (ImportError, AttributeError) as e:
-                raise ImportError(
-                    f"Failed to resolve {name}/{mode}/{variant}/{file_stem}: {e}"
-                ) from e
-        else:
-            raise ImportError(
-                f"Failed to resolve {name}/{mode}/{variant}/{file_stem}: file not found"
-            )
-
-    # 内置源用 import_module，私有源用 spec_from_file_location
-    if src_dir == _sources[0]:
-        module_path = f"novelbase.sources.{name}.{mode}.{variant}.{file_stem}"
-        try:
-            module = import_module(module_path)
-            fn = getattr(module, file_stem)
-        except (ImportError, AttributeError) as e:
-            raise ImportError(f"Failed to resolve {module_path}: {e}") from e
-    else:
-        # 私有源：从文件路径加载
-        module_name = f"novelbase_private.sources.{name}.{mode}.{variant}.{file_stem}"
-        spec = importlib_util.spec_from_file_location(module_name, str(candidate))
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Failed to load spec from {candidate}")
-        module = importlib_util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        fn = getattr(module, file_stem)
-
-    # 运行时签名校验：确保函数接受必需参数
-    sig = signature(fn)
-    missing = [p for p in meta["required_params"] if p not in sig.parameters]
-    if missing:
-        raise ValueError(
-            f"{candidate} 签名缺少参数: {missing}. "
-            f"当前签名: {list(sig.parameters)}"
-        )
-    return fn
