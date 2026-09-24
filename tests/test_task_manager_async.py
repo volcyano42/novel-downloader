@@ -58,11 +58,11 @@ def _install_mocks(monkeypatch, chapters, speed: float = 0.01):
     stats = {"inflight": 0, "peak": 0}
     store = MagicMock()
 
-    async def fake_resolve_meta(url, engine, **kw):
+    async def fake_resolve_meta(url, source_name, engines, **kw):
         return Novel(title="测试", url=url, id="fanqie_1", serial=0,
                      author="", description="", count=len(chapters))
 
-    async def fake_resolve_chapter(ch, engine, **kw):
+    async def fake_resolve_chapter(ch, source_name, engines, **kw):
         stats["inflight"] += 1
         stats["peak"] = max(stats["peak"], stats["inflight"])
         await asyncio.sleep(speed)

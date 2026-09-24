@@ -24,15 +24,31 @@ _tasks_lock = threading.Lock()
 
 
 async def _run_download(task: dict, mode: str, variant: str | None, platform: str):
-    """下载协程：创建 engine → 并发下载章节 → 收尾状态，支持暂停/取消。"""
+    """下载协程：创建 engines 解析器 → 并发下载章节 → 收尾状态，支持暂停/取消。"""
     from novelbase import resolve_meta, resolve_chapter
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
+    from novelbase.source import split_source_name
 
+    # 前端传的 platform 现在即书源名（source_name）。
+    source_name = platform
+    site, _, name_variant = split_source_name(source_name)
+    eff_variant = name_variant or variant
+
+    # engines(mode)->engine 解析器：预建主 mode 的引擎，其余 mode 惰性补齐。
     # get_cached_engine 是同步调用，browser 模式首次创建会启动 Chromium，
     # 用 to_thread 移出事件循环，避免阻塞整个 FastAPI 事件循环数秒。
-    engine = await asyncio.to_thread(get_cached_engine, platform, mode, variant=variant)
+    primary_mode = mode or "browser"
+    engines_cache: dict[str, object] = {}
+    engines_cache[primary_mode] = await asyncio.to_thread(
+        get_cached_engine, site, primary_mode, variant=eff_variant)
+
+    def engines(m: str):
+        if m not in engines_cache:
+            engines_cache[m] = get_cached_engine(site, m, variant=eff_variant)
+        return engines_cache[m]
+
     try:
         store = create_storage(StorageOptions(
             backend="sqlite",
@@ -42,7 +58,7 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
         novel_url = task.get("novel_url", "")
         if novel_url:
             try:
-                meta = await resolve_meta(novel_url, engine)
+                meta = await resolve_meta(novel_url, source_name, engines)
                 store.save_meta(meta)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
@@ -103,7 +119,7 @@ async def _run_download(task: dict, mode: str, variant: str | None, platform: st
                 if attempt > 0:
                     await asyncio.sleep(2 * attempt)
                 try:
-                    downloaded = await resolve_chapter(ch, engine)
+                    downloaded = await resolve_chapter(ch, source_name, engines)
                 except ChapterNotFoundError:
                     if attempt < max_retries:
                         continue

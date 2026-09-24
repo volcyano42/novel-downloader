@@ -271,7 +271,7 @@ def build_options(cfg, site_cfg):
                 env_key_name = f"{name.upper()}_API_KEY"
                 api_key = os.environ.get(env_key_name) or provider.get("key", "")
                 options.set_api_options(
-                    name=name, key=api_key,
+                    key=api_key,
                     timeout=provider.get("timeout", 30),
                     retry_times=provider.get("retry_times", 3),
                     backoff_factor=provider.get("backoff_factor", 2),

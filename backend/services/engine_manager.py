@@ -85,6 +85,18 @@ async def invalidate_engine(platform: str,
     return False
 
 
+def get_cached_engine_for_source(source_name: str, mode: str):
+    """按书源名取/建缓存引擎：从 source_name 解析站点名与 variant。
+
+    书源名约定 `{platform}-{mode}-{variant}`（见 `novelbase.source.split_source_name`），
+    站点名即 `sites/{platform}.yaml`。供 downloader 的 `engines(mode)->engine`
+    解析器复用。
+    """
+    from novelbase.source import split_source_name
+    platform, _, variant = split_source_name(source_name)
+    return get_cached_engine(platform, mode, variant=variant or None)
+
+
 async def clear_engine_cache():
     """关闭所有缓存引擎（shutdown 时调用）。"""
     with _engine_lock:
@@ -136,7 +148,7 @@ def create_engine_for_request(platform: str,
             raise HTTPException(400, f"API variant '{variant}' 未启用或不存在，请在站点配置中启用它")
         key = os.environ.get(f"{variant.upper()}_API_KEY", "") or prov_cfg.get("key", "")
         opts = Options().set_mode("api").set_api_options(
-            name=variant, key=key,
+            key=key,
             delay=tuple(prov_cfg.get("delay", [3, 5])),
             timeout=prov_cfg.get("timeout", 30),
             retry_times=prov_cfg.get("retry_times", 3),
@@ -186,7 +198,7 @@ def _build_options(mode: str, api=None, requests=None, browser=None) -> Options:
     opts = Options().set_mode(mode)
     if mode == "api" and api:
         a = api
-        opts.set_api_options(name=a.name, delay=a.delay, timeout=a.timeout,
+        opts.set_api_options(delay=a.delay, timeout=a.timeout,
                              retry_times=a.retry_times, backoff_factor=a.backoff_factor,
                              key=a.key, params=a.params)
     elif mode == "requests" and requests:
@@ -209,7 +221,7 @@ def _build_sub_options(mode: str, api=None, requests=None, browser=None):
     from novelbase.core.options import APIOptions, RequestsOptions, BrowserOptions
     if mode == "api" and api:
         a = api
-        return APIOptions(name=a.name, delay=a.delay, timeout=a.timeout,
+        return APIOptions(delay=a.delay, timeout=a.timeout,
                           retry_times=a.retry_times, backoff_factor=a.backoff_factor,
                           key=a.key, params=a.params)
     elif mode == "requests" and requests:
