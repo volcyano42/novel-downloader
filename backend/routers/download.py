@@ -8,17 +8,14 @@ from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.source import platform_from_url, resolve_book_url
+from novelbase.source import resolve_book_url
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
 
 def _platform_from_url(url: str) -> str:
-    """从 URL 推断平台（数据驱动，基于书源 hosts 匹配）。"""
-    plat = platform_from_url(url)
-    if plat:
-        return plat
-    raise HTTPException(400, f"未识别书源 URL: {url}")
+    """URL 无法自动推断书源（core 已删 platform_from_url）——需用户显式指定书源。"""
+    raise HTTPException(400, f"无法自动识别书源 URL，请显式指定书源: {url}")
 
 
 def _resolve_url(raw: str) -> str:
@@ -147,24 +144,21 @@ async def delete_task(task_id: str):
 
 @router.get("/platform")
 async def list_platforms():
-    from novelbase.source import register_source
-    sources = register_source()
-    return [{"id": name, "label": info.get("show_name", name)} for name, info in sources.items()]
+    from novelbase.source import list_sources
+    return [{"id": name, "label": name} for name in list_sources()]
 
 
 @router.get("/sources")
 async def list_all_sources():
     """返回所有 source 及其完整能力矩阵。"""
-    from novelbase.source import register_source
+    from novelbase.source import list_sources
     from novelbase.source import capabilities as _caps
-    sources = register_source()
     result = {}
-    for name, info in sources.items():
-        caps = _caps(name)
+    for name in list_sources():
         result[name] = {
-            "hosts": list(info.get("hosts", ())),
-            "show_name": info.get("show_name", name),
-            "capabilities": caps,
+            "hosts": [],
+            "show_name": name,
+            "capabilities": _caps(name),
         }
     return result
 
@@ -177,13 +171,10 @@ async def detect_platform(body: dict):
     raw: str = body.get("raw", "")
     if not raw:
         raise HTTPException(400, "缺少 raw 字段")
-    from novelbase.source import platform_from_url, resolve_book_url
-    plat = platform_from_url(raw)
-    if plat:
-        return {"platform": plat}
+    from novelbase.source import resolve_book_url
+    # core 已删 platform_from_url：无法自动识别书源，仅返回规范化 URL
     try:
         url = resolve_book_url(raw)
-        plat = platform_from_url(url)
-        return {"platform": plat, "url": url}
+        return {"platform": None, "url": url}
     except ValueError:
         return {"platform": None}

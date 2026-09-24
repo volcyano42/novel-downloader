@@ -64,17 +64,17 @@ def test_build_options_api_explicit_variant():
     })
     opts = cli.config.build_options({"mode": "api"}, site, "rain")
     assert opts.mode == "api"
-    assert opts.api.name == "rain"
     assert opts.api.timeout == 99
 
 
 def test_build_options_api_unset_takes_first_enabled():
     site = _site(api={
-        "oiapi": {"key": "k1"},
-        "rain": {"key": "k2", "enabled": False},
+        "oiapi": {"key": "k1", "timeout": 7},
+        "rain": {"key": "k2", "timeout": 99, "enabled": False},
     })
     opts = cli.config.build_options({"mode": "api"}, site)
-    assert opts.api.name == "oiapi"
+    # variant 名不再进字段；用 provider 独有的 timeout 区分「选中第一个启用 provider」
+    assert opts.api.timeout == 7
 
 
 def test_build_options_api_missing_variant_raises():
@@ -125,37 +125,3 @@ def test_main_resolve_variant_explicit(monkeypatch):
     site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
     monkeypatch.setattr(cli.main, "load_site_config", lambda p: site)
     assert cli.main._resolve_variant("fanqie", "api", "rain") == "rain"
-
-
-# ── 交互式 CLI（cli.interactive._resolve_variant）──
-
-
-def test_interactive_resolve_variant_asks_and_caches(monkeypatch):
-    import cli.interactive as it
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    monkeypatch.setattr(it, "load_site_config", lambda p: site)
-    monkeypatch.setattr(it, "_select", lambda msg, choices: "rain")
-    assert it._resolve_variant("fanqie", "api") == "rain"
-
-    # 会话级缓存：第二次不再询问
-    calls: list = []
-    monkeypatch.setattr(it, "_select", lambda msg, choices: calls.append(1) or "oiapi")
-    assert it._resolve_variant("fanqie", "api") == "rain"
-    assert calls == []
-    it._variant_cache.clear()
-
-
-def test_interactive_resolve_variant_cancel_falls_back(monkeypatch):
-    import cli.interactive as it
-    site = _site(api={"oiapi": {"key": ""}, "rain": {"key": ""}})
-    monkeypatch.setattr(it, "load_site_config", lambda p: site)
-    monkeypatch.setattr(it, "_select", lambda msg, choices: None)
-    assert it._resolve_variant("fanqie", "api") == "oiapi"
-    it._variant_cache.clear()
-
-
-def test_interactive_resolve_variant_single_no_ask(monkeypatch):
-    import cli.interactive as it
-    site = _site(browser={"default": {"headless": True}})
-    monkeypatch.setattr(it, "load_site_config", lambda p: site)
-    assert it._resolve_variant("fanqie", "browser") == "default"

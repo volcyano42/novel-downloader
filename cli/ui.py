@@ -84,11 +84,10 @@ def _input_float(prompt: str, default: float) -> float:
 
 
 def _show_platforms() -> dict[str, str]:
-    """返回 {显示标签: 内部名} 的平台映射，动态发现注册 source。"""
+    """返回 {显示标签: 内部名} 的书源映射（source_name 即标签）。"""
     try:
-        from novelbase.source import register_source
-        sources = register_source()
-        return {f"{info.get('show_name', k)} ({k})": k for k, info in sources.items()}
+        from novelbase.source import list_sources
+        return {name: name for name in list_sources()}
     except Exception:
         return {}
 

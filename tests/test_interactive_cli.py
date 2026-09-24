@@ -103,13 +103,9 @@ class TestUi:
     def test_show_platforms(self, monkeypatch):
         from cli.ui import _show_platforms
         import novelbase.source as src_mod
-        fake = {
-            "fanqie": {"name": "fanqie", "show_name": "番茄", "hosts": ("fanqienovel.com",)},
-            "qidian": {"name": "qidian", "show_name": "起点", "hosts": ("qidian.com",)},
-        }
-        monkeypatch.setattr(src_mod, "register_source", lambda: fake)
+        monkeypatch.setattr(src_mod, "list_sources", lambda: ["fanqie-api-rain", "92xs-requests-default"])
         labels = _show_platforms()
-        assert labels == {"番茄 (fanqie)": "fanqie", "起点 (qidian)": "qidian"}
+        assert labels == {"fanqie-api-rain": "fanqie-api-rain", "92xs-requests-default": "92xs-requests-default"}
 
     def test_platform_label(self):
         from cli.ui import _platform_label
@@ -207,41 +203,16 @@ class TestMenus:
 # ═══════════════════════════════════════════════════════════════
 
 class TestInteractive:
-    def test_platform_from_url_fanqie(self):
-        from cli.interactive import _platform_from_url
-        assert _platform_from_url("https://fanqienovel.com/page/7123456789012345678") == "fanqie"
-
-    def test_platform_from_url_qidian(self):
-        from cli.interactive import _platform_from_url
-        assert _platform_from_url("https://www.qidian.com/book/1012345678/") == "qidian"
-
-    def test_platform_from_url_qimao(self):
-        from cli.interactive import _platform_from_url
-        assert _platform_from_url("https://www.qimao.com/shuku/195958/") == "qimao"
-
-    def test_platform_from_url_unknown_raises(self):
-        from cli.interactive import _platform_from_url
-        import pytest as _pytest
-        with _pytest.raises(ValueError):
-            _platform_from_url("https://example.com/novel/1")
-
-    def test_platform_from_url_92xs_alias(self):
-        from cli.interactive import _platform_from_url
-        assert _platform_from_url("http://www.92xs.info/html/96850/35632400.html") == "92xs"
-
     def test_do_search_keyword_search_error(self, monkeypatch, capsys):
         from cli import interactive as mod
-
-        class _FakeEngine:
-            def close(self):
-                pass
 
         async def boom(*a, **k):
             raise RuntimeError("网络错误")
 
+        # 新 do_search 关键字分支：_select 选书源 → search(sources, query, engines)
+        # 不再预先创建/close 引擎，故无需再 monkeypatch _get_engine
         monkeypatch.setattr(mod, "_select", lambda *a, **k: "fanqie")
         monkeypatch.setattr(mod, "search", boom)
-        monkeypatch.setattr(mod, "_get_engine", lambda *a, **k: _FakeEngine())
         url, plat = mod.do_search("测试")
         assert url is None and plat is None
         assert "搜索失败" in capsys.readouterr().out
