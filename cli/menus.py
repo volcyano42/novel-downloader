@@ -5,9 +5,11 @@ from __future__ import annotations
 
 from cli.config import (
     save_main_config, load_format_configs,
-    save_site_config, load_groups,
+    save_site_config, load_site_config, load_groups,
 )
-from cli.ui import _select, _text_input, _input_int, _input_float, _platform_label, _show_platforms
+from cli.ui import _select, _text_input, _input_int, _input_float
+from shared.config import merged_source_config, is_source_enabled
+from novelbase.source import list_sources, capabilities
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("cli.menus")
@@ -16,28 +18,25 @@ _log = get_logger("cli.menus")
 # -- Settings menu --------------------------------------------
 
 
-def do_settings(cfg: dict, platform: str, site_cfg: dict) -> tuple[dict, dict]:
-    """设置菜单入口。返回 (cfg, site_cfg) 可能被修改。"""
-    labels = _show_platforms()
+def do_settings(cfg: dict) -> dict:
+    """设置菜单入口（书源维度）。返回可能被修改的 cfg。"""
     while True:
         fmt_str = _fmt_summary(cfg)
         print(f"\n[设置]")
-        print(f" 平台: {_platform_label(labels, platform)}")
-        print(f" 模式: {site_cfg.get('mode', 'browser')}")
         print(f" 1. 下载设置（线程/分组）")
-        print(f" 2. 站点设置（{platform}）")
+        print(f" 2. 书源设置")
         print(f" 3. 格式设置  （{fmt_str}）")
         print(" 0. 返回主菜单（自动保存）")
         ch = input("请选择: ").strip()
         if ch == "1":
-            _settings_download(cfg, platform, site_cfg, labels)
+            _settings_download(cfg)
         elif ch == "2":
-            _settings_site(cfg, platform, site_cfg)
+            _settings_source(cfg)
         elif ch == "3":
             _settings_format_list(cfg)
         elif ch == "0":
             break
-    return cfg, site_cfg
+    return cfg
 
 
 def _fmt_summary(cfg: dict) -> str:
@@ -46,159 +45,132 @@ def _fmt_summary(cfg: dict) -> str:
     return ", ".join(enabled) if enabled else "未设置"
 
 
-def _settings_download(cfg: dict, platform: str, site_cfg: dict, labels: dict) -> None:
-    """下载设置子菜单。"""
+def _settings_download(cfg: dict) -> None:
+    """下载设置子菜单（线程/分组）。"""
     dl = cfg.setdefault("download", {})
     _log.debug("settings_download")
 
-    mode = site_cfg.get("mode", "browser")
     print(f"\n[下载设置]")
-    print(f" 当前模式: {mode}")
-    print(" 1. 切换模式")
-    print(f" 2. 下载线程数: {dl.get('max_workers', 3)}")
-    print(f" 3. 下载分组: {dl.get('group', 'default')}")
+    print(f" 1. 下载线程数: {dl.get('max_workers', 3)}")
+    print(f" 2. 下载分组: {dl.get('group', 'default')}")
     print(" 0. 返回")
     ch = input("请选择: ").strip()
 
     if ch == "1":
-        modes = [("浏览器模式", "browser"), ("API 模式", "api"), ("Requests 模式", "requests")]
-        sel = _select("选择模式", modes)
-        if sel:
-            site_cfg["mode"] = sel
-            save_site_config(platform, site_cfg)
-    elif ch == "2":
-        n = _input_int("下载线程数", dl.get("max_workers", 3))
-        dl["max_workers"] = n
+        dl["max_workers"] = _input_int("下载线程数", dl.get("max_workers", 3))
         save_main_config(cfg)
-    elif ch == "3":
+    elif ch == "2":
         g = _text_input("输入分组名称")
         if g:
             dl["group"] = g
             save_main_config(cfg)
 
 
-def _settings_site(cfg: dict, platform: str, site_cfg: dict) -> None:
-    """站点设置子菜单。"""
-    mode = site_cfg.get("mode", "browser")
-    print(f"\n[{platform} 站点设置]")
-
-    if mode == "browser":
-        _settings_site_browser(cfg, site_cfg)
-    elif mode == "api":
-        _settings_site_api(cfg, site_cfg)
-    elif mode == "requests":
-        _settings_site_requests(cfg, site_cfg)
-
-    save_site_config(platform, site_cfg)
+def _settings_source(cfg: dict) -> None:
+    """书源设置：选书源 → 逐能力段编辑。"""
+    names = list_sources()
+    if not names:
+        print("没有可用书源")
+        return
+    source_name = _select("选择书源", [(n, n) for n in names])
+    if not source_name:
+        return
+    _settings_source_detail(cfg, source_name)
 
 
-def _settings_site_browser(cfg: dict, site_cfg: dict) -> None:
-    """浏览器模式站点设置。"""
-    browser = site_cfg.setdefault("browser", {}).setdefault("default", {})
+def _settings_source_detail(cfg: dict, source_name: str) -> None:
+    """单书源详情：启用开关 + 各能力段入口。"""
     while True:
-        lo, hi = _get_delay(site_cfg, "browser")
-        print(f"\n  浏览器设置:")
-        print(f"  1. 无头模式: {browser.get('headless', False)}")
-        print(f"  2. 延迟: {lo}-{hi}s")
-        print(f"  3. 超时: {browser.get('timeout', 30)}s")
-        print(f"  4. 重试次数: {browser.get('retry_times', 3)}")
-        print(f"  5. 回退系数: {browser.get('backoff_factor', 2)}")
-        print("  0. 返回")
+        caps = capabilities(source_name)
+        enabled = is_source_enabled(source_name)
+        print(f"\n[{source_name} 设置]  状态: {'启用' if enabled else '禁用'}")
+        print(f" 1. {'禁用' if enabled else '启用'}该书源")
+        entries = list(caps.items())
+        for i, (cap, mode) in enumerate(entries, 2):
+            print(f" {i}. {cap}（{mode}）配置")
+        print(" 0. 返回")
         ch = input("请选择: ").strip()
+        if ch == "0":
+            return
         if ch == "1":
-            browser["headless"] = not browser.get("headless", False)
-        elif ch == "2":
-            lo = _input_float("最小延迟", lo)
-            hi = _input_float("最大延迟", hi)
-            _set_delay(site_cfg, "browser", lo, hi)
-        elif ch == "3":
-            browser["timeout"] = _input_int("超时(秒)", browser.get("timeout", 30))
-        elif ch == "4":
-            browser["retry_times"] = _input_int("重试次数", browser.get("retry_times", 3))
-        elif ch == "5":
-            browser["backoff_factor"] = _input_float("回退系数", browser.get("backoff_factor", 2))
-        elif ch == "0":
-            break
-
-
-def _settings_site_api(cfg: dict, site_cfg: dict) -> None:
-    """API 模式站点设置。"""
-    api = site_cfg.setdefault("api", {})
-    while True:
-        print(f"\n  API 设置:")
-        current_name = None
-        for name, prov in api.items():
-            if isinstance(prov, dict):
-                current_name = name
-                print(f"  提供商: {name} {'(启用)' if prov.get('enabled', True) else '(禁用)'}")
-                print(f"  1. 切换提供商(当前: {name})")
-                print(f"  2. 启用/禁用 {name}")
-                print(f"  3. 超时: {prov.get('timeout', 30)}s")
-                print(f"  4. 重试次数: {prov.get('retry_times', 3)}")
-                break
-        if current_name is None:
-            print("  无 API 提供商配置")
-            print("  0. 返回")
-            ch = input("请选择: ").strip()
-            if ch == "0":
-                break
+            _toggle_source_enabled(source_name)
             continue
-        print("  0. 返回")
-        ch = input("请选择: ").strip()
-        if ch == "1":
-            names = [n for n, v in api.items() if isinstance(v, dict)]
-            if not names:
-                print("没有可用提供商")
-            else:
-                choices = [(n, n) for n in names]
-                sel = _select("选择提供商", choices)
-                if sel:
-                    for n in names:
-                        api[n]["enabled"] = (n == sel)
-        elif ch == "2":
-            for name, prov in api.items():
-                if isinstance(prov, dict):
-                    prov["enabled"] = not prov.get("enabled", True)
-                    print(f"{name} 已{'启用' if prov['enabled'] else '禁用'}")
-                    break
-        elif ch == "3":
-            for name, prov in api.items():
-                if isinstance(prov, dict):
-                    prov["timeout"] = _input_int("超时(秒)", prov.get("timeout", 30))
-                    break
-        elif ch == "4":
-            for name, prov in api.items():
-                if isinstance(prov, dict):
-                    prov["retry_times"] = _input_int("重试次数", prov.get("retry_times", 3))
-                    break
-        elif ch == "0":
-            break
+        try:
+            idx = int(ch) - 2
+        except ValueError:
+            continue
+        if 0 <= idx < len(entries):
+            _edit_capability(source_name, entries[idx][0], entries[idx][1])
 
 
-def _settings_site_requests(cfg: dict, site_cfg: dict) -> None:
-    """Requests 模式站点设置。"""
-    req = site_cfg.setdefault("requests", {}).setdefault("default", {})
+def _toggle_source_enabled(source_name: str) -> None:
+    """切换书源启用状态（写入用户层顶层 enabled）。"""
+    user = load_site_config(source_name)
+    new_val = not is_source_enabled(source_name)
+    user["enabled"] = new_val
+    save_site_config(source_name, user)
+    print(f"{source_name} 已{'启用' if new_val else '禁用'}")
+
+
+def _set_cap_field(source_name: str, capability: str, field: str, value) -> None:
+    """写入用户层某能力段的单个字段。"""
+    user = load_site_config(source_name)
+    user.setdefault(capability, {})[field] = value
+    save_site_config(source_name, user)
+
+
+def _edit_capability(source_name: str, capability: str, mode: str) -> None:
+    """按能力段 mode 编辑字段（browser/api/requests）。"""
     while True:
-        lo, hi = _get_delay(site_cfg, "requests")
-        print(f"\n  Requests 设置:")
+        merged = merged_source_config(source_name).get(capability, {})
+        lo, hi = _get_delay(source_name, capability)
+        print(f"\n  [{capability}（{mode}）配置]")
         print(f"  1. 延迟: {lo}-{hi}s")
-        print(f"  2. 超时: {req.get('timeout', 30)}s")
-        print(f"  3. 重试次数: {req.get('retry_times', 3)}")
-        print(f"  4. 回退系数: {req.get('backoff_factor', 2)}")
+        if mode == "browser":
+            print(f"  2. 无头模式: {merged.get('headless', False)}")
+            print(f"  3. 超时: {merged.get('timeout', 30)}s")
+            print(f"  4. 重试次数: {merged.get('retry_times', 3)}")
+            print(f"  5. 回退系数: {merged.get('backoff_factor', 2)}")
+        elif mode == "api":
+            print(f"  2. Key: {merged.get('key', '')}")
+            print(f"  3. 超时: {merged.get('timeout', 30)}s")
+            print(f"  4. 重试次数: {merged.get('retry_times', 3)}")
+            print(f"  5. 回退系数: {merged.get('backoff_factor', 2)}")
+        else:  # requests 及未知 mode 的通用字段
+            print(f"  2. 超时: {merged.get('timeout', 30)}s")
+            print(f"  3. 重试次数: {merged.get('retry_times', 3)}")
+            print(f"  4. 回退系数: {merged.get('backoff_factor', 2)}")
         print("  0. 返回")
         ch = input("请选择: ").strip()
+        if ch == "0":
+            return
         if ch == "1":
             lo = _input_float("最小延迟", lo)
             hi = _input_float("最大延迟", hi)
-            _set_delay(site_cfg, "requests", lo, hi)
-        elif ch == "2":
-            req["timeout"] = _input_int("超时(秒)", req.get("timeout", 30))
-        elif ch == "3":
-            req["retry_times"] = _input_int("重试次数", req.get("retry_times", 3))
-        elif ch == "4":
-            req["backoff_factor"] = _input_float("回退系数", req.get("backoff_factor", 2))
-        elif ch == "0":
-            break
+            _set_delay(source_name, capability, lo, hi)
+            continue
+        if mode == "browser":
+            spec = {"2": ("headless", "bool"), "3": ("timeout", "int"),
+                    "4": ("retry_times", "int"), "5": ("backoff_factor", "float")}
+        elif mode == "api":
+            spec = {"2": ("key", "str"), "3": ("timeout", "int"),
+                    "4": ("retry_times", "int"), "5": ("backoff_factor", "float")}
+        else:
+            spec = {"2": ("timeout", "int"), "3": ("retry_times", "int"),
+                    "4": ("backoff_factor", "float")}
+        entry = spec.get(ch)
+        if not entry:
+            continue
+        field, kind = entry
+        cur = merged.get(field, "")
+        if kind == "bool":
+            _set_cap_field(source_name, capability, field, not bool(cur))
+        elif kind == "int":
+            _set_cap_field(source_name, capability, field, _input_int(field, int(cur or 0)))
+        elif kind == "float":
+            _set_cap_field(source_name, capability, field, _input_float(field, float(cur or 0)))
+        else:
+            _set_cap_field(source_name, capability, field, _text_input(field) or str(cur))
 
 
 # -- Format settings -----------------------------------------
@@ -371,15 +343,17 @@ def do_delete() -> None:
 # -- Delay helpers -------------------------------------------
 
 
-def _get_delay(site_cfg: dict, mode: str) -> tuple[float, float]:
-    """获取某模式的当前延迟范围。"""
-    section = site_cfg.get(mode, {}).get("default", {})
-    delay = section.get("delay", (3, 6))
+def _get_delay(source_name: str, capability: str) -> tuple[float, float]:
+    """获取某书源某能力段三层合并后的当前延迟范围。"""
+    merged = merged_source_config(source_name).get(capability, {})
+    delay = merged.get("delay", (3, 6))
     if isinstance(delay, list):
         delay = tuple(delay)
     return delay[0], delay[1]
 
 
-def _set_delay(site_cfg: dict, mode: str, lo: float, hi: float):
-    """设置某模式的延迟范围。"""
-    site_cfg.setdefault(mode, {}).setdefault("default", {})["delay"] = [lo, hi]
+def _set_delay(source_name: str, capability: str, lo: float, hi: float) -> None:
+    """设置某书源某能力段的延迟范围（写入用户层）。"""
+    user = load_site_config(source_name)
+    user.setdefault(capability, {})["delay"] = [lo, hi]
+    save_site_config(source_name, user)

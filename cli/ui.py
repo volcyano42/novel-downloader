@@ -83,8 +83,8 @@ def _input_float(prompt: str, default: float) -> float:
         return default
 
 
-def _show_platforms() -> dict[str, str]:
-    """返回 {显示标签: 内部名} 的书源映射（source_name 即标签）。"""
+def _show_sources() -> dict[str, str]:
+    """返回 {显示标签: source_name} 的书源映射（source_name 即标签）。"""
     try:
         from novelbase.source import list_sources
         return {name: name for name in list_sources()}
@@ -92,9 +92,9 @@ def _show_platforms() -> dict[str, str]:
         return {}
 
 
-def _platform_label(platform_labels: dict[str, str], name: str) -> str:
-    """内部名 → 显示标签。"""
-    rev = {v: k for k, v in platform_labels.items()}
+def _source_label(source_labels: dict[str, str], name: str) -> str:
+    """source_name → 显示标签。"""
+    rev = {v: k for k, v in source_labels.items()}
     return rev.get(name, name)
 
 
