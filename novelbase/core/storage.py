@@ -161,7 +161,8 @@ class LocalStorage(BaseStorage):
         data = {
             "title": novel.title,
             "url": novel.url,
-            "id": novel.id,
+            # 库内 id 存 url 原样（目录名 / 对外标识仍是 novel.id = sha256(url)[:32]）
+            "id": novel.url,
             "serial": novel.serial,
             "author": novel.author,
             "description": novel.description,
@@ -177,6 +178,7 @@ class LocalStorage(BaseStorage):
         if not path.exists():
             return None
         json_data = json.loads(path.read_text(encoding="utf-8"))
+        json_data["id"] = novel_id  # 对外标识 = 目录名；库内 "id" 字段存的是 url
         return Novel.loads(**json_data)
 
     def iter_metas(self, include_images: bool = True) -> Iterator[Novel]:
@@ -192,6 +194,7 @@ class LocalStorage(BaseStorage):
                 json_data = json.loads(meta_path.read_text(encoding="utf-8"))
                 if not include_images:
                     json_data.pop("cover", None)
+                json_data["id"] = entry.name  # 对外标识 = 目录名（库内 "id" 字段是 url）
                 yield Novel.loads(**json_data)
             except (json.JSONDecodeError, KeyError, TypeError):
                 _log.warning("跳过损坏的 meta 文件: %s", meta_path)
@@ -372,11 +375,12 @@ class SQLiteStorage(BaseStorage):
         _log.debug("save_meta sqlite: id=%s", novel.id)
         tags_json = json.dumps(list(novel.tags) if novel.tags else [], ensure_ascii=False)
         with self._connect_novel(novel.id, write=True) as conn:
+            # 库内主键存 url 原样（可按 url 查书）；文件名与对外标识仍是 novel.id（sha256(url)[:32]）
             conn.execute("""
                 INSERT OR REPLACE INTO meta (id, title, url, author, serial,
                     description, tags, count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (novel.id, novel.title, novel.url, novel.author, novel.serial,
+            """, (novel.url, novel.title, novel.url, novel.author, novel.serial,
                   novel.description, tags_json, novel.count))
             self._save_illustration(conn, 'novel', novel.id, novel.cover)
         return novel.id
@@ -385,42 +389,44 @@ class SQLiteStorage(BaseStorage):
         if not os.path.exists(self._novel_path(novel_id)):
             return None
         with self._connect_novel(novel_id) as conn:
+            # 每库一行 meta；库内 id 是 url，不能再用 WHERE id = <文件名> 查
             row = conn.execute(
-                "SELECT id, title, url, author, serial, description, tags, count "
-                "FROM meta WHERE id = ?", (novel_id,)
+                "SELECT title, url, author, serial, description, tags, count "
+                "FROM meta"
             ).fetchone()
         if row is None:
             return None
         cover = self._load_illustration(novel_id, 'novel', novel_id)
-        return self._row_to_novel(row, cover)
+        return self._row_to_novel(row, novel_id, cover)
 
     def iter_metas(self, include_images: bool = True) -> Iterator[Novel]:
-        # 目录就是索引：扫描 *.db 读每本的 meta 表
+        # 目录就是索引：扫描 *.db 读每本的 meta 表（文件名 = 对外标识 sha256(url)[:32]）
         for path in sorted(self.base_dir.glob("*.db"), key=lambda p: p.name):
+            novel_id = path.stem
             try:
                 with sqlite3.connect(str(path), timeout=5) as conn:
                     row = conn.execute(
-                        "SELECT id, title, url, author, serial, description, tags, count "
+                        "SELECT title, url, author, serial, description, tags, count "
                         "FROM meta"
                     ).fetchone()
                 if row:
                     cover = None
                     if include_images:
-                        cover = self._load_illustration(row[0], 'novel', row[0])
-                    yield self._row_to_novel(row, cover=cover)
+                        cover = self._load_illustration(novel_id, 'novel', novel_id)
+                    yield self._row_to_novel(row, novel_id, cover=cover)
             except sqlite3.Error:
                 _log.warning("iter_metas skip broken db: %s", path.name)
 
     @staticmethod
-    def _row_to_novel(row: tuple, cover=None) -> Novel:
-        tags = json.loads(row[6]) if row[6] else []
-        serial = row[4]
+    def _row_to_novel(row: tuple, novel_id: str, cover=None) -> Novel:
+        tags = json.loads(row[5]) if row[5] else []
+        serial = row[3]
         if not isinstance(serial, int):
             serial = int(serial) if serial else 0
         return Novel(
-            id=row[0], title=row[1], url=row[2], author=row[3],
-            serial=serial, description=row[5], tags=tuple(tags),
-            count=row[7], cover=cover,
+            id=novel_id, title=row[0], url=row[1], author=row[2],
+            serial=serial, description=row[4], tags=tuple(tags),
+            count=row[6], cover=cover,
         )
 
     # ── 插图（内部辅助） ──

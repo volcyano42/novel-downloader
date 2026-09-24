@@ -4,7 +4,7 @@ from .exceptions import SourceNotFoundError
 from .options import ExportOptions
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
 from ..utils.logger import get_logger
-from ..utils.urls import canonical_book_url, make_novel_id
+from ..utils.urls import make_novel_id
 
 _T = TypeVar('_T')
 
@@ -123,8 +123,9 @@ async def resolve_meta(url: str, engine, skip_delay: bool = False, **kwargs) -> 
     kwargs["skip_delay"] = skip_delay
     fn = _resolve(name, mode, "novel_info", variant=variant)
     novel = await fn(url=url, engine=engine, **kwargs)
-    # id 中心化生成：hash(canonical url)，并冗余存平台（hash 后无法从 id 反推）
-    novel.id = make_novel_id(canonical_book_url(novel.url, name))
+    # id 中心化生成：sha256(url) 前 32 位（文件名与对外标识；url 本身含 "/" 不能作文件名），
+    # 库内 meta.id 列另存 url 原样，供按 url 查书。
+    novel.id = make_novel_id(novel.url)
     novel.extra["platform"] = name
     return novel
 

@@ -9,7 +9,7 @@ import pytest
 from novelbase.core.downloader import resolve_meta, resolve_chapter_list, resolve_chapter, get_source
 from novelbase.core.options import Options, StorageOptions
 from novelbase.models.novel import Novel, Chapter, Chapters
-from novelbase.utils.urls import canonical_book_url, make_novel_id
+from novelbase.utils.urls import make_novel_id
 
 
 # ── 辅助 ───────────────────────────────────────────────────────
@@ -137,7 +137,5 @@ class TestResolveMeta:
                 # 输入是 changdunovel 短链，source 返回标准化 fanqienovel url
                 result = asyncio.run(resolve_meta("https://changdunovel.com/t/shortlink", engine))
 
-        expected = make_novel_id(
-            canonical_book_url("https://fanqienovel.com/page/7123456789012345678", "fanqie")
-        )
+        expected = make_novel_id("https://fanqienovel.com/page/7123456789012345678")
         assert result.id == expected
