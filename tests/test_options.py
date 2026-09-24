@@ -16,7 +16,7 @@ from novelbase.core.options import (
 class TestAPIOptions:
     def test_defaults(self):
         o = APIOptions()
-        assert o.name is None
+        assert not hasattr(o, "name")
         assert o.delay == (3, 5)
         assert o.timeout == 30
         assert o.retry_times == 3
@@ -25,8 +25,7 @@ class TestAPIOptions:
         assert o.params is None
 
     def test_custom(self):
-        o = APIOptions(name="myapi", key="sk-xxx", params={"site": "fanqie"})
-        assert o.name == "myapi"
+        o = APIOptions(key="sk-xxx", params={"site": "fanqie"})
         assert o.key == "sk-xxx"
         assert o.params == {"site": "fanqie"}
 
@@ -112,8 +111,7 @@ class TestOptions:
         assert o.mode == "invalid"
 
     def test_set_api_options(self):
-        o = Options().set_api_options(name="test", key="sk-xxx")
-        assert o.api.name == "test"
+        o = Options().set_api_options(key="sk-xxx")
         assert o.api.key == "sk-xxx"
 
     def test_set_requests_options(self):

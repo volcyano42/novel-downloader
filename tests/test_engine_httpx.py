@@ -100,7 +100,7 @@ def test_requests_engine_fetch_text_post(monkeypatch):
 
 def _api_engine():
     opts = Options().set_mode("api").set_api_options(
-        name="test", key="k", timeout=5, retry_times=1, delay=(0, 0),
+        key="k", timeout=5, retry_times=1, delay=(0, 0),
         params={"token": "abc"},
     )
     return create_engine(opts)
@@ -479,7 +479,7 @@ def _make_engine(mode: str):
     if mode == "requests":
         opts.set_requests_options(headers={}, cookies={}, proxies={}, delay=[0, 0])
     elif mode == "api":
-        opts.set_api_options(name="test", key="", delay=[0, 0])
+        opts.set_api_options(key="", delay=[0, 0])
     return create_engine(opts)
 
 

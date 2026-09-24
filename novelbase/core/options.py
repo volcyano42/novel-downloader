@@ -6,7 +6,6 @@ from typing import Sequence, Literal
 
 @dataclass
 class APIOptions:
-    name: str | None = None
     delay: tuple[float, ...] = field(default_factory=lambda: (3.0, 5.0))
     timeout: float = 30
     retry_times: int = 3
@@ -64,14 +63,13 @@ class Options:
             return self
 
         def set_api_options(self,
-                            name: str,
                             delay: Sequence[float] = (3, 5),
                             timeout: float = 30,
                             retry_times: int = 3,
                             backoff_factor: float = 2,
                             key: str | None = None,
                             params: dict[str, str] | None = None) -> "Options":
-            self._api = APIOptions(name=name, delay=tuple(delay), timeout=timeout,
+            self._api = APIOptions(delay=tuple(delay), timeout=timeout,
                                    retry_times=retry_times,
                                    backoff_factor=backoff_factor, key=key, params=params)
             return self
