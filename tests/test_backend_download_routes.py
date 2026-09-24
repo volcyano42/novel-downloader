@@ -205,3 +205,94 @@ def test_search_result_data_uses_source_name():
     r = SearchResultData(title="t", author="a", url="http://x", source_name="92xs-requests-default")
     assert r.source_name == "92xs-requests-default"
     assert not hasattr(r, "platform")
+
+
+# ── config 路由按书源（T8）────────────────────────────
+
+def test_get_source_config_merged(monkeypatch, tmp_path):
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg.config_service, "merged_source_config",
+                        lambda n: {"search": {"mode": "requests", "timeout": 30}})
+    monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: True)
+    monkeypatch.setattr(cfg.config_service, "capabilities", lambda n: {"search": "requests"}, raising=False)
+    out = asyncio.run(cfg.get_source_config("92xs-requests-default"))
+    assert out["enabled"] is True and out["config"]["search"]["timeout"] == 30
+
+
+def test_get_source_config_shape(monkeypatch):
+    """GET /config/sources/{name} 契约形状：{source_name, enabled, capabilities, config}。"""
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
+    monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
+    monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
+    out = asyncio.run(cfg.get_source_config("demo-requests-default"))
+    assert set(out.keys()) == {"source_name", "enabled", "capabilities", "config"}
+    assert out["source_name"] == "demo-requests-default"
+    assert out["enabled"] is False
+    assert out["capabilities"] == {"search": "requests"}
+    assert out["config"] == {"search": {"mode": "requests"}}
+
+
+def test_get_config_has_no_mode(monkeypatch):
+    """GET /config 不再返回 mode。"""
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "load_config",
+                        lambda: {"download": {"max_workers": 5}})
+    out = asyncio.run(cfg.get_config())
+    assert "mode" not in out
+    assert out["max_workers"] == 5
+    assert out["notify"]["on_complete"] is True
+
+
+def test_save_source_config_writes_user_layer_only(monkeypatch, tmp_path):
+    """PUT /config/sources/{name} 只写用户层：顶层 enabled + 逐能力段 deep_merge，不写三层全量。"""
+    import yaml
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    asyncio.run(cfg.save_source_config(
+        "demo-requests-default",
+        {"enabled": False, "config": {"search": {"timeout": 99}}},
+    ))
+    path = tmp_path / "sites" / "demo-requests-default.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert data["enabled"] is False
+    assert data["search"]["timeout"] == 99
+    # 未提供的出厂字段 / 其它能力段不应被灌入用户层
+    assert set(data.keys()) == {"enabled", "search"}
+
+
+def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
+    """再次 PUT 时保留用户层既有字段（deep_merge 而非整体覆盖）。"""
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"timeout": 99}}}))
+    asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"retry_times": 7}}}))
+    merged = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
+    assert merged["search"] == {"timeout": 99, "retry_times": 7}
+
+
+def test_old_sites_routes_gone():
+    """旧 /config/sites/{website} 及其处理函数删除，无 shim。"""
+    from backend.routers import config as cfg
+    assert not hasattr(cfg, "get_site")
+    assert not hasattr(cfg, "save_site")
+    paths = {r.path for r in cfg.router.routes}
+    assert "/api/v2/config/sources/{source_name}" in paths
+    assert "/api/v2/config/sites/{website}" not in paths
+
+
+def test_engine_router_and_schemas_gone():
+    """explicit engine API 整体删除：路由模块、schemas、main 注册全部消失。"""
+    import importlib
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("backend.routers.engine")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("backend.schemas.engine")
+    import backend.schemas as schemas
+    assert not hasattr(schemas, "CreateEngineRequest")
+    assert not hasattr(schemas, "UpdateEngineRequest")
+    import backend.main as main_mod
+    paths = set(main_mod.app.openapi()["paths"])
+    assert not any(p.startswith("/api/v2/engine") for p in paths)
+

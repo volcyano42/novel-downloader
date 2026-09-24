@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
-from backend.routers import storage, download, export, engine, config, history
+from backend.routers import storage, download, export, config, history
 from backend.services.engine_manager import clear_engine_cache
 
 
@@ -80,7 +80,6 @@ app.add_middleware(
 app.include_router(storage.router)
 app.include_router(download.router)
 app.include_router(export.router)
-app.include_router(engine.router)
 app.include_router(config.router)
 app.include_router(history.router)
 

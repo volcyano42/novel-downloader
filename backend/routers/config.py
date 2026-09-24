@@ -1,8 +1,9 @@
-"""Config 路由 — 拆分 config / groups / sites / formats 四个子资源。"""
+"""Config 路由 — 拆分 config / groups / favorites / sources / formats 子资源。"""
 
 from fastapi import APIRouter, HTTPException
 
 import shared.config as config_service
+from novelbase.source import capabilities
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
@@ -15,7 +16,6 @@ async def get_config():
     raw = config_service.load_config()
     dl = raw.get("download", {}) or {}
     return {
-        "mode": raw.get("mode", config_service.GLOBAL_DEFAULTS["mode"]),
         "max_workers": dl.get("max_workers", config_service.GLOBAL_DEFAULTS["max_workers"]),
         "notify": config_service.deep_merge(
             config_service.GLOBAL_DEFAULTS["notify"], dl.get("notify", {}),
@@ -27,9 +27,6 @@ async def get_config():
 async def save_config(body: dict):
     raw = config_service.load_config()
     changed = False
-    if "mode" in body and body["mode"] != raw.get("mode"):
-        raw["mode"] = body["mode"]
-        changed = True
     dl = raw.setdefault("download", {})
     if "max_workers" in body:
         dl["max_workers"] = body["max_workers"]
@@ -82,47 +79,41 @@ async def remove_favorite(novel_id: str):
     return {"ok": ok, "removed": ok}
 
 
-# ── sites/{website}.yaml ────────────────────────────
+# ── sources/{source_name}.yaml（按书源）──────────────
 
-@router.get("/sites/{website}")
-async def get_site(website: str):
-    raw = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
-    entry: dict = {}
-    for mode in ("browser", "requests"):
-        entry[mode] = {
-            v: config_service.deep_merge(
-                config_service.ENGINE_DEFAULTS[mode],
-                config_service.get_mode_variant_config(raw, mode, v),
-            )
-            for v in config_service.mode_variants(raw, mode)
-        }
-    # api 是 variant 容器，不是模式配置
-    api_section = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
-    entry["api"] = {k: v for k, v in api_section.items() if isinstance(v, dict)}
-    entry["api_variants"] = list(entry["api"].keys())
-    return entry
+@router.get("/sources/{source_name}")
+async def get_source_config(source_name: str):
+    """三层合并后的书源配置 + 启用状态 + 能力映射。
+
+    形状：`{source_name, enabled, capabilities: {cap: mode}, config: {cap: {…完整合并字段…}}}`。
+    `config[cap]` 含 mode（恒取书源声明），`enabled` 走用户层顶层 `enabled` → 出厂值。
+    """
+    return {
+        "source_name": source_name,
+        "enabled": config_service.is_source_enabled(source_name),
+        "capabilities": capabilities(source_name),
+        "config": config_service.merged_source_config(source_name),
+    }
 
 
-@router.put("/sites/{website}")
-async def save_site(website: str, body: dict):
-    existing = config_service.load_yaml(_cfg_dir / "sites" / f"{website}.yaml")
-    for mode in ("browser", "requests"):
-        if mode in body and isinstance(body[mode], dict):
-            existing_mode = existing.get(mode, {}) if isinstance(existing.get(mode), dict) else {}
-            for v, cfg in body[mode].items():
-                if isinstance(cfg, dict):
-                    existing_mode[v] = config_service.deep_merge(
-                        existing_mode.get(v, {}), cfg,
-                    )
-            existing[mode] = existing_mode
-    # api mode 只保留 variant 子 dict，过滤标量字段
-    if "api" in body and isinstance(body["api"], dict):
-        api_existing = existing.get("api", {}) if isinstance(existing.get("api"), dict) else {}
-        for k, v in body["api"].items():
-            if isinstance(v, dict):
-                api_existing[k] = config_service.deep_merge(api_existing.get(k, {}), v)
-        existing["api"] = {k: v for k, v in api_existing.items() if isinstance(v, dict)}
-    config_service.save_yaml(_cfg_dir / "sites" / f"{website}.yaml", existing)
+@router.put("/sources/{source_name}")
+async def save_source_config(source_name: str, body: dict):
+    """只写用户层 `sites/{source_name}.yaml`：顶层 `enabled` + 逐能力段 `deep_merge`。
+
+    不把三层合并后的全量写回（否则用户层被灌满出厂/系统默认值）。
+    """
+    path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
+    existing = config_service.load_yaml(path)
+    if isinstance(body.get("enabled"), bool):
+        existing["enabled"] = body["enabled"]
+    cfg_body = body.get("config")
+    if isinstance(cfg_body, dict):
+        for cap, partial in cfg_body.items():
+            if isinstance(partial, dict):
+                base = existing.get(cap)
+                existing[cap] = config_service.deep_merge(
+                    base if isinstance(base, dict) else {}, partial)
+    config_service.save_yaml(path, existing)
     return {"status": "ok"}
 
 
