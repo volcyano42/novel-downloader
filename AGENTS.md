@@ -8,15 +8,15 @@
 # 后端导入验证
 python -c "from novelbase import *; print('OK')"
 
-# 运行测试（152 passed）
+# 运行测试（379 passed, 1 skipped）
 python -m pytest tests/ -v --tb=short
 
 # 启动 CLI（交互式）
 python main.py
 
 # 启动 CLI（非交互）
-python cli.py search --platform fanqie "关键词"
-python cli.py download --url "https://..." --mode requests
+python -m cli search --platform fanqie "关键词"
+python -m cli download --url "https://..." --mode requests
 
 # 启动 FastAPI 后端
 uvicorn backend.main:app --reload
