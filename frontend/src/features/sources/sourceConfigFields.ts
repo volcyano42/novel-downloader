@@ -21,7 +21,7 @@ export const CAP_LABELS: Record<string, string> = {
 
 export type EngineField = {
   label: string; desc?: string;
-  type: "toggle" | "num" | "select" | "range-delay" | "text";
+  type: "toggle" | "num" | "select" | "range-delay" | "text" | "json";
   key: string;
   opts?: { value: string; label: string }[];
   min?: number; max?: number; unit?: string;
@@ -38,7 +38,7 @@ export const ENGINE_FIELDS: Record<string, EngineField[]> = {
     { key: "backoff_factor", label: "退避因子", desc: "重试间隔倍增系数", type: "num", min: 1, max: 10 },
   ],
   requests: [
-    { key: "headers", label: "请求头", desc: "JSON 格式，如 {\"Cookie\": \"…\"}", type: "text" },
+    { key: "headers", label: "请求头", desc: "JSON 对象，如 {\"Cookie\": \"…\"}", type: "json" },
     { key: "delay", label: "请求延迟", desc: "两章之间随机等待", type: "range-delay", min: 0, max: 30, unit: "秒" },
     { key: "timeout", label: "超时", desc: "单次请求最长等待", type: "num", min: 5, max: 120, unit: "秒" },
     { key: "retry_times", label: "重试次数", type: "num", min: 0, max: 10 },

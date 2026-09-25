@@ -6,6 +6,7 @@
 import {useEffect, useState} from "react";
 import type {LucideIcon} from "lucide-react";
 import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
+import {cn} from "@/lib/utils";
 import {CAP_LABELS, ENGINE_FIELDS, MODE_META} from "./sourceConfigFields";
 import type {EngineField} from "./sourceConfigFields";
 
@@ -57,6 +58,41 @@ export function TextField({ value, onChange }: { value: string; onChange: (v: st
       onBlur={() => { if (local !== value) onChange(local); }}
       onKeyDown={e => { if (e.key === "Enter") { if (local !== value) onChange(local); (e.target as HTMLInputElement).blur(); } }}
       className="w-40 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2.5 py-1.5 text-xs text-slate-700 outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
+  );
+}
+
+/** JSON 对象字段（如 headers）：文本域编辑，失焦时解析；非法则提示且不写回。 */
+export function JsonField({ value, onCommit }: { value: unknown; onCommit: (v: Record<string, unknown>) => void }) {
+  const toText = (v: unknown) => JSON.stringify(v ?? {}, null, 2);
+  const [text, setText] = useState(() => toText(value));
+  const [error, setError] = useState(false);
+
+  // 服务端值变化（保存后 refetch）时同步文本
+  useEffect(() => { setText(toText(value)); setError(false); }, [value]);
+
+  const commit = () => {
+    const raw = text.trim();
+    if (!raw) { setError(false); onCommit({}); return; }
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        setError(false);
+        onCommit(parsed as Record<string, unknown>);
+      } else {
+        setError(true);
+      }
+    } catch {
+      setError(true);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <textarea value={text} onChange={e => setText(e.target.value)} onBlur={commit} rows={4} spellCheck={false}
+        className={cn("w-full rounded-lg border bg-white/50 px-2 py-1.5 font-mono text-xs text-slate-700 outline-none backdrop-blur-sm dark:bg-slate-800/50 dark:text-slate-300",
+          error ? "border-red-300 dark:border-red-500/40" : "border-white/20 dark:border-slate-600/30")} />
+      {error && <p className="mt-1 text-[11px] text-red-400">JSON 格式错误，未保存</p>}
+    </div>
   );
 }
 
@@ -113,6 +149,8 @@ export function SourceConfigEditor({ name }: { name: string }) {
         return <Select value={String(val ?? f.opts![0].value)} onChange={v => set(v)} options={f.opts!} />;
       case "num":
         return <Num value={Number(val) || 0} onChange={v => set(v)} min={f.min} max={f.max} unit={f.unit} />;
+      case "json":
+        return <JsonField value={val} onCommit={v => set(v)} />;
       case "text":
         return <TextField value={String(val ?? "")} onChange={v => set(v)} />;
       case "range-delay":
