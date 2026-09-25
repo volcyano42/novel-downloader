@@ -250,3 +250,59 @@ def test_cli_menu_delete_cleans_novel_sources(monkeypatch, isolated_user_db):
 
     assert store.deleted == ["n1"]
     assert isolated_user_db.get_novel_source("n1") is None
+
+
+def test_task_manager_passes_mode_overrides_to_core(monkeypatch, isolated_user_db):
+    """task_manager 分发时必须把有效 mode（`mode_overrides`）以**关键字**透传给 core。
+
+    若漏传、或改回位置传参（会被 `skip_delay` 静默吸收），`mode_overrides` 会为
+    None，下面断言即红。覆盖 `resolve_meta` 与 `resolve_chapter` 两个消费点。
+    """
+    import threading
+
+    import novelbase
+    import novelbase.core.storage as nb_storage
+    import shared.config as config_service
+    from backend.services import task_manager
+
+    novel = Novel(title="t", url="https://x/n1", id="n1", serial=1,
+                  author="a", description="d")
+    overrides = {"novel_info": "browser", "chapter_content": "browser"}
+    seen = {}
+
+    async def fake_resolve_meta(url, source_name, engines, skip_delay=False,
+                                mode_overrides=None, **kw):
+        seen["meta"] = mode_overrides
+        return novel
+
+    async def fake_resolve_chapter(ch, source_name, engines, skip_delay=False,
+                                   mode_overrides=None, **kw):
+        seen["chapter"] = mode_overrides
+        return Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id,
+                       title=ch.title, order=ch.order)
+
+    class FakeStore:
+        def save_meta(self, n):
+            return None
+
+        def save_chapter(self, novel, chapters):
+            return None
+
+    monkeypatch.setattr(novelbase, "resolve_meta", fake_resolve_meta)
+    monkeypatch.setattr(novelbase, "resolve_chapter", fake_resolve_chapter)
+    monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
+    monkeypatch.setattr(config_service, "effective_capabilities", lambda s: overrides)
+    monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
+    monkeypatch.setattr(task_manager, "set_novel_source", lambda nid, src: None)
+
+    task = {"task_id": "t1", "novel_id": "n1", "title": "t",
+            "novel_url": "https://x/n1", "total": 1, "progress": 0,
+            "status": "downloading", "error": None, "errors": [],
+            "current_title": "",
+            "chapters": [{"id": "c1", "url": "https://x/n1/c1",
+                          "title": "第一章", "order": 1, "status": "pending"}],
+            "_cancel": threading.Event(), "_pause": threading.Event()}
+    asyncio.run(task_manager._run_download(task, "fanqie-requests-default"))
+
+    assert seen["meta"] == overrides
+    assert seen["chapter"] == overrides

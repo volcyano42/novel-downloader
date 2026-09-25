@@ -1,4 +1,4 @@
-"""引擎工厂 — 按 book source(source_name) + 能力声明的 mode 建引擎。
+"""引擎工厂 — 按 book source(source_name) + 有效 mode 建引擎。
 
 职责：读取三层合并配置 → 构建 Options → create_engine。
 生命周期由调用方管理（用完必须 close）；缓存键 = (source_name, mode)。
@@ -106,10 +106,10 @@ def _linux_default_browser_args() -> list[str] | None:
     return None
 
 def create_engine_for_request(source_name: str, mode: str = "browser"):
-    """按书源名 + 能力声明的 mode，从三层合并配置创建引擎实例。
+    """按书源名 + 有效 mode，从三层合并配置创建引擎实例。
 
     配置取自 `merged_source_config(source_name)` 中 mode 对应能力段（能力段名由
-    `capabilities(source_name)` 反查）。每个请求调用一次，用完必须 close 释放资源。
+    `effective_capabilities(source_name)` 反查）。每个请求调用一次，用完必须 close 释放资源。
     """
     merged = merged_source_config(source_name)
     cap = _capability_for_mode(source_name, mode)

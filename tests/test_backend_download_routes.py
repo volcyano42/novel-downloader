@@ -182,6 +182,73 @@ def test_chapter_list_route_with_source(monkeypatch):
     assert seen == [("92xs-requests-default", "requests")]
 
 
+def test_search_passes_mode_overrides_by_keyword(monkeypatch):
+    """分发必须以**关键字**传 mode_overrides：位置误传会被 skip_delay 静默吸收。"""
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "browser"})
+    captured = {}
+
+    async def fake_search(sources, query, engines, skip_delay=False,
+                          mode_overrides=None, **kw):
+        captured["mode_overrides"] = mode_overrides
+        captured["skip_delay"] = skip_delay
+        return ()
+
+    monkeypatch.setattr(dl, "search", fake_search)
+    asyncio.run(dl.search_novels(query="关键词", source="92xs-requests-default"))
+    assert captured["mode_overrides"] == {"search": "browser"}
+    assert captured["skip_delay"] is False
+
+
+def test_resolve_meta_route_passes_mode_overrides_by_keyword(monkeypatch):
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"novel_info": "requests"})
+    captured = {}
+
+    async def fake_resolve_meta(url, source_name, engines, skip_delay=False,
+                                mode_overrides=None, **kw):
+        captured["mode_overrides"] = mode_overrides
+        captured["skip_delay"] = skip_delay
+        return Novel(url=url, title="T", author="A", serial=2, description="d")
+
+    monkeypatch.setattr(dl, "resolve_meta", fake_resolve_meta)
+    body = FetchMetaRequest(url="https://fanqienovel.com/page/7123456789012345678")
+    asyncio.run(dl.resolve_meta_route(body=body, source="fanqie-requests-default"))
+    assert captured["mode_overrides"] == {"novel_info": "requests"}
+    assert captured["skip_delay"] is False
+
+
+def test_get_remote_novel_passes_mode_overrides_by_keyword(monkeypatch):
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"novel_info": "requests"})
+    captured = {}
+
+    async def fake_resolve_meta(url, source_name, engines, skip_delay=False,
+                                mode_overrides=None, **kw):
+        captured["mode_overrides"] = mode_overrides
+        return Novel(url=url, title="T", author="A", serial=2, description="d")
+
+    monkeypatch.setattr(dl, "resolve_meta", fake_resolve_meta)
+    asyncio.run(dl.get_remote_novel(
+        novel_id="abc", url="http://www.92xs.info/book/9999.html",
+        source="92xs-requests-default"))
+    assert captured["mode_overrides"] == {"novel_info": "requests"}
+
+
+def test_chapter_list_route_passes_mode_overrides_by_keyword(monkeypatch):
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"chapter_list": "requests"})
+    captured = {}
+
+    async def fake_resolve_chapter_list(url, source_name, engines, skip_delay=False,
+                                        mode_overrides=None, **kw):
+        captured["mode_overrides"] = mode_overrides
+        return Chapters([])
+
+    monkeypatch.setattr(dl, "resolve_chapter_list", fake_resolve_chapter_list)
+    out = asyncio.run(dl.resolve_chapter_list_route(
+        novel_id="abc", url="http://www.92xs.info/book/9999.html",
+        source="92xs-requests-default"))
+    assert out == []
+    assert captured["mode_overrides"] == {"chapter_list": "requests"}
+
+
 def test_download_chapters_passes_source(monkeypatch):
     recorded = {}
 

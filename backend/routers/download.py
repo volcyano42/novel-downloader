@@ -15,7 +15,7 @@ from backend.services.engine_manager import get_cached_engine
 from backend.services.source_guard import require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
-from novelbase.source import resolve_book_url, list_sources, capabilities
+from novelbase.source import resolve_book_url, list_sources
 from shared.config import enabled_source_names, is_source_enabled, effective_capabilities
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
@@ -29,7 +29,7 @@ def _require_source(source: str | None, url: str) -> str:
 
 
 def _engines_for(source_name: str):
-    """构造 engines(mode)->engine（按书源名 + 能力声明的 mode 懒建并缓存）。"""
+    """构造 engines(mode)->engine：按书源名 + 调用方请求的 mode（经 `mode_overrides` 取得有效 mode）懒建并缓存。"""
     return lambda mode: get_cached_engine(source_name, mode)
 
 
