@@ -7,6 +7,7 @@ storage/novels/），与此处的内容迁移职责无关。
 """
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:          # 允许 `python scripts/migrate_novel_sources.py`
@@ -18,11 +19,30 @@ from shared.config import get_database_url             # noqa: E402
 from shared.user_data import set_novel_source          # noqa: E402
 
 
+# 域名 → 出厂 source_name（2026-09-25 用户裁决；子域按后缀匹配）
+DOMAIN_SOURCE_MAP = {
+    "fanqienovel.com": "fanqie-api-rain",
+    "qimao.com": "qimao-api-rain",
+    "92xs.info": "92xs-requests-default",
+    "qidian.com": "qidian-browser-default",
+}
+
+
+def _infer_source_from_url(url: str) -> str:
+    """按 URL 域名推断出厂书源；未知域名返回空串（不猜）。"""
+    host = urlparse(url or "").netloc.lower().split(":")[0]
+    for domain, source_name in DOMAIN_SOURCE_MAP.items():
+        if host == domain or host.endswith("." + domain):
+            return source_name
+    return ""
+
+
 def migrate(novels) -> tuple[int, int]:
     """搬运一批 Novel 的来源。返回 (迁移数, 跳过数)。"""
     moved = skipped = 0
     for novel in novels:
-        source_name = getattr(novel, "source_name", "") or ""
+        source_name = (getattr(novel, "source_name", "")
+                       or _infer_source_from_url(getattr(novel, "url", "")))
         if not source_name:
             skipped += 1
             continue

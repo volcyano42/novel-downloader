@@ -3,11 +3,56 @@ from novelbase.models.novel import Novel
 from shared import user_data
 
 
-def _fake_novel(novel_id: str, source_name: str) -> Novel:
-    n = Novel(title="t", url=f"https://x/{novel_id}", id=novel_id,
+def _fake_novel(novel_id: str, source_name: str, url: str = "") -> Novel:
+    n = Novel(title="t", url=url or f"https://x/{novel_id}", id=novel_id,
               serial=1, author="a", description="d")
     n.source_name = source_name          # 模拟旧 JSON 残留的游离属性
     return n
+
+
+DOMAIN_CASES = [
+    ("https://fanqienovel.com/page/1", "fanqie-api-rain"),
+    ("https://www.qimao.com/book/2", "qimao-api-rain"),
+    ("https://www.92xs.info/book/3", "92xs-requests-default"),
+    ("https://www.qidian.com/book/4", "qidian-browser-default"),
+]
+
+
+def test_migrate_infers_source_from_url_domain(tmp_path, monkeypatch):
+    """游离 source_name 缺失时按 URL 域名回填。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    novels = [_fake_novel(f"d{i}", "", url=url) for i, (url, _) in enumerate(DOMAIN_CASES)]
+    moved, skipped = m.migrate(novels)
+    assert (moved, skipped) == (4, 0)
+    for i, (_, expected) in enumerate(DOMAIN_CASES):
+        assert user_data.get_novel_source(f"d{i}") == expected
+
+
+def test_migrate_prefers_existing_source_name(tmp_path, monkeypatch):
+    """游离属性优先于域名推断。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    n = _fake_novel("x", "fanqie-browser-default",
+                    url="https://fanqienovel.com/page/1")
+    moved, skipped = m.migrate([n])
+    assert (moved, skipped) == (1, 0)
+    assert user_data.get_novel_source("x") == "fanqie-browser-default"
+
+
+def test_migrate_skips_unknown_domain(tmp_path, monkeypatch):
+    """未知域名不猜，计入 skipped。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    moved, skipped = m.migrate([_fake_novel("u", "", url="https://example.com/b/1")])
+    assert (moved, skipped) == (0, 1)
+    assert user_data.get_novel_source("u") is None
 
 
 def test_migrate_moves_and_is_idempotent(tmp_path, monkeypatch):
