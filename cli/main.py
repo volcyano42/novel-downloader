@@ -21,8 +21,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 # ── 复用 app.config 的配置加载 ─────────────────────────────────
-from cli.config import load_main_config, load_format_configs, build_options
-from novelbase import create_engine, resolve_meta
+from cli.config import load_main_config, load_format_configs
+from novelbase import resolve_meta
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("novelbase.cli")
@@ -113,20 +113,6 @@ def _apply_export_options(options) -> dict:
         opt = opt_cls(output_path=raw_path, **extra)
         options.set_export(opt)
     return format_configs
-
-
-def _get_engine(source_name: str, mode: str | None = None):
-    """按书源名创建 engine；mode 缺省取书源首个能力声明的 mode（含导出配置装配）。
-
-    与 `cli.core._get_engine` 统一：配置来自 `cli.config.build_options(source_name, mode)`
-    （shared.config 三层合并）。
-    """
-    if mode is None:
-        from novelbase.source import capabilities
-        mode = next(iter(capabilities(source_name).values()), "browser")
-    options = build_options(source_name, mode)
-    format_configs = _apply_export_options(options)
-    return create_engine(options), format_configs
 
 
 def cmd_search(args):
