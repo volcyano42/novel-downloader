@@ -741,9 +741,141 @@ EOF
 
 ---
 
+---
+
+### Task 5: 迁移时按 URL 域名回填 `source_name`
+
+**背景（用户中途追加）**：sqlite 后端的 `meta` 表**没有 `source_name` 列**（`SQLiteStorage._row_to_novel` 用固定列构造 `Novel`），实测 35 本存量全部读不到来源（`fanqienovel.com` ×33、`www.92xs.info` ×2）。故迁移需**按 URL 域名回填**。
+
+**Files:**
+- Modify: `scripts/migrate_novel_sources.py`
+- Test: `tests/test_migrate_novel_sources.py`
+
+**Interfaces:**
+- Consumes: T4 的 `migrate(novels) -> tuple[int, int]`、`_fake_novel` 测试助手
+- Produces: 签名不变；`migrate()` 在游离 `source_name` 缺失时按域名推断
+
+- [ ] **Step 1: 写失败测试**
+
+追加到 `tests/test_migrate_novel_sources.py`（把 `_fake_novel` 扩展为可传 `url`）：
+
+```python
+def _fake_novel(novel_id: str, source_name: str, url: str = "") -> Novel:
+    n = Novel(title="t", url=url or f"https://x/{novel_id}", id=novel_id,
+              serial=1, author="a", description="d")
+    n.source_name = source_name          # 模拟旧 JSON 残留的游离属性
+    return n
+
+
+DOMAIN_CASES = [
+    ("https://fanqienovel.com/page/1", "fanqie-api-rain"),
+    ("https://www.qimao.com/book/2", "qimao-api-rain"),
+    ("https://www.92xs.info/book/3", "92xs-requests-default"),
+    ("https://www.qidian.com/book/4", "qidian-browser-default"),
+]
+
+
+def test_migrate_infers_source_from_url_domain(tmp_path, monkeypatch):
+    """游离 source_name 缺失时按 URL 域名回填。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    novels = [_fake_novel(f"d{i}", "", url=url) for i, (url, _) in enumerate(DOMAIN_CASES)]
+    moved, skipped = m.migrate(novels)
+    assert (moved, skipped) == (4, 0)
+    for i, (_, expected) in enumerate(DOMAIN_CASES):
+        assert user_data.get_novel_source(f"d{i}") == expected
+
+
+def test_migrate_prefers_existing_source_name(tmp_path, monkeypatch):
+    """游离属性优先于域名推断。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    n = _fake_novel("x", "fanqie-browser-default",
+                    url="https://fanqienovel.com/page/1")
+    moved, skipped = m.migrate([n])
+    assert (moved, skipped) == (1, 0)
+    assert user_data.get_novel_source("x") == "fanqie-browser-default"
+
+
+def test_migrate_skips_unknown_domain(tmp_path, monkeypatch):
+    """未知域名不猜，计入 skipped。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    from scripts import migrate_novel_sources as m
+    moved, skipped = m.migrate([_fake_novel("u", "", url="https://example.com/b/1")])
+    assert (moved, skipped) == (0, 1)
+    assert user_data.get_novel_source("u") is None
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `python -m pytest tests/test_migrate_novel_sources.py -q`
+Expected: `test_migrate_infers_source_from_url_domain` FAIL（迁移 0 条）；`prefers` 应 PASS；`skips_unknown` 应 PASS
+
+- [ ] **Step 3: 实现**
+
+`scripts/migrate_novel_sources.py`：顶部加 `from urllib.parse import urlparse`，并加入映射与推断：
+
+```python
+# 域名 → 出厂 source_name（2026-09-25 用户裁决；子域按后缀匹配）
+DOMAIN_SOURCE_MAP = {
+    "fanqienovel.com": "fanqie-api-rain",
+    "qimao.com": "qimao-api-rain",
+    "92xs.info": "92xs-requests-default",
+    "qidian.com": "qidian-browser-default",
+}
+
+
+def _infer_source_from_url(url: str) -> str:
+    """按 URL 域名推断出厂书源；未知域名返回空串（不猜）。"""
+    host = urlparse(url or "").netloc.lower().split(":")[0]
+    for domain, source_name in DOMAIN_SOURCE_MAP.items():
+        if host == domain or host.endswith("." + domain):
+            return source_name
+    return ""
+```
+
+`migrate()` 的来源取值改为两级优先：
+
+```python
+        source_name = (getattr(novel, "source_name", "")
+                       or _infer_source_from_url(getattr(novel, "url", "")))
+```
+
+- [ ] **Step 4: 跑测试确认通过**
+
+Run: `python -m pytest tests/test_migrate_novel_sources.py -q`
+Expected: PASS（5 passed）
+
+- [ ] **Step 5: 全量回归 + 真机试跑**
+
+Run: `python -m pytest tests -q`
+Expected: `415 passed, 1 skipped`，0 failed
+
+Run: `python scripts/migrate_novel_sources.py`
+Expected: 存量 35 本**全部迁移**（33 本 fanqie-api-rain + 2 本 92xs-requests-default），输出 `迁移 35 条，跳过 0 条`
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add scripts/migrate_novel_sources.py tests/test_migrate_novel_sources.py
+git commit -F - <<'EOF'
+feat(scripts): 迁移时按 URL 域名回填 source_name
+
+sqlite 后端的 meta 表没有 source_name 列，存量读不到来源。新增
+DOMAIN_SOURCE_MAP（fanqienovel.com/qimao.com/92xs.info/qidian.com），
+在游离属性缺失时按域名后缀推断；未知域名不猜、计入 skipped。
+EOF
+```
+
 ## 完成后验证
 
-- [ ] `python -m pytest tests -q` → **411 passed, 1 skipped**，0 failed
+- [ ] `python -m pytest tests -q` → **415 passed, 1 skipped**，0 failed
 - [ ] `grep -rn "source_name" novelbase/models/novel.py` → 无命中（模型已纯净）
 - [ ] `grep -rn "extra\[\"platform\"\]" novelbase/ backend/ cli/` → 无命中（冗余已清）
 - [ ] `git status --porcelain` → clean

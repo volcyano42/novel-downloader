@@ -89,10 +89,25 @@ CREATE TABLE IF NOT EXISTS novel_sources (
 
 迁移步骤：
 
-1. 遍历小说库 `app_data/storage/novels/<id>.db` 的 meta 记录，取旧 `source_name` 值（仅当非空）
+1. 遍历两种后端的小说库，取来源值，**优先级**：
+   1. 旧 JSON 里残留的 `source_name`（`Novel.loads(**kwargs)` 的游离属性）——仅 local 后端可能读到
+   2. **按 URL 域名回填**（sqlite 后端没有该列，存量只能靠域名推断）
 2. 写入 `app_data/storage/users/default/user_data.db` 的 `novel_sources`
 3. **幂等**：可重复执行，已存在的行按最新值 UPSERT
 4. 输出统计（迁移 N 条 / 跳过 M 条）
+
+**域名 → `source_name` 映射（2026-09-25 用户裁决）**：
+
+| 域名（含 `www.` 子域） | `source_name` |
+|---|---|
+| `fanqienovel.com` | `fanqie-api-rain` |
+| `qimao.com` | `qimao-api-rain` |
+| `92xs.info`（就爱文学） | `92xs-requests-default` |
+| `qidian.com` | `qidian-browser-default` |
+
+未知域名 → 跳过并计入 `skipped`。
+
+> 实测存量 35 本的域名分布：`fanqienovel.com` ×33、`www.92xs.info` ×2。
 
 ### 5. 数据流
 
