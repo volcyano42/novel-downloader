@@ -238,7 +238,8 @@ EOF
 **Files:**
 - Modify: `novelbase/models/novel.py:287-288`
 - Modify: `novelbase/core/downloader.py:64`
-- Test: `tests/test_models.py`
+- Modify: `tests/test_downloader.py`（把断言 `extra["platform"]` 写入的用例改为负断言）
+- Test: `tests/test_models.py`（新增 2 条；**删除** 2 条断言被移除行为的旧用例）
 
 **Interfaces:**
 - Consumes: 无
@@ -246,7 +247,9 @@ EOF
 
 - [ ] **Step 1: 写失败测试**
 
-追加到 `tests/test_models.py`：
+追加到 `tests/test_models.py`（同时**删除**两条断言本次被移除行为的旧用例：
+`test_novel_has_source_name_default_empty`、`test_novel_loads_tolerates_missing_source_name`
+—— 它们断言的是刚被剥离的字段，必然失效，由下面两条更强断言取代）：
 
 ```python
 def test_novel_has_no_source_name_field():
@@ -272,7 +275,7 @@ def test_novel_loads_tolerates_legacy_source_name():
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_models.py -q -k source_name`
-Expected: `test_novel_has_no_source_name_field` FAIL（字段还在）；`tolerates` 那条此时应已 PASS
+Expected: **两条都 FAIL**（`has_no_source_name_field` 因字段还在；`tolerates` 因它同时断言 `"source_name" not in fields(Novel)`）
 
 - [ ] **Step 3: 实现**
 
@@ -298,7 +301,7 @@ Expected: PASS
 
 Run: `python -m pytest tests -q`
 Run: `grep -rn "source_name" novelbase/models/novel.py novelbase/core/downloader.py`
-Expected: 测试全绿；grep 在 `download.py` 只剩 `resolve_meta`/`resolve_chapter_list`/`resolve_chapter` 的**参数**，`novel.py` 无命中
+Expected: 测试全绿（`405 passed, 1 skipped`）；`download.py` 只剩 `resolve_*` 的**参数**与 `SearchResult` 的 `r.source_name = name`（属搜索，不在本任务范围）；`novel.py` 只剩 `SearchResult.source_name` 一处（`Novel` 的已删）
 
 - [ ] **Step 6: 提交**
 
@@ -477,7 +480,7 @@ Expected: PASS（3 passed）
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `410 passed, 1 skipped`，0 failed
+Expected: `408 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
@@ -606,7 +609,7 @@ Expected: PASS
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `411 passed, 1 skipped`，0 failed
+Expected: `409 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
@@ -624,7 +627,7 @@ EOF
 
 ## 完成后验证
 
-- [ ] `python -m pytest tests -q` → **411 passed, 1 skipped**，0 failed
+- [ ] `python -m pytest tests -q` → **409 passed, 1 skipped**，0 failed
 - [ ] `grep -rn "source_name" novelbase/models/novel.py` → 无命中（模型已纯净）
 - [ ] `grep -rn "extra\[\"platform\"\]" novelbase/ backend/ cli/` → 无命中（冗余已清）
 - [ ] `git status --porcelain` → clean
