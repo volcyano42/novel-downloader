@@ -197,10 +197,19 @@ def test_source_url_templates_unchanged():
 
 
 def test_passthrough_novel_info_has_no_url_literal():
-    """透传型书源 novel_info 里没有 url 模板（不构造/规范化 novel.url）。"""
+    """透传型书源 novel_info 里没有 url 模板（不构造/规范化 novel.url）。
+
+    对**实际扫描结果**断言（`_collect_url_templates` 读源码 AST），而非对静态
+    常量断言：若该文件新增含 `://` 的字面量（即开始构造/规范化 novel.url），
+    `scanned` 会包含该键 → 变红。
+    """
+    scanned = _collect_url_templates(SOURCES)
     for src in PASSTHROUGH_NOVEL_INFO:
         key = f"{src}/novel_info.py"
-        assert key not in EXPECTED_URL_TEMPLATES, key
+        assert (SOURCES / key).is_file(), f"被检查的源码文件不存在：{SOURCES / key}"
+        assert key not in scanned, (
+            f"{key} 含 url 模板，透传型书源不得构造/规范化 novel.url：{scanned.get(key)}"
+        )
 
 class _StubEngine:
     """最小 engine stub：只提供 novel_info 需要的两个协程（不联网）。"""
