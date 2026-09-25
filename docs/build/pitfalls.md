@@ -17,3 +17,4 @@
   ⑦ `MainActivity` 里不存在的标签 `this@healthPoll` → 改为直接引用 `healthPoll` 字段；
   ⑧ Kotlin 属性在**初始化表达式内不能自引用**：`healthPoll` 的 `run()` 里要写 `this`（不能写 `healthPoll`），并显式标注类型（`: Runnable`）避免类型推断自循环。
   首次成功：run `35975357459`（artifact `novel-crawler-apk-dev` ≈28.6 MB，**未签名**，真机未验证）
+- **前端源码改了必须重新 `npm run build`，否则后端 / 手机端 / 打包产物仍是旧 UI**（2026-09-25 实测踩到）：`frontend/dist` **不入库**（`.gitignore` 的 `dist/`），但它是被消费的那份 —— 后端 `StaticFiles` 托管它（`backend/main.py`）、`android/scripts/build-apk.sh` 从它 `cp` 进 APK、portable/nuitka 用 `--include-data-dir` 打包它。所以只改 `frontend/src` 而不重建，`git status` **不会有任何提示**，而手机浏览器访问后端服务时看到的还是旧界面。典型症状：dev server 上已经删掉的入口在手机上仍然存在（本轮删掉的独立「书源」页就这样在手机端残留）。修复：`cd frontend && npm run build`（产出新 hash 资源、旧文件自动清理），浏览器强刷一次；后端无需重启（每次请求读磁盘）
