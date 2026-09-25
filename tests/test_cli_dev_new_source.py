@@ -53,6 +53,50 @@ def test_new_source_manifest_valid(monkeypatch, tmp_path):
         assert manifest["default_config"][cap]["mode"] == "requests"
 
 
+def test_new_source_common_includes_factory_defaults(monkeypatch, tmp_path):
+    """脚手架 common 必须与真实书源一致：除 mode 外带上该 mode 的出厂默认字段。"""
+    root, _ = _setup(monkeypatch, tmp_path)
+    cli.main._scaffold_source("demo-requests-default", ["requests"])
+    common = json.loads(
+        (root / "demo_requests_default" / "source.json").read_text(encoding="utf-8")
+    )["common"]
+    assert common["mode"] == "requests"
+    for key in ("timeout", "retry_times", "backoff_factor", "delay",
+                "headers", "cookies", "proxies"):
+        assert key in common, key
+    # 空值须与真实书源字面同构（None → {}/""）
+    assert common["cookies"] == {}
+    assert common["proxies"] == {}
+    assert isinstance(common["headers"], dict) and common["headers"]
+
+
+def test_new_source_api_common_includes_key_and_params(monkeypatch, tmp_path):
+    """api 的出厂默认不在 ENGINE_DEFAULTS（空 dict），须由 APIOptions 派生。"""
+    root, _ = _setup(monkeypatch, tmp_path)
+    cli.main._scaffold_source("demo-api-rain", ["api"])
+    common = json.loads(
+        (root / "demo_api_rain" / "source.json").read_text(encoding="utf-8")
+    )["common"]
+    assert common["mode"] == "api"
+    for key in ("timeout", "retry_times", "backoff_factor", "delay", "key", "params"):
+        assert key in common, key
+    assert common["key"] == ""
+    assert common["params"] == {}
+
+
+def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, tmp_path):
+    """dataclass 的 None 默认须规范化为真实书源用的 ""/{}/[]（用户裁决：spec §4.3(b) 优先）。"""
+    root, _ = _setup(monkeypatch, tmp_path)
+    cli.main._scaffold_source("demo-browser-default", ["browser"])
+    common = json.loads(
+        (root / "demo_browser_default" / "source.json").read_text(encoding="utf-8")
+    )["common"]
+    assert common["user_data_dir"] == ""
+    assert common["viewport"] == {}
+    assert common["extra_args"] == []
+    assert common["browser_type"] == "chromium"
+
+
 def test_new_source_api_disabled_by_default(monkeypatch, tmp_path):
     """D4：api 类出厂 `enabled: false`。"""
     root, _ = _setup(monkeypatch, tmp_path)

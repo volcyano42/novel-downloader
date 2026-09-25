@@ -380,10 +380,11 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
     (source_dir / "__init__.py").write_text("", encoding="utf-8")
 
     enabled = mode != "api"
+    from shared.config import mode_defaults
     manifest = {
         "source_name": name,
         "enabled": enabled,
-        "common": {"mode": mode},
+        "common": {"mode": mode, **mode_defaults(mode)},
         "default_config": {fn: {} for fn in _SCAFFOLD_FUNCTIONS},
     }
     (source_dir / "source.json").write_text(

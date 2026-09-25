@@ -64,6 +64,46 @@ ENGINE_DEFAULTS = {
     "api": {},
 }
 
+# dataclass 默认用 None 表示「空」，而真实书源的 source.json 用 ""/{}/[]。
+# 脚手架产物必须与真实书源字面同构（spec §4.3(b)），故按字段给出对应空值。
+_BLANK_BY_FIELD: dict[str, object] = {
+    "user_data_dir": "",
+    "key": "",
+    "viewport": {},
+    "cookies": {},
+    "proxies": {},
+    "params": {},
+    "extra_args": [],
+}
+
+
+def _normalize_blank(key: str, value):
+    """dataclass 的 None 默认 → 真实 source.json 使用的空值（可变容器浅拷贝，避免共享）。"""
+    if value is not None:
+        return value
+    blank = _BLANK_BY_FIELD.get(key)
+    if isinstance(blank, dict):
+        return dict(blank)
+    if isinstance(blank, list):
+        return list(blank)
+    return blank
+
+
+def mode_defaults(mode: str) -> dict:
+    """该 mode 的出厂默认字段（系统默认层），供脚手架生成 `source.json.common`。
+
+    `ENGINE_DEFAULTS["api"]` 是空 dict（api 的 Options 由 `set_api_options` 单独消费），
+    脚手架需要 key/params——这里从 `APIOptions` 的 dataclass 默认派生，**不改
+    `ENGINE_DEFAULTS`**（避免影响 `merged_source_config` 的三层合并结果）。
+    """
+    if mode == "api":
+        from novelbase.core.options import APIOptions
+        defaults: dict = _dataclass_defaults(APIOptions)
+    else:
+        defaults = dict(ENGINE_DEFAULTS.get(mode, {}))
+    return {k: _normalize_blank(k, v) for k, v in defaults.items()}
+
+
 GLOBAL_DEFAULTS = {
     "max_workers": 3,
     "notify": {"on_complete": True, "on_incomplete": True, "sound": "bell"},
