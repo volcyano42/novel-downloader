@@ -3,7 +3,7 @@
 - 换源成功 → 落库到 user_data.novel_sources，响应回显新书源
 - UPSERT：连续两次换源取后者（一书一源）
 - 未知书源 → 404（source_guard.require_known_source 是 HTTP 边界唯一校验点）
-- 小说不存在 → 404
+- 未入库的 novel_id 也能写入（来源独立于 storage，不校验存在性）
 """
 import asyncio
 
@@ -79,12 +79,13 @@ def test_switch_unknown_source_404(monkeypatch, isolated_user_db):
     assert isolated_user_db.get_novel_source("n1") is None
 
 
-def test_switch_missing_novel_404(monkeypatch, isolated_user_db):
+def test_switch_unstored_novel_persists(monkeypatch, isolated_user_db):
+    """未入库的 novel_id（FakeStore.load_meta 返回 None）也能落库：来源独立于 storage。"""
     _only_known(monkeypatch, _KNOWN)
-    _patch_store(monkeypatch, "n1")
+    _patch_store(monkeypatch, "n1")  # 只有 "n1" 入库，"n2" 未入库
 
-    with pytest.raises(HTTPException) as ei:
-        asyncio.run(storage_router.set_novel_source_route(
-            "nope", SetSourceRequest(source_name=_KNOWN)))
+    resp = asyncio.run(storage_router.set_novel_source_route(
+        "n2", SetSourceRequest(source_name=_KNOWN)))
 
-    assert ei.value.status_code == 404
+    assert resp == {"status": "ok", "novel_id": "n2", "source_name": _KNOWN}
+    assert isolated_user_db.get_novel_source("n2") == _KNOWN

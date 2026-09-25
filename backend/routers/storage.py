@@ -140,10 +140,11 @@ async def save_meta(novel_id: str, body: NovelMeta):
 
 @router.put("/novel/{novel_id}/source")
 async def set_novel_source_route(novel_id: str, body: SetSourceRequest):
-    """换源：把该书的来源标记改写为给定书源（持久化到 user_data.novel_sources）。"""
-    store = _get_storage()
-    if not store.load_meta(novel_id):
-        raise HTTPException(404, "小说不存在")
+    """换源：把该书的来源标记改写为给定书源（持久化到 user_data.novel_sources）。
+
+    来源记录独立于 storage；未下载的书也能先换源，故不校验小说是否已入库
+    （「先换源、再下载」是合法场景；`novel_id` 前后一致）。
+    """
     source_name = require_known_source(body.source_name)
     set_novel_source(novel_id, source_name)
     return {"status": "ok", "novel_id": novel_id, "source_name": source_name}
