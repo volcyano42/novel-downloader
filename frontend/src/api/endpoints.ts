@@ -10,6 +10,7 @@ export interface NovelMeta {
   tags: string[] | null; count: number | null;
   cover: { raw_data: string | null; alt: string | null; url: string | null; format: string | null } | null;
   extra?: { rating?: number } | null;
+  source_name?: string | null;
 }
 
 export interface ChapterBrief {

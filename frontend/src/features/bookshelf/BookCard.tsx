@@ -32,9 +32,10 @@ interface BookCardProps {
   groups?: string[];
   currentGroup?: string;
   onDelete?: (novelId: string) => void;
+  sourceName?: string | null;
 }
 
-export function BookCard({ title, novelId, cover, onRead, className, groups = [], currentGroup, onDelete }: BookCardProps) {
+export function BookCard({ title, novelId, cover, onRead, className, groups = [], currentGroup, onDelete, sourceName }: BookCardProps) {
   const [showExport, setShowExport] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -222,7 +223,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
           )}
         </div>
         <div className="flex flex-1 flex-col gap-1 px-4 py-3">
-          {novelId && <p className="truncate text-[11px] text-slate-400 font-mono">{novelId}</p>}
+          {sourceName && <p className="truncate text-[11px] text-slate-400">{sourceName}</p>}
           <TooltipProvider delayDuration={500}>
             <Tooltip>
               <TooltipTrigger asChild>

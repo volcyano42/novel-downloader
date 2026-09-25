@@ -206,6 +206,7 @@ export default function BookshelfPage() {
                             <div className="grid grid-cols-3 gap-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                               {items.map(novel => (
                                 <BookCard key={novel.id} novelId={novel.id} title={novel.title} author={novel.author}
+                                  sourceName={novel.source_name}
                                   onRead={() => navigate(`/novel/${novel.id}`)}
                                   groups={groupNames}
                                   currentGroup={tag === "未分类" ? undefined : tag}
