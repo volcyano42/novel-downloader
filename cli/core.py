@@ -11,7 +11,7 @@ from novelbase import (
     create_engine, StorageOptions,
 )
 from novelbase.core.storage import create_storage
-from novelbase.source import capabilities
+from shared.config import effective_capabilities
 from novelbase.utils.logger import get_logger
 from shared.user_data import get_novel_source
 
@@ -75,12 +75,12 @@ def _make_engines(source_name: str, options_hook=None):
 
 
 def _get_engine(source_name: str, mode: str | None = None, options_hook=None):
-    """按书源名创建引擎；mode 缺省取书源首个能力声明的 mode。
+    """按书源名创建引擎；mode 缺省取书源首个能力声明的**有效** mode。
 
     与 `cli.main._get_engine` 统一：配置来自 `shared.config` 的三层合并。
     """
     if mode is None:
-        caps = capabilities(source_name)
+        caps = effective_capabilities(source_name)
         mode = next(iter(caps.values()), "browser")
     options = build_options(source_name, mode)
     if options_hook is not None:
@@ -107,8 +107,10 @@ async def _do_download_inner(
 
     # 1. Get metadata
     print("正在获取小说信息...")
+    _overrides = effective_capabilities(source_name)
     try:
-        novel = await resolve_meta(url, source_name, engines, skip_delay=skip_delay)
+        novel = await resolve_meta(url, source_name, engines, skip_delay=skip_delay,
+                                   mode_overrides=_overrides)
     except Exception as e:
         print(f"获取小说信息失败: {e}")
         return
@@ -117,7 +119,8 @@ async def _do_download_inner(
     # 2. Get chapter list
     print("正在获取章节列表...")
     try:
-        chapters = await resolve_chapter_list(novel.url, source_name, engines, skip_delay=skip_delay)
+        chapters = await resolve_chapter_list(novel.url, source_name, engines, skip_delay=skip_delay,
+                                              mode_overrides=_overrides)
     except Exception as e:
         print(f"获取章节列表失败: {e}")
         return
@@ -160,7 +163,8 @@ async def _do_download_inner(
     async def _download_one(ch) -> tuple[bool, str, str]:
         async with sem:
             try:
-                resolved = await resolve_chapter(ch, source_name, engines)
+                resolved = await resolve_chapter(ch, source_name, engines,
+                                                 mode_overrides=_overrides)
                 if resolved is None:
                     return False, ch.title, "章节内容为空"
                 storage.save_chapter(novel, resolved)
@@ -270,8 +274,10 @@ async def do_update(format_configs: dict, max_workers: int = 3):
             print("  无法确定书源，跳过（请重新下载该小说以记录书源）")
             continue
         engines = _make_engines(source_name)
+        _overrides = effective_capabilities(source_name)
         try:
-            remote_chapters = await resolve_chapter_list(novel.url, source_name, engines)
+            remote_chapters = await resolve_chapter_list(novel.url, source_name, engines,
+                                                         mode_overrides=_overrides)
             if not remote_chapters:
                 print("  无法获取远程章节")
                 continue
@@ -291,7 +297,8 @@ async def do_update(format_configs: dict, max_workers: int = 3):
             async def _dl(ch):
                 async with sem:
                     try:
-                        resolved = await resolve_chapter(ch, source_name, engines)
+                        resolved = await resolve_chapter(ch, source_name, engines,
+                                                         mode_overrides=_overrides)
                         if resolved:
                             storage.save_chapter(novel, resolved)
                             return True

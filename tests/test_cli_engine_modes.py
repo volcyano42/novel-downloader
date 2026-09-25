@@ -34,7 +34,7 @@ def test_make_engines_builds_per_mode_and_applies_hook(monkeypatch):
 
 
 def test_get_engine_defaults_to_first_capability_mode(monkeypatch):
-    monkeypatch.setattr(cli.core, "capabilities", lambda name: {"search": "browser", "chapter_content": "requests"})
+    monkeypatch.setattr(cli.core, "effective_capabilities", lambda name: {"search": "browser", "chapter_content": "requests"})
     seen: list[str] = []
 
     class _Opt(_FakeOptions):

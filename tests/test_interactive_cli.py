@@ -219,7 +219,7 @@ class TestMenus:
         monkeypatch.setattr(ccfg, "CONFIG_DIR", tmp_path)
         from cli import menus
         monkeypatch.setattr(menus, "list_sources", lambda: ["a-x-default"])
-        monkeypatch.setattr(menus, "capabilities", lambda n: {"search": "requests"})
+        monkeypatch.setattr(menus, "effective_capabilities", lambda n: {"search": "requests"})
         monkeypatch.setattr(menus, "is_source_enabled", lambda n: False)
         monkeypatch.setattr(menus, "_select", lambda *a, **k: "a-x-default")
         inputs = iter(["2", "1", "0", "0"])
@@ -233,7 +233,7 @@ class TestMenus:
         monkeypatch.setattr(ccfg, "CONFIG_DIR", tmp_path)
         from cli import menus
         monkeypatch.setattr(menus, "list_sources", lambda: ["a-x-default"])
-        monkeypatch.setattr(menus, "capabilities", lambda n: {"search": "requests"})
+        monkeypatch.setattr(menus, "effective_capabilities", lambda n: {"search": "requests"})
         monkeypatch.setattr(menus, "is_source_enabled", lambda n: True)
         monkeypatch.setattr(menus, "merged_source_config",
                             lambda n: {"search": {"mode": "requests", "timeout": 30, "delay": [3, 6]}})

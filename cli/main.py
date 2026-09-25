@@ -23,6 +23,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 # ── 复用 app.config 的配置加载 ─────────────────────────────────
 from cli.config import load_main_config, load_format_configs
 from novelbase import resolve_meta
+from shared.config import effective_capabilities
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("novelbase.cli")
@@ -129,7 +130,8 @@ def cmd_search(args):
         # 每个源各用自己的引擎（杜绝「同 mode 源共用首个源引擎」）。
         engines = _make_engines(name)
         try:
-            return await search([name], args.query, engines, page=args.page)
+            return await search([name], args.query, engines, page=args.page,
+                                mode_overrides=effective_capabilities(name))
         except Exception as e:      # 某源失败静默跳过：不影响其它源
             print(f"  [{name}] 搜索失败: {e}")
             return ()
@@ -229,7 +231,8 @@ def cmd_info(args):
     engines = _make_engines(source_name, options_hook=_apply_export_options)
     try:
         print(f"正在获取: {args.url}")
-        novel = asyncio.run(resolve_meta(args.url, source_name, engines))
+        novel = asyncio.run(resolve_meta(args.url, source_name, engines,
+                                         mode_overrides=effective_capabilities(source_name)))
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
@@ -306,8 +309,9 @@ def cmd_novel(args):
 
 
 def cmd_source(args):
-    """书源管理。"""
-    from novelbase.source import list_sources, capabilities
+    """书源管理（mode 显示有效值：用户层覆盖优先）。"""
+    from novelbase.source import list_sources
+    from shared.config import effective_capabilities
 
     if args.source_command != "list":
         return
@@ -319,7 +323,7 @@ def cmd_source(args):
             name: {
                 "name": name,
                 "show_name": name,
-                "capabilities": capabilities(name),
+                "capabilities": effective_capabilities(name),
             }
             for name in names
         }
@@ -328,7 +332,7 @@ def cmd_source(args):
 
     print(f"可用书源 ({len(names)}):")
     for name in names:
-        caps = capabilities(name)
+        caps = effective_capabilities(name)
         cap_str = ", ".join(f"{c}:{m}" for c, m in caps.items()) or "无"
         print(f"  - {name}   capabilities: {cap_str}")
 

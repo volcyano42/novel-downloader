@@ -8,8 +8,8 @@ from cli.config import (
     save_site_config, load_site_config, load_groups,
 )
 from cli.ui import _select, _text_input, _input_int, _input_float
-from shared.config import merged_source_config, is_source_enabled
-from novelbase.source import list_sources, capabilities
+from shared.config import merged_source_config, is_source_enabled, effective_capabilities
+from novelbase.source import list_sources
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("cli.menus")
@@ -81,7 +81,7 @@ def _settings_source(cfg: dict) -> None:
 def _settings_source_detail(cfg: dict, source_name: str) -> None:
     """单书源详情：启用开关 + 各能力段入口。"""
     while True:
-        caps = capabilities(source_name)
+        caps = effective_capabilities(source_name)
         enabled = is_source_enabled(source_name)
         print(f"\n[{source_name} 设置]  状态: {'启用' if enabled else '禁用'}")
         print(f" 1. {'禁用' if enabled else '启用'}该书源")

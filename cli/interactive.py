@@ -10,7 +10,7 @@ from cli.config import (
     build_options, get_novel_group, load_groups,
 )
 from cli.ui import _select, _text_input
-from shared.config import enabled_source_names
+from shared.config import effective_capabilities, enabled_source_names
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, search,
     create_engine,
@@ -23,11 +23,9 @@ _log = get_logger("cli.interactive")
 
 
 def _get_engine(source_name: str = "fanqie", mode: str | None = None):
-    """按书源名创建引擎；mode 缺省取书源首个能力声明的 mode。"""
-    from novelbase.source import capabilities
-
+    """按书源名创建引擎；mode 缺省取书源首个能力声明的**有效** mode。"""
     if mode is None:
-        caps = capabilities(source_name)
+        caps = effective_capabilities(source_name)
         mode = next(iter(caps.values()), "browser")
     options = build_options(source_name, mode)
     return create_engine(options)
@@ -68,7 +66,8 @@ def do_search(query: str) -> tuple[str | None, str | None]:
             return None, None
         engines = _make_engines(source_name)
         try:
-            novel = asyncio.run(resolve_meta(query, source_name, engines, skip_delay=True))
+            novel = asyncio.run(resolve_meta(query, source_name, engines, skip_delay=True,
+                                             mode_overrides=effective_capabilities(source_name)))
             print(f"\n📖 {novel.title} — {novel.author}")
             return novel.url, source_name
         except Exception as e:
@@ -92,7 +91,8 @@ def do_search(query: str) -> tuple[str | None, str | None]:
             # 每个源各用自己的引擎（杜绝「同 mode 源共用首个源引擎」）
             engines = _make_engines(name)
             try:
-                return await search([name], query, engines, skip_delay=True)
+                return await search([name], query, engines, skip_delay=True,
+                                    mode_overrides=effective_capabilities(name))
             except Exception as e:      # 单个源失败静默跳过：不影响其它源
                 print(f"  [{name}] 搜索失败: {e}")
                 return ()
@@ -172,8 +172,10 @@ async def _update_one_async(novel, max_workers: int) -> int:
         print("  无法确定书源")
         return 0
     engines = _make_engines(source_name)
+    _overrides = effective_capabilities(source_name)
     try:
-        remote_chapters = await resolve_chapter_list(novel.url, source_name, engines)
+        remote_chapters = await resolve_chapter_list(novel.url, source_name, engines,
+                                                     mode_overrides=_overrides)
         if not remote_chapters:
             print("  无法获取远程章节")
             return 0
@@ -193,7 +195,8 @@ async def _update_one_async(novel, max_workers: int) -> int:
         async def _dl(ch):
             async with sem:
                 try:
-                    resolved = await resolve_chapter(ch, source_name, engines)
+                    resolved = await resolve_chapter(ch, source_name, engines,
+                                                     mode_overrides=_overrides)
                     if resolved:
                         storage.save_chapter(novel, resolved)
                         return True
