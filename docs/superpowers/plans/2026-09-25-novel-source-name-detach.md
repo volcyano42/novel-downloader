@@ -322,7 +322,8 @@ EOF
 
 **Files:**
 - Modify: `backend/services/task_manager.py:63-69`
-- Modify: `cli/core.py:132-135`
+- Modify: `cli/core.py:132-135`（写入点）与 `cli/core.py:264`（读点）
+- Modify: `cli/interactive.py:169`（读点）
 - Modify: `backend/routers/storage.py:132-137`
 - Test: `tests/test_novel_source_writes.py`
 

@@ -14,7 +14,7 @@
 
 | 事实 | 证据 |
 |---|---|
-| `Novel.source_name` **零读点** | 全仓 grep `.source_name` 只命中搜索历史相关代码与一处注释 |
+| `Novel.source_name` **有 2 处真实读点** | `cli/core.py:264` 与 `cli/interactive.py:169` 的 `getattr(novel, "source_name", "")` —— 二者是「更新已有小说」取书源建引擎的**唯一来源**。初稿 grep `.source_name` 漏掉了这种字符串形式，故误判为「零读点」；本设计**必须**改造这两处，否则更新功能整体跳过 |
 | `Novel.extra["platform"]` **只写不读** | 仅 `novelbase/core/downloader.py:64` 一处写入 |
 | API 不返回该字段 | `backend/routers/storage.py:58` 经 `_novel_to_meta()` → `NovelMeta`，其中不含 `source_name` |
 | 前端所有 `source_name` 用法属搜索 | `SearchResult.source_name`（按源分 tab）、`/history/search` |
@@ -31,7 +31,7 @@
 ## 非目标（YAGNI，明确不做）
 
 - 不新建 `Book` 领域对象（该方向已废弃）
-- 不新增 API / 前端读点（本轮只搬家，不接消费方）
+- 不新增 API / 前端读点；但 **CLI 既有的 2 处读点必须改造**（`cli/core.py`、`cli/interactive.py` 的更新路径）—— 那不是「接新消费方」，是保住既有功能
 - 不改 `SearchResult.source_name`（有真实消费方，语义是「搜索结果的即时标签」）
 - 不动搜索历史、`bookmarks.platform`
 - 不动公开库 `novel-crawler`
@@ -66,13 +66,20 @@ CREATE TABLE IF NOT EXISTS novel_sources (
 - `resolve_meta` / `resolve_chapter_list` / `resolve_chapter` 签名**不变**
 - `novelbase` 不再感知「书库来源」概念；来源由调用方持有（本就在调用方手上）
 
-### 3. 写入点
+### 3. 写入点与读点
 
 | 位置 | 时机 | 动作 |
 |---|---|---|
 | `backend/services/task_manager.py::_run_download` | 下载完成 | `set_novel_source(novel_id, source_name)` |
 | `cli/main.py::cmd_download` | 下载完成 | 同上 |
 | `backend/routers/storage.py` 的 `DELETE /novel/{id}` | 删书 | `delete_novel_source(novel_id)` |
+
+读点（改造既有 `getattr` 读法）：
+
+| 位置 | 时机 | 动作 |
+|---|---|---|
+| `cli/core.py:264`（`do_update`） | 更新已有小说 | `getattr(novel, "source_name", "")` → `get_novel_source(novel.id)` |
+| `cli/interactive.py:169`（`_update_one_async`） | 同上 | 同上 |
 
 ### 4. 存量迁移 —— 新增 `scripts/migrate_novel_sources.py`
 
@@ -94,7 +101,8 @@ CREATE TABLE IF NOT EXISTS novel_sources (
       → 存小说库；同时 set_novel_source(novel_id, source_name) → user_data.db
 
 读取：storage 读 Novel（纯小说数据）
-      + user_data.get_novel_source(novel_id)   ← 本轮暂无调用方，留给后续
+      + user_data.get_novel_source(novel_id)   ← CLI 更新路径本轮已接
+      （API / 前端仍不返回来源，留给后续）
 ```
 
 ### 6. 错误处理
