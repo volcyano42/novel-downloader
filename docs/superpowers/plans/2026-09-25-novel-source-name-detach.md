@@ -684,9 +684,32 @@ def migrate(novels) -> tuple[int, int]:
 
 
 def main() -> None:
-    storage = create_storage(StorageOptions(backend="sqlite",
-                                            database_url=get_database_url()))
-    moved, skipped = migrate(list(storage.iter_metas()))
+    """命令行入口：两种后端都扫。
+
+    注意：**sqlite 后端的 meta 表没有 `source_name` 列**（`SQLiteStorage._row_to_novel`
+    用固定列构造 `Novel`），故 sqlite 侧必然 0 条；游离属性只出现在 **local JSON
+    后端**的旧数据上（`Novel.loads(**json_data)` 的 `**kwargs` setattr）。两者都扫是
+    为了兼容仍在使用 local 后端的旧库。
+    """
+    moved = skipped = 0
+
+    sqlite_storage = create_storage(
+        StorageOptions(backend="sqlite", database_url=get_database_url()))
+    m, s = migrate(list(sqlite_storage.iter_metas()))
+    moved += m
+    skipped += s
+
+    local_dir = ROOT / "app_data" / "storage"
+    if local_dir.is_dir():
+        try:
+            local_storage = create_storage(
+                StorageOptions(backend="local", base_dir=str(local_dir)))
+            m, s = migrate(list(local_storage.iter_metas()))
+            moved += m
+            skipped += s
+        except Exception as e:                       # local 后端缺失/为空时不应中断
+            print(f"local 后端扫描跳过: {e}")
+
     print(f"完成：迁移 {moved} 条，跳过 {skipped} 条（无来源）")
 
 
