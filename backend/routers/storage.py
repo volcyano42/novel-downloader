@@ -9,7 +9,7 @@ from novelbase.core.options import StorageOptions
 from novelbase.core.storage import create_storage
 from novelbase.models.novel import Novel, Illustration
 from shared.config import get_database_url
-from shared.user_data import delete_novel_source
+from shared.user_data import delete_novel_source, get_novel_source, get_novel_sources
 
 router = APIRouter(prefix="/api/v2/storage", tags=["storage"])
 
@@ -61,6 +61,7 @@ def _novel_to_meta(novel) -> NovelMeta:
         author=novel.author, description=novel.description,
         tags=list(novel.tags) if novel.tags else None, count=novel.count, cover=cover_data,
         extra=dict(novel.extra) if novel.extra else None,
+        source_name=get_novel_source(novel.id),
     )
 
 def _chapter_to_brief(ch) -> ChapterBrief:
@@ -86,8 +87,11 @@ async def switch_backend(body: BackendSwitch): return {"backend": body.backend, 
 @router.get("/novel")
 async def list_novels():
     store = _get_storage()
+    novels = list(store.iter_metas(include_images=True))
+    # 一次批量查来源（避免逐本 N+1）
+    sources = get_novel_sources([n.id for n in novels])
     result: list[dict] = []
-    for novel in store.iter_metas(include_images=True):
+    for novel in novels:
         result.append({
             "title": novel.title, "url": novel.url, "id": novel.id,
             "serial": novel.serial, "author": novel.author,
@@ -95,6 +99,7 @@ async def list_novels():
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
             "cover": _cover_to_response(novel.cover, thumbnail=True),
+            "source_name": sources.get(novel.id),
         })
     return result
 
