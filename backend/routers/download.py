@@ -16,7 +16,7 @@ from backend.services.source_guard import require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources, capabilities
-from shared.config import enabled_source_names, is_source_enabled
+from shared.config import enabled_source_names, is_source_enabled, effective_capabilities
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -31,6 +31,11 @@ def _require_source(source: str | None, url: str) -> str:
 def _engines_for(source_name: str):
     """构造 engines(mode)->engine（按书源名 + 能力声明的 mode 懒建并缓存）。"""
     return lambda mode: get_cached_engine(source_name, mode)
+
+
+def _mode_overrides(source_name: str) -> dict[str, str]:
+    """用户层覆盖后的「能力 → mode」映射，透传给 core 分发层。"""
+    return effective_capabilities(source_name)
 
 
 def _resolve_url(raw: str) -> str:
@@ -49,7 +54,8 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
         source_name = _require_source(source, query)
         url = _resolve_url(query)
         try:
-            novel = await resolve_meta(url, source_name, _engines_for(source_name))
+            novel = await resolve_meta(url, source_name, _engines_for(source_name),
+                                       mode_overrides=_mode_overrides(source_name))
         except Exception as e:
             raise HTTPException(500, str(e))
         return [SearchResultData(title=novel.title, author=novel.author,
@@ -61,7 +67,8 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
     if source:
         source_name = require_known_source(source)
         try:
-            results = await search([source_name], query, _engines_for(source_name), page=page)
+            results = await search([source_name], query, _engines_for(source_name), page=page,
+                                   mode_overrides=_mode_overrides(source_name))
         except FeatureNotSupportedError as e:
             # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
             raise HTTPException(400, str(e))
@@ -71,7 +78,8 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
         async def _search_one(name: str):
             # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。
             try:
-                return await search([name], query, _engines_for(name), page=page)
+                return await search([name], query, _engines_for(name), page=page,
+                                    mode_overrides=_mode_overrides(name))
             except Exception:
                 # 复刻 core.search 的「单源失败静默跳过」：某源出错不影响其它源。
                 return ()
@@ -90,7 +98,8 @@ async def resolve_meta_route(body: FetchMetaRequest, source: str = Query("")):
     url = _resolve_url(body.url)
     source_name = _require_source(source, url)
     try:
-        novel = await resolve_meta(url, source_name, _engines_for(source_name))
+        novel = await resolve_meta(url, source_name, _engines_for(source_name),
+                                   mode_overrides=_mode_overrides(source_name))
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -105,7 +114,8 @@ async def get_remote_novel(novel_id: str, url: str = Query(...), source: str = Q
     url = _resolve_url(url)
     source_name = _require_source(source, url)
     try:
-        novel = await resolve_meta(url, source_name, _engines_for(source_name))
+        novel = await resolve_meta(url, source_name, _engines_for(source_name),
+                                   mode_overrides=_mode_overrides(source_name))
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -120,7 +130,8 @@ async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
     url = _resolve_url(url)
     source_name = _require_source(source, url)
     try:
-        chapters = await resolve_chapter_list(url, source_name, _engines_for(source_name))
+        chapters = await resolve_chapter_list(url, source_name, _engines_for(source_name),
+                                              mode_overrides=_mode_overrides(source_name))
     except Exception as e:
         raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
@@ -165,12 +176,8 @@ async def delete_task(task_id: str):
 
 @router.get("/sources")
 async def list_all_sources():
-    """返回全部书源（含未启用）的扁平能力矩阵与启用状态。
-
-    `capabilities(name)` 直出 `{capability: mode}`；`enabled` = 三层读取结果
-    （用户层覆盖出厂值，见 `shared.config.is_source_enabled`）。
-    """
+    """返回全部书源（含未启用）的扁平能力矩阵与启用状态（mode 为**有效值**）。"""
     return {
-        name: {"capabilities": capabilities(name), "enabled": is_source_enabled(name)}
+        name: {"capabilities": effective_capabilities(name), "enabled": is_source_enabled(name)}
         for name in list_sources()
     }

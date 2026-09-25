@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 import shared.config as config_service
 from novelbase.source import capabilities
+from shared.config import effective_capabilities
 from backend.services.source_guard import require_known_source
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
@@ -86,14 +87,17 @@ async def remove_favorite(novel_id: str):
 async def get_source_config(source_name: str):
     """三层合并后的书源配置 + 启用状态 + 能力映射。
 
-    形状：`{source_name, enabled, capabilities: {cap: mode}, config: {cap: {…完整合并字段…}}}`。
-    `config[cap]` 含 mode（恒取书源声明），`enabled` 走用户层顶层 `enabled` → 出厂值。
+    形状：`{source_name, enabled, capabilities: {cap: 有效mode}, declared_capabilities: {cap: 声明mode},
+    config: {cap: {…完整合并字段（含 mode）…}}}`。
+    `capabilities` 为**有效 mode**（用户层 `{cap}.mode` 覆盖书源声明），
+    `declared_capabilities` 为书源声明值（前端「恢复默认」用）。
     """
     require_known_source(source_name)
     return {
         "source_name": source_name,
         "enabled": config_service.is_source_enabled(source_name),
-        "capabilities": capabilities(source_name),
+        "capabilities": effective_capabilities(source_name),
+        "declared_capabilities": capabilities(source_name),
         "config": config_service.merged_source_config(source_name),
     }
 
@@ -103,6 +107,7 @@ async def save_source_config(source_name: str, body: dict):
     """只写用户层 `sites/{source_name}.yaml`：顶层 `enabled` + 逐能力段 `deep_merge`。
 
     不把三层合并后的全量写回（否则用户层被灌满出厂/系统默认值）。
+    能力段的 `mode` 键特判：传入字符串 → 覆盖；传入 `null` → 删除该键（恢复书源声明）。
     """
     require_known_source(source_name)
     path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
@@ -112,10 +117,21 @@ async def save_source_config(source_name: str, body: dict):
     cfg_body = body.get("config")
     if isinstance(cfg_body, dict):
         for cap, partial in cfg_body.items():
-            if isinstance(partial, dict):
-                base = existing.get(cap)
-                existing[cap] = config_service.deep_merge(
-                    base if isinstance(base, dict) else {}, partial)
+            if not isinstance(partial, dict):
+                continue
+            section = existing.get(cap)
+            section = dict(section) if isinstance(section, dict) else {}
+            mode = partial.get("mode")
+            if mode is None and "mode" in partial:
+                section.pop("mode", None)        # 恢复默认：删掉覆盖
+            section = config_service.deep_merge(
+                section, {k: v for k, v in partial.items() if k != "mode"})
+            if mode is not None:
+                section["mode"] = mode
+            if section:
+                existing[cap] = section
+            else:
+                existing.pop(cap, None)
     config_service.save_yaml(path, existing)
     return {"status": "ok"}
 

@@ -30,7 +30,7 @@ async def _run_download(task: dict, source_name: str):
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
     from novelbase.core.options import StorageOptions
-    from novelbase.source import capabilities
+    from shared.config import effective_capabilities
 
     # engines(mode)->engine 解析器：按书源能力声明的 mode 惰性取引擎。
     # get_cached_engine(source_name, mode) 带缓存，命中即复用同一实例。
@@ -46,7 +46,7 @@ async def _run_download(task: dict, source_name: str):
     # 暂停/取消接口）数秒。resolve_meta/resolve_chapter 在事件循环里同步求值
     # engines(mode)，故先用 to_thread 把「该源 novel_info 能力声明的 mode」
     # （即解析将首先用到的 mode）建到缓存，移出事件循环线程。
-    _caps = capabilities(source_name)
+    _caps = effective_capabilities(source_name)
     primary_mode = _caps.get("novel_info") or next(iter(_caps.values()), None)
     if primary_mode:
         engines_cache[primary_mode] = await asyncio.to_thread(
@@ -61,7 +61,8 @@ async def _run_download(task: dict, source_name: str):
         novel_url = task.get("novel_url", "")
         if novel_url:
             try:
-                meta = await resolve_meta(novel_url, source_name, engines)
+                meta = await resolve_meta(novel_url, source_name, engines,
+                                          mode_overrides=_caps)
                 store.save_meta(meta)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
@@ -129,7 +130,8 @@ async def _run_download(task: dict, source_name: str):
                 if attempt > 0:
                     await asyncio.sleep(2 * attempt)
                 try:
-                    downloaded = await resolve_chapter(ch, source_name, engines)
+                    downloaded = await resolve_chapter(ch, source_name, engines,
+                                                       mode_overrides=_caps)
                 except ChapterNotFoundError:
                     if attempt < max_retries:
                         continue

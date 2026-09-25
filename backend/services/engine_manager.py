@@ -21,9 +21,9 @@ _engine_lock = threading.Lock()
 
 
 def _capability_for_mode(source_name: str, mode: str) -> str | None:
-    """按 mode 反查书源的能力段名（同名多段取 manifest 声明序第一个）。"""
-    from novelbase.source import capabilities
-    for cap, cap_mode in capabilities(source_name).items():
+    """按 mode 反查书源的能力段名（用有效 mode；同名多段取声明序第一个）。"""
+    from shared.config import effective_capabilities
+    for cap, cap_mode in effective_capabilities(source_name).items():
         if cap_mode == mode:
             return cap
     return None
