@@ -1,5 +1,10 @@
 # 书源扁平化收尾 — Implementation Plan
 
+> **状态：✅ 已完成（2026-09-25）** —— Task 1–7 全部执行并验证。
+> `python -m pytest tests -q` = **401 passed, 1 skipped, 0 failed**（计划基线 389 passed / 1 skipped）；
+> `git diff --stat 1e7a1a2..HEAD -- novelbase/sources novelbase/core novelbase/models novelbase/utils` = **空**（`Novel.id` 硬约束满足）。
+> 各任务的产出提交见文末「完成记录」。本文件此前 51 个 checkbox 长期未回填，正是 Task 5–7 被遗漏的根因。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 清理书源扁平化重构遗留的 6 项 Minor（未知书源 404、`enabled` 双向失效、CLI 单引擎、前端 ~110 行重复、脚手架与真实书源不一致、文档残留），并把两份并存的 `docs/` 归一为核心仓库一份。
@@ -64,7 +69,7 @@
 - Produces: `backend.services.source_guard.require_known_source(source_name: str) -> str`（未知 → `fastapi.HTTPException(404, f"未知书源: {source_name}")`；已知 → 原样返回）
 - Consumes: `novelbase.source.list_sources() -> list[str]`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `tests/test_backend_source_guard.py`：
 
@@ -142,12 +147,12 @@ def test_novel_unknown_source_404(monkeypatch):
     assert ei.value.status_code == 404
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `python -m pytest tests/test_backend_source_guard.py -q`
 Expected: collection error / FAIL —— `ModuleNotFoundError: No module named 'backend.services.source_guard'`
 
-- [ ] **Step 3: 实现 `source_guard`**
+- [x] **Step 3: 实现 `source_guard`**
 
 新建 `backend/services/source_guard.py`：
 
@@ -172,7 +177,7 @@ def require_known_source(source_name: str) -> str:
     return source_name
 ```
 
-- [ ] **Step 4: 接入 download 路由**
+- [x] **Step 4: 接入 download 路由**
 
 `backend/routers/download.py` import 区（`:14` 之后）加一行：
 
@@ -206,7 +211,7 @@ def _require_source(source: str | None, url: str) -> str:
 
 > 注：`_require_source` 已覆盖 URL 分支、`/novel`、`/novel/{id}`、`/novel/{id}/chapters`、`/novel/{id}/chapter`；上面这处是 spec §4.1「所有按 source_name 取参的路由」里**唯一不经过 `_require_source`** 的入口。
 
-- [ ] **Step 5: 接入 config 路由**
+- [x] **Step 5: 接入 config 路由**
 
 `backend/routers/config.py` 的 `get_source_config`（`:84-96`）与 `save_source_config`（`:99-105`）各在函数体首行加校验：
 
@@ -244,19 +249,19 @@ async def save_source_config(source_name: str, body: dict):
 from backend.services.source_guard import require_known_source
 ```
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `python -m pytest tests/test_backend_source_guard.py tests/test_backend_download_routes.py -q`
 Expected: 全绿（新增 7 例 + 既有 download 路由用例全过）
 
 > 既有 `test_backend_download_routes.py::test_search_single_source_binds_engine`（`:67-79`）用的 `source="92xs-requests-default"` 是**真实书源名**，`list_sources()` 能在默认环境命中，故不受 404 校验影响。若该用例因环境差异（如 `NLD_PRIVATE_SOURCES` 指向别处）失败，**在用例内** monkeypatch `source_guard.list_sources` 返回该名——**不要**放宽 `require_known_source`。
 
-- [ ] **Step 7: 全量回归**
+- [x] **Step 7: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: `389 passed, 1 skipped` + 新增 7 例 = **396 passed, 1 skipped, 0 failed**
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 cd D:\Linux\novel-downloader\novel-downloader
@@ -283,7 +288,7 @@ git add backend/services/source_guard.py backend/routers/download.py backend/rou
   - `SourceConfigEditor({ name }: { name: string })` —— 自取数据（`useSourceConfig`）、自写（`useSaveSourceConfig`），渲染逐能力段表单
 - Consumes: `@/hooks/index` 的 `useSourceConfig`、`useSaveSourceConfig`
 
-- [ ] **Step 1: 创建共享文件**
+- [x] **Step 1: 创建共享文件**
 
 新建 `frontend/src/features/sources/sourceConfigForm.tsx`（内容 = `SourcesPage.tsx:9-117` 的原子与常量搬移 + `SourceConfigEditor`，`Section`/`MODE_META` 的 icon 类型统一为 `LucideIcon`，`MODE_META` 取带 `desc` 的版本）：
 
@@ -490,7 +495,7 @@ export function SourceConfigEditor({ name }: { name: string }) {
 }
 ```
 
-- [ ] **Step 2: `SourcesPage.tsx` 改 import 并删重复**
+- [x] **Step 2: `SourcesPage.tsx` 改 import 并删重复**
 
 `SourcesPage.tsx` 的 import 区改为：
 
@@ -515,7 +520,7 @@ import {CAP_LABELS, Section, SourceConfigEditor, Toggle} from "./sourceConfigFor
 
 随之删除 `const qc = useQueryClient();`（现 `:183`）与 `useQueryClient` import（现 `:2`）。
 
-- [ ] **Step 3: `SettingsPage.tsx` 改 import 并复用编辑器**
+- [x] **Step 3: `SettingsPage.tsx` 改 import 并复用编辑器**
 
 `SettingsPage.tsx` import 区改为（删除 `:15-142` 的本地原子/常量定义）：
 
@@ -589,7 +594,7 @@ function SourceSection() {
 
 > `useSaveSourceConfig` 仍在 `SettingsPage.tsx` 使用（`enabled` 开关），故 import 保留；`useSourceConfig` 同理（`cfg.enabled`）。`FormatsSection`（现 `:245-287`）继续用共享的 `Row`/`Select`/`Num`/`Toggle`/`Section`，无需改动（仅改由 import 提供）。
 
-- [ ] **Step 4: 修复 `useSaveSourceConfig` 双向失效**
+- [x] **Step 4: 修复 `useSaveSourceConfig` 双向失效**
 
 `frontend/src/hooks/index.ts` 的 `useSaveSourceConfig` 改为：
 
@@ -608,22 +613,22 @@ export function useSaveSourceConfig(source: string) {
 }
 ```
 
-- [ ] **Step 5: 类型检查**
+- [x] **Step 5: 类型检查**
 
 Run: `cd frontend; npx tsc --noEmit --project tsconfig.app.json`
 Expected: **0 错**（若报 `Layers`/`Settings` 未使用或缺失 import，按报错调整 import 列表——`SourcesPage` 仍需要 `Layers`（`Section` icon 与列表用），`SettingsPage` 仍需要 `Settings`/`Layers`）
 
-- [ ] **Step 6: 构建**
+- [x] **Step 6: 构建**
 
 Run: `cd frontend; npm run build`
 Expected: `EXIT 0`
 
-- [ ] **Step 7: 人工核对重复已消除**
+- [x] **Step 7: 人工核对重复已消除**
 
 Run: `git diff --stat -- frontend/src/features/settings/SettingsPage.tsx frontend/src/features/sources/SourcesPage.tsx`
 Expected: 两文件各减约 110 行；`ENGINE_FIELDS` 全仓只剩 `sourceConfigForm.tsx` 一处定义（`grep -rn "ENGINE_FIELDS" frontend/src` 只应命中共享文件 + 消费方 import）
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add frontend/src/features/sources/sourceConfigForm.tsx frontend/src/features/sources/SourcesPage.tsx frontend/src/features/settings/SettingsPage.tsx frontend/src/hooks/index.ts
@@ -647,7 +652,7 @@ git add frontend/src/features/sources/sourceConfigForm.tsx frontend/src/features
   - `cli.main._apply_export_options(options) -> dict`（返回 `format_configs`，便于调用方复用）
 - Consumes: `cli.config.build_options(source_name, mode)`、`novelbase.create_engine`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `tests/test_cli_engine_modes.py`：
 
@@ -703,12 +708,12 @@ def test_get_engine_defaults_to_first_capability_mode(monkeypatch):
 
 > 若 `cli/core.py` 当前没有模块级 `capabilities` 名字（它在函数体内 `from novelbase.source import capabilities` 局部导入），则把 `test_get_engine_defaults_to_first_capability_mode` 写成 monkeypatch `cli.core.capabilities` **并**在实现里把局部导入提为模块级导入（Step 3 说明）。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `python -m pytest tests/test_cli_engine_modes.py -q`
 Expected: FAIL —— `TypeError: _make_engines() got an unexpected keyword argument 'options_hook'`
 
-- [ ] **Step 3: 实现 `cli/core.py`**
+- [x] **Step 3: 实现 `cli/core.py`**
 
 `cli/core.py` 的 `_make_engines` / `_get_engine`（`:56-82`）改为：
 
@@ -752,7 +757,7 @@ def _get_engine(source_name: str, mode: str | None = None, options_hook=None):
 from novelbase.source import capabilities
 ```
 
-- [ ] **Step 4: 实现 `cli/main.py`**
+- [x] **Step 4: 实现 `cli/main.py`**
 
 `cli/main.py` 的 `_get_engine`（`:99-126`）拆为两个函数：
 
@@ -840,28 +845,28 @@ def cmd_info(args):
                 pass
 ```
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `python -m pytest tests/test_cli_engine_modes.py tests/test_interactive_cli.py tests/test_cli_storage.py -q`
 Expected: 全绿
 
-- [ ] **Step 6: CLI 冒烟（真实配置路径）**
+- [x] **Step 6: CLI 冒烟（真实配置路径）**
 
 Run: `python cli.py sources list`
 Expected: 正常输出书源列表（不抛异常）
 
-- [ ] **Step 7: 重命名测试文件**
+- [x] **Step 7: 重命名测试文件**
 
 ```powershell
 git mv tests/test_cli_variant.py tests/test_cli_config.py
 ```
 
-- [ ] **Step 8: 全量回归**
+- [x] **Step 8: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: `0 failed`
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```powershell
 git add cli/core.py cli/main.py tests/test_cli_engine_modes.py tests/test_cli_config.py
@@ -881,7 +886,7 @@ git add cli/core.py cli/main.py tests/test_cli_engine_modes.py tests/test_cli_co
 - Produces: `shared.config.mode_defaults(mode: str) -> dict`（该 mode 的出厂默认字段；api 段由 `APIOptions` dataclass 默认派生）
 - Consumes: `shared.config.ENGINE_DEFAULTS`、`novelbase.core.options.APIOptions`
 
-- [ ] **Step 1: 重命名测试文件并补失败断言**
+- [x] **Step 1: 重命名测试文件并补失败断言**
 
 ```powershell
 git mv tests/test_cli_dev_new_variant.py tests/test_cli_dev_new_source.py
@@ -936,12 +941,12 @@ def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, 
 
 > 字段白名单已由 `novelbase/sources/manifest.py:16-22` 的 `MODE_FIELDS` 锁定，且它与三个 Options dataclass 字段一一对应——因此 `mode_defaults()` 产出的 `common` 必然通过 `load_manifest()` 校验（`test_new_source_manifest_valid` 保持绿）。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `python -m pytest tests/test_cli_dev_new_source.py -q`
 Expected: 新增 2 例 FAIL（`KeyError: 'timeout'` / `'key'`）
 
-- [ ] **Step 3: 实现 `mode_defaults`**
+- [x] **Step 3: 实现 `mode_defaults`**
 
 `shared/config.py` 在 `ENGINE_DEFAULTS` 定义之后新增：
 
@@ -986,7 +991,7 @@ def mode_defaults(mode: str) -> dict:
     return {k: _normalize_blank(k, v) for k, v in defaults.items()}
 ```
 
-- [ ] **Step 4: 实现脚手架改动**
+- [x] **Step 4: 实现脚手架改动**
 
 `cli/main.py` 的 `_scaffold_source`（`:382-387`）改为：
 
@@ -1004,18 +1009,18 @@ def mode_defaults(mode: str) -> dict:
 > `mode_defaults` 已把 dataclass 的 `None` 默认规范化为真实 `source.json` 使用的空值（`""`/`{}`/`[]`），`delay` 的 tuple 经 `json.dumps` 写成 `[3.0, 5.0]`——产物与现有 10 个书源 `source.json` 逐字同构（用户裁决：以 spec §4.3(b)「与真实书源一致」为准，而非保留 `null`）。
 > 字段白名单由 `novelbase/sources/manifest.py:16-22` 的 `MODE_FIELDS` 锁定，且与三个 Options dataclass 字段一一对应，故 `load_manifest()` 校验必然通过。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `python -m pytest tests/test_cli_dev_new_source.py tests/test_source_manifest.py tests/test_site_config.py -q`
 Expected: 全绿
 
-- [ ] **Step 6: 全量回归 + 硬约束检查**
+- [x] **Step 6: 全量回归 + 硬约束检查**
 
 Run: `python -m pytest tests -q`
 Run: `git diff --stat -- novelbase/sources novelbase/core novelbase/models novelbase/utils`
 Expected: `0 failed`；diff 为**空**
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
@@ -1035,7 +1040,7 @@ git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
 - Modify: `CHANGELOG.md`（`## Unreleased` 追加）
 - 无测试（文档任务）；验证 = `Select-String` 断言残留词为 0 + `git status` 干净
 
-- [ ] **Step 1: 修 `docs/source-plugin.md`**
+- [x] **Step 1: 修 `docs/source-plugin.md`**
 
 - 文件首行加标题与状态标注（若已有标题则在标题下方补一行）：
 
@@ -1047,18 +1052,18 @@ git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
 - `:70` 的 `browser 模式引擎（DrissionPage Chromium 实例）` → `browser 模式引擎（Playwright Chromium 实例）`
 - `:107` 的 `不含 DrissionPage/浏览器` → `不含 Playwright/浏览器`
 
-- [ ] **Step 2: 修 `docs/project/overview.md`**
+- [x] **Step 2: 修 `docs/project/overview.md`**
 
 - `:23` 的 `> **docs/ 在外层容器**（\`D:\Linux\novel-downloader\docs\`），被 .gitignore 忽略，不入版本库。` → `> **docs/ 随核心仓库入库**（\`novel-downloader/docs/\`）。外层容器 \`D:\Linux\novel-downloader\docs\` 仅存一份指向本目录的指针。`
 - `:64` 的 `storage/            novels.db（SQLite，每本小说一个独立 .db 文件）` → `storage/novels/       SQLite，每本小说一个独立 <id>.db 文件（id = sha256(url)[:32]）`
 
-- [ ] **Step 3: 修 `docs/README.md:3`**
+- [x] **Step 3: 修 `docs/README.md:3`**
 
 `外层容器 \`D:\Linux\novel-downloader\docs\`(非 git 仓库,被 .gitignore 忽略,不入版本库)。核心仓库在 \`D:\Linux\novel-downloader\novel-downloader\`。` →
 
 `本文档目录随核心仓库入库（\`novel-downloader/docs/\`）。外层容器 \`D:\Linux\novel-downloader\docs\` 仅存一份指向本目录的指针。核心仓库根：\`D:\Linux\novel-downloader\novel-downloader\`。`
 
-- [ ] **Step 4: 追平 `docs/project/updates.md`**
+- [x] **Step 4: 追平 `docs/project/updates.md`**
 
 文件末尾追加：
 
@@ -1081,7 +1086,7 @@ git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
 - 设计：`docs/superpowers/specs/2026-09-25-source-flattening-followup-design.md`、`docs/superpowers/specs/2026-09-25-flattening-closeout-design.md`
 ```
 
-- [ ] **Step 5: 更新 `docs/session-prompt.md` 的「仍待收口」段（`:56`）**
+- [x] **Step 5: 更新 `docs/session-prompt.md` 的「仍待收口」段（`:56`）**
 
 该段「**仍待收口**：① … ② … ③ … ④ …」改为：
 
@@ -1089,7 +1094,7 @@ git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
 - **中间态收口状态**（2026-09-25 扁平化 followup + 收尾完成）：core 层遗留中间态**已全部收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**；`source.json` 的 `enabled` **已有消费者**（`shared.config.enabled_source_names()`）；前端 mode/variant 两级选择器**已删除**（搜索改「已启用书源并发」，URL 解析改「手选书源」，书源管理页 `/sources`）。收尾阶段补齐：① 未知 `source_name` 在 **HTTP 边界统一 404**（`backend/services/source_guard.py` 唯一校验点，覆盖 `download` 与 `config/sources` 全部入口）；② 书源配置表单抽为 `frontend/src/features/sources/sourceConfigForm.tsx` 共享实现（`SettingsPage` / `SourcesPage` 复用），`useSaveSourceConfig` 同时失效 `["source-config", src]` 与 `["sources"]`；③ CLI `cmd_info` / `cmd_download` 引擎按 mode 懒建（不再共用单引擎）；④ `dev new-source` 脚手架 `source.json.common` 与出厂默认同源（`shared.config.mode_defaults()`）。**仍缺**（后续增强，非缺陷）：前端 URL **自动**匹配书源（core 无 `platform_from_url`，`source` 由用户手选）；重复 `source_name` 无实现层检测；`novel.extra["platform"]` 键名保留（值为 `source_name`，数据兼容）
 ```
 
-- [ ] **Step 6: 追加 `CHANGELOG.md` 的 `## Unreleased` 段**
+- [x] **Step 6: 追加 `CHANGELOG.md` 的 `## Unreleased` 段**
 
 在 `## Unreleased（书源扁平化收口）` 段的「### 变更」列表末尾追加一条编号项：
 
@@ -1097,7 +1102,7 @@ git add shared/config.py cli/main.py tests/test_cli_dev_new_source.py
 8. **收尾补齐** — 未知 `source_name` 统一 404（`backend/services/source_guard.py`）；书源配置表单抽为前端共享组件并修复 `enabled` 开关跨页失效；CLI `info` / `download` 引擎按 mode 懒建；`dev new-source` 脚手架 `source.json.common` 与出厂默认同源；docs 归一（外层容器 `docs/` 仅存指针）
 ```
 
-- [ ] **Step 7: 验证残留清零**
+- [x] **Step 7: 验证残留清零**
 
 Run（在仓库根）：
 ```powershell
@@ -1111,7 +1116,7 @@ Select-String -Path docs\README.md,docs\project\overview.md -Pattern '不入版�
 ```
 Expected: 无输出
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```powershell
 git add docs/source-plugin.md docs/project/overview.md docs/README.md docs/project/updates.md docs/session-prompt.md CHANGELOG.md
@@ -1130,7 +1135,7 @@ git add docs/source-plugin.md docs/project/overview.md docs/README.md docs/proje
 - Produces: 核心 `docs/` 含上述 8 个文件（`git status` 可见 8 个 new file）
 - 顺序约束：**本任务必须先于 Task 7 完成并提交**
 
-- [ ] **Step 1: 复制 8 个文件（外层 → 核心）**
+- [x] **Step 1: 复制 8 个文件（外层 → 核心）**
 
 ```powershell
 $outer = 'D:\Linux\novel-downloader\docs'
@@ -1153,7 +1158,7 @@ foreach ($f in $files) {
 }
 ```
 
-- [ ] **Step 2: 逐文件校验内容一致（8/8 相同 hash）**
+- [x] **Step 2: 逐文件校验内容一致（8/8 相同 hash）**
 
 ```powershell
 foreach ($f in $files) {
@@ -1164,7 +1169,7 @@ foreach ($f in $files) {
 ```
 Expected: 8 行 `OK`，无 `MISMATCH`
 
-- [ ] **Step 3: 提交（显式列 8 个文件，禁止 `git add -A`）**
+- [x] **Step 3: 提交（显式列 8 个文件，禁止 `git add -A`）**
 
 ```powershell
 cd D:\Linux\novel-downloader\novel-downloader
@@ -1179,7 +1184,7 @@ git add docs/superpowers/plans/2026-08-22-browser-auto-reconnect.md `
 # docs: 迁入外层容器独有的 8 个设计与计划留档
 ```
 
-- [ ] **Step 4: 确认入库**
+- [x] **Step 4: 确认入库**
 
 Run: `git log -1 --stat`
 Expected: 8 个文件全部为 `create mode`
@@ -1197,7 +1202,7 @@ Expected: 8 个文件全部为 `create mode`
 - Consumes: Task 6 已提交的 8 个文件（确保核心 `docs/` 是超集）
 - Produces: 外层 `docs/` 只剩 `README.md` 指针
 
-- [ ] **Step 1: 前置校验 —— 外层文件数 ⊂ 核心文件数（除下列 7 个已知过期同名文件）**
+- [x] **Step 1: 前置校验 —— 外层文件数 ⊂ 核心文件数（除下列 7 个已知过期同名文件）**
 
 ```powershell
 $outer = 'D:\Linux\novel-downloader\docs'
@@ -1209,7 +1214,7 @@ if ($missing) { "未迁移: "; $missing } else { "OK: 外层全部文件已在�
 ```
 Expected: `OK: 外层全部文件已在核心 docs/ 中`（`project\*.md`、`session-prompt.md` 等 7 个同名文件用核心版；若此处报 `未迁移`，**停止**并回到 Task 6 迁移缺失文件）
 
-- [ ] **Step 2: 重写外层 `README.md` 为指针**
+- [x] **Step 2: 重写外层 `README.md` 为指针**
 
 ```markdown
 # 本目录已废弃 —— 文档事实来源在核心仓库
@@ -1231,7 +1236,7 @@ Expected: `OK: 外层全部文件已在核心 docs/ 中`（`project\*.md`、`ses
 **不要再在此目录新增文档。**
 ```
 
-- [ ] **Step 3: 删除外层其余文件与空目录**
+- [x] **Step 3: 删除外层其余文件与空目录**
 
 ```powershell
 $outer = 'D:\Linux\novel-downloader\docs'
@@ -1241,7 +1246,7 @@ Get-ChildItem $outer -Recurse | Select-Object -ExpandProperty FullName
 ```
 Expected: 只输出 `D:\Linux\novel-downloader\docs\README.md`
 
-- [ ] **Step 4: 改 `session-init` skill 的读取路径**
+- [x] **Step 4: 改 `session-init` skill 的读取路径**
 
 修改 `D:\Linux\novel-downloader\.reasonix\skills\session-init\SKILL.md`：
 
@@ -1249,7 +1254,7 @@ Expected: 只输出 `D:\Linux\novel-downloader\docs\README.md`
   `按以下顺序读取**核心仓库** \`novel-downloader/docs/\` 目录下的文档（2026-08-02 已按主题分类编排；外层容器 \`docs/\` 仅存指针，不再读取）：`
 - 「### 注意事项」再加一条：`- 文档事实来源是核心仓库 \`novel-downloader/docs/\`，外层容器 \`docs/\` 只有指针文件`
 
-- [ ] **Step 5: 验证会话入口可读**
+- [x] **Step 5: 验证会话入口可读**
 
 Run:
 ```powershell
@@ -1257,7 +1262,7 @@ Get-Content 'D:\Linux\novel-downloader\novel-downloader\docs\session-prompt.md' 
 ```
 Expected: 正常输出（核心仓库 `session-prompt.md` 可读，且含 2026-09-25 的约定）
 
-- [ ] **Step 6: 最终全量验收**
+- [x] **Step 6: 最终全量验收**
 
 ```powershell
 cd D:\Linux\novel-downloader\novel-downloader
@@ -1278,7 +1283,7 @@ npm run build
 ```
 Expected: tsc 0 错；`npm run build` EXIT 0
 
-- [ ] **Step 7: 确认未推送（遵守决策 D4）**
+- [x] **Step 7: 确认未推送（遵守决策 D4）**
 
 Run: `git log --oneline origin/dev..dev | Measure-Object -Line`
 Expected: 计数 ≥ 54（原有 53 + 本计划新增提交）；**不执行** `git push`
@@ -1319,3 +1324,21 @@ Expected: 计数 ≥ 54（原有 53 + 本计划新增提交）；**不执行** `
 - **T1 与既有测试（已核实，非隐患）**：`test_backend_download_routes.py` 只有 5 个用例，其中唯一走单源分支的是 `test_search_single_source_binds_engine`，用的是**真实书源名** `"92xs-requests-default"`（`list_sources()` 能命中），其余用例走空 `source` 或 patch `enabled_source_names`/`get_cached_engine`，均不经过 `require_known_source` → Task 1 后既有用例保持绿。兜底修法已写在该任务 Step 6 的注里。
 - **T2 的 tsc 增量**：删除本地球 `MODE_META` 后，`SourcesPage` 若仍引用 `Monitor`/`Globe`/`Zap` 会 `noUnusedLocals` 报错 → 按 Step 5 的提示调整 import。
 - **T4 与 `test_site_config.py`**：`mode_defaults` 不改 `ENGINE_DEFAULTS`，故三层合并用例不受影响；若 Step 5 出现 `test_merged_source_config_*` 失败，说明误改了 `ENGINE_DEFAULTS`，须回退。
+
+---
+
+## 完成记录（2026-09-25）
+
+| Task | 产出提交 |
+|---|---|
+| T1 后端未知书源统一 404 | `b9e2124` |
+| T2 前端共享书源配置组件 + `enabled` 双向失效 | `cdeb592` |
+| T3 CLI 引擎按 mode 解析 | `79f16c3`、`cdc7047` |
+| T4 脚手架 `source.json` 与出厂默认同源 | `f9fda06`、`1e7a1a2` |
+| T5 文档残留修正与追平 | `b6ca8a5`、`c8283f8`、`f830a91`、`3dbeb33`、`f770fe0` |
+| T6 外层 8 个独有文档迁入核心 `docs/` | `27226b6` |
+| T7 外层 `docs/` 指针化 + 会话入口改指 + 最终验收 | `d6cb69a`（外层 `README.md` 指针为非 git 文件） |
+| 补做（计划外）：`build/` 误伤 `docs/build/`，4 个构建文档首次入库 | `2c93bef` |
+
+> T5 与 T7 的部分收尾由子 Agent 三轮只读复核后补全（详见 `docs/project/updates.md` 与各提交消息）。
+> 外层容器旧 `docs/` 副本（39 文件）已并入核心仓库并删除，仅留 `README.md` 指针。
