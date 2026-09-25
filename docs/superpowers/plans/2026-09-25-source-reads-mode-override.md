@@ -1406,7 +1406,7 @@ export type EngineField = {
 
 - [ ] **Step 2: 新增 `JsonField`**
 
-`frontend/src/features/sources/sourceConfigForm.tsx`：确保顶部有 `import { useEffect, useState } from "react";`（已 import 则跳过），并在 `TextField` 之后加：
+`frontend/src/features/sources/sourceConfigForm.tsx`：确保顶部有 `import { useEffect, useState } from "react";`（已有）与 `import {cn} from "@/lib/utils";`（该文件**原本没有** `cn` 导入，`JsonField` 用到，需新增），并在 `TextField` 之后加：
 
 ```tsx
 /** JSON 对象字段（如 headers）：文本域编辑，失焦时解析；非法则提示且不写回。 */
