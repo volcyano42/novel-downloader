@@ -17,7 +17,13 @@ from fastapi import HTTPException
 
 from backend.routers import download as dl
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest
+from backend.services import source_guard
 from novelbase.models.novel import Chapters, Novel, SearchResult
+
+
+def _allow_sources(monkeypatch, *names):
+    """把边界校验（require_known_source）的已知书源收窄为给定的虚拟名。"""
+    monkeypatch.setattr(source_guard, "list_sources", lambda: list(names))
 
 
 def _patch_engine_factory(monkeypatch):
@@ -226,6 +232,7 @@ def test_get_source_config_shape(monkeypatch):
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
+    _allow_sources(monkeypatch, "demo-requests-default")
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
     assert set(out.keys()) == {"source_name", "enabled", "capabilities", "config"}
     assert out["source_name"] == "demo-requests-default"
@@ -250,6 +257,7 @@ def test_save_source_config_writes_user_layer_only(monkeypatch, tmp_path):
     import yaml
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    _allow_sources(monkeypatch, "demo-requests-default")
     asyncio.run(cfg.save_source_config(
         "demo-requests-default",
         {"enabled": False, "config": {"search": {"timeout": 99}}},
@@ -266,6 +274,7 @@ def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
     """再次 PUT 时保留用户层既有字段（deep_merge 而非整体覆盖）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    _allow_sources(monkeypatch, "demo-requests-default")
     asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"timeout": 99}}}))
     asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"retry_times": 7}}}))
     merged = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")

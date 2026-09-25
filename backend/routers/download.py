@@ -12,6 +12,7 @@ from backend.routers.storage import _cover_to_response as encode_cover
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine
+from backend.services.source_guard import require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources, capabilities
@@ -24,7 +25,7 @@ def _require_source(source: str | None, url: str) -> str:
     """URL 无法自动推断书源（core 已删 platform_from_url）——需用户显式指定 source。"""
     if not source:
         raise HTTPException(400, f"无法自动识别书源 URL，请显式指定 source（书源名）: {url}")
-    return source
+    return require_known_source(source)
 
 
 def _engines_for(source_name: str):
@@ -58,8 +59,9 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
 
     # 关键字搜索：source 空 → 并发全部启用书源（每源各绑定自己的引擎）；否则单书源。
     if source:
+        source_name = require_known_source(source)
         try:
-            results = await search([source], query, _engines_for(source), page=page)
+            results = await search([source_name], query, _engines_for(source_name), page=page)
         except FeatureNotSupportedError as e:
             # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
             raise HTTPException(400, str(e))

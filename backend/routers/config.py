@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 import shared.config as config_service
 from novelbase.source import capabilities
+from backend.services.source_guard import require_known_source
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
@@ -88,6 +89,7 @@ async def get_source_config(source_name: str):
     形状：`{source_name, enabled, capabilities: {cap: mode}, config: {cap: {…完整合并字段…}}}`。
     `config[cap]` 含 mode（恒取书源声明），`enabled` 走用户层顶层 `enabled` → 出厂值。
     """
+    require_known_source(source_name)
     return {
         "source_name": source_name,
         "enabled": config_service.is_source_enabled(source_name),
@@ -102,6 +104,7 @@ async def save_source_config(source_name: str, body: dict):
 
     不把三层合并后的全量写回（否则用户层被灌满出厂/系统默认值）。
     """
+    require_known_source(source_name)
     path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
     existing = config_service.load_yaml(path)
     if isinstance(body.get("enabled"), bool):
