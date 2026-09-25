@@ -106,3 +106,56 @@ def test_cli_update_reads_source_from_user_data(monkeypatch, isolated_user_db):
 
     asyncio.run(cli_core.do_update({}, max_workers=1))
     assert seen.get("source") == "fanqie-api-rain"
+
+
+def test_task_manager_run_download_writes_novel_source(monkeypatch, isolated_user_db):
+    """task_manager._run_download 的写入点（spy 断言 set_novel_source 落库）。
+
+    为让流程走到写入点（`if novel_url:` 内的 save_meta 之后），需替掉引擎缓存、
+    书源能力查询、resolve_meta 与 storage 工厂；随后让章节列表为空以尽快收尾。
+
+    说明：`_run_download` 内 `capabilities` 是函数内 `from novelbase.source import
+    capabilities`，故 patch 目标是 `novelbase.source.capabilities`（task_manager
+    模块并无该属性）。spy 既记录调用、又转发真实写入，从而同时断言「调用发生」与
+    「落库生效」。
+    """
+    import threading
+
+    import novelbase
+    import novelbase.core.storage as nb_storage
+    import novelbase.source as nb_source
+    from backend.services import task_manager
+
+    novel = Novel(title="t", url="https://x/n1", id="n1", serial=1,
+                  author="a", description="d")
+    calls = []
+    real_set = user_data.set_novel_source
+
+    async def fake_resolve_meta(url, source_name, engines, **kw):
+        return novel
+
+    class FakeStore:
+        def save_meta(self, n):
+            return None
+
+    monkeypatch.setattr(novelbase, "resolve_meta", fake_resolve_meta)
+    monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
+    monkeypatch.setattr(nb_source, "capabilities",
+                        lambda s: {"novel_info": "requests"})
+    monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
+
+    def spy_set(nid, src):
+        calls.append((nid, src))
+        real_set(nid, src)
+
+    monkeypatch.setattr(task_manager, "set_novel_source", spy_set)
+
+    task = {"task_id": "t1", "novel_id": "n1", "title": "t",
+            "novel_url": "https://x/n1", "total": 0, "progress": 0,
+            "status": "downloading", "error": None, "errors": [],
+            "current_title": "", "chapters": [],
+            "_cancel": threading.Event(), "_pause": threading.Event()}
+    asyncio.run(task_manager._run_download(task, "fanqie-api-rain"))
+
+    assert ("n1", "fanqie-api-rain") in calls
+    assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"
