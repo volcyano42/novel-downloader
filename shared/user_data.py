@@ -5,6 +5,7 @@
 """
 import logging
 import sqlite3
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Optional
 
@@ -60,6 +61,12 @@ _SCHEMA_SQL = """
         note            TEXT,
         created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
         UNIQUE(platform, novel_id, chapter_index)
+    );
+
+    CREATE TABLE IF NOT EXISTS novel_sources (
+        novel_id     TEXT PRIMARY KEY,
+        source_name  TEXT NOT NULL,
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
     );
 """
 
@@ -281,3 +288,52 @@ def get_bookmarks(novel_id: str = None, platform: str = None) -> list[dict]:
             "SELECT * FROM bookmarks ORDER BY created_at DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════ Novel Sources ═══════════════════════════════
+
+def set_novel_source(novel_id: str, source_name: str) -> None:
+    """记录某本书的来源（UPSERT）。空 source_name 跳过，不建孤儿行。"""
+    if not source_name:
+        return
+    conn = _connection()
+    conn.execute(
+        """INSERT INTO novel_sources(novel_id, source_name, updated_at)
+           VALUES (?, ?, datetime('now','localtime'))
+           ON CONFLICT(novel_id)
+           DO UPDATE SET source_name = excluded.source_name,
+                         updated_at  = datetime('now','localtime')""",
+        (novel_id, source_name),
+    )
+    conn.commit()
+
+
+def get_novel_source(novel_id: str) -> Optional[str]:
+    """返回该书来源；无记录返回 None。"""
+    conn = _connection()
+    row = conn.execute(
+        "SELECT source_name FROM novel_sources WHERE novel_id = ?", (novel_id,)
+    ).fetchone()
+    return row["source_name"] if row else None
+
+
+def get_novel_sources(novel_ids: Sequence[str]) -> dict[str, str]:
+    """批量查询（供列表 join 用）。只返回命中的 id；空输入返回 {}。"""
+    ids = list(novel_ids)
+    if not ids:
+        return {}
+    conn = _connection()
+    marks = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"SELECT novel_id, source_name FROM novel_sources WHERE novel_id IN ({marks})",
+        ids,
+    ).fetchall()
+    return {r["novel_id"]: r["source_name"] for r in rows}
+
+
+def delete_novel_source(novel_id: str) -> bool:
+    """删书时清理。返回 True 表示确实删除了。"""
+    conn = _connection()
+    cur = conn.execute("DELETE FROM novel_sources WHERE novel_id = ?", (novel_id,))
+    conn.commit()
+    return cur.rowcount > 0

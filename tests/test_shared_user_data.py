@@ -92,3 +92,50 @@ def test_search_history_old_schema_dropped_rebuilt(tmp_path, monkeypatch):
     rows = user_data.get_search_history()
     assert len(rows) == 1
     assert rows[0]["source_name"] == "fanqie-api-rain"
+
+
+def test_novel_source_set_get_upsert(tmp_path, monkeypatch):
+    """set 写入、get 读回、同 id 再 set 为 UPSERT 覆盖。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    assert user_data.get_novel_source("n1") is None
+    user_data.set_novel_source("n1", "fanqie-api-rain")
+    assert user_data.get_novel_source("n1") == "fanqie-api-rain"
+
+    user_data.set_novel_source("n1", "qimao-api-rain")   # UPSERT 覆盖
+    assert user_data.get_novel_source("n1") == "qimao-api-rain"
+
+
+def test_novel_source_skips_empty(tmp_path, monkeypatch):
+    """空 source_name 不写行，避免无来源的孤儿记录。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    user_data.set_novel_source("n1", "")
+    assert user_data.get_novel_source("n1") is None
+
+
+def test_novel_sources_batch_only_hits(tmp_path, monkeypatch):
+    """批量查询只返回命中的 id。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    user_data.set_novel_source("n1", "fanqie-api-rain")
+    user_data.set_novel_source("n2", "qimao-api-rain")
+    assert user_data.get_novel_sources(["n1", "n2", "n3"]) == {
+        "n1": "fanqie-api-rain",
+        "n2": "qimao-api-rain",
+    }
+    assert user_data.get_novel_sources([]) == {}
+
+
+def test_novel_source_delete(tmp_path, monkeypatch):
+    """删书清理：删掉返回 True，重复删返回 False。"""
+    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
+    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+
+    user_data.set_novel_source("n1", "fanqie-api-rain")
+    assert user_data.delete_novel_source("n1") is True
+    assert user_data.delete_novel_source("n1") is False
+    assert user_data.get_novel_source("n1") is None
