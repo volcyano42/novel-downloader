@@ -239,6 +239,7 @@ export default function BookshelfPage() {
                 <DownloadTask key={task.task_id} title={task.title}
                   status={status} progress={pct} errorMessage={task.error ?? undefined}
                   currentTitle={task.current_title} chapters={task.chapters}
+                  sourceName={task.source_name} createdAt={task.created_at}
                   onPause={() => pauseTask(task.task_id)}
                   onResume={() => resumeTask(task.task_id)}
                   onCancel={() => deleteTask(task.task_id)}

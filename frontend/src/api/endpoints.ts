@@ -41,6 +41,8 @@ export interface TaskInfo {
   current_title: string;
   chapters: ChapterStatus[];
   eta?: number;
+  source_name?: string;
+  created_at?: number;
 }
 
 export interface EngineOptions {

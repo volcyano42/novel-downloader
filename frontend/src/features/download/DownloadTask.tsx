@@ -9,6 +9,7 @@ type TaskStatus = "downloading" | "paused" | "completed" | "failed" | "partial" 
 interface DownloadTaskProps {
   title: string; status: TaskStatus; progress?: number; errorMessage?: string; currentTitle?: string;
   chapters?: ChapterStatus[];
+  sourceName?: string; createdAt?: number;
   onPause?: () => void; onResume?: () => void; onCancel?: () => void; onRetry?: () => void; className?: string;
 }
 
@@ -74,7 +75,7 @@ export function DownloadTaskSkeleton() {
   );
 }
 
-export function DownloadTask({ title, status, progress = 0, errorMessage, currentTitle, chapters = [], onPause, onResume, onCancel, onRetry, className }: DownloadTaskProps) {
+export function DownloadTask({ title, status, progress = 0, errorMessage, currentTitle, chapters = [], sourceName, createdAt, onPause, onResume, onCancel, onRetry, className }: DownloadTaskProps) {
   const cfg = statusConfig[status]; const Icon = cfg.icon;
   const showProgress = status === "downloading" || status === "paused";
   const [expanded, setExpanded] = useState(false);
@@ -108,6 +109,11 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
           {currentTitle && status === "downloading" && (
             <span className="truncate block text-[11px] text-slate-400 mt-0.5">{currentTitle}</span>
           )}
+          {(sourceName || createdAt) ? (
+            <span className="truncate block text-[11px] text-slate-400 mt-0.5">
+              {[sourceName, createdAt ? new Date(createdAt * 1000).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : null].filter(Boolean).join(" · ")}
+            </span>
+          ) : null}
           {showProgress && (
             <div className="mt-1.5 flex items-center gap-2">
               <div className="flex-1 max-w-[120px]"><div className="relative h-1.5 overflow-hidden rounded-lg bg-slate-200">
