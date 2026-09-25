@@ -221,7 +221,7 @@ export function useSaveSourceConfig(source: string) {
     mutationFn: (data: { enabled?: boolean; config?: Record<string, Record<string, unknown>> }) =>
       saveSourceConfig(source, data),
     onSuccess: () => {
-      // 两侧都要失效：设置页读 ["source-config", src]，书源管理页读 ["sources"]
+      // 两侧都要失效：设置页读 ["source-config", src]，设置页折叠条（SourceAccordion）读 ["sources"]
       qc.invalidateQueries({ queryKey: ["source-config", source] });
       qc.invalidateQueries({ queryKey: ["sources"] });
     },

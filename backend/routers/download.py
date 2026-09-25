@@ -1,7 +1,7 @@
 """Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。
 
 契约（spec §3.1）：`source` Query 即 `source_name`；`/search` 的 `source` 为空时并发
-全部启用书源（`shared.config.enabled_source_names()`）；MODE 由书源自声明，用户不再传。
+全部启用书源（`shared.config.enabled_source_names()`）；MODE 默认由书源在 `source.json` 声明，用户可逐能力覆盖（`shared.config.effective_capabilities()`），由路由以关键字 `mode_overrides=` 透传给 core 分发层。
 """
 
 import asyncio

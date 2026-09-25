@@ -1,6 +1,6 @@
 /** 书源配置表单的共享实现：UI 原子 + 能力字段元数据 + 逐能力段编辑器。
  *
- * 唯一来源——`SourcesPage`（书源管理页）与 `SettingsPage`（设置页书源段）都从这里 import，
+ * 唯一来源——`SourceAccordion`（设置页折叠条）与 `SettingsPage`（设置页书源段）都从这里 import，
  * 避免两份逐字重复的实现漂移。
  */
 import {useEffect, useState} from "react";

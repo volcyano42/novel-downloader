@@ -1,7 +1,7 @@
 /** 书源配置表单的字段元数据（非组件常量，与 sourceConfigForm.tsx 分离，
  * 避免 `react(only-export-components)` Fast-Refresh 警告）。
  *
- * 唯一来源——`sourceConfigForm.tsx`（编辑器实现）与 `SourcesPage.tsx`（能力标签）都从这里取。
+ * 唯一来源——`sourceConfigForm.tsx`（编辑器实现）/ `SourceAccordion.tsx`（折叠条）/ `SettingsPage.tsx` 都从这里取。
  */
 import type {LucideIcon} from "lucide-react";
 import {Globe, Monitor, Zap} from "lucide-react";
