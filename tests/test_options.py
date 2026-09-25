@@ -1,8 +1,6 @@
 """配置层测试：Options / APIOptions / RequestsOptions / BrowserOptions / ExportOptions"""
 from __future__ import annotations
 
-import pytest
-
 from novelbase.core.options import (
     Options, APIOptions, RequestsOptions, BrowserOptions,
     ExportOptions,

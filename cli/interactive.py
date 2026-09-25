@@ -9,7 +9,7 @@ from cli.config import (
     load_main_config, load_format_configs,
     build_options, get_novel_group, load_groups,
 )
-from cli.ui import _select, _text_input, _create_progress, _advance_progress
+from cli.ui import _select, _text_input
 from shared.config import enabled_source_names
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, search,

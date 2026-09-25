@@ -1,8 +1,6 @@
 """模型层测试：Illustration / Chapter / Chapters / Novel / SearchResult"""
 from __future__ import annotations
 
-import pytest
-
 from novelbase.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
 
 # ═══════════════════════════════════════════════════════════════

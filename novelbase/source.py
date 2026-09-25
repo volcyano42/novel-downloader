@@ -21,8 +21,6 @@ import os
 from importlib import import_module, util as importlib_util
 from inspect import signature
 from pathlib import Path
-from typing import Callable
-
 from .sources.contracts import CAPABILITY_META
 from .sources.manifest import ManifestError, check_capability_files, load_manifest
 

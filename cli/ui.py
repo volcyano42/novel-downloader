@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import sys
-import unicodedata
 from typing import Any
 
 from novelbase.utils.logger import get_logger

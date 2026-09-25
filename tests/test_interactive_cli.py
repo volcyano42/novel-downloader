@@ -2,8 +2,6 @@
 """交互式 CLI（cli/ui.py、cli/notify.py、cli/interactive.py、cli/menus.py）测试。"""
 from __future__ import annotations
 
-import pytest
-
 
 # ═══════════════════════════════════════════════════════════════
 # cli.ui 交互辅助层

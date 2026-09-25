@@ -5,11 +5,9 @@ import gc
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from novelbase.core.storage import SQLiteStorage
 from novelbase.core.options import StorageOptions
-from novelbase.models.novel import Novel, Chapter, Chapters
+from novelbase.models.novel import Novel, Chapter
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────
