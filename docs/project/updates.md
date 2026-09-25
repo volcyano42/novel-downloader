@@ -414,5 +414,6 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **未下载的书也能先换源**：后端**不校验**小说是否已入库（来源独立于 storage，「先换源、再下载」合法）；换源成功后前端用本地 `sourceOverride` **立即**反映新书源（远端/未下载书无 `localMeta` 可刷新）
 - **删除 `DownloadDialog`**：改造后无使用处，文件删除
 - **API**：新增 `PUT /api/v2/storage/novel/{id}/source`（body `{source_name}`；未知书源 404，不校验已入库），落库到 `user_data.novel_sources`（UPSERT），前端失效 `["novel-meta", id]` / `["novels"]`
-- 测试：`python -m pytest tests -q` = **448 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint` 0 告警
+- **下载管理条目新增书源与下载时间**：`create_task` 记录 `created_at`，`list_tasks` 透出 `source_name`/`created_at`，下载任务项在书名下方显示「书源名 · 下载时间」小字
+- 测试：`python -m pytest tests -q` = **449 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint` 0 告警
 - 设计：`docs/superpowers/specs/2026-09-25-detail-source-switch-design.md`
