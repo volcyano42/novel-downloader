@@ -105,7 +105,7 @@ if attempt > 0:
 
 ## 3. `asyncio.gather()` —— 并发调度
 
-最代表性的例子：图片批量下载 `RequestsEngine.async_fetch_images`（`novelbase/core/engine.py:447`）：
+最代表性的例子：图片批量下载 `RequestsEngine.async_fetch_images`（`novelbase/core/engine.py:614`）：
 
 ```python
 async def async_fetch_images(self, urls: list[str], max_workers: int = 5) -> list[bytes]:
@@ -242,7 +242,7 @@ async def _wait_if_paused() -> bool:
 
 ## 7. `httpx.AsyncClient` —— 真异步 HTTP 核心
 
-`RequestsEngine` 的客户端管理（`novelbase/core/engine.py:397`）：
+`RequestsEngine` 的客户端管理（`novelbase/core/engine.py:550`）：
 
 ```python
 def _get_async_client(self) -> httpx.AsyncClient:

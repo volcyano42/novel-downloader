@@ -44,10 +44,11 @@ backend/              FastAPI 入口 (main.py) + 内嵌前端静态文件 serve
 
 frontend/             React SPA (Vite)
   src/features/     bookshelf/, detail/, download/, reader/, settings/, sources/
-  src/hooks/        useNovels, useChapters, useDownload, useConfig, useSources …
+  src/hooks/        useNovels, useChapters, useDownloadMutation, useGlobalConfig, useSources …
   src/api/          endpoints.ts（API 函数）, client.ts（fetch 封装）
   src/components/   Toast, ErrorBoundary, UI 组件库 (alert-dialog, button, dropdown-menu, select, sheet, tooltip)
   src/utils/        sessionCache, chapterCache
+  src/lib/          utils.ts
 
 cli/                  CLI 层（2026-08-02 起为 cli/ 包）
   main.py           ← 非交互 argparse 命令入口（cli.py 委托于此）

@@ -14,5 +14,6 @@
   ④ **pip 只接受 tag ≤ app `minSdk` 的 wheel**（Chaquopy 维护者原话），而 `lxml`/`PyYAML` 只有 `android_24` 的 cp311 wheel → **`minSdk` 必须 ≥ 24**；`android_21` 的包（yarl/multidict/numpy 等）在 24 下仍可安装；
   ⑤ `pydantic-core` 是 Rust 扩展、无 Android wheel → 必须 `pydantic<2`；相应地 `fastapi` 要 pin 到 `≤0.120`（`0.121+` 起要求 `pydantic>=2.9`）；
   ⑥ `Python.start()` 只接受 `Python.Platform`（旧写法 `Python.start(cls, "module")` 编译不过），且模块不会以 `__main__` 执行 → `Python.start(AndroidPlatform(this))` 后显式 `getModule("server").callAttr("_start")`；
-  ⑦ Kotlin 属性在**初始化表达式内不能自引用**：`healthPoll` 的 `run()` 里要写 `this`（不能写 `healthPoll`），并显式标注类型（`: Runnable`）避免类型推断自循环。
+  ⑦ `MainActivity` 里不存在的标签 `this@healthPoll` → 改为直接引用 `healthPoll` 字段；
+  ⑧ Kotlin 属性在**初始化表达式内不能自引用**：`healthPoll` 的 `run()` 里要写 `this`（不能写 `healthPoll`），并显式标注类型（`: Runnable`）避免类型推断自循环。
   首次成功：run `35975357459`（artifact `novel-crawler-apk-dev` ≈28.6 MB，**未签名**，真机未验证）
