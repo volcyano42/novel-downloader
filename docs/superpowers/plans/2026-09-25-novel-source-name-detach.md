@@ -477,9 +477,13 @@ def test_task_manager_run_download_writes_novel_source(monkeypatch, isolated_use
     monkeypatch.setattr(novelbase, "resolve_chapter", fake_resolve_chapter_list)
     monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
     monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
-    monkeypatch.setattr(task_manager, "capabilities", lambda s: {"novel_info": "requests"})
+    # capabilities 在 _run_download 内是**函数级** import（from novelbase.source import capabilities），
+    # 故 patch 目标是 novelbase.source.capabilities，而非 task_manager.capabilities
+    monkeypatch.setattr("novelbase.source.capabilities", lambda s: {"novel_info": "requests"})
+    # spy：记录调用 + 转发真实写入（同时验证「被正确调用」与「落库生效」）
+    real_set = task_manager.set_novel_source
     monkeypatch.setattr(task_manager, "set_novel_source",
-                        lambda nid, src: calls.append((nid, src)))
+                        lambda nid, src: (calls.append((nid, src)), real_set(nid, src))[0])
 
     task = {"task_id": "t1", "novel_id": "n1", "title": "t",
             "novel_url": "https://x/n1", "_cancel": __import__("threading").Event(),
@@ -487,6 +491,7 @@ def test_task_manager_run_download_writes_novel_source(monkeypatch, isolated_use
     asyncio.run(task_manager._run_download(task, "fanqie-api-rain"))
 
     assert ("n1", "fanqie-api-rain") in calls
+    assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
