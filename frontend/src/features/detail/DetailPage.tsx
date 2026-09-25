@@ -46,8 +46,10 @@ export default function DetailPage() {
   const downloadMut = useDownloadMutation();
 
   const novel = st?.meta ?? localMeta ?? null;
-  // 来源：本地书取 user_data 记录，远端书取进入详情页时手选的书源
-  const bookSource = localMeta?.source_name ?? st?.source;
+  // 换源成功后立即覆盖显示：远端/未下载的书没有 localMeta 可刷新，那一行否则不会变
+  const [sourceOverride, setSourceOverride] = useState<string | null>(null);
+  // 来源：本地书取 user_data 记录，远端书取进入详情页时手选的书源；换过源则用覆盖值
+  const bookSource = sourceOverride ?? localMeta?.source_name ?? st?.source;
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(isRemote);
@@ -212,7 +214,7 @@ export default function DetailPage() {
   };
 
   const [showSourcePicker, setShowSourcePicker] = useState(false);
-  const { mutate: submitSource } = useSetNovelSource(novelId!);
+  const { mutate: submitSource, isPending: submittingSource } = useSetNovelSource(novelId!);
 
   const runCheckUpdate = useCallback(async (src: string) => {
     setChecking(true);
@@ -281,7 +283,7 @@ export default function DetailPage() {
 
   const handlePickSource = useCallback((src: string) => {
     submitSource(src, {
-      onSuccess: () => { toast(`已换源：${src}`, "success"); setShowSourcePicker(false); },
+      onSuccess: () => { toast(`已换源：${src}`, "success"); setSourceOverride(src); setShowSourcePicker(false); },
       onError: (e) => toast((e as Error).message || "换源失败", "error"),
     });
   }, [submitSource, toast]);
@@ -454,6 +456,7 @@ export default function DetailPage() {
 
       <SourcePickerDialog open={showSourcePicker} onClose={() => setShowSourcePicker(false)}
         novelTitle={novel?.title ?? ""} sources={sourceNames} current={bookSource}
+        submitting={submittingSource}
         onPick={handlePickSource} />
     </div>
   );

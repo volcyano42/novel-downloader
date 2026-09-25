@@ -9,10 +9,12 @@ interface SourcePickerDialogProps {
   sources: string[];
   /** 当前书源（有效来源） */
   current?: string;
+  /** 换源请求进行中：禁用并改写确定按钮 */
+  submitting?: boolean;
   onPick: (source: string) => void;
 }
 
-export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], current, onPick }: SourcePickerDialogProps) {
+export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], current, submitting = false, onPick }: SourcePickerDialogProps) {
   const [selected, setSelected] = useState(current ?? sources[0] ?? "");
 
   // 打开时同步一次：保留仍在列表中的当前选择，否则回退到当前书源 / 第一项。
@@ -58,9 +60,9 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
             className="flex-1 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
             取消
           </button>
-          <button onClick={() => selected && onPick(selected)} disabled={!selected}
+          <button onClick={() => selected && onPick(selected)} disabled={submitting || !selected}
             className="flex-1 rounded-xl bg-indigo-500 text-white py-2.5 text-sm font-medium hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60">
-            确定
+            {submitting ? "保存中…" : "确定"}
           </button>
         </div>
       </div>
