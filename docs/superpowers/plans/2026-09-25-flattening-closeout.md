@@ -20,6 +20,7 @@
 - **提交写法（必须照做，避免中文被吞）**：提交消息一律经文件传入，例如
   `$msg = Join-Path $env:TEMP 'nd-msg.txt'; [IO.File]::WriteAllText($msg, 'fix: …', (New-Object Text.UTF8Encoding($false))); git commit -F $msg; Remove-Item $msg -Force`。
   **不要**用 `git commit -m "中文…"`。各任务的提交步骤只给出 `git add` 文件清单与该条提交的消息文本。
+- **前端任务无自动化测试**：spec §5 明确**不引入**前端测试框架；Task 2 的验收判据是 `npx tsc --noEmit --project tsconfig.app.json` **0 错** + `npm run build` **EXIT 0**（不做人工 UI 验证）。
 - **本机环境**：全局 `python`（3.10.11，已装 pytest 9.1.1 + 项目依赖）可直接跑测试；`frontend/node_modules` 已存在；**无 `.venv`**，不要试图激活虚拟环境。
 - 每个任务的验证命令都在仓库根 `D:\Linux\novel-downloader\novel-downloader` 下执行。
 
@@ -900,6 +901,10 @@ def test_new_source_common_includes_factory_defaults(monkeypatch, tmp_path):
     for key in ("timeout", "retry_times", "backoff_factor", "delay",
                 "headers", "cookies", "proxies"):
         assert key in common, key
+    # 空值须与真实书源字面同构（None → {}/""）
+    assert common["cookies"] == {}
+    assert common["proxies"] == {}
+    assert isinstance(common["headers"], dict) and common["headers"]
 
 
 def test_new_source_api_common_includes_key_and_params(monkeypatch, tmp_path):
@@ -912,6 +917,21 @@ def test_new_source_api_common_includes_key_and_params(monkeypatch, tmp_path):
     assert common["mode"] == "api"
     for key in ("timeout", "retry_times", "backoff_factor", "delay", "key", "params"):
         assert key in common, key
+    assert common["key"] == ""
+    assert common["params"] == {}
+
+
+def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, tmp_path):
+    """dataclass 的 None 默认须规范化为真实书源用的 ""/{}/[]（用户裁决：spec §4.3(b) 优先）。"""
+    root, _ = _setup(monkeypatch, tmp_path)
+    cli.main._scaffold_source("demo-browser-default", ["browser"])
+    common = json.loads(
+        (root / "demo_browser_default" / "source.json").read_text(encoding="utf-8")
+    )["common"]
+    assert common["user_data_dir"] == ""
+    assert common["viewport"] == {}
+    assert common["extra_args"] == []
+    assert common["browser_type"] == "chromium"
 ```
 
 > 字段白名单已由 `novelbase/sources/manifest.py:16-22` 的 `MODE_FIELDS` 锁定，且它与三个 Options dataclass 字段一一对应——因此 `mode_defaults()` 产出的 `common` 必然通过 `load_manifest()` 校验（`test_new_source_manifest_valid` 保持绿）。
@@ -926,6 +946,31 @@ Expected: 新增 2 例 FAIL（`KeyError: 'timeout'` / `'key'`）
 `shared/config.py` 在 `ENGINE_DEFAULTS` 定义之后新增：
 
 ```python
+# dataclass 默认用 None 表示「空」，而真实书源的 source.json 用 ""/{}/[]。
+# 脚手架产物必须与真实书源字面同构（spec §4.3(b)），故按字段给出对应空值。
+_BLANK_BY_FIELD: dict[str, object] = {
+    "user_data_dir": "",
+    "key": "",
+    "viewport": {},
+    "cookies": {},
+    "proxies": {},
+    "params": {},
+    "extra_args": [],
+}
+
+
+def _normalize_blank(key: str, value):
+    """dataclass 的 None 默认 → 真实 source.json 使用的空值（可变容器浅拷贝，避免共享）。"""
+    if value is not None:
+        return value
+    blank = _BLANK_BY_FIELD.get(key)
+    if isinstance(blank, dict):
+        return dict(blank)
+    if isinstance(blank, list):
+        return list(blank)
+    return blank
+
+
 def mode_defaults(mode: str) -> dict:
     """该 mode 的出厂默认字段（系统默认层），供脚手架生成 `source.json.common`。
 
@@ -935,8 +980,10 @@ def mode_defaults(mode: str) -> dict:
     """
     if mode == "api":
         from novelbase.core.options import APIOptions
-        return _dataclass_defaults(APIOptions)
-    return dict(ENGINE_DEFAULTS.get(mode, {}))
+        defaults: dict = _dataclass_defaults(APIOptions)
+    else:
+        defaults = dict(ENGINE_DEFAULTS.get(mode, {}))
+    return {k: _normalize_blank(k, v) for k, v in defaults.items()}
 ```
 
 - [ ] **Step 4: 实现脚手架改动**
@@ -954,7 +1001,8 @@ def mode_defaults(mode: str) -> dict:
     }
 ```
 
-> `mode_defaults` 返回的 `delay` 是 tuple（`(3.0, 5.0)`），`json.dumps` 会写成数组 `[3.0, 5.0]`，与真实书源一致；`user_data_dir=None` / `viewport=None` / `extra_args=None` 等 `None` 值会写成 `null`，与真实书源 `""`/`{}`/`[]` 不同——**保持 `null` 可接受**（`merged_source_config` 与引擎构建对 `None` 与空值等价处理），若 Step 5 的既有用例断言了具体字面值则按断言调整。
+> `mode_defaults` 已把 dataclass 的 `None` 默认规范化为真实 `source.json` 使用的空值（`""`/`{}`/`[]`），`delay` 的 tuple 经 `json.dumps` 写成 `[3.0, 5.0]`——产物与现有 10 个书源 `source.json` 逐字同构（用户裁决：以 spec §4.3(b)「与真实书源一致」为准，而非保留 `null`）。
+> 字段白名单由 `novelbase/sources/manifest.py:16-22` 的 `MODE_FIELDS` 锁定，且与三个 Options dataclass 字段一一对应，故 `load_manifest()` 校验必然通过。
 
 - [ ] **Step 5: 运行测试**
 
