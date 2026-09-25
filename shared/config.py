@@ -89,6 +89,17 @@ def _normalize_blank(key: str, value):
     return blank
 
 
+def _normalize_delay(value):
+    """真实书源的 delay 写成整数列表 `[3, 5]`；dataclass 默认是 `(3.0, 5.0)`。
+
+    仅作 JSON 字面归一（不影响三级合并路径——`merged_source_config` 直读
+    `ENGINE_DEFAULTS`，不经过本函数）。
+    """
+    if isinstance(value, (list, tuple)):
+        return [int(x) for x in value]
+    return value
+
+
 def mode_defaults(mode: str) -> dict:
     """该 mode 的出厂默认字段（系统默认层），供脚手架生成 `source.json.common`。
 
@@ -101,7 +112,10 @@ def mode_defaults(mode: str) -> dict:
         defaults: dict = _dataclass_defaults(APIOptions)
     else:
         defaults = dict(ENGINE_DEFAULTS.get(mode, {}))
-    return {k: _normalize_blank(k, v) for k, v in defaults.items()}
+    return {
+        k: (_normalize_delay(v) if k == "delay" else _normalize_blank(k, v))
+        for k, v in defaults.items()
+    }
 
 
 GLOBAL_DEFAULTS = {

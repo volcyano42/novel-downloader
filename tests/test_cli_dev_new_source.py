@@ -68,6 +68,10 @@ def test_new_source_common_includes_factory_defaults(monkeypatch, tmp_path):
     assert common["cookies"] == {}
     assert common["proxies"] == {}
     assert isinstance(common["headers"], dict) and common["headers"]
+    # delay 须与真实书源逐字同构（整数列表 [3, 5]，而非 [3.0, 5.0]）
+    assert common["delay"] == [3, 5], common["delay"]
+    # 类型也须为 int（JSON 字面 3 而非 3.0）；否则 [3.0, 5.0] == [3, 5] 也会通过
+    assert all(type(x) is int for x in common["delay"]), common["delay"]
 
 
 def test_new_source_api_common_includes_key_and_params(monkeypatch, tmp_path):
@@ -82,6 +86,9 @@ def test_new_source_api_common_includes_key_and_params(monkeypatch, tmp_path):
         assert key in common, key
     assert common["key"] == ""
     assert common["params"] == {}
+    assert common["delay"] == [3, 5], common["delay"]
+    # 类型也须为 int（JSON 字面 3 而非 3.0）；否则 [3.0, 5.0] == [3, 5] 也会通过
+    assert all(type(x) is int for x in common["delay"]), common["delay"]
 
 
 def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, tmp_path):
@@ -95,6 +102,9 @@ def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, 
     assert common["viewport"] == {}
     assert common["extra_args"] == []
     assert common["browser_type"] == "chromium"
+    assert common["delay"] == [3, 5], common["delay"]
+    # 类型也须为 int（JSON 字面 3 而非 3.0）；否则 [3.0, 5.0] == [3, 5] 也会通过
+    assert all(type(x) is int for x in common["delay"]), common["delay"]
 
 
 def test_new_source_api_disabled_by_default(monkeypatch, tmp_path):
