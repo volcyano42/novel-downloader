@@ -133,6 +133,7 @@ export function SourceConfigEditor({ name }: { name: string }) {
   const saveSource = useSaveSourceConfig(name);
 
   const caps = cfg?.capabilities ?? {};
+  const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
 
   const updateField = (cap: string, key: string, value: unknown) => {
@@ -171,15 +172,25 @@ export function SourceConfigEditor({ name }: { name: string }) {
 
   return (
     <div className="border-t border-slate-100 pt-2 pb-1 dark:border-slate-800/50">
+      <p className="pb-1 text-[11px] text-slate-400">
+        切换引擎模式可能不可用（不同模式的接口/参数互不通用）；不可用时点「恢复默认」回退。
+      </p>
       {Object.entries(caps).length === 0 && <p className="py-1 text-[11px] text-slate-400">该书源未声明能力</p>}
       {Object.entries(caps).map(([cap, mode]) => {
         const fields = ENGINE_FIELDS[mode] ?? [];
-        const meta = MODE_META[mode];
         return (
           <div key={cap} className="border-t border-slate-100 first:border-t-0 dark:border-slate-800/50">
-            <div className="flex items-center gap-2 py-1">
+            <div className="flex flex-wrap items-center gap-2 py-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
-              {meta && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">{meta.label}</span>}
+              <Select value={mode}
+                onChange={v => saveSource.mutate({ config: { [cap]: { mode: v } } })}
+                options={Object.entries(MODE_META).map(([m, meta]) => ({ value: m, label: meta.label }))} />
+              {declared[cap] && declared[cap] !== mode && (
+                <button onClick={() => saveSource.mutate({ config: { [cap]: { mode: null } } })}
+                  className="text-[10px] font-medium text-indigo-500 hover:underline">
+                  恢复默认（{declared[cap]}）
+                </button>
+              )}
             </div>
             {fields.length === 0
               ? <p className="py-1 text-[11px] text-slate-400">该能力无可配置项</p>

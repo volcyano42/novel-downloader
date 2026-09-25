@@ -77,10 +77,12 @@ export interface GlobalConfig {
 export interface SourceConfig {
   source_name: string;
   enabled: boolean;
-  /** 能力段 → mode（如 {search: "api"}） */
+  /** 能力段 → 有效 mode（如 {search: "api"}） */
   capabilities: Record<string, string>;
+  /** 能力段 → 书源声明的 mode（「恢复默认」用） */
+  declared_capabilities: Record<string, string>;
   /** 能力段 → 三层合并后的完整配置 */
-  config: Record<string, EngineOptions>;
+  config: Record<string, Record<string, unknown>>;
 }
 
 export type GroupsConfig = Record<string, Record<string, object>>;
@@ -273,7 +275,7 @@ export function getSourceConfig(source: string) {
 
 export function saveSourceConfig(
   source: string,
-  data: { enabled?: boolean; config?: Record<string, Partial<EngineOptions>> },
+  data: { enabled?: boolean; config?: Record<string, Record<string, unknown>> },
 ) {
   return apiPut<void>(`/config/sources/${source}`, data);
 }

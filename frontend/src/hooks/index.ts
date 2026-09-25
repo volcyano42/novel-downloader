@@ -1,7 +1,7 @@
 /** React Query hooks — 所有数据获取和变更操作 */
 
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import type {ChapterBrief, EngineOptions} from "@/api/endpoints";
+import type {ChapterBrief} from "@/api/endpoints";
 import {
   addFavorite,
   addSearchHistory,
@@ -218,7 +218,7 @@ export function useDeleteSearchHistory() {
 export function useSaveSourceConfig(source: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { enabled?: boolean; config?: Record<string, Partial<EngineOptions>> }) =>
+    mutationFn: (data: { enabled?: boolean; config?: Record<string, Record<string, unknown>> }) =>
       saveSourceConfig(source, data),
     onSuccess: () => {
       // 两侧都要失效：设置页读 ["source-config", src]，书源管理页读 ["sources"]
