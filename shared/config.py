@@ -199,16 +199,39 @@ def _user_site_cfg(source_name: str) -> dict:
     return load_yaml(CONFIG_DIR / "sites" / f"{source_name}.yaml")
 
 
+VALID_MODES = ("browser", "requests", "api")
+
+
+def effective_capabilities(source_name: str) -> dict[str, str]:
+    """有效 mode 映射：用户层 `sites/{source_name}.yaml` 的 `{cap}.mode` 覆盖 `source.json` 声明。
+
+    - 未覆盖 / 覆盖值非法（不在 VALID_MODES）→ 取书源声明
+    - 未知书源 → `{}`（与 `capabilities()` 的宽容语义一致）
+    """
+    from novelbase.source import capabilities
+    declared = capabilities(source_name)
+    if not declared:
+        return {}
+    user = _user_site_cfg(source_name)
+    out: dict[str, str] = {}
+    for cap, mode in declared.items():
+        section = user.get(cap) if isinstance(user.get(cap), dict) else {}
+        override = section.get("mode")
+        out[cap] = override if override in VALID_MODES else mode
+    return out
+
+
 def merged_source_config(source_name: str) -> dict[str, dict]:
     """三层合并某书源的逐能力配置。
 
     返回 `{capability: 该能力段三层合并后的完整字段}`；未知书源返回 `{}`。
     三层：ENGINE_DEFAULTS[mode]（系统默认）→ `source.json.default_config[cap]`（书源出厂，
     已含 `common` 合并）→ `sites/{source_name}.yaml[cap]`（用户层）。
-    用户层不决定 mode：合并前从用户层段剔除 `mode` 键，mode 恒取书源声明。
+    **mode 取有效值**（`effective_capabilities()`：用户层 `{cap}.mode` 覆盖声明），
+    且用户层的 `mode` 键**保留**在输出中（前端表单需回显）。
     """
-    from novelbase.source import capabilities, get_manifest
-    caps = capabilities(source_name)
+    from novelbase.source import get_manifest
+    caps = effective_capabilities(source_name)
     if not caps:
         return {}
     manifest = get_manifest(source_name)
@@ -216,8 +239,8 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
+        base["mode"] = mode
         user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
-        user_cap = {k: v for k, v in user_cap.items() if k != "mode"}  # mode 恒取书源声明
         out[cap] = deep_merge(base, user_cap)
     return out
 
@@ -269,14 +292,13 @@ def get_database_url():
 def build_options(source_name: str, mode: str) -> Options:
     """按书源名 + mode 组 Options，字段取自 `merged_source_config(source_name)` 的对应能力段。
 
-    能力段由 mode 反查（`capabilities(source_name)` 里 mode 匹配的能力段；一个书源的各
-    能力段通常同 mode）。未知书源 / 无匹配段时退回 `ENGINE_DEFAULTS[mode]`。
+    能力段由 mode 反查（`effective_capabilities(source_name)` 里 mode 匹配的能力段；一个
+    书源的各能力段通常同 mode）。未知书源 / 无匹配段时退回 `ENGINE_DEFAULTS[mode]`。
     """
     from novelbase.core.options import Options
-    from novelbase.source import capabilities
 
     merged = merged_source_config(source_name)
-    caps = capabilities(source_name)
+    caps = effective_capabilities(source_name)
     cfg: dict = {}
     for cap, cap_mode in caps.items():
         if cap_mode == mode:

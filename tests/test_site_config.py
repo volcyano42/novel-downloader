@@ -40,8 +40,8 @@ def test_merged_source_config_user_layer_overrides(monkeypatch, tmp_path):
     assert merged["search"]["retry_times"] == 3
 
 
-def test_merged_source_config_user_mode_is_ignored(monkeypatch, tmp_path):
-    """用户层不决定 mode；即使写了 mode 也忽略，mode 恒取书源声明。"""
+def test_merged_source_config_user_mode_overrides_declared(monkeypatch, tmp_path):
+    """用户层 `{cap}.mode` 覆盖书源声明（有效 mode）；mode 键保留在输出中。"""
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
@@ -49,5 +49,5 @@ def test_merged_source_config_user_mode_is_ignored(monkeypatch, tmp_path):
     })
     sc.save_site_config("demo-requests-default", {"search": {"mode": "browser", "timeout": 5}})
     merged = sc.merged_source_config("demo-requests-default")
-    assert merged["search"]["mode"] == "requests"
+    assert merged["search"]["mode"] == "browser"
     assert merged["search"]["timeout"] == 5
