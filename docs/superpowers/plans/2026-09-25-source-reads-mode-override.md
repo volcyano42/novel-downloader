@@ -833,7 +833,7 @@ def test_search_uses_override_mode(monkeypatch):
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_downloader_mode_overrides.py -q`
-Expected: `TypeError: resolve_chapter() got an unexpected keyword argument 'mode_overrides'`
+Expected: 2 failed, 1 passed（旧参数被 `**kwargs` 吞掉，`engines` 仍收到声明 mode，覆盖断言失败）
 
 - [ ] **Step 3: 实现**
 
@@ -906,7 +906,7 @@ Expected: 3 passed
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: 430 passed, 1 skipped, 0 failed
+Expected: 432 passed, 1 skipped, 0 failed
 
 - [ ] **Step 6: 提交**
 
