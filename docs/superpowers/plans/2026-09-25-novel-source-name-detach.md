@@ -35,7 +35,7 @@
 | `backend/services/task_manager.py` | 修改 | 下载完成后写来源 |
 | `cli/core.py` | 修改 | CLI 下载完成后写来源 |
 | `backend/routers/storage.py` | 修改 | 删书时清理来源 |
-| `tests/test_storage_delete_route.py` | 创建 | 断言删书端点清理了 `novel_sources` |
+| `tests/test_novel_source_writes.py` | 创建 | 断言删书端点清理了 `novel_sources`、CLI 下载写入了来源 |
 | `scripts/migrate_novel_sources.py` | 创建 | 幂等迁移存量来源 |
 | `tests/test_migrate_novel_sources.py` | 创建 | 迁移正确性 + 幂等 |
 
@@ -234,11 +234,16 @@ def test_novel_has_no_source_name_field():
 
 
 def test_novel_loads_tolerates_legacy_source_name():
-    """旧库 JSON 残留的 source_name 不会让 loads 抛错（只成游离属性）。"""
+    """旧库 JSON 残留的 source_name 不会让 loads 抛错。
+
+    它只经 `Novel.loads(**kwargs)` 的 setattr 落到**游离实例属性**上，
+    不属于 dataclass 字段，故不进入数据契约。
+    """
+    import dataclasses
     n = Novel.loads(title="t", url="https://x/y", id="abc", serial=1,
                     author="a", description="d", source_name="fanqie-api-rain")
     assert n.title == "t"
-    import dataclasses
+    assert n.source_name == "fanqie-api-rain"      # 游离属性存在（旧数据被兜住）
     assert "source_name" not in {f.name for f in dataclasses.fields(Novel)}
 ```
 
@@ -294,29 +299,38 @@ EOF
 - Modify: `backend/services/task_manager.py:63-69`
 - Modify: `cli/core.py:132-135`
 - Modify: `backend/routers/storage.py:132-137`
-- Test: `tests/test_storage_delete_route.py`
+- Test: `tests/test_novel_source_writes.py`
 
 **Interfaces:**
 - Consumes: `shared.user_data.set_novel_source(novel_id, source_name)` / `delete_novel_source(novel_id)`（Task 1）
 - Produces: 来源在下载完成时落库；删书时清理
 
-- [ ] **Step 1: 写失败测试（删书清理）**
+- [ ] **Step 1: 写失败测试（删书清理 + CLI 写入）**
 
-新建 `tests/test_storage_delete_route.py`：
+新建 `tests/test_novel_source_writes.py`：
 
 ```python
-"""删书端点应清理 novel_sources（避免孤儿行）。"""
+"""写入点覆盖：删书端点清理来源、CLI 下载流程写入来源。"""
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 
+from cli import core as cli_core
+from novelbase.models.novel import Chapter, Chapters, Novel
+from shared import user_data
 from backend.routers import storage as storage_router
 
 
-def test_delete_novel_cleans_novel_sources(monkeypatch, tmp_path):
-    from shared import user_data
+@pytest.fixture
+def isolated_user_db(tmp_path, monkeypatch):
     monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
     monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
-    user_data.set_novel_source("n1", "fanqie-api-rain")
+    return user_data
+
+
+def test_delete_novel_cleans_novel_sources(monkeypatch, isolated_user_db):
+    isolated_user_db.set_novel_source("n1", "fanqie-api-rain")
 
     class FakeStore:
         def load_meta(self, novel_id):
@@ -326,28 +340,60 @@ def test_delete_novel_cleans_novel_sources(monkeypatch, tmp_path):
             return None
 
     monkeypatch.setattr(storage_router, "_get_storage", lambda: FakeStore())
-
-    import asyncio
     asyncio.run(storage_router.delete_novel("n1"))
-    assert user_data.get_novel_source("n1") is None
+    assert isolated_user_db.get_novel_source("n1") is None
 
 
-def test_delete_unknown_novel_404(monkeypatch, tmp_path):
+def test_delete_unknown_novel_404(monkeypatch, isolated_user_db):
     class FakeStore:
         def load_meta(self, novel_id):
             return None
 
     monkeypatch.setattr(storage_router, "_get_storage", lambda: FakeStore())
-    import asyncio
     with pytest.raises(HTTPException) as ei:
         asyncio.run(storage_router.delete_novel("nope"))
     assert ei.value.status_code == 404
+
+
+def test_cli_download_writes_novel_source(monkeypatch, isolated_user_db):
+    """CLI 下载流程走到写入点即应落库。
+
+    让 storage.load_chapters 返回「章节已存在」，从而在写入点之后的
+    `if not to_download: return` 处提前返回 —— 无需进入真实下载循环。
+    """
+    novel = Novel(title="t", url="https://x/n1", id="n1", serial=1,
+                  author="a", description="d")
+    ch = Chapter(id="c1", url="https://x/n1/c1", novel_id="n1",
+                 title="第一章", order=1)
+
+    async def fake_resolve_meta(url, source_name, engines, **kw):
+        return novel
+
+    async def fake_resolve_chapter_list(url, source_name, engines, **kw):
+        return Chapters([ch])
+
+    class FakeStorage:
+        def save_meta(self, n):
+            return None
+
+        def load_chapters(self, novel_id):
+            return [ch]                      # 章节已在 → to_download 为空 → 提前返回
+
+    monkeypatch.setattr(cli_core, "resolve_meta", fake_resolve_meta)
+    monkeypatch.setattr(cli_core, "resolve_chapter_list", fake_resolve_chapter_list)
+    monkeypatch.setattr(cli_core, "_get_storage", lambda: FakeStorage())
+    monkeypatch.setattr(cli_core, "add_novel_to_group", lambda nid, grp: None)
+
+    asyncio.run(cli_core._do_download_inner(
+        "fanqie-api-rain", "https://x/n1", "default", {}))
+
+    assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/test_storage_delete_route.py -q`
-Expected: `test_delete_novel_cleans_novel_sources` FAIL（来源未被清理，`get_novel_source("n1")` 仍是 `"fanqie-api-rain"`）
+Run: `python -m pytest tests/test_novel_source_writes.py -q`
+Expected: `test_delete_novel_cleans_novel_sources` 与 `test_cli_download_writes_novel_source` FAIL（来源既未写入也未清理）；`test_delete_unknown_novel_404` 应已 PASS
 
 - [ ] **Step 3: 实现（三处接入）**
 
@@ -403,18 +449,18 @@ from shared.user_data import set_novel_source
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `python -m pytest tests/test_storage_delete_route.py -q`
-Expected: PASS（2 passed）
+Run: `python -m pytest tests/test_novel_source_writes.py -q`
+Expected: PASS（3 passed）
 
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `407 passed, 1 skipped`，0 failed
+Expected: `410 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
 ```bash
-git add backend/routers/storage.py backend/services/task_manager.py cli/core.py tests/test_storage_delete_route.py
+git add backend/routers/storage.py backend/services/task_manager.py cli/core.py tests/test_novel_source_writes.py
 git commit -F - <<'EOF'
 feat: 下载完成时写入来源、删书时清理
 
@@ -538,7 +584,7 @@ Expected: PASS
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `408 passed, 1 skipped`，0 failed
+Expected: `411 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
@@ -556,7 +602,7 @@ EOF
 
 ## 完成后验证
 
-- [ ] `python -m pytest tests -q` → **408 passed, 1 skipped**，0 failed
+- [ ] `python -m pytest tests -q` → **411 passed, 1 skipped**，0 failed
 - [ ] `grep -rn "source_name" novelbase/models/novel.py` → 无命中（模型已纯净）
 - [ ] `grep -rn "extra\[\"platform\"\]" novelbase/ backend/ cli/` → 无命中（冗余已清）
 - [ ] `git status --porcelain` → clean
