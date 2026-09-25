@@ -10,11 +10,14 @@ python -c "from novelbase import *; print('OK')"
 python cli.py sources list
 python cli.py novel list
 
-# 前端编译
+# 前端编译（按 tsconfig.app.json 单项目检查）
 cd frontend
 npx tsc --noEmit --project tsconfig.app.json
 
-# 运行测试（401 passed / 1 skipped，2026-09-25 实测）
+# 整仓类型检查：根 tsconfig.json 是 solution 风格，`tsc --noEmit` 会空转，须用 -b
+npx tsc -b
+
+# 运行测试（444 passed / 1 skipped，2026-09-25 实测）
 python -m pytest tests/ -v --tb=short
 ```
 
