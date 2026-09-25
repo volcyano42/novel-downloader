@@ -3,6 +3,9 @@
 > **状态**：设计草案，未实现。Phase 1 已完成硬编码兜底移除 + manifest 机制，Phase 2 将在适当时机实现。
 >
 > *（2026-09-25 注）API 名称已按书源扁平化后的 `novelbase/source.py` 对齐：入口是 `source.resolve(source_name, capability) -> (fn, mode)`，旧 `registry.resolve(name, mode, function)` / `register_source()` 已随扁平化删除。*
+>
+> **状态：未实现的设想方案**（当前仓库无插件进程实现；`resolve()` 只从内置/私有源目录加载）。
+> 文中 `browser` 模式引擎为 **Playwright**（2026-08-16 已替换 DrissionPage）。
 
 
 ## 目标
@@ -67,7 +70,7 @@
 
 ## 限制：browser 模式不可插件化
 
-**核心原因**：browser 模式引擎（DrissionPage Chromium 实例）在主进程缓存并持有浏览器进程句柄，无法序列化跨进程传递。
+**核心原因**：browser 模式引擎（Playwright Chromium 实例）在主进程缓存并持有浏览器进程句柄，无法序列化跨进程传递。
 
 | 模式 | 可插件化 | 说明 |
 |------|:--:|------|
@@ -104,7 +107,7 @@ app_data/plugins/
 ## 实现要点
 
 1. **proxy 函数**：`SourceProxy(source_name, capability)` 类，实现与内置源函数相同签名，内部用 `subprocess.Popen` + stdin/stdout JSON-RPC 通信。
-2. **插件编译**：每个书源编译时生成独立的 `plugin_main.py`（只含该源 + 轻量 HTTP 引擎，不含 DrissionPage/浏览器），Nuitka onefile 打包。
+2. **插件编译**：每个书源编译时生成独立的 `plugin_main.py`（只含该源 + 轻量 HTTP 引擎，不含 Playwright/浏览器），Nuitka onefile 打包。
 3. **engine_config 序列化**：只传 dict（headers/cookies/timeout），不传 Engine 对象。插件内部 `create_engine(engine_config)` 创建自己的引擎实例。
 4. **发现扩展**：扩展 `novelbase/source.py` 的 `list_sources()` / `resolve()`，扫描 `app_data/plugins/` 目录，将发现的插件源合并进返回结果（旧 `register_source()` 已随扁平化删除）。
 

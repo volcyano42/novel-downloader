@@ -61,7 +61,7 @@ shared/               config.py, user_data.py（跨端共享：配置加载 / �
 
 app_data/
   config/             config.yaml, sites/{source_name}.yaml, formats/*.yaml
-  storage/            novels.db（SQLite，每本小说一个独立 .db 文件）
+  storage/novels/       SQLite，每本小说一个独立 <id>.db 文件（id = sha256(url)[:32]）
   exports/            导出输出目录
 tests/                check_imports.py, test_downloader.py, test_export_config.py, test_models.py,
                       test_options.py, test_storage.py, test_android_server.py, conftest.py 等

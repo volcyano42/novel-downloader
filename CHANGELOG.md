@@ -16,6 +16,8 @@
 6. **Novel.id 改 `sha256(url)[:32]`** — 取代旧的 `hash(canonical url)`；库内 `meta.id` 存书源返回的 url 原样；不再做 url 规范化（92xs/qidian 平台特例随 core 站点知识一并删除）
 7. **`storage` 段成为死配置** — 实现恒取 `shared.config.get_database_url()`，`config.yaml` 的 `storage.backend` / `storage.database_url` 不再生效（模板保留仅为兼容旧文件）
 
+8. **收尾补齐** — 未知 `source_name` 统一 404（`backend/services/source_guard.py`）；书源配置表单抽为前端共享组件并修复 `enabled` 开关跨页失效；CLI `info` / `download` 引擎按 mode 懒建；`dev new-source` 脚手架 `source.json.common` 与出厂默认同源；docs 归一（外层容器 `docs/` 仅存指针）
+
 ### 不迁移
 
 - `sites/{platform}.yaml`（`fanqie.yaml` / `qidian.yaml` / `qimao.yaml` / `92xs.yaml`）与旧的 `search_history`（platform/mode/variant 维度）**不做迁移**，用户按新 `source_name` 重新配置、历史重新积累
