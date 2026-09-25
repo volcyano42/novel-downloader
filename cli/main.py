@@ -311,7 +311,6 @@ def cmd_novel(args):
 def cmd_source(args):
     """书源管理（mode 显示有效值：用户层覆盖优先）。"""
     from novelbase.source import list_sources
-    from shared.config import effective_capabilities
 
     if args.source_command != "list":
         return
