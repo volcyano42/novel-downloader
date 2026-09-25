@@ -27,6 +27,10 @@ class NovelMeta(BaseModel):
     source_name: str | None = None      # 来源（user_data.novel_sources；无记录为 None）
 
 
+class SetSourceRequest(BaseModel):
+    source_name: str
+
+
 class ImageData(BaseModel):
     raw_data: str | None = None
     alt: str | None = None

@@ -6,5 +6,6 @@ from backend.schemas.export import (
     TXTExportOptions, EPUBExportOptions, IMGExportOptions, ExportRequest, ExportTaskStatus,
 )
 from backend.schemas.storage import (
-    BackendSwitch, CoverData, NovelMeta, ImageData, ChapterData, ChapterBrief,
+    BackendSwitch, CoverData, NovelMeta, SetSourceRequest,
+    ImageData, ChapterData, ChapterBrief,
 )
