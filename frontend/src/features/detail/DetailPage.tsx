@@ -6,6 +6,7 @@ import {
     useDownloadMutation,
     useNovelMeta,
     useRemoteChapters,
+    useSetNovelSource,
     useSources
 } from "@/hooks/index";
 import {
@@ -16,7 +17,7 @@ import {
     type NovelMeta,
     streamChapters
 } from "@/api/endpoints";
-import {DownloadDialog} from "@/features/download/DownloadDialog";
+import {SourcePickerDialog} from "@/features/detail/SourcePickerDialog";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import {useToast} from "@/components/toast-context";
 import {getCachedChapters, setCachedChapters} from "@/utils/chapterCache";
@@ -210,7 +211,8 @@ export default function DetailPage() {
     }
   };
 
-  const [dialogVariant, setDialogVariant] = useState<"download" | "check" | null>(null);
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const { mutate: submitSource } = useSetNovelSource(novelId!);
 
   const runCheckUpdate = useCallback(async (src: string) => {
     setChecking(true);
@@ -267,24 +269,22 @@ export default function DetailPage() {
   }, [novelId, selectedIds, merged, novel?.title, novel?.url, toast, downloadMut]);
 
   const handleCheckUpdate = useCallback(() => {
-    setDialogVariant("check");
-  }, []);
+    if (!bookSource) { toast("请先点旁边「换源」选定书源", "error"); return; }
+    runCheckUpdate(bookSource);
+  }, [bookSource, runCheckUpdate, toast]);
 
   const handleDownloadClick = useCallback(() => {
-    setDialogVariant("download");
-  }, []);
+    if (!bookSource) { toast("请先点旁边「换源」选定书源", "error"); return; }
+    if (showCompare) runDownload(bookSource);
+    else runDownloadLocal(bookSource);
+  }, [bookSource, showCompare, runDownload, runDownloadLocal, toast]);
 
-  const handleDialogConfirm = useCallback((src: string) => {
-    const v = dialogVariant;
-    setDialogVariant(null);
-    if (v === "check") {
-      runCheckUpdate(src);
-    } else if (showCompare) {
-      runDownload(src);
-    } else {
-      runDownloadLocal(src);
-    }
-  }, [dialogVariant, runCheckUpdate, runDownload, runDownloadLocal, showCompare]);
+  const handlePickSource = useCallback((src: string) => {
+    submitSource(src, {
+      onSuccess: () => { toast(`已换源：${src}`, "success"); setShowSourcePicker(false); },
+      onError: (e) => toast((e as Error).message || "换源失败", "error"),
+    });
+  }, [submitSource, toast]);
 
   // meta 加载完成后发现是远程小说，开启 loading 等远程章节
   useEffect(() => {
@@ -314,9 +314,14 @@ export default function DetailPage() {
                 <ExternalLink className="h-4 w-4 opacity-0 group-hover/title:opacity-30 transition-opacity shrink-0" strokeWidth={1.5} />
               </a>
               <p className="text-sm text-slate-500">{novel.author}</p>
-              <p className="text-xs text-slate-400 font-mono">{novel.id}</p>
+              <div className="flex items-center gap-2 pt-0.5">
+                <p className="truncate text-xs text-slate-500">{bookSource || "未记录书源"}</p>
+                <button onClick={() => setShowSourcePicker(true)}
+                  className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-200">
+                  换源
+                </button>
+              </div>
               <p className="text-sm text-slate-500">{streamError ? "" : `${localChapters.length}/${novel.serial} 章`}{newCount > 0 && <span className="ml-1.5 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-500 breathing-badge">+{newCount}</span>} · {novel.count ? `${novel.count.toLocaleString()} 字` : "字数未知"}</p>
-              {bookSource && <p className="text-xs text-slate-400 pt-0.5">来源：{bookSource}</p>}
               {novel.extra?.rating != null && <p className="text-xs text-slate-500 pt-0.5">{novel.extra.rating} 分</p>}
               {novel.tags && novel.tags.length > 0 && <div className="flex flex-wrap gap-1 pt-1">{novel.tags.map(t => <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{t}</span>)}</div>}
             </div>
@@ -447,10 +452,9 @@ export default function DetailPage() {
       </button>
       )}
 
-      <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
-        dialogMode={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
-        sources={sourceNames} initialSource={bookSource}
-        onStart={handleDialogConfirm} />
+      <SourcePickerDialog open={showSourcePicker} onClose={() => setShowSourcePicker(false)}
+        novelTitle={novel?.title ?? ""} sources={sourceNames} current={bookSource}
+        onPick={handlePickSource} />
     </div>
   );
 }

@@ -106,6 +106,11 @@ export function deleteNovel(novelId: string) {
   return apiDelete(`/storage/novel/${novelId}`);
 }
 
+export function setNovelSource(novelId: string, sourceName: string) {
+  return apiPut<{ status: string; novel_id: string; source_name: string }>(
+    `/storage/novel/${novelId}/source`, { source_name: sourceName });
+}
+
 export function listChapters(
   novelId: string,
   params?: { order?: string; page?: number; size?: number },

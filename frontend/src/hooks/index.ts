@@ -32,6 +32,7 @@ import {
   saveGroups,
   saveSourceConfig,
   searchDownload,
+  setNovelSource,
   triggerExport,
 } from "@/api/endpoints";
 
@@ -153,6 +154,18 @@ export function useDeleteNovel() {
   return useMutation({
     mutationFn: deleteNovel,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["novels"] }),
+  });
+}
+
+export function useSetNovelSource(novelId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceName: string) => setNovelSource(novelId, sourceName),
+    onSuccess: () => {
+      // 详情页那一行读 ["novel-meta", id]，书架卡片读 ["novels"]
+      qc.invalidateQueries({ queryKey: ["novel-meta", novelId] });
+      qc.invalidateQueries({ queryKey: ["novels"] });
+    },
   });
 }
 
