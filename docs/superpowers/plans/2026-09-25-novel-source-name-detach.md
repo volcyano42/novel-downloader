@@ -29,6 +29,7 @@
 |---|---|---|
 | `shared/user_data.py` | 修改 | 新增 `novel_sources` 表 + 4 个 CRUD 函数（来源的唯一归属地） |
 | `tests/test_shared_user_data.py` | 修改 | 追加 `novel_sources` 的 CRUD 与边界用例 |
+| `template/storage/users/default/user_data.db` | 修改（重生成） | 用户库模板：与 `_SCHEMA_SQL` 结构级一致（改 schema 必须同步） |
 | `novelbase/models/novel.py` | 修改 | 删除 `Novel.source_name` 字段 |
 | `novelbase/core/downloader.py` | 修改 | 删除 `novel.extra["platform"] = source_name` |
 | `tests/test_models.py` | 修改 | 断言 `Novel` 不再有该字段 |
@@ -47,6 +48,7 @@
 
 **Files:**
 - Modify: `shared/user_data.py`（`_SCHEMA_SQL` 加表；文件末尾追加一组函数）
+- Modify: `template/storage/users/default/user_data.db`（重生成，见 Step 5）
 - Test: `tests/test_shared_user_data.py`
 
 **Interfaces:**
@@ -191,15 +193,35 @@ def delete_novel_source(novel_id: str) -> bool:
 Run: `python -m pytest tests/test_shared_user_data.py -q`
 Expected: PASS（原有 5 个 + 新增 4 个）
 
-- [ ] **Step 5: 全量回归**
+- [ ] **Step 5: 重生成用户库模板**
+
+`_SCHEMA_SQL` 变更会破坏 `tests/test_user_db_template.py::test_template_schema_matches_runtime`
+（它把 `_SCHEMA_SQL` 与已跟踪的二进制模板 `template/storage/users/default/user_data.db`
+做结构级比对）。必须同步重生成模板库：
+
+```python
+import sqlite3
+from shared.user_data import _SCHEMA_SQL
+conn = sqlite3.connect("template/storage/users/default/user_data.db")
+conn.executescript(_SCHEMA_SQL)
+conn.execute("PRAGMA user_version=0")
+conn.commit(); conn.close()
+```
+
+Run: `python -m pytest tests/test_user_db_template.py -q`
+Expected: PASS（模板对象 = `bookmarks, favorites, groups, idx_search_history_time, novel_sources, search_history`，`user_version=0`）
+
+> 先例：`2a51a16`（`search_history` 改键）同样是「源码 + 模板库 + 测试」一并提交。
+
+- [ ] **Step 6: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: `405 passed, 1 skipped`（基线 401 + 新增 4），0 failed
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
-git add shared/user_data.py tests/test_shared_user_data.py
+git add shared/user_data.py tests/test_shared_user_data.py template/storage/users/default/user_data.db
 git commit -F - <<'EOF'
 feat(user_data): 新增 novel_sources 表承载书源来源
 
