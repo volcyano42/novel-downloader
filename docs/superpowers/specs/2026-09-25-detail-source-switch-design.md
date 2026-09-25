@@ -28,6 +28,7 @@
 3. 换源**持久化**到 `user_data.novel_sources`；之后这本书一直用新书源
 4. 「检查更新 / 下载选中」**直接沿用**该书书源执行，**不再弹窗**
 5. 没有来源记录时**不弹窗**，提示用户先换源
+6. 未下载的书（刚搜到）也能**先换源、再下载**
 
 ## 非目标（YAGNI）
 
@@ -49,17 +50,18 @@ class SetSourceRequest(BaseModel):
 
 @router.put("/novel/{novel_id}/source")
 async def set_novel_source_route(novel_id: str, body: SetSourceRequest):
-    """换源：把该书的来源标记改写为给定书源（持久化到 user_data.novel_sources）。"""
-    store = _get_storage()
-    if not store.load_meta(novel_id):
-        raise HTTPException(404, "小说不存在")
+    """换源：把该书的来源标记改写为给定书源（持久化到 user_data.novel_sources）。
+
+    不校验小说是否已入库：来源记录独立于 storage，且「先换源、再下载」是合法场景
+    （未下载的书没有 meta，但 `novel_id = sha256(url)` 与下载后一致）。
+    """
     source_name = require_known_source(body.source_name)
     set_novel_source(novel_id, source_name)
     return {"status": "ok", "novel_id": novel_id, "source_name": source_name}
 ```
 
 - `require_known_source`（`backend/services/source_guard.py`）是未知书源的**唯一**校验点 → 未知书源 404
-- 小说不存在 → 404（与 `DELETE /novel/{novel_id}` 同语义）
+- **不校验小说是否已入库**（2026-09-25 用户裁决）：「先换源、再下载」是合法场景，未下载的书也能写入来源
 - `SetSourceRequest` 放进 `backend/schemas/storage.py`（与 `NovelMeta` 同处）并由 `backend/schemas/__init__.py` 导出
 
 ### 2. 前端：换源弹窗
@@ -143,11 +145,11 @@ export function setNovelSource(novelId: string, sourceName: string) {
 
 ## 错误处理
 
-- 未知书源（PUT body 里的 `source_name`）→ 404（`source_guard`）
-- 小说不存在 → 404
+- 未知书源（PUT body 里的 `source_name`）→ 404（`source_guard`，**本端点的唯一校验**）
+- **不校验小说是否已入库**：未下载的书换源会先留下来源行，下载时 `task_manager` 用同一 `novel_id` 落库，对账一致
 - `bookSource` 为空（老书未回填 / 未记录）→ 前端 toast 提示先换源，不发请求
 - 换源请求失败 → toast 展示错误，**不改动**页面上的当前显示（等待下一次成功响应）
-- 远端书（未下载）：`bookSource` 取 `location.state.source`；换源同样落库（`novel_id` 是 `sha256(url)`，下载后一致）
+- 远端书（未下载）：`bookSource` 取 `location.state.source`；换源同样落库（`novel_id` 是 `sha256(url)`，下载后一致）。换源成功后前端用本地 `sourceOverride` 立即反映新书源——远端书没有 `localMeta` 可刷新，否则界面不会更新
 
 ## 测试
 
@@ -155,7 +157,7 @@ export function setNovelSource(novelId: string, sourceName: string) {
   - 换源成功 → `get_novel_source(id)` 返回新值，响应含 `source_name`
   - UPSERT：连续两次换源取后者
   - 未知书源 → 404（`require_known_source` 收窄为已知源）
-  - 小说不存在 → 404
+  - **未入库的 novel_id 也能写入**（不校验存在性；替代原「小说不存在 404」用例）
 - 前端：`npx tsc -b` 0 错、`npm run lint` 无新增告警；手测清单见下
 - 全量：`python -m pytest tests -q` 基线 **444 passed, 1 skipped** → 目标 0 failed
 
@@ -175,6 +177,7 @@ export function setNovelSource(novelId: string, sourceName: string) {
 3. 选另一个书源 → 确定 → toast 成功、那一行与书架卡片都变
 4. 「检查更新」→ 不再弹窗、直接用该书书源；「下载选中」同理
 5. 老书（无来源）→ 点两个操作都只弹提示，不发请求
+6. 未下载的书（搜到即进详情页）→ 换源成功、那一行**立即**显示新书源（无需刷新）
 
 ## 文档
 
