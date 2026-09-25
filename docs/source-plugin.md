@@ -5,7 +5,7 @@
 > *（2026-09-25 注）API 名称已按书源扁平化后的 `novelbase/source.py` 对齐：入口是 `source.resolve(source_name, capability) -> (fn, mode)`，旧 `registry.resolve(name, mode, function)` / `register_source()` 已随扁平化删除。*
 >
 > **状态：未实现的设想方案**（当前仓库无插件进程实现；`resolve()` 只从内置/私有源目录加载）。
-> 文中 `browser` 模式引擎为 **Playwright**（2026-08-16 已替换 DrissionPage）。
+> 文中 `browser` 模式引擎为 **Playwright**（2026-08-16 起已替换旧的浏览器引擎实现）。
 
 
 ## 目标
