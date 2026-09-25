@@ -1208,8 +1208,10 @@ def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
     cli_main.cmd_source(argparse.Namespace(source_command="list", json=False))
 
     out = capsys.readouterr().out
-    assert "search:browser" in out          # 有效 mode
-    assert "search:requests" not in out     # 声明值不再直出
+    # 断言精确到被测源那一行：整段输出里其它 *-requests-default 源仍会直出 search:requests（正常）
+    line = next(l for l in out.splitlines() if KNOWN in l)
+    assert "search:browser" in line          # 该源的有效 mode
+    assert "search:requests" not in line     # 该源的声明值不再直出
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -1340,7 +1342,7 @@ from shared.config import effective_capabilities, enabled_source_names
                 return await search([name], args.query, engines, page=args.page,
                                     mode_overrides=effective_capabilities(name))
 
-# :232（cmd_download 的 meta 解析）
+# :232（cmd_info 的 meta 解析）
         novel = asyncio.run(resolve_meta(args.url, source_name, engines,
                                          mode_overrides=effective_capabilities(source_name)))
 ```
@@ -1355,7 +1357,7 @@ Expected: 全 PASS
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: 435 passed, 1 skipped, 0 failed
+Expected: 444 passed, 1 skipped, 0 failed
 
 - [ ] **Step 6: 提交**
 
