@@ -2,7 +2,8 @@ import {useEffect, useMemo, useState} from "react";
 import {ChevronDown, Layers} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {useSaveSourceConfig, useSources} from "@/hooks/index";
-import {CAP_LABELS, Section, SourceConfigEditor, Toggle} from "./sourceConfigForm";
+import {Section, SourceConfigEditor, Toggle} from "./sourceConfigForm";
+import {CAP_LABELS} from "./sourceConfigFields";
 
 /** 列表单行：书源名 + 能力摘要 + enabled 开关 + 编辑配置入口。 */
 function SourceRow({ name, info }: { name: string; info: { capabilities: Record<string, string>; enabled: boolean } }) {
