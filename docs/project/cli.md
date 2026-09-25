@@ -18,7 +18,8 @@
 ### 书源与模式
 
 - `--source/-s`：书源名 `source_name`（如 `fanqie-requests-default`）。
-- **mode 由书源自己在 `source.json` 里声明，用户不再选**——旧的 `--platform/-p`、
+- **mode 默认由书源在 `source.json` 里声明，用户可逐能力覆盖**（`sites/{source_name}.yaml` 的 `{cap}.mode`，
+  唯一入口 `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎并透传 `mode_overrides`）——旧的 `--platform/-p`、
   `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。
 - `search` 省略 `--source` 时**并发全部启用书源**（`shared.config.enabled_source_names()`）；
   单个源失败静默跳过，并在结果里标注来源 `source_name`。

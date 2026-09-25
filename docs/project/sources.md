@@ -3,7 +3,7 @@
 > **2026-09-25 扁平化重构后**：书源为**一层目录** + `source.json` + 4 个能力文件。
 > 旧的 `platform` / `SHOW_NAME` / `HOSTS` / `NAME`、四层目录（`{platform}/{mode}/{variant}/`）、
 > `variant` 概念、`register_source()` / `platform_from_url()` / `canonical_book_url()`
-> **全部移除**——mode 由书源自己在 `source.json` 里声明，`source_name` 是唯一的对外键。
+> **全部移除**——mode **默认**由书源在 `source.json` 里声明（用户可逐能力覆盖，见「mode 的用户覆盖」），`source_name` 是唯一的对外键。
 
 ## 书源结构
 
@@ -72,6 +72,18 @@ novelbase/sources/{dir}/
   - `browser`：`mode, timeout, retry_times, delay, backoff_factor, browser_type, headless, user_data_dir, viewport, extra_args, auto_reconnect`
   - `api`：`mode, timeout, retry_times, delay, backoff_factor, key, params`
 - 字段命名全链统一用 `retry_times`。
+
+### mode 的用户覆盖（2026-09-25）
+
+- 有效 mode = 用户层 `app_data/config/sites/{source_name}.yaml` 的 `{cap}.mode`（合法值 `browser`/`requests`/`api`）
+  优先于 `source.json` 声明；非法值忽略并回退声明
+- 唯一入口：`shared.config.effective_capabilities(source_name)`；`merged_source_config()` 按有效 mode 取
+  `ENGINE_DEFAULTS[mode]` 作基底并保留 `mode` 键（表单回显）
+- core 分发层 `novelbase/core/downloader.py` 的 4 个函数接受可选 `mode_overrides`（能力名 → mode），
+  由调用方（backend `task_manager` / 各路由、CLI）透传；`novelbase.source.capabilities()` 语义不变
+- API：`GET /api/v2/config/sources/{name}` 返回 `capabilities`（有效）与 `declared_capabilities`（声明）；
+  `PUT` 传 `config[cap].mode = null` 即删除覆盖
+- 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用
 
 ## 内置书源
 

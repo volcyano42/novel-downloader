@@ -395,3 +395,13 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - 搜索历史改 `(source_name, keyword)` 唯一键；`enabled` 用户层覆盖落地为 `sites/{source_name}.yaml` 顶层
 - 收尾：未知 `source_name` 统一 404、前端书源配置表单去重 + `enabled` 双向失效修复、CLI 引擎按 mode 解析、脚手架 `common` 与出厂默认同源、docs 位置归一
 - 设计：`docs/superpowers/specs/2026-09-25-source-flattening-followup-design.md`、`docs/superpowers/specs/2026-09-25-flattening-closeout-design.md`
+
+## 2026-09-25 变更（来源读点 + mode 用户覆盖 + 前端整合）
+
+- **来源读点**：`GET /storage/novel`（列表）与 `GET /storage/novel/{id}/meta` 返回 `source_name`（源 `user_data.novel_sources`）；书架卡片以来源替掉 novelId 小字行、详情页显示来源，详情页「检查更新 / 下载选中」默认用该书来源
+- **mode 用户覆盖**（约定反转）：书源 `source.json` 声明为**默认**，用户可在 `sites/{source_name}.yaml` **逐能力覆盖** `{cap}.mode`；唯一入口 `shared.config.effective_capabilities()`（非法值忽略回退声明、`null` 恢复声明）；core `novelbase/core/downloader.py` 四个分发函数新增可选 `mode_overrides`（能力名 → mode）由调用方（backend 路由/`task_manager`、CLI）关键字透传，`capabilities()` / `resolve()` 语义不变
+- **API**：`GET /api/v2/config/sources/{name}` 增返 `declared_capabilities`（`capabilities` 改为**有效 mode**）；`PUT` 传 `config[cap].mode = null` 即删除覆盖、恢复声明
+- **前端整合**：书源管理并入设置页（每源一个折叠条，展开可编辑能力字段 + mode 下拉 + 「恢复默认」），`/sources` 改为重定向 `/settings`、侧边栏去「书源」入口；`headers` 字段改 `json` 类型控件（不再显示 `[object Object]`，写回为 JSON 对象）
+- **CLI**：删书（`cmd_delete` / 交互式 `do_delete`）会清理 `novel_sources`
+- 测试：`python -m pytest tests -q` = **444 passed, 1 skipped**；前端 `npx tsc -b` = 0 错
+- 设计：`docs/superpowers/specs/2026-09-25-source-reads-mode-override-design.md`；计划：`docs/superpowers/plans/2026-09-25-source-reads-mode-override.md`

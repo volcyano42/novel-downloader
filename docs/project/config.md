@@ -18,8 +18,8 @@ storage:                    # ⚠️ 遗留死配置，见下
 
 - `download.max_workers`：下载并发数（后端 `/api/v2/config` 可写）。
 - `download.notify`：下载完成/未完成通知。
-- **全局 `mode` 已删除**（2026-09-25）：mode 由书源自己在 `source.json` 里声明，
-  用户不再选；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
+- **全局 `mode` 已删除**（2026-09-25）：mode **默认**由书源在 `source.json` 里声明，用户可**逐能力覆盖**
+  （`sites/{source_name}.yaml` 的 `{cap}.mode`，见下）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
 - ⚠️ **`storage` 段已不可配置（死配置）**：实现恒取 `shared.config.get_database_url()`
   （= `{APP_DATA}/storage/novels/`），backend 与 CLI 统一，与 `config.yaml` 内容无关。
   修改该段的 `backend` / `database_url` **不生效**；保留仅为兼容旧文件，新配置可省略。
@@ -37,7 +37,7 @@ storage:                    # ⚠️ 遗留死配置，见下
 ```yaml
 enabled: true              # 顶层：启用状态，覆盖 source.json 的出厂值
 search:                    # 逐能力段：search / novel_info / chapter_list / chapter_content
-  mode: requests           # 用户层的 mode 键被忽略——mode 恒取书源声明
+  mode: requests           # 逐能力覆盖：合法值 browser/requests/api；不写则继承声明；null = 恢复声明
   timeout: 30
   retry_times: 3
   delay: [3, 5]
@@ -50,9 +50,12 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
 
 - **顶层 `enabled`**：覆盖出厂启用状态（`shared.config.is_source_enabled`）。
   书源是否「启用」= 读 `sites/{source_name}.yaml` 顶层 `enabled`，无则回落到 `source.json.enabled`。
-- **逐能力段**：字段随该能力的 mode 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
-- 用户层**不决定 mode**：合并前会从用户层段剔除 `mode` 键，mode 恒取书源声明
-  （`shared.config.merged_source_config()`）。
+- **逐能力段**：字段随该能力的**有效 mode** 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
+- **用户层可逐能力覆盖 mode**：`{cap}.mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
+  写 `null`（或删除该键）= 恢复声明；非法值忽略回退声明。唯一入口 `shared.config.effective_capabilities()`；
+  `shared.config.merged_source_config()` 按有效 mode 取 `ENGINE_DEFAULTS[mode]` 作基底，输出的 `mode` 恒为有效值
+  （后端 `PUT /api/v2/config/sources/{name}` 传 `config[cap].mode = null` 即删除覆盖）。
+- 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用。
 - **旧 `sites/{platform}.yaml`（`fanqie.yaml` / `qidian.yaml` / `qimao.yaml` / `92xs.yaml`）不迁移**，
   用户需按新书源名重配。
 
