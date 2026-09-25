@@ -605,6 +605,24 @@ def test_build_options_follows_effective_mode(isolated_sites):
     opts = config_service.build_options(KNOWN, "browser")
 
     assert opts.mode == "browser"
+
+
+def test_merged_source_config_invalid_mode_falls_back_in_output(isolated_sites):
+    _write(isolated_sites, "search", "nonsense")
+
+    merged = config_service.merged_source_config(KNOWN)
+
+    assert merged["search"]["mode"] == "requests"      # 输出恒等于有效 mode
+    assert "headers" in merged["search"]               # 字段集同样按有效 mode 构建
+    assert "browser_type" not in merged["search"]
+
+
+def test_merged_source_config_null_mode_falls_back_in_output(isolated_sites):
+    (isolated_sites / f"{KNOWN}.yaml").write_text("search:\n  mode:\n", encoding="utf-8")
+
+    merged = config_service.merged_source_config(KNOWN)
+
+    assert merged["search"]["mode"] == "requests"
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -660,8 +678,10 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
-        base["mode"] = mode
+        base["mode"] = mode          # 不变量：输出的 mode 恒等于有效 mode
         user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
+        # 用户层 mode 键不参与覆盖（非法值 / YAML null 会污染有效 mode 与字段集一致性）
+        user_cap = {k: v for k, v in user_cap.items() if k != "mode"}
         out[cap] = deep_merge(base, user_cap)
     return out
 ```
@@ -693,12 +713,12 @@ def build_options(source_name: str, mode: str) -> Options:
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_config_effective_mode.py -q`
-Expected: 6 passed
+Expected: 8 passed（含 fix 轮补的非法值 / null 两条断言）
 
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: 427 passed, 1 skipped, 0 failed
+Expected: 429 passed, 1 skipped, 0 failed
 
 > 若此处出现与 `mode` 键相关的既有断言失败（例如某测试断言用户层 `mode` 被剔除），说明它在锁定旧约定——把该断言改为断言有效 mode（这是本 Task 的预期行为变更），在提交信息里写明。
 
