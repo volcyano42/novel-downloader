@@ -326,6 +326,8 @@ def do_delete() -> None:
         return
     if confirm == "yes":
         storage.delete_novel(novel.id)
+        from shared.user_data import delete_novel_source
+        delete_novel_source(novel.id)
         groups = load_groups()
         removed = False
         for g, ids in groups.items():

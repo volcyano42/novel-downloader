@@ -1,4 +1,5 @@
 """写入点覆盖：删书端点清理来源、CLI 下载流程写入来源。"""
+import argparse
 import asyncio
 
 import pytest
@@ -196,3 +197,56 @@ def test_task_manager_writes_novel_source_when_fetch_meta_fails(monkeypatch, iso
     asyncio.run(task_manager._run_download(task, "fanqie-api-rain"))
 
     assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"
+
+
+class _FakeStorage:
+    """最小 storage 替身：iter_metas 给一本书，delete_novel 记账。"""
+
+    def __init__(self):
+        self.deleted: list[str] = []
+
+    def iter_metas(self, include_images=False):
+        return iter([Novel(title="t", url="https://x/1", id="n1", serial=1,
+                           author="a", description="d")])
+
+    def load_meta(self, novel_id):
+        return next((n for n in self.iter_metas() if n.id == novel_id), None)
+
+    def delete_novel(self, novel_id):
+        self.deleted.append(novel_id)
+
+
+def test_cli_cmd_delete_cleans_novel_sources(monkeypatch, isolated_user_db):
+    """`novel-downloader delete <id>` 删书后要清掉 novel_sources 行。"""
+    from cli import main as cli_main
+    from cli import core as cli_core
+    from cli import config as cli_config
+
+    isolated_user_db.set_novel_source("n1", "fanqie-api-rain")
+    store = _FakeStorage()
+    monkeypatch.setattr(cli_core, "_get_storage", lambda: store)
+    monkeypatch.setattr(cli_config, "load_groups", lambda: {})
+    monkeypatch.setattr(cli_config, "save_groups", lambda groups: None)
+
+    cli_main.cmd_delete(argparse.Namespace(id="n1"))
+
+    assert store.deleted == ["n1"]
+    assert isolated_user_db.get_novel_source("n1") is None
+
+
+def test_cli_menu_delete_cleans_novel_sources(monkeypatch, isolated_user_db):
+    """交互式菜单删书（do_delete）同样要清掉 novel_sources 行。"""
+    from cli import menus
+
+    isolated_user_db.set_novel_source("n1", "fanqie-api-rain")
+    store = _FakeStorage()
+    answers = iter(["1", "yes"])          # 先选第 1 本，再 yes 确认
+    monkeypatch.setattr("cli.core._get_storage", lambda: store)
+    monkeypatch.setattr(menus, "load_groups", lambda: {})
+    monkeypatch.setattr("cli.config.save_groups", lambda groups: None)
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+
+    menus.do_delete()
+
+    assert store.deleted == ["n1"]
+    assert isolated_user_db.get_novel_source("n1") is None

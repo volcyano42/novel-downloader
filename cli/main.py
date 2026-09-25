@@ -263,6 +263,9 @@ def cmd_delete(args):
 
     storage.delete_novel(novel_id)
 
+    from shared.user_data import delete_novel_source
+    delete_novel_source(novel_id)
+
     groups = load_groups()
     removed = False
     for g, novels in groups.items():
