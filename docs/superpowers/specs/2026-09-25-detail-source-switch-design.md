@@ -136,7 +136,7 @@ export function setNovelSource(novelId: string, sourceName: string) {
 ```
 换源：详情页「换源」→ SourcePickerDialog（列出全部书源，标「当前」）
      → PUT /api/v2/storage/novel/{id}/source {source_name}
-     → require_known_source（未知源 404）+ load_meta（无书 404）
+     → require_known_source（未知源 404；**不校验是否已入库**）
      → user_data.set_novel_source（UPSERT）→ 失效 ["novel-meta", id] / ["novels"]
      → 详情页那一行与书架卡片都显示新书源
 
