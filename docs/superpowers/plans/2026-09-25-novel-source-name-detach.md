@@ -520,7 +520,7 @@ from shared.user_data import get_novel_source
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_novel_source_writes.py -q`
-Expected: PASS（3 passed）
+Expected: PASS（4 passed）
 
 - [ ] **Step 5: 全量回归**
 
@@ -530,7 +530,7 @@ Expected: `409 passed, 1 skipped`，0 failed
 - [ ] **Step 6: 提交**
 
 ```bash
-git add backend/routers/storage.py backend/services/task_manager.py cli/core.py tests/test_novel_source_writes.py
+git add backend/routers/storage.py backend/services/task_manager.py cli/core.py cli/interactive.py tests/test_novel_source_writes.py
 git commit -F - <<'EOF'
 feat: 下载完成时写入来源、删书时清理
 
