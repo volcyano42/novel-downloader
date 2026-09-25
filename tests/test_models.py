@@ -364,19 +364,27 @@ class TestSearchResult:
         assert r.description is None
 
 
-def test_novel_has_source_name_default_empty():
-    n = Novel(title="t", url="https://x/y", id="abc", serial=0, author="a", description="d")
-    assert n.source_name == ""
-
-
-def test_novel_loads_tolerates_missing_source_name():
-    """旧 JSON 没有 source_name 字段也能加载（setattr 兜底）。"""
-    n = Novel.loads(title="t", url="https://x/y", id="abc", serial=0,
-                    author="a", description="d")
-    assert n.source_name == ""
-
-
 def test_search_result_uses_source_name():
     r = SearchResult(title="t", author="a")
     assert r.source_name == ""
     assert not hasattr(r, "platform")
+
+
+def test_novel_has_no_source_name_field():
+    """Novel 只存纯小说数据：不再有 source_name 字段。"""
+    import dataclasses
+    assert "source_name" not in {f.name for f in dataclasses.fields(Novel)}
+
+
+def test_novel_loads_tolerates_legacy_source_name():
+    """旧库 JSON 残留的 source_name 不会让 loads 抛错。
+
+    它只经 `Novel.loads(**kwargs)` 的 setattr 落到**游离实例属性**上，
+    不属于 dataclass 字段，故不进入数据契约。
+    """
+    import dataclasses
+    n = Novel.loads(title="t", url="https://x/y", id="abc", serial=1,
+                    author="a", description="d", source_name="fanqie-api-rain")
+    assert n.title == "t"
+    assert n.source_name == "fanqie-api-rain"      # 游离属性存在（旧数据被兜住）
+    assert "source_name" not in {f.name for f in dataclasses.fields(Novel)}

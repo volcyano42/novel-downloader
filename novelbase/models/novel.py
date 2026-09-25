@@ -284,8 +284,6 @@ class Novel:
     cover: Illustration | None = None
     chapters: Chapters = field(default_factory=Chapters)
     extra: Box = field(default_factory=Box)
-    # 书源系统级 id（如 92xs-requests-default）；空 = 旧数据或来源未知
-    source_name: str = ""
     # serial 自动模式标记：serial==0 的书源（如 92xs）进入后持续跟随本地章节数
     _serial_auto: bool = field(default=False, init=False, repr=False, compare=False)
 

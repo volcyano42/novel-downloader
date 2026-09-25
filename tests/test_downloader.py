@@ -43,7 +43,8 @@ def test_resolve_meta_returns_novel_with_id(monkeypatch):
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
     result = asyncio.run(resolve_meta(novel.url, "fanqie-requests-default", _engines(_Engine())))
     assert result.id == make_novel_id(novel.url)
-    assert result.extra["platform"] == "fanqie-requests-default"
+    # 来源元数据不再写入 Novel：resolve_meta 不再打 extra["platform"] 标签（Task 2）
+    assert "platform" not in result.extra
 
 
 def test_resolve_meta_unknown_source(monkeypatch):

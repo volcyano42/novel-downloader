@@ -61,7 +61,6 @@ async def resolve_meta(url: str, source_name: str, engines, skip_delay: bool = F
     kwargs["skip_delay"] = skip_delay
     novel = await fn(url=url, engine=engines(mode), **kwargs)
     novel.id = make_novel_id(novel.url)
-    novel.extra["platform"] = source_name
     return novel
 
 
