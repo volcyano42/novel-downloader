@@ -1,62 +1,25 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
-import {Bell, ChevronDown, Gauge, Layers, Package} from "lucide-react";
-import {cn} from "@/lib/utils";
+import {useCallback, useMemo, useState} from "react";
+import {Bell, Gauge, Layers, Package} from "lucide-react";
 import {
     useFormatConfig,
     useSaveFormatConfig,
     useSaveGlobalConfig,
-    useSaveSourceConfig,
-    useSourceConfig,
     useSources
 } from "@/hooks/index";
 import {useToast} from "@/components/toast-context";
 import type {GlobalConfig} from "@/api/endpoints";
-import {Num, Range, Row, Section, Select, SourceConfigEditor, Toggle} from "@/features/sources/sourceConfigForm";
+import {Num, Range, Row, Section, Select, Toggle} from "@/features/sources/sourceConfigForm";
+import {SourceAccordion} from "@/features/sources/SourceAccordion";
 
-/** 按书源编辑配置：选书源 → 启用开关 → 展开逐能力段表单（表单体复用共享 SourceConfigEditor）。 */
+/** 书源：每源一个折叠条，展开即编辑（含逐能力 mode 下拉）。 */
 function SourceSection() {
   const { data: sources } = useSources();
-  const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
-  const [source, setSource] = useState("");
-  const [open, setOpen] = useState(true);
-
-  // 数据变化后保证有合法选中：无选择或已失效时回退到第一项
-  useEffect(() => {
-    if (!source && sourceNames.length > 0) setSource(sourceNames[0]);
-    else if (source && !sourceNames.includes(source)) setSource(sourceNames[0] ?? "");
-  }, [sourceNames, source]);
-
-  const { data: cfg } = useSourceConfig(source || undefined);
-  const saveSource = useSaveSourceConfig(source);
+  const names = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
 
   return (
-    <Section icon={Layers} title="书源配置">
-      <div className="flex flex-wrap gap-1.5 py-2.5">
-        {sourceNames.map(name => (
-          <button key={name} onClick={() => setSource(name)}
-            className={cn(
-              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-              source === name
-                ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400"
-                : "border-white/20 bg-white/50 text-slate-500 hover:border-slate-200 dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-400",
-            )}>
-            {name}
-          </button>
-        ))}
-        {sourceNames.length === 0 && <span className="py-2 text-xs text-slate-400">暂无书源</span>}
-      </div>
-      {cfg && source && (
-        <div>
-          <Row label="启用" desc="关闭后不参与并发搜索">
-            <Toggle checked={cfg.enabled} onChange={v => saveSource.mutate({ enabled: v })} />
-          </Row>
-          <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-300">
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} strokeWidth={1.5} />
-            {source} · 能力配置
-          </button>
-          {open && <SourceConfigEditor name={source} />}
-        </div>
-      )}
+    <Section icon={Layers} title="书源">
+      {names.map(name => <SourceAccordion key={name} name={name} info={sources![name]} />)}
+      {names.length === 0 && <div className="py-3 text-xs text-slate-400">暂无书源</div>}
     </Section>
   );
 }

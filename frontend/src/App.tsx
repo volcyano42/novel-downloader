@@ -1,27 +1,25 @@
 import {Link, Navigate, Route, Routes, useLocation} from "react-router-dom";
 import {useMemo, useState} from "react";
-import {BookOpen, Download, Layers, Library, PanelLeftClose, PanelLeftOpen, Search as SearchIcon, Settings} from "lucide-react";
+import {BookOpen, Download, Library, PanelLeftClose, PanelLeftOpen, Search as SearchIcon, Settings} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {ErrorBoundary} from "@/components/ErrorBoundary";
 import {ToastProvider} from "@/components/Toast";
 import BookshelfPage from "@/features/bookshelf/BookshelfPage";
 import DetailPage from "@/features/detail/DetailPage";
 import ReaderPage from "@/features/reader/ReaderPage";
-import SourcesPage from "@/features/sources/SourcesPage";
 
-type NavItem = "bookshelf" | "downloads" | "settings" | "search" | "sources";
+type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
 const DESKTOP_ITEMS: { id: NavItem; label: string; icon: typeof BookOpen }[] = [
   { id: "search", label: "搜索", icon: SearchIcon },
   { id: "bookshelf", label: "书架", icon: Library },
   { id: "downloads", label: "下载管理", icon: Download },
   { id: "settings", label: "设置", icon: Settings },
-  { id: "sources", label: "书源", icon: Layers },
 ];
 
 const TO_PATH: Record<string, string> = {
   bookshelf: "/bookshelf", search: "/search-tab",
-  downloads: "/downloads", settings: "/settings", sources: "/sources",
+  downloads: "/downloads", settings: "/settings",
 };
 
 export default function App() {
@@ -40,7 +38,6 @@ function AppShell() {
   const activeNav: NavItem = useMemo(() => {
     if (pathname === "/downloads") return "downloads";
     if (pathname === "/settings") return "settings";
-    if (pathname === "/sources") return "sources";
     if (pathname === "/search-tab") return "search";
     return "bookshelf";
   }, [pathname]);
@@ -91,7 +88,7 @@ function AppShell() {
             <Route path="/bookshelf" element={<BookshelfPage />} />
             <Route path="/downloads" element={<BookshelfPage />} />
             <Route path="/settings" element={<BookshelfPage />} />
-            <Route path="/sources" element={<SourcesPage />} />
+            <Route path="/sources" element={<Navigate to="/settings" replace />} />
             <Route path="/search-tab" element={<BookshelfPage />} />
             <Route path="/novel/:novelId" element={<DetailPage />} />
             <Route path="/novel/:novelId/:chapterId" element={<ReaderPage />} />
