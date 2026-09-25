@@ -20,7 +20,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
                                       cloud_sync/recover_db/archive 等）
 ```
 
-> **docs/ 在外层容器**（`D:\Linux\novel-downloader\docs\`），被 .gitignore 忽略，不入版本库。
+> **docs/ 随核心仓库入库**（`novel-downloader/docs/`）。外层容器 `D:\Linux\novel-downloader\docs` 仅存一份指向本目录的指针。
 
 ## 架构速览
 

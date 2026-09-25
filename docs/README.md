@@ -1,6 +1,6 @@
 # novel-downloader 文档导航
 
-外层容器 `D:\Linux\novel-downloader\docs\`(非 git 仓库,被 .gitignore 忽略,不入版本库)。核心仓库在 `D:\Linux\novel-downloader\novel-downloader\`。
+本文档目录随核心仓库入库（`novel-downloader/docs/`）。外层容器 `D:\Linux\novel-downloader\docs` 仅存一份指向本目录的指针。核心仓库根：`D:\Linux\novel-downloader\novel-downloader`。
 
 ## 会话速览(必读)
 
