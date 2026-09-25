@@ -232,6 +232,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
         "total": len(chapters), "progress": 0, "status": "downloading",
         "error": None, "errors": [], "current_title": "",
         "chapters": ch_data, "novel_url": novel_url,
+        "created_at": time.time(),
         "_pause": asyncio.Event(),
         "_cancel": asyncio.Event(),
         "_source": source_name,
@@ -271,6 +272,8 @@ def list_tasks() -> list[dict]:
                 "current_title": t.get("current_title", ""),
                 "eta": t.get("eta"),
                 "chapters": chapters,
+                "source_name": t.get("_source", ""),
+                "created_at": t.get("created_at"),
             })
         for tid in to_remove:
             _tasks.pop(tid, None)

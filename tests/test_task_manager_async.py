@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import time
 from unittest.mock import MagicMock
 
 
@@ -250,3 +251,34 @@ def test_run_download_prewarms_primary_mode_off_event_loop(monkeypatch):
     assert ("92xs-requests-default", "requests") in seen, seen
     assert seen[("92xs-requests-default", "requests")] is not main_thread, \
         "主 mode 预热必须经 asyncio.to_thread 移出事件循环线程"
+
+
+def test_list_tasks_exposes_source_name_and_created_at(monkeypatch):
+    """list_tasks 透出书源名与创建时间，且不泄漏 _source/_pause/_cancel 等内部键。"""
+    from backend.services import task_manager as tm
+
+    async def _stub(task, source_name):
+        return None
+
+    monkeypatch.setattr(tm, "_run_download", _stub)
+    tm._tasks.clear()
+
+    async def _run():
+        before = time.time()
+        r = tm.create_task("fanqie_1", [], "测试", source_name="92xs-requests-default")
+        tid = r["task_id"]
+        after = time.time()
+
+        items = tm.list_tasks()
+        item = next(i for i in items if i["task_id"] == tid)
+        assert item["source_name"] == "92xs-requests-default"
+        assert isinstance(item["created_at"], (int, float))
+        assert before <= item["created_at"] <= after
+        # 内部键不透出
+        assert "_source" not in item
+        assert "_pause" not in item and "_cancel" not in item
+        return tid
+
+    tid = asyncio.run(_run())
+    tm.delete_task(tid)
+    tm._tasks.clear()
