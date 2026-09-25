@@ -96,18 +96,8 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _get_engine(source_name: str, mode: str | None = None):
-    """按书源名创建 engine；mode 缺省取书源首个能力声明的 mode。
-
-    与 `cli.core._get_engine` 统一：配置来自 `cli.config.build_options(source_name, mode)`
-    （shared.config 三层合并）。
-    """
-    if mode is None:
-        from novelbase.source import capabilities
-        mode = next(iter(capabilities(source_name).values()), "browser")
-    options = build_options(source_name, mode)
-
-    # 注册导出格式 — 单格式模式
+def _apply_export_options(options) -> dict:
+    """把当前生效的导出格式配置装配到 Options（单格式模式），返回 format_configs 供复用。"""
     format_configs = load_format_configs()
     from novelbase.exporter import register_export_options
     _opt_cls_map = register_export_options()
@@ -122,7 +112,20 @@ def _get_engine(source_name: str, mode: str | None = None):
         ) if k in fmt_cfg}
         opt = opt_cls(output_path=raw_path, **extra)
         options.set_export(opt)
+    return format_configs
 
+
+def _get_engine(source_name: str, mode: str | None = None):
+    """按书源名创建 engine；mode 缺省取书源首个能力声明的 mode（含导出配置装配）。
+
+    与 `cli.core._get_engine` 统一：配置来自 `cli.config.build_options(source_name, mode)`
+    （shared.config 三层合并）。
+    """
+    if mode is None:
+        from novelbase.source import capabilities
+        mode = next(iter(capabilities(source_name).values()), "browser")
+    options = build_options(source_name, mode)
+    format_configs = _apply_export_options(options)
     return create_engine(options), format_configs
 
 
@@ -173,13 +176,19 @@ def cmd_search(args):
 
 def cmd_download(args):
     source_name = args.source
-    engine, format_configs = _get_engine(source_name)
+    from cli.core import _do_download_inner, _make_engines
+
+    format_configs = load_format_configs()
+    engines = _make_engines(source_name, options_hook=_apply_export_options)
     try:
-        from cli.core import _do_download_inner
         asyncio.run(_do_download_inner(source_name, args.url, args.group, format_configs,
-                                       max_workers=args.workers, engines=lambda m: engine))
+                                       max_workers=args.workers, engines=engines))
     finally:
-        engine.close()
+        for eng in engines.cache.values():
+            try:
+                eng.close()
+            except Exception:
+                pass
 
 
 def cmd_update(args):
@@ -229,10 +238,12 @@ def cmd_export(args):
 
 def cmd_info(args):
     source_name = args.source
-    engine, _ = _get_engine(source_name)
+    from cli.core import _make_engines
+
+    engines = _make_engines(source_name, options_hook=_apply_export_options)
     try:
         print(f"正在获取: {args.url}")
-        novel = asyncio.run(resolve_meta(args.url, source_name, lambda m: engine))
+        novel = asyncio.run(resolve_meta(args.url, source_name, engines))
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
@@ -245,7 +256,11 @@ def cmd_info(args):
         if novel.cover and novel.cover.image_format:
             print(f"  封面：{novel.cover.image_format} ({len(novel.cover.raw_data)} bytes)")
     finally:
-        engine.close()
+        for eng in engines.cache.values():
+            try:
+                eng.close()
+            except Exception:
+                pass
 
 
 def cmd_delete(args):

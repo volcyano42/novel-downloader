@@ -11,6 +11,7 @@ from novelbase import (
     create_engine, StorageOptions,
 )
 from novelbase.core.storage import create_storage
+from novelbase.source import capabilities
 from novelbase.utils.logger import get_logger
 
 _log = get_logger("cli.core")
@@ -53,8 +54,11 @@ def _get_storage():
     return _storage
 
 
-def _make_engines(source_name: str):
+def _make_engines(source_name: str, options_hook=None):
     """构造 engines(mode)->engine（按书源名懒建并缓存）。
+
+    `options_hook(options)` 在 `create_engine` 之前调用——供 cli.main 注入导出配置装配
+    （`cli.core` 不能反向 import `cli.main`，故用依赖注入）。
 
     缓存暴露为 `_engines.cache`，便于调用方在结束时 close 所有引擎。
     """
@@ -62,23 +66,24 @@ def _make_engines(source_name: str):
 
     def _engines(mode: str):
         if mode not in cache:
-            cache[mode] = _get_engine(source_name, mode)
+            cache[mode] = _get_engine(source_name, mode, options_hook)
         return cache[mode]
 
     _engines.cache = cache  # type: ignore[attr-defined]
     return _engines
 
 
-def _get_engine(source_name: str, mode: str | None = None):
+def _get_engine(source_name: str, mode: str | None = None, options_hook=None):
     """按书源名创建引擎；mode 缺省取书源首个能力声明的 mode。
 
     与 `cli.main._get_engine` 统一：配置来自 `shared.config` 的三层合并。
     """
     if mode is None:
-        from novelbase.source import capabilities
         caps = capabilities(source_name)
         mode = next(iter(caps.values()), "browser")
     options = build_options(source_name, mode)
+    if options_hook is not None:
+        options_hook(options)
     return create_engine(options)
 
 
