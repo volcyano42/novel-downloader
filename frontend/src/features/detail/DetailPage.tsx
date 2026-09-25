@@ -449,7 +449,7 @@ export default function DetailPage() {
 
       <DownloadDialog open={dialogVariant !== null} onClose={() => setDialogVariant(null)}
         dialogMode={dialogVariant ?? "download"} novelTitle={novel?.title ?? ""} chapterCount={selectedIds.size}
-        sources={sourceNames} initialSource={source}
+        sources={sourceNames} initialSource={bookSource}
         onStart={handleDialogConfirm} />
     </div>
   );
