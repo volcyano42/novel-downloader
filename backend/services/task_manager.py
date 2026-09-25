@@ -13,6 +13,7 @@ import uuid
 from backend.services.engine_manager import get_cached_engine
 from novelbase.core.exceptions import ChapterNotFoundError
 from shared.config import load_config, get_database_url
+from shared.user_data import set_novel_source
 
 _log = logging.getLogger("backend.task_manager")
 
@@ -62,6 +63,7 @@ async def _run_download(task: dict, source_name: str):
             try:
                 meta = await resolve_meta(novel_url, source_name, engines)
                 store.save_meta(meta)
+                set_novel_source(task["novel_id"], source_name)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
 

@@ -17,6 +17,7 @@ from novelbase import (
 )
 from novelbase.source import list_sources
 from novelbase.utils.logger import get_logger
+from shared.user_data import get_novel_source
 
 _log = get_logger("cli.interactive")
 
@@ -166,7 +167,7 @@ async def _update_one_async(novel, max_workers: int) -> int:
     from cli.core import _get_storage
 
     storage = _get_storage()
-    source_name = getattr(novel, "source_name", "")
+    source_name = get_novel_source(novel.id) or ""
     if not source_name:
         print("  无法确定书源")
         return 0

@@ -13,6 +13,7 @@ from novelbase import (
 from novelbase.core.storage import create_storage
 from novelbase.source import capabilities
 from novelbase.utils.logger import get_logger
+from shared.user_data import get_novel_source
 
 _log = get_logger("cli.core")
 
@@ -133,6 +134,9 @@ async def _do_download_inner(
 
     storage.save_meta(novel)
     add_novel_to_group(novel_id, group)
+
+    from shared.user_data import set_novel_source
+    set_novel_source(novel_id, source_name)
 
     existing = list(storage.load_chapters(novel_id))
     existing_set = {c.order for c in existing}
@@ -261,7 +265,7 @@ async def do_update(format_configs: dict, max_workers: int = 3):
     updated = 0
     for i, novel in enumerate(targets, 1):
         print(f"\n── [{i}/{total}] 正在更新: {novel.title} ──")
-        source_name = getattr(novel, "source_name", "")
+        source_name = get_novel_source(novel.id) or ""
         if not source_name:
             print("  无法确定书源，跳过（请重新下载该小说以记录书源）")
             continue

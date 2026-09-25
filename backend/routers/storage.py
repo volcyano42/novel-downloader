@@ -9,6 +9,7 @@ from novelbase.core.options import StorageOptions
 from novelbase.core.storage import create_storage
 from novelbase.models.novel import Novel, Illustration
 from shared.config import get_database_url
+from shared.user_data import delete_novel_source
 
 router = APIRouter(prefix="/api/v2/storage", tags=["storage"])
 
@@ -134,6 +135,7 @@ async def delete_novel(novel_id: str):
     store = _get_storage()
     if not store.load_meta(novel_id): raise HTTPException(404, "小说不存在")
     store.delete_novel(novel_id)
+    delete_novel_source(novel_id)
     return {"status": "deleted", "novel_id": novel_id}
 
 @router.get("/novel/{novel_id}/chapters")
