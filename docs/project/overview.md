@@ -33,13 +33,13 @@ novelbase/          ← 核心库（source 驱动，引擎/存储/下载/导出�
   models/             Novel, Chapter, Chapters, Illustration, SearchResult（models/novel.py）
   exporters/          export() 纯函数（txt, epub, img；base.py/contracts.py）
   utils/              logger.py, hooks.py, encoding.py, urls.py, template_utils.py, build_manifest.py
-  source.py           ← 公共 API（list_sources / get_manifest / capabilities / resolve）
+  source.py           ← 公共 API（list_sources / get_manifest / capabilities / resolve / resolve_book_url）
   sources/contracts.py ← Protocol 契约 + CAPABILITY_META 单一数据源
   sources/manifest.py  ← source.json 加载与校验
 
 backend/              FastAPI 入口 (main.py) + 内嵌前端静态文件 serve
   routers/          download.py, storage.py, export.py, config.py, history.py
-  services/         task_manager.py, engine_manager.py
+  services/         task_manager.py, engine_manager.py, source_guard.py
   schemas/          download.py, storage.py, export.py, export_config.py
 
 frontend/             React SPA (Vite)

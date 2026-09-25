@@ -174,19 +174,21 @@ asyncio.Semaphore(5)                # 限制"最多 5 个协程"
 
 ---
 
-## 5. `asyncio.to_thread()` —— 同步库的救命稻草
+## 5. `asyncio.to_thread()` —— 同步库的兜底手段（本项目现已不用）
 
-DrissionPage（浏览器）是**同步库**，`page.get()` 不能 await。`BrowserEngine` 的处理（`novelbase/core/engine.py:316`）：
+旧实现 DrissionPage（浏览器）是**同步库**，`page.get()` 不能 await，当时的 `BrowserEngine` 用 `asyncio.to_thread` 兜底。2026-08-16 起换成 **Playwright**（`playwright.async_api`）后已改为**真异步**，`novelbase/core/engine.py:432-433`：
 
 ```python
 async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs) -> str:
-    return await asyncio.to_thread(
-        self.fetch_text, url=url, skip_delay=skip_delay, encoding=encoding, **kwargs
-    )
+    """真异步：直接 await Playwright（不 to_thread）；浏览器失效时按 auto_reconnect 重建。"""
+    await self._ensure_browser()
+    for attempt in range(self.options.retry_times):
+        ...
+        return await self._do_fetch_text(url, skip_delay=skip_delay, **kwargs)
 ```
 
 **`asyncio.to_thread(func, *args)` 做了什么**：
-1. 把同步函数 `self.fetch_text` 丢进一个**线程池**
+1. 把同步函数丢进一个**线程池**
 2. 返回一个协程，可以 `await`
 3. `await` 期间事件循环不阻塞（阻塞发生在那个线程里）
 
@@ -196,7 +198,7 @@ async def async_fetch_text(self, url, skip_delay=False, encoding=None, **kwargs)
 |------|------|------|
 | RequestsEngine | `await client.get(url)`（httpx 真异步） | ⭐⭐⭐ |
 | APIEngine | `await client.get(url)`（httpx 真异步） | ⭐⭐⭐ |
-| BrowserEngine | `await asyncio.to_thread(...)` | ⭐ 线程池兜底 |
+| BrowserEngine | `await playwright.async_api`（真异步 + page 池复用） | ⭐⭐⭐ |
 
 **这就是为什么图片下载统一用 httpx 而不是浏览器**——图片是纯字节抓取，用浏览器是"杀鸡用牛刀还浪费内存开 tab"。
 

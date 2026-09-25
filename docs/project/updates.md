@@ -391,7 +391,7 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 ## 2026-09-25 变更（扁平化遗留改造 + 收尾）
 
 - 契约收口 15 任务：backend / CLI / 前端 / 配置全部改到 `source_name` 维度（`--source` Query；`/download/sources` 新形状；`/config/sources/{name}` 三层合并；前端去 mode/variant 选择器 + 新增书源管理页 `/sources`）
-- 删除失去基础的三个端点/入口：`POST /download/detect`、`/api/v2/engine*`、CLI `do_visit_site`
+- 删除失去基础的端点/入口：`/api/v2/download/platform`、`POST /download/detect`、`/api/v2/engine*`、CLI `do_visit_site`
 - 搜索历史改 `(source_name, keyword)` 唯一键；`enabled` 用户层覆盖落地为 `sites/{source_name}.yaml` 顶层
 - 收尾：未知 `source_name` 统一 404、前端书源配置表单去重 + `enabled` 双向失效修复、CLI 引擎按 mode 解析、脚手架 `common` 与出厂默认同源、docs 位置归一
 - 设计：`docs/superpowers/specs/2026-09-25-source-flattening-followup-design.md`、`docs/superpowers/specs/2026-09-25-flattening-closeout-design.md`
