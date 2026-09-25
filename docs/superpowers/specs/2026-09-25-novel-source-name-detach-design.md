@@ -74,12 +74,16 @@ CREATE TABLE IF NOT EXISTS novel_sources (
 | `cli/main.py::cmd_download` | 下载完成 | 同上 |
 | `backend/routers/storage.py` 的 `DELETE /novel/{id}` | 删书 | `delete_novel_source(novel_id)` |
 
-### 4. 存量迁移 —— `scripts/migrate_storage.py`
+### 4. 存量迁移 —— 新增 `scripts/migrate_novel_sources.py`
 
-新增迁移步骤：
+> 不复用现有的 `scripts/migrate_storage.py`：那是**文件布局**迁移
+> （`storage/*.db` → `storage/novels/`、`user_data.db` → `storage/users/default/`），
+> 与本步的数据内容迁移职责无关。
 
-1. 遍历小说库所有 `<id>.db` 的 meta 记录，取旧 `source_name` 值（仅当非空）
-2. 写入 `user_data.db` 的 `novel_sources`
+迁移步骤：
+
+1. 遍历小说库 `app_data/storage/novels/<id>.db` 的 meta 记录，取旧 `source_name` 值（仅当非空）
+2. 写入 `app_data/storage/users/default/user_data.db` 的 `novel_sources`
 3. **幂等**：可重复执行，已存在的行按最新值 UPSERT
 4. 输出统计（迁移 N 条 / 跳过 M 条）
 
