@@ -17,6 +17,9 @@
 - **`Novel.id` 硬约束**：`Novel.id = sha256(url)[:32]`、库内 `meta.id` 存 url 原样。**不得改任何书源返回的 url**，不得在 backend/CLI 侧做 URL 规范化；`git diff --stat -- novelbase/sources novelbase/core novelbase/models novelbase/utils` 在本计划全部任务结束后必须为**空**。
 - **不改**：`novelbase/sources/*`、`novelbase/exporters/*`、`novelbase/core/*`、`android/`、`app_data/config/sites/*.yaml`、`bookmarks.platform` 列、`shared/config.py::ENGINE_DEFAULTS`。
 - **Git**：中文提交消息；一个方面一条 commit；**禁止 `git add -A`**（显式列文件）；`dev` 分支提交已授权，**不推送**（`git push` 一律不执行）。
+- **提交写法（必须照做，避免中文被吞）**：提交消息一律经文件传入，例如
+  `$msg = Join-Path $env:TEMP 'nd-msg.txt'; [IO.File]::WriteAllText($msg, 'fix: …', (New-Object Text.UTF8Encoding($false))); git commit -F $msg; Remove-Item $msg -Force`。
+  **不要**用 `git commit -m "中文…"`。各任务的提交步骤只给出 `git add` 文件清单与该条提交的消息文本。
 - **本机环境**：全局 `python`（3.10.11，已装 pytest 9.1.1 + 项目依赖）可直接跑测试；`frontend/node_modules` 已存在；**无 `.venv`**，不要试图激活虚拟环境。
 - 每个任务的验证命令都在仓库根 `D:\Linux\novel-downloader\novel-downloader` 下执行。
 
@@ -616,7 +619,7 @@ Expected: `EXIT 0`
 
 - [ ] **Step 7: 人工核对重复已消除**
 
-Run: `git -C .. diff --stat -- frontend/src/features/settings/SettingsPage.tsx frontend/src/features/sources/SourcesPage.tsx`
+Run: `git diff --stat -- frontend/src/features/settings/SettingsPage.tsx frontend/src/features/sources/SourcesPage.tsx`
 Expected: 两文件各减约 110 行；`ENGINE_FIELDS` 全仓只剩 `sourceConfigForm.tsx` 一处定义（`grep -rn "ENGINE_FIELDS" frontend/src` 只应命中共享文件 + 消费方 import）
 
 - [ ] **Step 8: 提交**
