@@ -444,6 +444,49 @@ def test_cli_update_reads_source_from_user_data(monkeypatch, isolated_user_db):
 
     asyncio.run(cli_core.do_update({}, max_workers=1))
     assert seen.get("source") == "fanqie-api-rain"
+
+
+def test_task_manager_run_download_writes_novel_source(monkeypatch, isolated_user_db):
+    """task_manager._run_download 的写入点（spy 断言 set_novel_source 被调用）。
+
+    为让流程走到写入点（`if novel_url:` 内的 save_meta 之后），需替掉引擎缓存、
+    书源能力查询、resolve_meta 与 storage 工厂；随后让章节解析返回空以尽快收尾。
+    """
+    import novelbase
+    import novelbase.core.storage as nb_storage
+    from backend.services import task_manager
+
+    novel = Novel(title="t", url="https://x/n1", id="n1", serial=1,
+                  author="a", description="d")
+    calls = []
+
+    async def fake_resolve_meta(url, source_name, engines, **kw):
+        return novel
+
+    async def fake_resolve_chapter_list(url, source_name, engines, **kw):
+        return Chapters([])
+
+    class FakeStore:
+        def save_meta(self, n):
+            return None
+
+        def load_chapters(self, nid):
+            return []
+
+    monkeypatch.setattr(novelbase, "resolve_meta", fake_resolve_meta)
+    monkeypatch.setattr(novelbase, "resolve_chapter", fake_resolve_chapter_list)
+    monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
+    monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
+    monkeypatch.setattr(task_manager, "capabilities", lambda s: {"novel_info": "requests"})
+    monkeypatch.setattr(task_manager, "set_novel_source",
+                        lambda nid, src: calls.append((nid, src)))
+
+    task = {"task_id": "t1", "novel_id": "n1", "title": "t",
+            "novel_url": "https://x/n1", "_cancel": __import__("threading").Event(),
+            "_pause": __import__("threading").Event()}
+    asyncio.run(task_manager._run_download(task, "fanqie-api-rain"))
+
+    assert ("n1", "fanqie-api-rain") in calls
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -525,7 +568,7 @@ Expected: PASS（4 passed）
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `409 passed, 1 skipped`，0 failed
+Expected: `410 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
@@ -654,7 +697,7 @@ Expected: PASS
 - [ ] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
-Expected: `410 passed, 1 skipped`，0 failed
+Expected: `411 passed, 1 skipped`，0 failed
 
 - [ ] **Step 6: 提交**
 
@@ -672,7 +715,7 @@ EOF
 
 ## 完成后验证
 
-- [ ] `python -m pytest tests -q` → **410 passed, 1 skipped**，0 failed
+- [ ] `python -m pytest tests -q` → **411 passed, 1 skipped**，0 failed
 - [ ] `grep -rn "source_name" novelbase/models/novel.py` → 无命中（模型已纯净）
 - [ ] `grep -rn "extra\[\"platform\"\]" novelbase/ backend/ cli/` → 无命中（冗余已清）
 - [ ] `git status --porcelain` → clean
