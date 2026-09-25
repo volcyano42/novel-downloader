@@ -159,3 +159,40 @@ def test_task_manager_run_download_writes_novel_source(monkeypatch, isolated_use
 
     assert ("n1", "fanqie-api-rain") in calls
     assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"
+
+
+def test_task_manager_writes_novel_source_when_fetch_meta_fails(monkeypatch, isolated_user_db):
+    """fetch_meta 抛错时仍应记录来源。
+
+    来源 `source_name` 由调用方显式传入，不依赖 meta 是否取到；若此时不写
+    `novel_sources`，该书在后续「更新已有小说」时会被当成未知来源而永久跳过。
+    手法参照 test_task_manager_run_download_writes_novel_source。
+    """
+    import threading
+
+    import novelbase
+    import novelbase.core.storage as nb_storage
+    import novelbase.source as nb_source
+    from backend.services import task_manager
+
+    class FakeStore:
+        def save_meta(self, n):
+            return None
+
+    async def boom(url, source_name, engines, **kw):
+        raise RuntimeError("fetch_meta boom")
+
+    monkeypatch.setattr(novelbase, "resolve_meta", boom)
+    monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
+    monkeypatch.setattr(nb_source, "capabilities",
+                        lambda s: {"novel_info": "requests"})
+    monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
+
+    task = {"task_id": "t1", "novel_id": "n1", "title": "t",
+            "novel_url": "https://x/n1", "total": 0, "progress": 0,
+            "status": "downloading", "error": None, "errors": [],
+            "current_title": "", "chapters": [],
+            "_cancel": threading.Event(), "_pause": threading.Event()}
+    asyncio.run(task_manager._run_download(task, "fanqie-api-rain"))
+
+    assert isolated_user_db.get_novel_source("n1") == "fanqie-api-rain"

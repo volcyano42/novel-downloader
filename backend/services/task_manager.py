@@ -63,9 +63,15 @@ async def _run_download(task: dict, source_name: str):
             try:
                 meta = await resolve_meta(novel_url, source_name, engines)
                 store.save_meta(meta)
-                set_novel_source(task["novel_id"], source_name)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
+
+        # 来源由调用方显式给出，不依赖 meta 是否取到：即使 fetch_meta 失败也要记录，
+        # 否则该书在后续「更新」时会被当成未知来源而跳过。
+        try:
+            set_novel_source(task["novel_id"], source_name)
+        except Exception:
+            _log.warning("set_novel_source failed for %s", task.get("novel_id"), exc_info=True)
 
         novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"],
                       serial=0, author="", description="")
