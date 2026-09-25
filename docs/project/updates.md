@@ -405,3 +405,14 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **CLI**：删书（`cmd_delete` / 交互式 `do_delete`）会清理 `novel_sources`
 - 测试：`python -m pytest tests -q` = **444 passed, 1 skipped**；前端 `npx tsc -b` = 0 错
 - 设计：`docs/superpowers/specs/2026-09-25-source-reads-mode-override-design.md`；计划：`docs/superpowers/plans/2026-09-25-source-reads-mode-override.md`
+
+## 2026-09-25 变更（详情页换源）
+
+- **详情页那一行**：`novelId` 行改为「书源名 + 换源按钮」（深灰字/浅灰底）；书源名取本地 `source_name` 或远端 `state.source`，无记录时显示「未记录书源」
+- **换源弹窗**：新建 `SourcePickerDialog`（结构照搬原 `DownloadDialog`），列出全部书源，当前书源条目右侧标「当前」；确定按钮在请求 pending 时 `disabled` 并显示「保存中…」
+- **两个操作不再弹窗**：详情页「检查更新 / 下载选中」直接沿用该书书源执行；无来源时 toast 提示「请先点旁边「换源」选定书源」、不发请求
+- **未下载的书也能先换源**：后端**不校验**小说是否已入库（来源独立于 storage，「先换源、再下载」合法）；换源成功后前端用本地 `sourceOverride` **立即**反映新书源（远端/未下载书无 `localMeta` 可刷新）
+- **删除 `DownloadDialog`**：改造后无使用处，文件删除
+- **API**：新增 `PUT /api/v2/storage/novel/{id}/source`（body `{source_name}`；未知书源 404，不校验已入库），落库到 `user_data.novel_sources`（UPSERT），前端失效 `["novel-meta", id]` / `["novels"]`
+- 测试：`python -m pytest tests -q` = **448 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint` 0 告警
+- 设计：`docs/superpowers/specs/2026-09-25-detail-source-switch-design.md`
