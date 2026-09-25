@@ -60,3 +60,23 @@ def test_build_options_follows_effective_mode(isolated_sites):
     opts = config_service.build_options(KNOWN, "browser")
 
     assert opts.mode == "browser"
+
+
+def test_merged_source_config_invalid_mode_falls_back_in_output(isolated_sites):
+    """用户层非法 mode：输出的 mode 回退为声明值，字段集仍按有效 mode 构建。"""
+    _write(isolated_sites, "search", "nonsense")
+
+    merged = config_service.merged_source_config(KNOWN)
+
+    assert merged["search"]["mode"] == "requests"        # 不变量：mode 恒等于有效 mode
+    assert "headers" in merged["search"]                 # 字段集取自有效 mode（requests）
+    assert "browser_type" not in merged["search"]
+
+
+def test_merged_source_config_null_mode_falls_back_in_output(isolated_sites):
+    """用户层 YAML `mode:`（None）：输出的 mode 回退为声明值，不残留 None。"""
+    (isolated_sites / f"{KNOWN}.yaml").write_text("search:\n  mode:\n", encoding="utf-8")
+
+    merged = config_service.merged_source_config(KNOWN)
+
+    assert merged["search"]["mode"] == "requests"

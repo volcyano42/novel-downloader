@@ -229,6 +229,8 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     已含 `common` 合并）→ `sites/{source_name}.yaml[cap]`（用户层）。
     **mode 取有效值**（`effective_capabilities()`：用户层 `{cap}.mode` 覆盖声明），
     且用户层的 `mode` 键**保留**在输出中（前端表单需回显）。
+    不变量：输出的 `mode` **恒等于有效 mode**（`effective_capabilities()[cap]`），
+    用户层的 `mode` 键（含非法值 / YAML `null`）不参与覆盖。
     """
     from novelbase.source import get_manifest
     caps = effective_capabilities(source_name)
@@ -239,8 +241,11 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
-        base["mode"] = mode
+        base["mode"] = mode  # 不变量：base 已写入有效 mode
         user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
+        # 用户层 mode 键不再参与覆盖（否则非法值 / None 会污染有效 mode 与字段集的
+        # 一致性：该段字段集按有效 mode 构建，mode 也必须等于有效 mode）。
+        user_cap = {k: v for k, v in user_cap.items() if k != "mode"}
         out[cap] = deep_merge(base, user_cap)
     return out
 
