@@ -1,6 +1,6 @@
 # 来源读点 + 用户可选 mode + 设置/书源整合 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 让「来源」（`novel_sources`）真正被消费（API / 书架卡片 / 详情页 / 详情页默认书源），放开书源 `mode` 的用户逐能力覆盖，把书源管理并入设置页，并修掉 `headers` 字段的 `[object Object]` 显示与字符串写回缺陷。
 
@@ -71,7 +71,7 @@
 - Consumes: `shared/user_data.get_novel_source(novel_id) -> Optional[str]`、`get_novel_sources(novel_ids) -> dict[str, str]`（均已存在）
 - Produces: `NovelMeta.source_name: str | None = None`；`GET /api/v2/storage/novel` 每项含 `"source_name": str | None`；`GET /api/v2/storage/novel/{id}/meta` 含 `source_name`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_storage_source_reads.py`:
 
@@ -136,12 +136,12 @@ def test_list_novels_returns_source_names(monkeypatch, isolated_user_db):
     }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_storage_source_reads.py -q`
 Expected: 3 failed（`NovelMeta` 无 `source_name` 字段 / 列表 dict 无 `source_name` 键）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `backend/schemas/storage.py` — `NovelMeta` 末尾加字段：
 
@@ -202,17 +202,17 @@ async def list_novels():
     return result
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_storage_source_reads.py -q`
 Expected: 3 passed
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 419 passed, 1 skipped, 0 failed
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/schemas/storage.py backend/routers/storage.py tests/test_storage_source_reads.py
@@ -239,7 +239,7 @@ EOF
 - Consumes: Task 1 的 `source_name`（列表项与 `/meta` 都含）
 - Produces: `BookCard` 新增可选 prop `sourceName?: string | null`
 
-- [ ] **Step 1: 加类型字段**
+- [x] **Step 1: 加类型字段**
 
 `frontend/src/api/endpoints.ts` — `NovelMeta` 接口（第 7 行）内加：
 
@@ -259,7 +259,7 @@ export interface NovelMeta {
 }
 ```
 
-- [ ] **Step 2: 卡片改为显示来源**
+- [x] **Step 2: 卡片改为显示来源**
 
 `frontend/src/features/bookshelf/BookCard.tsx`：
 
@@ -294,7 +294,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
 {sourceName && <p className="truncate text-[11px] text-slate-400">{sourceName}</p>}
 ```
 
-- [ ] **Step 3: 书架传值**
+- [x] **Step 3: 书架传值**
 
 `frontend/src/features/bookshelf/BookshelfPage.tsx`（`<BookCard>` 位于分组列表内，约第 208 行）：在现有 props 后补一行：
 
@@ -309,7 +309,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
 />
 ```
 
-- [ ] **Step 4: 详情页显示来源**
+- [x] **Step 4: 详情页显示来源**
 
 `frontend/src/features/detail/DetailPage.tsx`：
 
@@ -326,17 +326,17 @@ const bookSource = localMeta?.source_name ?? st?.source;
 {bookSource && <p className="text-xs text-slate-400 pt-0.5">来源：{bookSource}</p>}
 ```
 
-- [ ] **Step 5: 类型检查**
+- [x] **Step 5: 类型检查**
 
 Run（在 `frontend/` 下）: `npx tsc --noEmit`
 Expected: 0 错
 
-- [ ] **Step 6: 手工自测**
+- [x] **Step 6: 手工自测**
 
 1. 启动后端 + 前端，打开书架：卡片上原 `novelId` 小字位置显示来源（如 `fanqie-api-rain`）；无来源的老书该行不显示。
 2. 打开任一本地书详情页：元信息区显示「来源：xxx」。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add frontend/src/api/endpoints.ts frontend/src/features/bookshelf/BookCard.tsx frontend/src/features/bookshelf/BookshelfPage.tsx frontend/src/features/detail/DetailPage.tsx
@@ -360,7 +360,7 @@ EOF
 - Consumes: Task 2 的 `bookSource`；`DownloadDialog` 既有 prop `initialSource?: string`（`frontend/src/features/download/DownloadDialog.tsx:12,17,25`，已实现「不在列表则回退第一项」）
 - Produces: 无新接口（行为变更）
 
-- [ ] **Step 1: 改默认来源**
+- [x] **Step 1: 改默认来源**
 
 `frontend/src/features/detail/DetailPage.tsx` 末尾的 `DownloadDialog`（约第 447 行）：
 
@@ -373,18 +373,18 @@ EOF
 
 （`bookSource` 已在 Task 2 定义为 `localMeta?.source_name ?? st?.source`；`DownloadDialog` 内部若该值不在 `sources` 列表则回退第一项，因此书源被删/改名时不会传错。）
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 Run（在 `frontend/` 下）: `npx tsc --noEmit`
 Expected: 0 错
 
-- [ ] **Step 3: 手工自测**
+- [x] **Step 3: 手工自测**
 
 1. 进入一本**本地已下载**的书详情页 → 点「检查更新」：书源选择默认已选中该书来源（不再是空/第一项），仍可手动改成其它书源。
 2. 「下载选中」同理。
 3. 来源书源已被删除/改名（如手改 `user_data.db`）→ 对话框回退到列表第一项，不报错。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add frontend/src/features/detail/DetailPage.tsx
@@ -409,7 +409,7 @@ EOF
 - Consumes: `shared/user_data.delete_novel_source(novel_id) -> bool`
 - Produces: 无新接口（行为修复：删书不再留下孤儿来源行）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 追加到 `tests/test_novel_source_writes.py`（该文件已有 `isolated_user_db` fixture）：
 
@@ -475,12 +475,12 @@ import argparse
 
 > **patch 目标的依据（已核对源码）**：`cli/main.py::cmd_delete` 用函数内 `from cli.core import _get_storage` 与 `from cli.config import load_groups, save_groups`，故 patch `cli.core._get_storage` / `cli.config.*`；`cli/menus.py::do_delete` 用函数内 `from cli.core import _get_storage`、函数内 `from cli.config import save_groups`，而 `load_groups` 是 `cli/menus.py` 的**模块级** import，故分别 patch `cli.core._get_storage` / `cli.config.save_groups` / `cli.menus.load_groups`。`do_delete` 的交互是两次 `input()`（编号 → `yes`），用 `iter(["1", "yes"])` 喂入。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_novel_source_writes.py -q -k cli`
 Expected: 2 failed（`novel_sources` 行仍在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `cli/main.py::cmd_delete`（`storage.delete_novel(novel_id)` 之后）：
 
@@ -501,17 +501,17 @@ Expected: 2 failed（`novel_sources` 行仍在）
 
 （懒 import 与 `cli/core.py` 的既有风格一致。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_novel_source_writes.py -q`
 Expected: 全 PASS
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 421 passed, 1 skipped, 0 failed
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add cli/main.py cli/menus.py tests/test_novel_source_writes.py
@@ -538,7 +538,7 @@ EOF
 - Consumes: `novelbase.source.capabilities(source_name) -> {cap: mode}`；用户层 yaml `sites/{source_name}.yaml`
 - Produces: `effective_capabilities(source_name: str) -> dict[str, str]`（本计划所有调用方的**唯一** mode 入口）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_config_effective_mode.py`:
 
@@ -625,12 +625,12 @@ def test_merged_source_config_null_mode_falls_back_in_output(isolated_sites):
     assert merged["search"]["mode"] == "requests"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_config_effective_mode.py -q`
 Expected: `effective_capabilities` 不存在（AttributeError）→ 全 failed
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `shared/config.py` — 新增函数（放在 `merged_source_config` 之前）：
 
@@ -710,19 +710,19 @@ def build_options(source_name: str, mode: str) -> Options:
 
 （其余函数体不变。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_config_effective_mode.py -q`
 Expected: 8 passed（含 fix 轮补的非法值 / null 两条断言）
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 429 passed, 1 skipped, 0 failed
 
 > 若此处出现与 `mode` 键相关的既有断言失败（例如某测试断言用户层 `mode` 被剔除），说明它在锁定旧约定——把该断言改为断言有效 mode（这是本 Task 的预期行为变更），在提交信息里写明。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/config.py tests/test_config_effective_mode.py
@@ -748,7 +748,7 @@ EOF
 - Consumes: `novelbase.source.resolve(source_name, capability) -> (fn, mode)`（不变）
 - Produces: `search(..., mode_overrides=None)`、`resolve_meta(..., mode_overrides=None)`、`resolve_chapter_list(..., mode_overrides=None)`、`resolve_chapter(..., mode_overrides=None)`，其中 `mode_overrides: dict[str, str] | None`（**能力名 → mode**）；未传时行为与现状完全一致
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_downloader_mode_overrides.py`:
 
@@ -830,12 +830,12 @@ def test_search_uses_override_mode(monkeypatch):
 
 （`Chapter` 的构造字段以 `novelbase/models/novel.py` 为准；若 `Chapter` 需要更多必填字段，按实际签名补齐。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_downloader_mode_overrides.py -q`
 Expected: 2 failed, 1 passed（旧参数被 `**kwargs` 吞掉，`engines` 仍收到声明 mode，覆盖断言失败）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `novelbase/core/downloader.py` — 4 个函数各加参数与一行覆盖逻辑（`mode_overrides` **不进 `kwargs`**）：
 
@@ -898,17 +898,17 @@ async def resolve_chapter(chapter: Chapter, source_name: str, engines, skip_dela
     return await fn(chapter=chapter, engine=engines(mode), **kwargs)
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_downloader_mode_overrides.py -q`
 Expected: 3 passed
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 432 passed, 1 skipped, 0 failed
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add novelbase/core/downloader.py tests/test_downloader_mode_overrides.py
@@ -939,7 +939,7 @@ EOF
   - `GET /api/v2/download/sources` 的 `capabilities` = 有效 mode
   - `PUT /api/v2/config/sources/{name}`：`config[cap].mode` 为字符串 → 覆盖；为 `null` → 删除该键
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_backend_config_routes.py`:
 
@@ -1003,12 +1003,12 @@ def test_download_sources_returns_effective_mode(isolated_sites):
     assert data[KNOWN]["capabilities"]["search"] == "browser"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_backend_config_routes.py -q`
 Expected: failed（无 `declared_capabilities` 键；`capabilities` 仍是声明值；`mode: None` 不能删键）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `backend/routers/config.py` — import 与两处改造：
 
@@ -1147,17 +1147,17 @@ def _capability_for_mode(source_name: str, mode: str) -> str | None:
 
 （`_caps` 即本函数内已有的 `effective_capabilities(source_name)` 结果；若作用域不便复用，直接再调用一次。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_backend_config_routes.py tests/test_backend_source_guard.py tests/test_backend_download_routes.py -q`
 Expected: 全 PASS
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 434 passed, 1 skipped, 0 failed
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/routers/config.py backend/routers/download.py backend/services/engine_manager.py backend/services/task_manager.py tests/test_backend_config_routes.py
@@ -1185,7 +1185,7 @@ EOF
 - Consumes: Task 5 的 `effective_capabilities()`、Task 6 的 `mode_overrides`
 - Produces: CLI 与 backend 行为一致（同一份 `sites/{name}.yaml` 覆盖，两侧都生效）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_cli_effective_mode.py`:
 
@@ -1214,12 +1214,12 @@ def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
     assert "search:requests" not in line     # 该源的声明值不再直出
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_cli_effective_mode.py -q`
 Expected: FAIL（输出仍是 `search:requests`）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `cli/main.py::cmd_source`：
 
@@ -1349,17 +1349,17 @@ from shared.config import effective_capabilities, enabled_source_names
 
 `cli/menus.py`：顶部 `from novelbase.source import list_sources, capabilities` 改为 `from novelbase.source import list_sources`，另加 `from shared.config import effective_capabilities`；`_settings_source_detail` 的 `caps = capabilities(source_name)` 改为 `caps = effective_capabilities(source_name)`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_cli_effective_mode.py tests/test_cli_storage.py -q`
 Expected: 全 PASS
 
-- [ ] **Step 5: 全量回归**
+- [x] **Step 5: 全量回归**
 
 Run: `python -m pytest tests -q`
 Expected: 444 passed, 1 skipped, 0 failed
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add cli/core.py cli/interactive.py cli/main.py cli/menus.py tests/test_cli_effective_mode.py
@@ -1384,7 +1384,7 @@ EOF
 **Interfaces:**
 - Produces: `EngineField.type` 新增取值 `"json"`；新增导出组件 `JsonField({ value, onCommit })`
 
-- [ ] **Step 1: 改字段声明**
+- [x] **Step 1: 改字段声明**
 
 `frontend/src/features/sources/sourceConfigFields.ts`：
 
@@ -1404,7 +1404,7 @@ export type EngineField = {
     { key: "headers", label: "请求头", desc: "JSON 对象，如 {\"Cookie\": \"…\"}", type: "json" },
 ```
 
-- [ ] **Step 2: 新增 `JsonField`**
+- [x] **Step 2: 新增 `JsonField`**
 
 `frontend/src/features/sources/sourceConfigForm.tsx`：确保顶部有 `import { useEffect, useState } from "react";`（已有）与 `import {cn} from "@/lib/utils";`（该文件**原本没有** `cn` 导入，`JsonField` 用到，需新增），并在 `TextField` 之后加：
 
@@ -1452,18 +1452,18 @@ export function JsonField({ value, onCommit }: { value: unknown; onCommit: (v: R
         return <JsonField value={val} onCommit={v => set(v)} />;
 ```
 
-- [ ] **Step 3: 类型检查**
+- [x] **Step 3: 类型检查**
 
 Run（在 `frontend/` 下）: `npx tsc --noEmit`
 Expected: 0 错
 
-- [ ] **Step 4: 手工自测（含数据校验）**
+- [x] **Step 4: 手工自测（含数据校验）**
 
 1. 打开设置 → 任一 `requests` 模式书源 → 展开：`请求头` 显示为格式化 JSON，**不再是 `[object Object]`**。
 2. 改成非法 JSON（如 `{"a":`）失焦 → 出现「JSON 格式错误，未保存」，`app_data/config/sites/{name}.yaml` 不变。
 3. 改成合法 JSON 失焦 → 用 `python -c "import yaml;print(type(yaml.safe_load(open('app_data/config/sites/<name>.yaml',encoding='utf-8').read())['search']['headers']))"` 确认是 `dict`（不是 `str`）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/features/sources/sourceConfigFields.ts frontend/src/features/sources/sourceConfigForm.tsx
@@ -1489,7 +1489,7 @@ EOF
 - Consumes: Task 7 的 `GET /config/sources/{name}` 之 `capabilities`（有效）/ `declared_capabilities`（声明）；`PUT` 的 `mode: null` 删键语义
 - Produces: 每个能力段一个 mode 下拉 + 未覆盖时的「默认：xxx」提示与「恢复默认」按钮
 
-- [ ] **Step 1: 类型与 hook 放宽**
+- [x] **Step 1: 类型与 hook 放宽**
 
 `frontend/src/api/endpoints.ts` — 书源配置类型（`source_name` 所在的 interface）加字段，并让 config 值可为 `null`：
 
@@ -1512,7 +1512,7 @@ export interface SourceConfig {
 
 （`saveSourceConfig` 在 `endpoints.ts` 的签名同步放宽为 `Record<string, unknown>`。）
 
-- [ ] **Step 2: 加 mode 下拉**
+- [x] **Step 2: 加 mode 下拉**
 
 `frontend/src/features/sources/sourceConfigForm.tsx` — `SourceConfigEditor` 内取声明值并渲染控件：
 
@@ -1549,19 +1549,19 @@ export interface SourceConfig {
 
 ）
 
-- [ ] **Step 3: 类型检查**
+- [x] **Step 3: 类型检查**
 
 Run（在 `frontend/` 下）: `npx tsc --noEmit`
 Expected: 0 错
 
-- [ ] **Step 4: 手工自测**
+- [x] **Step 4: 手工自测**
 
 1. 展开任一书源：每个能力段有 mode 下拉，初值为有效 mode（默认即声明值）。
 2. 切成 `browser` → 出现「恢复默认（requests）」，字段列表随之变成 browser 字段集；`app_data/config/sites/{name}.yaml` 里该能力段出现 `mode: browser`。
 3. 点「恢复默认」→ 该键从 yaml 消失，下拉回到 `requests`。
 4. 改 mode 后回到书架执行一次搜索/下载，观察后端日志确认按新 mode 建引擎（失败属预期风险，不算回归）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/api/endpoints.ts frontend/src/hooks/index.ts frontend/src/features/sources/sourceConfigForm.tsx
@@ -1587,7 +1587,7 @@ EOF
 - Consumes: `useSources()`（`{source_name: {capabilities, enabled}}`）、`SourceConfigEditor`、`Toggle`
 - Produces: `SourceAccordion({ name, info })` 组件（折叠条：名称 + 能力 badge + enabled 开关 + 展开编辑）
 
-- [ ] **Step 1: 新建共享折叠条**
+- [x] **Step 1: 新建共享折叠条**
 
 Create `frontend/src/features/sources/SourceAccordion.tsx`（从 `SourcesPage.tsx` 的 `SourceRow` 平移而来）：
 
@@ -1639,7 +1639,7 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
 }
 ```
 
-- [ ] **Step 2: 设置页书源区改用折叠条**
+- [x] **Step 2: 设置页书源区改用折叠条**
 
 `frontend/src/features/settings/SettingsPage.tsx`：把 `SourceSection` 整体替换为（删除原先的横排按钮 + 单选 state + `useSourceConfig`/`useState` 相关代码）：
 
@@ -1660,7 +1660,7 @@ function SourceSection() {
 
 import 调整：加 `import {SourceAccordion} from "@/features/sources/SourceAccordion";`；移除新代码不再引用的 `SourceConfigEditor`、`useSourceConfig`、`useSaveSourceConfig` 三个 import（`cn` / `Num` / `Range` / `Select` / `Toggle` / `useFormatConfig` 等仍被本页其它区段使用，保留）；其余以 `npm run lint` 的未使用告警为准。
 
-- [ ] **Step 3: 删除书源页与路由收窄**
+- [x] **Step 3: 删除书源页与路由收窄**
 
 - 删除文件：`git rm frontend/src/features/sources/SourcesPage.tsx`
 - `frontend/src/App.tsx`：
@@ -1670,18 +1670,18 @@ import 调整：加 `import {SourceAccordion} from "@/features/sources/SourceAcc
   - 路由 `<Route path="/sources" element={<SourcesPage />} />` 改为 `<Route path="/sources" element={<Navigate to="/settings" replace />} />`（保留旧深链）
   - 若 `Layers` 图标不再被使用，一并从 `lucide-react` 的 import 列表移除
 
-- [ ] **Step 4: 类型检查与 lint**
+- [x] **Step 4: 类型检查与 lint**
 
 Run（在 `frontend/` 下）: `npx tsc --noEmit && npm run lint`
 Expected: tsc 0 错；lint 无新增告警
 
-- [ ] **Step 5: 手工自测**
+- [x] **Step 5: 手工自测**
 
 1. 设置页「书源」区：每个书源一行折叠条（名称 + 能力 badge + 开关），点击展开可编辑（含 mode 下拉与 JSON 请求头）。
 2. 侧边栏不再有「书源」入口；访问旧的 `/sources` 自动跳到 `/settings`。
 3. 开关某书源 → 书架搜索并发集随之变化（沿用既有 `enabled_source_names()` 行为）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add frontend/src/features/sources/SourceAccordion.tsx frontend/src/features/settings/SettingsPage.tsx frontend/src/App.tsx
@@ -1711,7 +1711,7 @@ EOF
 - Consumes: 前 11 个 Task 的最终行为
 - Produces: 文档与代码一致（尤其「用户不再选 mode」这条约定必须反转）
 
-- [ ] **Step 1: 改约定条目**
+- [x] **Step 1: 改约定条目**
 
 `docs/session-prompt.md` 的「引擎」条（约第 37 行）：
 
@@ -1719,7 +1719,7 @@ EOF
 - **引擎** 三种模式：`browser`（**Playwright**，2026-08-16 从 DrissionPage 迁移）、`requests`（httpx）、`api`（Rain.ink 代理）。**mode 默认由书源在 `source.json` 里声明**（`common.mode` 并入各能力段）；**用户可逐能力覆盖**（`sites/{source_name}.yaml` 的 `{cap}.mode`，唯一入口 `shared.config.effective_capabilities()`，2026-09-25 二次修订；覆盖为「值 + 引擎默认字段」替换，`null` 表示恢复声明）。core 的 `capabilities()` / `resolve()` 恒取声明值，覆盖只在调用方生效
 ```
 
-- [ ] **Step 2: 改机制文档**
+- [x] **Step 2: 改机制文档**
 
 `docs/project/sources.md`：在能力声明（`source.json` 的 `capabilities`/`mode`）一节后补：
 
@@ -1739,17 +1739,17 @@ EOF
 
 `docs/project/config.md`：在「逐书源配置」节说明 `sites/{source_name}.yaml` 的 `{cap}.mode` 语义（覆盖声明、`null` 删除、非法值忽略）。
 
-- [ ] **Step 3: 追加更新记录**
+- [x] **Step 3: 追加更新记录**
 
 `docs/project/updates.md`：在最新一节追加本轮摘要（来源读点、详情页默认来源、mode 覆盖、设置/书源整合、headers 修复、CLI 删书清理），并注明测试数（`python -m pytest tests -q` 的实际结果）。
 
-- [ ] **Step 4: 文档自检**
+- [x] **Step 4: 文档自检**
 
 Run: `grep -rn "用户不再选 mode\|用户不选 mode" docs/` → 无命中
 Run: `grep -rn "effective_capabilities" docs/` → 至少命中 `session-prompt.md` / `project/sources.md`
 Run: `python -m pytest tests -q` → 0 failed
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add docs/session-prompt.md docs/project/sources.md docs/project/config.md docs/project/updates.md
@@ -1766,15 +1766,27 @@ EOF
 
 ## 完成后验证
 
-- [ ] `python -m pytest tests -q` → 0 failed（基线 416 passed / 1 skipped，本轮预计 ~435 passed）
-- [ ] `npx tsc --noEmit`（在 `frontend/`）→ 0 错；`npm run lint` → 无新增告警
-- [ ] `grep -rn "capabilities(source_name)" backend cli` → 只剩 core 内部/无遗漏消费点（全部走 `effective_capabilities`）
-- [ ] `grep -n "source_name" novelbase/models/novel.py` → 无命中（模型仍纯净）
-- [ ] 端到端抽查：书架卡片显示来源 → 详情页显示来源 → 「检查更新」默认选中该书来源 → 设置页改某书源 `search` 的 mode → `GET /api/v2/config/sources/{name}` 的 `capabilities` 随之变化 → CLI `python -m cli source list` 显示同一有效 mode
-- [ ] `git status --porcelain` → clean
+- [x] `python -m pytest tests -q` → 0 failed（基线 416 passed / 1 skipped，本轮预计 ~435 passed）
+- [x] `npx tsc --noEmit`（在 `frontend/`）→ 0 错；`npm run lint` → 无新增告警
+- [x] `grep -rn "capabilities(source_name)" backend cli` → 只剩 core 内部/无遗漏消费点（全部走 `effective_capabilities`）
+- [x] `grep -n "source_name" novelbase/models/novel.py` → 无命中（模型仍纯净）
+- [ ] 端到端抽查（需起后端 + 前端 + 浏览器，本轮未执行，留给人工）：书架卡片显示来源 → 详情页显示来源 → 「检查更新」默认选中该书来源 → 设置页改某书源 `search` 的 mode → `GET /api/v2/config/sources/{name}` 的 `capabilities` 随之变化 → CLI `python -m cli source list` 显示同一有效 mode
+- [x] `git status --porcelain` → clean
 
 ## Self-Review 记录
 
 - **spec 覆盖**：spec §1 读点 → T1/T2；§2 详情页默认来源 → T3；§3 mode 覆盖 → T5/T6/T7/T8；§4 前端整合 → T10/T11；§5 headers → T9；§6 CLI 清理 → T4；§「文档与约定修订」→ T12。spec 的「非目标」未被任何 Task 触碰。
 - **类型一致性**：`effective_capabilities()`、`mode_overrides`（能力名 → mode）、`capabilities`（有效）/ `declared_capabilities`（声明）、`NovelMeta.source_name`、`SourceAccordion({name, info})` 在各 Task 间命名一致。
 - **测试计数**：T1 +3；T4 +2；T5 +6；T6 +3；T7 +4；T8 +1 → 预计 435 passed（若某步实际数不同，以 `pytest` 实测为准并更新对应 Expected 行）。
+
+---
+
+## 完成记录（2026-09-25）
+
+- **状态**：12 个 Task 全部完成并逐个通过任务级审阅（spec ✅ + quality approved）；其中 T5、T7、T8 各进过 1 轮 fix loop（finding 全部 ADDRESSED 后收口）；全分支终审判定**可合并**，终审的 4 条建议项已由一次 fix 波次修完并复审通过。
+- **提交范围**：`09b2f62..8a05a00`（19 个 commit，均为 dev 本地、未 push）。
+- **验证**：`python -m pytest tests -q` → **444 passed, 1 skipped, 0 failed**（起点 416）；`cd frontend && npx tsc -b` → 0 错；`npm run lint` → 0 告警；`grep "capabilities(" backend cli` → 只剩 `declared_capabilities`（有意保留声明值）与 `effective_capabilities` 内部读声明，无遗漏消费点；`Novel` 模型内无 `source_name`（命中在 `SearchResult`，spec 明确不改）。
+- **口径修正**：`frontend/tsconfig.json` 是 solution 风格，`npx tsc --noEmit` 不检查 `src`（空转）；前端类型检查一律用 `npx tsc -b`。已同步进 `docs/session-prompt.md`。
+- **人工待验证**（无前端测试框架，本轮未起浏览器）：书架卡片来源行、详情页「来源：」、检查更新/下载选中默认该书来源、`headers` 显示为格式化 JSON 且非法不落库、mode 下拉初值与「恢复默认」、`/sources` → `/settings` 跳转、设置页折叠条展开编辑。
+- **决策追认**：`docs/superpowers/{plans,specs}/` 历史存档内的旧约定原文（「用户不再选 mode」）不改写——那是设计史与本计划的派发材料；现行指导层已 0 命中。
+- **已知延后项**（终审 triage 判 keep，非阻塞）：测试强度类（批量查 spy、`build_options` 反查断言、CLI 位置误传防线只覆盖关键路径）、`VALID_MODES` 与 `MODE_META` 双份定义、UI 细节（enabled 开关语义说明、折叠条双分隔线、mode 下拉无乐观更新）、`EngineOptions` 死类型、`sourceConfigFields.ts` 头注释多列了一个间接使用方。
