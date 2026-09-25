@@ -220,7 +220,11 @@ export function useSaveSourceConfig(source: string) {
   return useMutation({
     mutationFn: (data: { enabled?: boolean; config?: Record<string, Partial<EngineOptions>> }) =>
       saveSourceConfig(source, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["source-config", source] }),
+    onSuccess: () => {
+      // 两侧都要失效：设置页读 ["source-config", src]，书源管理页读 ["sources"]
+      qc.invalidateQueries({ queryKey: ["source-config", source] });
+      qc.invalidateQueries({ queryKey: ["sources"] });
+    },
   });
 }
 
