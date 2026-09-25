@@ -75,4 +75,4 @@ android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新�
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-25（书源扁平化收口后本机实测）：`python -m pytest tests/ -q` = **389 passed, 1 skipped, 0 failed**（约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）。前端 `npx tsc --noEmit --project tsconfig.app.json` = 0 错。
+> 2026-09-25（书源扁平化收口后本机实测）：`python -m pytest tests/ -q` = **401 passed, 1 skipped, 0 failed**（约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）。前端 `npx tsc --noEmit --project tsconfig.app.json` = 0 错。

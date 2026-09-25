@@ -14,7 +14,7 @@ python cli.py novel list
 cd frontend
 npx tsc --noEmit --project tsconfig.app.json
 
-# 运行测试（389 passed / 1 skipped，2026-09-25 实测）
+# 运行测试（401 passed / 1 skipped，2026-09-25 实测）
 python -m pytest tests/ -v --tb=short
 ```
 

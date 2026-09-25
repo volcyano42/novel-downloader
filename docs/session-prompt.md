@@ -22,7 +22,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-25（扁平化 followup 收口后）：**389 passed, 1 skipped, 0 failed**（本机实测，约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc --noEmit` = 0 错。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-25（扁平化 followup 收口后）：**401 passed, 1 skipped, 0 failed**（本机实测，约 4.9s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc --noEmit` = 0 错。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
@@ -54,7 +54,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
 - **中间态收口状态**（2026-09-25 扁平化 followup + 收尾完成）：core 层遗留中间态**已全部收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**；`source.json` 的 `enabled` **已有消费者**（`shared.config.enabled_source_names()`）；前端 mode/variant 两级选择器**已删除**（搜索改「已启用书源并发」，URL 解析改「手选书源」，书源管理页 `/sources`）。收尾阶段补齐：① 未知 `source_name` 在 **HTTP 边界统一 404**（`backend/services/source_guard.py` 唯一校验点，覆盖 `download` 与 `config/sources` 全部入口）；② 书源配置表单抽为 `frontend/src/features/sources/sourceConfigForm.tsx` 共享实现（`SettingsPage` / `SourcesPage` 复用），`useSaveSourceConfig` 同时失效 `["source-config", src]` 与 `["sources"]`；③ CLI `cmd_info` / `cmd_download` 引擎按 mode 懒建（不再共用单引擎）；④ `dev new-source` 脚手架 `source.json.common` 与出厂默认同源（`shared.config.mode_defaults()`）。**仍缺**（后续增强，非缺陷）：前端 URL **自动**匹配书源（core 无 `platform_from_url`，`source` 由用户手选）；重复 `source_name` 无实现层检测；`novel.extra["platform"]` 键名保留（值为 `source_name`，数据兼容）
-- **分支状态**（2026-09-25）：main = **v4.4.0**（`ef7f21d`，2026-08-17 后仅 CHANGELOG 补充）；**dev 领先 origin/dev 27 个提交（未推送，用户 2026-09-25 明确选择留在本地）**——含书源扁平化 core 层 23 个提交（`7ccb608`..`2c694b9`）与之前的 4 个；未合并 main
+- **分支状态**（2026-09-25）：main = **v4.4.0**（`ef7f21d`，2026-08-17 后仅 CHANGELOG 补充）；**dev 领先 origin/dev 69 个提交（未推送，用户 2026-09-25 明确选择留在本地）**——含书源扁平化 core 层与后续 backend/CLI/前端收口共 69 个提交（口径：2026-09-25 自检以 `git ls-remote origin dev` = `103f017` 实测；本地偏旧的 `origin/dev` ref 口径为 72）；未合并 main
 
 ## 文档索引
 

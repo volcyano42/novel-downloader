@@ -8,15 +8,15 @@
 # 后端导入验证
 python -c "from novelbase import *; print('OK')"
 
-# 运行测试（379 passed, 1 skipped）
+# 运行测试（401 passed, 1 skipped）
 python -m pytest tests/ -v --tb=short
 
 # 启动 CLI（交互式）
 python main.py
 
 # 启动 CLI（非交互）
-python -m cli search --platform fanqie "关键词"
-python -m cli download --url "https://..." --mode requests
+python -m cli search --source fanqie-requests-default "关键词"
+python -m cli download --source fanqie-requests-default --url "https://..."
 
 # 启动 FastAPI 后端
 uvicorn backend.main:app --reload
@@ -37,7 +37,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
   新增书源：建目录 + 空 `__init__.py` + `source.json` + 4 个能力文件，无注册表改动。
 - **引擎三种模式** `browser`（Playwright）、`requests`（httpx）、`api`（Rain.ink 代理）
 - **前端状态** `@tanstack/react-query`，不用手动 `useEffect` 加载
-- **SSE 章节流** `GET /api/v2/novel/{id}/chapters/stream`
+- **SSE 章节流** `GET /api/v2/storage/novel/{id}/chapters/stream`
 - **BS4 选择器** 只用 `select_one`/`select`（CSS 选择器），不用 `find`/`find_all`
 - **CSS flex 陷阱** flex column 中 `flex-1` 不约束宽度，需 `min-w-0` + `overflow-hidden`；flex row 子元素默认 `min-width: auto`
 - **提交** 中文消息，一个方面一条 commit，禁止 `git add -A`
