@@ -17,6 +17,7 @@ from .core.exceptions import (
     ParseError,
     SourceNotFoundError,
     FeatureNotSupportedError,
+    ModeUnavailableError,
     StorageError,
     AntiCrawlError,
 )
@@ -32,7 +33,7 @@ from .core.storage import LocalStorage
 from .models.novel import Novel, Chapter, Chapters, Illustration, SearchResult
 from .utils.hooks import SourceHooks
 
-__version__ = "4.4.1"
+__version__ = "4.5.0"
 
 def list_sources():
     """列出所有可用 source 名称。"""
@@ -67,6 +68,7 @@ __all__ = [
     "ParseError",
     "SourceNotFoundError",
     "FeatureNotSupportedError",
+    "ModeUnavailableError",
     "StorageError",
     "AntiCrawlError",
     # 模型

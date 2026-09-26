@@ -1,26 +1,41 @@
 # 更新日志
 
-## Unreleased（书源扁平化收口）
+## v4.5.0
 
-> 2026-09-25 dev 分支：书源模型从「四层目录（platform/mode/variant）+ registry 硬编码兜底」
-> 扁平化为「一层目录 + `source.json`」，backend / CLI / 前端 / 配置全面改到 `source_name` 维度。
-> 本条为**未发布**变更汇总，发布时另起 `## v{版本}` 段落。
+> 2026-09-26。相对 v4.4.1 的变更汇总：书源模型扁平化、下载并发模型重做、详情页换源、
+> Android 套壳前端交付修复与「不支持 browser」的环境能力表。
+
+### 新增
+
+1. **下载并发模型重做（三层语义）** — ① 任务级 `download.max_workers`（默认 3）= **最多同时运行的下载任务数**，超额任务排队（前端显示「排队中」，排队中暂停不占任务槽）；② 书源级 `concurrency`（`source.json` 顶层声明 + 用户层 `sites/{name}.yaml` 顶层覆盖，默认 1，**跨任务共享**）；③ 逐能力 `delay` 出厂默认由 `[3, 5]` 改为 `[0, 0]`（= 不限速）。CLI 章节并发上限 = `min(max_workers, source_concurrency)`
+2. **环境能力表：Android 不支持 browser** — `android/.../server.py` 注入 `NLD_PLATFORM=android`，`shared.config.supported_modes()`（`(requests, api)`）是全链唯一真源：browser 书源不进启用集、`{cap}.mode` 覆盖被忽略并回退书源声明（用户 yaml 不动）、`/download/sources` 与 `/config/sources/{name}` 带 `available`、`PUT` 启用/覆盖成不可用引擎 → 400、新增 `GET /config/environment`；前端 browser 源置灰并标注「本环境不支持 browser」、选源列表过滤、mode 下拉只列可用引擎；core 只兜底 `ModeUnavailableError`（不读环境变量）
+3. **Android APK（套壳）前端交付** — 构建期把 `frontend/dist` 打成 `frontend.zip` 随 APK 资产分发，启动时解压到 `$HOME/frontend/dist` 并经 `NLD_FRONTEND_DIR` 交给 `backend/main.py` 的 SPA fallback（Chaquopy 的源码目录不是真实文件系统，`os.listdir`/`os.scandir` 不可用，`StaticFiles` 的真实目录假设不成立 —— 这是真机 WebView 只显示「前端尚未构建」的根因）；`novelbase` 改为与 `backend/`、`shared/` 同法源码复制进 APK（`pip install file:../..` 会让 pip 解析 `playwright` 依赖 → APK 构建必失败）
+4. **详情页换源** — 新增 `PUT /api/v2/storage/novel/{id}/source`；远端书（未入库）也可先换源，换源后立即反映
+5. **`fanqie-api-oiapi` 书源按实测契约修复** — 三处能力修复，并以测试钉住实测响应结构
+6. **书源扁平化为一层 + `source.json`** — `novelbase/sources/{dir}/` 一层目录，每源含 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件；`platform` / `SHOW_NAME` / `HOSTS` / `NAME` / `variant` / `register_source()` / `platform_from_url()` / `canonical_book_url()` 全部移除。`novelbase/source.py` 只暴露 `list_sources` / `get_manifest` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)`
+7. **CLI 参数改按书源** — `--platform/--mode/--variant` 改为 `--source`（`source_name`）；`search` 省略 `--source` 时并发全部启用书源；`dev new-source` 生成新一层结构并默认写 `sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 与 `do_visit_site`（访问平台）删除
+8. **配置改按书源 + 三层合并** — 逐书源配置改为 `sites/{source_name}.yaml`（顶层 `enabled` / `concurrency` 覆盖 `source.json` 出厂值），三层合并由 `shared.config.merged_source_config()` 提供；新增 `/api/v2/config/sources/{source_name}`（GET 三层合并 / PUT 只写用户层）；全局 `mode` 设置项删除
+9. **前端删除 mode/variant 两级选择器** — 搜索改「已启用书源并发」，URL 解析改「手选书源」；**书源管理并入设置页**（每源一个折叠条，展开含逐能力 mode 下拉），`/sources` 仅重定向 `/settings`；选源列表标注未启用书源
+10. **`Novel.id` 改 `sha256(url)[:32]`** — 取代旧的 `hash(canonical url)`；库内 `meta.id` 存书源返回的 url 原样；不再做 url 规范化（92xs/qidian 平台特例随 core 站点知识一并删除）
 
 ### 变更
 
-1. **书源扁平化为一层 + `source.json`** — `novelbase/sources/{dir}/` 一层目录，每源含 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件；`platform` / `SHOW_NAME` / `HOSTS` / `NAME` / `variant` / `register_source()` / `platform_from_url()` / `canonical_book_url()` 全部移除。`novelbase/source.py` 只暴露 `list_sources` / `get_manifest` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)`
-2. **CLI 参数改按书源** — `--platform/--mode/--variant` 改为 `--source`（`source_name`）；`search` 省略 `--source` 时并发全部启用书源；`dev new-source` 生成新一层结构并默认写 `sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 与 `do_visit_site`（访问平台）删除
-3. **删除废弃路由/入口** — `/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由删除，CLI `do_visit_site`（访问平台）一并删除；下载路由统一以 `source` Query 表达书源，`source` 为空 = 并发全部启用书源
-4. **配置改按书源 + 三层合并** — 逐书源配置改为 `sites/{source_name}.yaml`（顶层 `enabled` 覆盖 `source.json` 出厂值），三层合并由 `shared.config.merged_source_config()` 提供；新增 `/api/v2/config/sources/{source_name}`（GET 三层合并 / PUT 只写用户层）；全局 `mode` 设置项删除
-5. **前端删除 mode/variant 两级选择器** — 搜索改「已启用书源并发」，URL 解析改「手选书源」；新增**书源管理页** `/sources`（按书源编辑，含 `enabled` 开关）
-6. **Novel.id 改 `sha256(url)[:32]`** — 取代旧的 `hash(canonical url)`；库内 `meta.id` 存书源返回的 url 原样；不再做 url 规范化（92xs/qidian 平台特例随 core 站点知识一并删除）
-7. **`storage` 段成为死配置** — 实现恒取 `shared.config.get_database_url()`，`config.yaml` 的 `storage.backend` / `storage.database_url` 不再生效（模板保留仅为兼容旧文件）
+1. **删除废弃路由/入口** — `/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由删除，CLI `do_visit_site`（访问平台）一并删除；下载路由统一以 `source` Query 表达书源，`source` 为空 = 并发全部启用书源
+2. **`storage` 段成为死配置** — 实现恒取 `shared.config.get_database_url()`，`config.yaml` 的 `storage.backend` / `storage.database_url` 不再生效（模板保留仅为兼容旧文件）
 
-8. **收尾补齐** — 未知 `source_name` 统一 404（`backend/services/source_guard.py`）；书源配置表单抽为前端共享组件并修复 `enabled` 开关跨页失效；CLI `info` / `download` 引擎按 mode 懒建；`dev new-source` 脚手架 `source.json.common` 与出厂默认同源；docs 归一（外层容器 `docs/` 仅存指针）
+### 修复
+
+1. **92xs 章节正文剥离站内广告位**（`#center_tip`）
+2. **书源额度「释放即唤醒」** — 修退避轮询的吞吐回退；章节拿到书源额度后才标记「下载中」
+3. **并发健壮性加固** — 章节分批提交、额度热路径/队列阻塞/请求覆盖与释放路径修复；排队中任务可取消、并发数输入回车去重
+4. **未知 `source_name` 统一 404** — `backend/services/source_guard.py` 为 HTTP 边界唯一校验点（覆盖 download 与 config/sources 入口）
+5. **`delay` 兜底值统一为出厂默认 `[0, 0]`** — 前端书源 delay 输入与后端兜底一致
+6. **书源配置表单抽为共享组件** — 修复 `enabled` 开关跨页失效（保存后同时失效 `["source-config", src]` 与 `["sources"]`）
 
 ### 不迁移
 
 - `sites/{platform}.yaml`（`fanqie.yaml` / `qidian.yaml` / `qimao.yaml` / `92xs.yaml`）与旧的 `search_history`（platform/mode/variant 维度）**不做迁移**，用户按新 `source_name` 重新配置、历史重新积累
+
 
 ## v4.4.1
 
