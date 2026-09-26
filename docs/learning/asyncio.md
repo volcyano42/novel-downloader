@@ -14,7 +14,7 @@
 | `async def` / `await` | 普通函数 | 协程骨架 |
 | `asyncio.sleep` | `time.sleep` | 异步睡眠 |
 | `asyncio.gather` | `ThreadPoolExecutor` + `as_completed` | 并发调度 |
-| `asyncio.Semaphore` | `max_workers` 参数 | 并发限流 |
+| `asyncio.Semaphore` | `max_workers` 参数 | 并发限流（图片批量下载；**下载任务的章节并发**见下方注） |
 | `asyncio.Event` | `threading.Event` | 协程间开关 |
 | `asyncio.to_thread` | 直接调同步函数 | 同步库兜底 |
 | `asyncio.run` | `threading.Thread` 启动 | 同步入口阻塞等完 |
@@ -170,7 +170,9 @@ ThreadPoolExecutor(max_workers=5)   # 限制"最多 5 个线程"
 asyncio.Semaphore(5)                # 限制"最多 5 个协程"
 ```
 
-**关键理解**：解决同一个问题——"别一次性开太多并发"。章节下载 `max_workers=3` = 最多同时下 3 章；图片 `max_workers=5` = 最多同时下 5 张图。
+**关键理解**：解决同一个问题——"别一次性开太多并发"。图片批量下载 `max_workers=5` = 最多同时下 5 张图。
+
+> **本项目的实际口径（2026-09-25 重做）**：下载任务的 `max_workers` 已**不再**表示"任务内同时下几章"，而是「**最多同时运行的下载任务数**」（`download.max_workers`，默认 3；超额任务停在 `queued`）。**章节并发**改由**书源级 `concurrency`**（默认 1，跨任务共享）决定，且用**轮询计数**而非 `asyncio.Semaphore` 实现——因为 `max_workers` 与 `concurrency` 都是运行时可改配置（UI 改完立即生效），固定容量的 `Semaphore` 无法反映运行中变化的上限。设计见 `docs/superpowers/specs/2026-09-25-download-concurrency-design.md`。
 
 ---
 

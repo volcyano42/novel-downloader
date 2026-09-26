@@ -60,8 +60,8 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
 - **逐能力 `delay`**：每个请求前的随机等待（`asyncio.sleep(random.uniform(delay))`，语义不变）；
   **出厂默认改为 `[0, 0]`（不设置 = 不限速；旧出厂值为 `[3,5]`）**。生效优先级：
   `dataclass 默认 → source.json 的 common → 能力段自身 → 用户层 sites yaml`。
-  ⚠️ 本机历史上已写入 `sites/*.yaml` 的 `delay: [3,5]` 仍会覆盖新出厂默认（三层合并的正常结果），
-  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。
+  ⚠️ **历史写入过 `delay` 的老用户**（旧版曾在 `sites/*.yaml` 落过 `delay: [3,5]`）会因三层合并语义继续以用户层为准，
+  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 `enabled` / api 源的能力段 `key`），新用户不受影响。
 - **逐能力段**：字段随该能力的**有效 mode** 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
 - **用户层可逐能力覆盖 mode**：`{cap}.mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
   写 `null`（或删除该键）= 恢复声明；非法值忽略回退声明。唯一入口 `shared.config.effective_capabilities()`；
