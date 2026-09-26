@@ -37,14 +37,19 @@ _tasks_lock = threading.Lock()
 _running_tasks: set[str] = set()
 # 各书源当前在飞的请求数（跨任务共享，上限 = source_concurrency(source)）。
 _source_active: dict[str, int] = {}
+# 各书源「额度释放」唤醒队列：等额度的协程在此登记 Future，`_release_source_slot`
+# 释放后 set_result 立即唤醒（事件驱动，取代定时轮询）。绑定当前事件循环，跨 loop
+# （如测试里多次 asyncio.run）复用时重置，避免 Future 串 loop。
+_source_waiters: dict[str, list[asyncio.Future]] = {}
+_source_waiters_loop: asyncio.AbstractEventLoop | None = None
 
 _QUEUE_POLL_INTERVAL = 0.2
-_SOURCE_POLL_INTERVAL = 0.05
-# 等书源额度时退避轮询：间隔从 _SOURCE_POLL_INTERVAL 逐次倍增到上限 _SOURCE_POLL_MAX，
-# 减少大批章节同时抢同一书源额度时的无效唤醒（上限 0.5s 保证取消最迟 0.5s 内退出）。
-_SOURCE_POLL_MAX = 0.5
-# 章节分批提交：把「同时挂起、以轮询抢书源额度」的协程数从全部章节压到每批 _BATCH_SIZE，
-# 批间串行；批内仍受书源额度约束。避免千章书一次性挂起 N 个协程 → N/0.05 次/s 唤醒 + 锁竞争。
+# 等书源额度改「释放即唤醒」：释放后立即唤醒等待者，避免定时/退避轮询在「单请求耗时
+# < 检查间隔」时空转（默认 concurrency=1 会退化成 ~2 章/s）。空闲期用有界超时兜底，
+# 兼顾暂停/取消感知（超时后重查 _cancel/_pause）。
+_SOURCE_WAIT_TIMEOUT = 0.2
+# 章节分批提交：把「同时挂起、等书源额度」的协程数从全部章节压到每批 _BATCH_SIZE，
+# 批间串行；批内仍受书源额度约束。避免千章书一次性挂起 N 个协程的无谓开销。
 _BATCH_SIZE = 32
 _MAX_WORKERS_TTL = 1.0
 # (time.monotonic() 时间戳, max_workers) —— 短 TTL 缓存，避免排队轮询每 0.2s 读 config.yaml
@@ -115,19 +120,55 @@ def _release_task_slot(task: dict) -> None:
         _running_tasks.discard(task["task_id"])
 
 
+def _source_waiters_for(source_name: str) -> list[asyncio.Future]:
+    """取该书源的等待者列表（惰性创建，绑定当前事件循环）。
+
+    跨 loop 复用时清空旧 Future，避免把唤醒投递到已关闭的循环。
+    """
+    global _source_waiters_loop
+    loop = asyncio.get_running_loop()
+    if _source_waiters_loop is not loop:
+        _source_waiters.clear()
+        _source_waiters_loop = loop
+    return _source_waiters.setdefault(source_name, [])
+
+
+def _discard_waiter(waiters: list[asyncio.Future], fut: asyncio.Future) -> None:
+    """把 fut 从等待者列表移除（可能已被 `_wake_source_waiters` clear，忽略缺失）。"""
+    try:
+        waiters.remove(fut)
+    except ValueError:
+        pass
+
+
+def _wake_source_waiters(source_name: str) -> None:
+    """释放额度后唤醒该书源的全部等待者（同一事件循环线程，直接 set_result）。
+
+    唤醒后等待者会在各自协程里重查额度、竞争出唯一的接手者，其余重新登记等待。
+    """
+    waiters = _source_waiters.get(source_name)
+    if not waiters:
+        return
+    for fut in waiters:
+        if not fut.done():
+            fut.set_result(None)
+    waiters.clear()
+
+
 async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool:
-    """轮询等待书源级额度（跨任务共享）：拿到返回 True，任务被取消返回 False。
+    """等待书源级额度（跨任务共享）：拿到返回 True，任务被取消返回 False。
 
     `limit` 由调用方在任务开始时取一次并缓存（`source_concurrency()` 会读
     `sites/*.yaml` 与 `source.json`，不得进每请求热路径）。等待期间若任务被暂停，
     则不占额度地停在 `paused`（优雅暂停：未开始的请求停住，已在飞的请求跑完）。
 
-    等待间隔**退避递增**（`_SOURCE_POLL_INTERVAL` 起，逐次 ×2 到 `_SOURCE_POLL_MAX`）：
-    大批章节同时抢同一书源额度时，避免固定 0.05s 轮询造成的海量无效唤醒/锁竞争；
-    上限 0.5s 保证取消后最迟 0.5s 内退出。
+    **释放即唤醒**（事件驱动，取代定时/退避轮询）：额度已满时在 `_source_waiters`
+    登记 Future，`_release_source_slot` 释放后立即 set_result 唤醒 —— 无竞争时零等待、
+    有竞争时释放后毫秒级接手，避免定时轮询在「单请求耗时 < 检查间隔」时空转
+    （默认 concurrency=1 会退化成 ~2 章/s）。每个 Future 仍带 `_SOURCE_WAIT_TIMEOUT`
+    有界超时兜底，超时后重查取消/暂停，保证取消/暂停最迟 ~0.2s 内被感知。
     """
     limit = max(1, limit)
-    interval = _SOURCE_POLL_INTERVAL
     while True:
         if task["_cancel"].is_set():
             return False
@@ -135,18 +176,32 @@ async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool
             with _tasks_lock:
                 task["status"] = "paused"
             await asyncio.sleep(0.1)
-            interval = _SOURCE_POLL_INTERVAL   # 恢复后重新从最小间隔退避
             continue
         with _tasks_lock:
             if _source_active.get(source_name, 0) < limit:
                 _source_active[source_name] = _source_active.get(source_name, 0) + 1
                 return True
-        await asyncio.sleep(interval)
-        interval = min(interval * 2, _SOURCE_POLL_MAX)
+        # 额度已满：登记唤醒 Future，并做一次「登记后」复检以关闭竞态
+        # （释放可能恰好发生在「检查满」与「登记」之间 → 唤醒会落空）。
+        waiters = _source_waiters_for(source_name)
+        fut = asyncio.get_running_loop().create_future()
+        waiters.append(fut)
+        with _tasks_lock:
+            if _source_active.get(source_name, 0) < limit:
+                _source_active[source_name] = _source_active.get(source_name, 0) + 1
+                _discard_waiter(waiters, fut)
+                return True
+        try:
+            await asyncio.wait_for(fut, _SOURCE_WAIT_TIMEOUT)
+        except asyncio.TimeoutError:
+            _discard_waiter(waiters, fut)
+        except asyncio.CancelledError:
+            _discard_waiter(waiters, fut)
+            raise
 
 
 def _release_source_slot(source_name: str) -> None:
-    """释放书源额度。
+    """释放书源额度，并**立即唤醒**等待该源额度的协程（释放即唤醒）。
 
     下界保护：计数已为 0 时说明出现了双释放 / 漏 acquire（额度泄漏会让该源永久
     卡死），记录 error 而非静默 `pop`，使其在日志中暴露。
@@ -160,6 +215,8 @@ def _release_source_slot(source_name: str) -> None:
             _source_active[source_name] = n
         else:
             _source_active.pop(source_name, None)
+    # 无论是否归零都唤醒：可能有多个额度，等待者醒来后各自重查、竞争接手。
+    _wake_source_waiters(source_name)
 
 
 async def _run_download(task: dict, source_name: str):
