@@ -294,8 +294,8 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
 
 
 def test_get_source_config_shape(monkeypatch):
-    """GET /config/sources/{name} 契约形状：{source_name, enabled, capabilities,
-    declared_capabilities, config}（capabilities 为有效 mode）。"""
+    """GET /config/sources/{name} 契约形状：{source_name, enabled, concurrency,
+    capabilities, declared_capabilities, config}（capabilities 为有效 mode）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
@@ -303,10 +303,11 @@ def test_get_source_config_shape(monkeypatch):
     monkeypatch.setattr(cfg, "effective_capabilities", lambda n: {"search": "browser"})
     _allow_sources(monkeypatch, "demo-requests-default")
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
-    assert set(out.keys()) == {"source_name", "enabled", "capabilities",
-                               "declared_capabilities", "config"}
+    assert set(out.keys()) == {"source_name", "enabled", "concurrency",
+                               "capabilities", "declared_capabilities", "config"}
     assert out["source_name"] == "demo-requests-default"
     assert out["enabled"] is False
+    assert out["concurrency"] == 1
     assert out["capabilities"] == {"search": "browser"}
     assert out["declared_capabilities"] == {"search": "requests"}
     assert out["config"] == {"search": {"mode": "requests"}}

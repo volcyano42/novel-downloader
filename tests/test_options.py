@@ -15,7 +15,7 @@ class TestAPIOptions:
     def test_defaults(self):
         o = APIOptions()
         assert not hasattr(o, "name")
-        assert o.delay == (3, 5)
+        assert o.delay == (0, 0)
         assert o.timeout == 30
         assert o.retry_times == 3
         assert o.backoff_factor == 2
