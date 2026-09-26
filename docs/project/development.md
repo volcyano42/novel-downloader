@@ -17,7 +17,7 @@ npx tsc --noEmit --project tsconfig.app.json
 # 整仓类型检查：根 tsconfig.json 是 solution 风格，`tsc --noEmit` 会空转，须用 -b
 npx tsc -b
 
-# 运行测试（444 passed / 1 skipped，2026-09-25 实测）
+# 运行测试（449 passed / 1 skipped，2026-09-25 实测）
 python -m pytest tests/ -v --tb=short
 ```
 
