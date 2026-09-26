@@ -48,12 +48,14 @@ def _parse_args() -> argparse.Namespace:
     dp.add_argument("--source", "-s", required=True, help="书源名 source_name")
     dp.add_argument("--url", "-u", required=True, help="小说页面 URL")
     dp.add_argument("--group", "-g", default="default", help="分组名")
-    dp.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
+    dp.add_argument("--workers", "-w", type=int, default=3,
+                    help="并行章节数（受书源并发额度约束）")
 
     # ── update ──
     up = sub.add_parser("update", help="更新已下载小说")
     up.add_argument("--group", "-g", default="default", help="分组名")
-    up.add_argument("--workers", "-w", type=int, default=3, help="下载线程数")
+    up.add_argument("--workers", "-w", type=int, default=3,
+                    help="并行章节数（受书源并发额度约束）")
 
     # ── export ──
     ep = sub.add_parser("export", help="重新导出已下载小说")

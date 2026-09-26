@@ -51,13 +51,14 @@ def _settings_download(cfg: dict) -> None:
     _log.debug("settings_download")
 
     print(f"\n[下载设置]")
-    print(f" 1. 下载线程数: {dl.get('max_workers', 3)}")
+    print(f" 1. 并行章节数（受书源并发额度约束）: {dl.get('max_workers', 3)}")
     print(f" 2. 下载分组: {dl.get('group', 'default')}")
     print(" 0. 返回")
     ch = input("请选择: ").strip()
 
     if ch == "1":
-        dl["max_workers"] = _input_int("下载线程数", dl.get("max_workers", 3))
+        dl["max_workers"] = _input_int("并行章节数（受书源并发额度约束）",
+                                       dl.get("max_workers", 3))
         save_main_config(cfg)
     elif ch == "2":
         g = _text_input("输入分组名称")

@@ -11,7 +11,7 @@ from novelbase import (
     create_engine, StorageOptions,
 )
 from novelbase.core.storage import create_storage
-from shared.config import effective_capabilities
+from shared.config import effective_capabilities, source_concurrency
 from novelbase.utils.logger import get_logger
 from shared.user_data import get_novel_source
 
@@ -158,7 +158,10 @@ async def _do_download_inner(
     incomplete_count = 0
     errors: list[str] = []
 
-    sem = asyncio.Semaphore(max_workers)
+    # 章节并发上限 = min(max_workers, 书源并发额度)：与 backend 一致，
+    # 受书源级 concurrency 约束（默认 1）。
+    concurrency = min(max_workers, source_concurrency(source_name))
+    sem = asyncio.Semaphore(max(1, concurrency))
 
     async def _download_one(ch) -> tuple[bool, str, str]:
         async with sem:
@@ -292,7 +295,9 @@ async def do_update(format_configs: dict, max_workers: int = 3):
 
             print(f"  {len(existing)}/{len(remote_chapters)} \033[1;32m+{len(new_chapters)}\033[0m")
 
-            sem = asyncio.Semaphore(max_workers)
+            # 章节并发上限 = min(max_workers, 书源并发额度)（与 backend 一致）
+            concurrency = min(max_workers, source_concurrency(source_name))
+            sem = asyncio.Semaphore(max(1, concurrency))
 
             async def _dl(ch):
                 async with sem:

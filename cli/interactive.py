@@ -10,7 +10,7 @@ from cli.config import (
     build_options, get_novel_group, load_groups,
 )
 from cli.ui import _select, _text_input
-from shared.config import effective_capabilities, enabled_source_names
+from shared.config import effective_capabilities, enabled_source_names, source_concurrency
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, search,
     create_engine,
@@ -190,7 +190,9 @@ async def _update_one_async(novel, max_workers: int) -> int:
 
         print(f"  {len(existing)}/{len(remote_chapters)} \033[1;32m+{len(new_chapters)}\033[0m")
 
-        sem = asyncio.Semaphore(max_workers)
+        # 章节并发上限 = min(max_workers, 书源并发额度)（与 backend 一致）
+        concurrency = min(max_workers, source_concurrency(source_name))
+        sem = asyncio.Semaphore(max(1, concurrency))
 
         async def _dl(ch):
             async with sem:
