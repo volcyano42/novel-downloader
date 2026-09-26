@@ -234,7 +234,7 @@ export default function BookshelfPage() {
           ) : tasks.length === 0 ? <p className="text-center text-sm text-slate-400 py-20">暂无下载任务</p>
             : [...tasks].reverse().map(task => {
               const pct = task.total > 0 ? Math.round((task.progress / task.total) * 100) : 0;
-              const status = task.status as "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
+              const status = task.status as "queued" | "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
               return (
                 <DownloadTask key={task.task_id} title={task.title}
                   status={status} progress={pct} errorMessage={task.error ?? undefined}

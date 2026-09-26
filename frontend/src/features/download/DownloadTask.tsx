@@ -1,10 +1,10 @@
 import {useState} from "react";
-import {AlertTriangle, CheckCircle, ChevronDown, Loader2, Pause, Play, RefreshCw, X, XCircle} from "lucide-react";
+import {AlertTriangle, CheckCircle, ChevronDown, Clock, Loader2, Pause, Play, RefreshCw, X, XCircle} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import type {ChapterStatus} from "@/api/endpoints";
 
-type TaskStatus = "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
+type TaskStatus = "queued" | "downloading" | "paused" | "completed" | "failed" | "partial" | "cancelled";
 
 interface DownloadTaskProps {
   title: string; status: TaskStatus; progress?: number; errorMessage?: string; currentTitle?: string;
@@ -14,6 +14,7 @@ interface DownloadTaskProps {
 }
 
 const statusConfig: Record<TaskStatus, { label: string; className: string; icon: typeof CheckCircle }> = {
+  queued:     { label: "排队中", className: "bg-slate-100 text-slate-500", icon: Clock },
   downloading: { label: "下载中",  className: "bg-[#5e6ad2]/10 text-[#5e6ad2]", icon: Loader2 },
   paused:     { label: "已暂停", className: "bg-amber-50 text-amber-600", icon: Pause },
   completed:  { label: "完成",   className: "bg-emerald-50 text-emerald-600", icon: CheckCircle },
@@ -108,6 +109,9 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
           <span className="truncate block text-sm font-medium text-slate-800">{title}</span>
           {currentTitle && status === "downloading" && (
             <span className="truncate block text-[11px] text-slate-400 mt-0.5">{currentTitle}</span>
+          )}
+          {status === "queued" && (
+            <span className="truncate block text-[11px] text-slate-400 mt-0.5">等待前一个任务完成…</span>
           )}
           {(sourceName || createdAt) ? (
             <span className="truncate block text-[11px] text-slate-400 mt-0.5">
