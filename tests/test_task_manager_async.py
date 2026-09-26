@@ -150,7 +150,12 @@ def test_pause_freezes_progress_until_resume(monkeypatch):
     # speed=0.05：5 章约 0.1s 下完，sleep(0.02) 时稳定处于下载中，
     # 避免默认 speed=0.01 与 sleep(0.02) 临界竞态导致 pause 落在完成后
     _install_mocks(monkeypatch, chapters, speed=0.05)
+    # 并发模型重做后：章节并发 = 书源额度（默认 1）。本用例断言的是「多章同时
+    # 开始下载」下的暂停冻结，故显式把书源额度设为 3 以复现该前提。
+    monkeypatch.setattr(tm, "source_concurrency", lambda name: 3)
     tm._tasks.clear()
+    tm._running_tasks.clear()
+    tm._source_active.clear()
 
     async def _run():
         r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
@@ -183,7 +188,12 @@ def test_pause_at_tail_does_not_skip(monkeypatch):
 
     chapters = _chapters(3)
     _install_mocks(monkeypatch, chapters, speed=0.05)  # 每章 0.05s，时序可控
+    # 并发模型重做后：章节并发 = 书源额度（默认 1）。本用例断言「3 章同时开始
+    # 下载、暂停不打断进行中的章节」，故显式把书源额度设为 3 以复现该前提。
+    monkeypatch.setattr(tm, "source_concurrency", lambda name: 3)
     tm._tasks.clear()
+    tm._running_tasks.clear()
+    tm._source_active.clear()
 
     async def _run():
         r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")

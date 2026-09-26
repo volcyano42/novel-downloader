@@ -3,6 +3,16 @@
 create_task/list_tasks/pause_task/resume_task/delete_task 保持同步 def，
 由 FastAPI async 路由在事件循环线程里调用；下载协程通过
 asyncio.get_running_loop() + loop.create_task 调度到同一事件循环。
+
+并发模型（2026-09-25 重做，见 docs/superpowers/specs/2026-09-25-download-concurrency-design.md）：
+- **任务级额度**：同时运行的下载任务数上限 = `download.max_workers`（默认 3），
+  超额任务停在 `queued`，拿到额度才转 `downloading`。
+- **书源级额度**：同一书源同时最多 `source_concurrency(source)` 个请求在飞，
+  **跨任务共享**（默认 1）。
+
+两者都用**轮询式计数**而非固定容量 asyncio.Semaphore：`max_workers` 与书源
+`concurrency` 都是运行时可改配置（UI 改完立即生效），轮询式能立刻反映新上限
+（与 `_wait_if_paused` 的轮询风格一致）。
 """
 import asyncio
 import logging
@@ -12,7 +22,7 @@ import uuid
 
 from backend.services.engine_manager import get_cached_engine
 from novelbase.core.exceptions import ChapterNotFoundError
-from shared.config import load_config, get_database_url
+from shared.config import load_config, get_database_url, source_concurrency
 from shared.user_data import set_novel_source
 
 _log = logging.getLogger("backend.task_manager")
@@ -20,12 +30,101 @@ _log = logging.getLogger("backend.task_manager")
 _tasks: dict[str, dict] = {}
 # 单事件循环下协程之间不会在同步语句上交错，但下载协程与 create_task/
 # list_tasks 等同步函数混用时，threading.Lock 仍是最稳妥的保护（等价的
-# asyncio.Lock 无法在同步函数里 acquire）。
+# asyncio.Lock 无法在同步函数里 acquire）。任务槽与书源额度计数共用此锁。
 _tasks_lock = threading.Lock()
+
+# 当前持有任务级额度的 task_id 集合（同时运行的任务数上限 = max_workers）。
+_running_tasks: set[str] = set()
+# 各书源当前在飞的请求数（跨任务共享，上限 = source_concurrency(source)）。
+_source_active: dict[str, int] = {}
+
+_QUEUE_POLL_INTERVAL = 0.2
+_SOURCE_POLL_INTERVAL = 0.05
+
+
+def _max_workers() -> int:
+    """运行时可改的任务并发上限（`download.max_workers`，非法值回退 1）。"""
+    return max(1, load_config().get("download", {}).get("max_workers", 3))
+
+
+async def _acquire_task_slot(task: dict) -> bool:
+    """轮询等待任务级额度：拿到返回 True，被取消返回 False。
+
+    轮询而非固定容量 asyncio.Semaphore：`max_workers` 是运行时可改配置，轮询能
+    立即生效（与 `_wait_if_paused` 同风格）。等额度期间任务保持 `queued`，且
+    响应取消（取消后立即退出，不留 `downloading` 残影）。
+    """
+    while True:
+        if task["_cancel"].is_set():
+            return False
+        max_workers = _max_workers()   # 锁外读配置（含文件 IO），避免持锁做 IO
+        with _tasks_lock:
+            if task["task_id"] in _running_tasks:
+                return True
+            if len(_running_tasks) < max_workers:
+                _running_tasks.add(task["task_id"])
+                return True
+        await asyncio.sleep(_QUEUE_POLL_INTERVAL)
+
+
+def _release_task_slot(task: dict) -> None:
+    with _tasks_lock:
+        _running_tasks.discard(task["task_id"])
+
+
+async def _acquire_source_slot(source_name: str, task: dict) -> bool:
+    """轮询等待书源级额度（跨任务共享）：拿到返回 True，任务被取消返回 False。
+
+    轮询而非固定容量 Semaphore：书源 `concurrency` 是用户可改配置，UI 改完立即生效。
+    等待期间若任务被暂停，则不占额度地停在 `paused`（优雅暂停：未开始的章节停住，
+    已在飞的章节跑完后不再发起新请求）。
+    """
+    while True:
+        if task["_cancel"].is_set():
+            return False
+        if task["_pause"].is_set():
+            with _tasks_lock:
+                task["status"] = "paused"
+            await asyncio.sleep(0.1)
+            continue
+        limit = max(1, source_concurrency(source_name))
+        with _tasks_lock:
+            if _source_active.get(source_name, 0) < limit:
+                _source_active[source_name] = _source_active.get(source_name, 0) + 1
+                return True
+        await asyncio.sleep(_SOURCE_POLL_INTERVAL)
+
+
+def _release_source_slot(source_name: str) -> None:
+    with _tasks_lock:
+        n = _source_active.get(source_name, 0) - 1
+        if n > 0:
+            _source_active[source_name] = n
+        else:
+            _source_active.pop(source_name, None)
 
 
 async def _run_download(task: dict, source_name: str):
-    """下载协程：按书源取引擎 → 并发下载章节 → 收尾状态，支持暂停/取消。"""
+    """下载协程入口：先排任务级额度（超额停在 queued），再执行下载主体。"""
+    # ── 任务级排队：超额任务停在 queued，直到拿到额度（轮询，响应取消）──
+    if not await _acquire_task_slot(task):
+        # 排队中被取消：立即退出，不留 downloading 残影
+        return
+    try:
+        with _tasks_lock:
+            if task["_cancel"].is_set():
+                return
+            # 排队中已被暂停：保持 queued，交给 _wait_if_paused 停在 paused
+            if not task["_pause"].is_set():
+                task["status"] = "downloading"
+        await _run_download_impl(task, source_name)
+    finally:
+        # 任务结束（无论成败/取消）必须释放任务槽
+        _release_task_slot(task)
+
+
+async def _run_download_impl(task: dict, source_name: str):
+    """下载主体：按书源取引擎 → 并发下载章节 → 收尾状态，支持暂停/取消。"""
     from novelbase import resolve_meta, resolve_chapter
     from novelbase.models.novel import Chapter, Chapters, Novel
     from novelbase.core.storage import create_storage
@@ -77,9 +176,6 @@ async def _run_download(task: dict, source_name: str):
         novel = Novel(title=task["title"], url=novel_url, id=task["novel_id"],
                       serial=0, author="", description="")
 
-        cfg = load_config()
-        max_workers = cfg.get("download", {}).get("max_workers", 3)
-
         _eta_samples: list[float] = []
         _eta_lock = threading.Lock()
 
@@ -90,7 +186,10 @@ async def _run_download(task: dict, source_name: str):
                     _eta_samples.pop(0)
                 avg = sum(_eta_samples) / len(_eta_samples)
                 remaining = task["total"] - task["progress"]
-                eta_seconds = avg * remaining / max(1, max_workers)
+                # 章节并发度 = 书源并发额度（跨任务共享，故仅为近似估算）；
+                # 不再与 max_workers 挂钩（max_workers 现在是「任务数」上限）。
+                concurrency = max(1, source_concurrency(source_name))
+                eta_seconds = avg * remaining / concurrency
                 with _tasks_lock:
                     task["eta"] = eta_seconds
 
@@ -129,6 +228,10 @@ async def _run_download(task: dict, source_name: str):
             for attempt in range(max_retries + 1):
                 if attempt > 0:
                     await asyncio.sleep(2 * attempt)
+                # 书源级额度：同一书源同时最多 source_concurrency 个请求在飞
+                #（跨任务共享）。被取消时直接返回。
+                if not await _acquire_source_slot(source_name, task):
+                    return
                 try:
                     downloaded = await resolve_chapter(ch, source_name, engines,
                                                        mode_overrides=_caps)
@@ -161,23 +264,17 @@ async def _run_download(task: dict, source_name: str):
                             ch_data["status"] = "failed"
                             ch_data["error"] = "章节不可获取"
                     break
+                finally:
+                    # 每次 resolve_chapter（含重试）后释放书源额度
+                    _release_source_slot(source_name)
 
             _update_eta(time.time() - t0)
             with _tasks_lock:
                 task["progress"] += 1
 
-        # 章节并发：Semaphore 限流 + gather 并发，异常按返回值收集不中断整体
-        sem = asyncio.Semaphore(max(1, max_workers))
-
-        async def _run_one(ch_data: dict):
-            # 排队检查点：拿信号量前先响应暂停/取消（不占信号量）
-            if not await _wait_if_paused():
-                return
-            async with sem:
-                await _download_one(ch_data)
-
+        # 章节并发由书源额度决定（不再有任务内 Semaphore + max_workers）
         results = await asyncio.gather(
-            *(_run_one(ch) for ch in task["chapters"]),
+            *(_download_one(ch) for ch in task["chapters"]),
             return_exceptions=True,
         )
         for r in results:
@@ -199,7 +296,7 @@ async def _run_download(task: dict, source_name: str):
         pending = [ch for ch in task["chapters"] if ch.get("status") == "pending"]
         if pending:
             results = await asyncio.gather(
-                *(_run_one(ch) for ch in pending),
+                *(_download_one(ch) for ch in pending),
                 return_exceptions=True,
             )
             for r in results:
@@ -229,7 +326,7 @@ def create_task(novel_id: str, chapters: list[dict], title: str,
     ]
     task = {
         "task_id": task_id, "novel_id": novel_id, "title": title,
-        "total": len(chapters), "progress": 0, "status": "downloading",
+        "total": len(chapters), "progress": 0, "status": "queued",
         "error": None, "errors": [], "current_title": "",
         "chapters": ch_data, "novel_url": novel_url,
         "created_at": time.time(),
@@ -285,8 +382,9 @@ def get_task(task_id: str) -> dict | None:
 
 
 def pause_task(task_id: str) -> bool:
+    """暂停任务：`downloading` 或排队的 `queued` 都可暂停（排队中暂停 = 置 _pause）。"""
     task = _tasks.get(task_id)
-    if task and task.get("_pause") and task["status"] in ("downloading",):
+    if task and task.get("_pause") and task["status"] in ("downloading", "queued"):
         task["_pause"].set()
         return True
     return False
@@ -299,6 +397,10 @@ def resume_task(task_id: str) -> bool:
     if task["status"] == "paused":
         task["_pause"].clear()
         task["status"] = "downloading"
+        return True
+    if task["status"] == "queued" and task["_pause"].is_set():
+        # 排队中被暂停：清标志，status 保持 queued（等额度；拿到后转 downloading）
+        task["_pause"].clear()
         return True
     if task["status"] == "failed":
         task["_pause"].clear()
@@ -316,7 +418,10 @@ def resume_task(task_id: str) -> bool:
 
 
 def delete_task(task_id: str) -> bool:
-    """真正取消下载：设 _cancel 标志 + status=cancelled，下载协程检测到后停止。"""
+    """真正取消下载：设 _cancel 标志 + status=cancelled，下载协程检测到后停止。
+
+    对排队中（`queued`）任务同样有效：协程在拿到额度后立即检查 _cancel 并退出。
+    """
     with _tasks_lock:
         task = _tasks.get(task_id)
         if not task:
