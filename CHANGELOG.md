@@ -1,5 +1,14 @@
 # 更新日志
 
+## Unreleased
+
+> 2026-09-26。移除 Android 套壳与环境能力表（移动端改走 Termux）。
+
+### 移除
+
+1. **Android 套壳（Chaquopy APK 方案）整体移除** — 依赖被上游 wheel 清单绑架（`pydantic<2`、`fastapi==0.120.0`、`minSdk 24` 由 `lxml`/`PyYAML` 的 `android_24` wheel 决定），且「Chaquopy 资产不是真实文件系统」是一整类根因（前端白页已踩、`list_sources()` 目录枚举是同一根因的下一处）。删除 `android/`、`build-apk.yml`、`tests/test_android_server.py`、`docs/build/android-apk.md`，以及 `NLD_FRONTEND_DIR` 候选和文档/公开清单里的 android 条目；移动端改走已有的 Termux 产物
+2. **环境能力表移除** — 其唯一注入点（APK 的 `server.py`）已随套壳消失。删除 `platform()` / `supported_modes()` / `available_capabilities()` / `is_source_available()`、`GET /config/environment`、各处 `available` 字段、书源配置 PUT 的可用性校验、`ModeUnavailableError`，以及前端的 `useEnvironment` / 置灰 / 选源过滤。**「mode 用户覆盖」不受影响，保留**
+
 ## v4.5.0
 
 > 2026-09-26。相对 v4.4.1 的变更汇总：书源模型扁平化、下载并发模型重做、详情页换源、

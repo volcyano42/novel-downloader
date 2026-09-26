@@ -52,7 +52,6 @@ novel-downloader-web       # Web 后端 (FastAPI + 内嵌前端)
 | build-linux-x64.yml | Linux x64 | `...-linux-x64.tar.gz` |
 | build-linux-arm64.yml | Linux arm64 | `...-linux-arm64.tar.gz` |
 | build-linux-arm64-termux.yml | Linux arm64 Termux | `...-termux.tar.gz`（pyroot 内置 Python，含 PYTHONHOME 启动验证） |
-| build-apk.yml | **Android APK**（workflow_dispatch，独立于 build-dist） | `novel-downloader-web-{version}-android.apk`（Chaquopy 嵌入 Python，见 [android-apk.md](android-apk.md)） |
 | build-dist.yml | 一键触发以上 4 个 portable | 全平台 portable |
 | release.yml | 发布：校验 CHANGELOG → 建 tag → 触发 build-dist → 下载产物 → 上传资产 → 创建 Release | Release + 附件 |
 

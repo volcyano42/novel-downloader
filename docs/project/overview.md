@@ -10,7 +10,6 @@
 D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 ├── novel-downloader\                ← 核心 git 仓库（dev/main 分支）
 │   ├── novelbase/  backend/  frontend/  cli/  shared/  scripts/  tests/
-│   ├── android/                     ← Android APK 项目（2026-08-02 新增，Chaquopy 嵌入 Python）
 │   ├── cli.py  main.py  app.py      ← 非交互 CLI / 交互式 CLI / 一键启动 入口
 │   ├── init_config.py  template/  app_data/  docs/
 │   └── .git
@@ -65,13 +64,7 @@ app_data/
   storage/novels/       SQLite，每本小说一个独立 <id>.db 文件（id = sha256(url)[:32]）
   exports/            导出输出目录
 tests/                check_imports.py, test_downloader.py, test_export_config.py, test_models.py,
-                      test_options.py, test_storage.py, test_android_server.py, conftest.py 等
-
-android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新增，见「Android APK 方案」章节）
-  app/src/main/python/   server.py + backend/ + shared/ + novelbase/ + init_config.py + template/（构建时复制）
-                         + frontend.zip（构建期打包，启动时解压到 $HOME/frontend/dist 并经 NLD_FRONTEND_DIR 交给 SPA fallback）
-  app/src/main/java/     MainActivity.kt, ServerService.kt, AndroidBridge.kt, EnvironmentCompat.kt
-  scripts/build-apk.sh   CI 构建脚本
+                      test_options.py, test_storage.py, conftest.py 等
 ```
 
 ## CI 测试状态 — ✅ 全部通过
@@ -83,3 +76,5 @@ android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新�
 > 2026-09-25（详情页换源 + 下载管理书源/时间收口后本机实测）：`python -m pytest tests -q` = **449 passed, 1 skipped, 0 failed**（约 7.6s）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
 >
 > 2026-09-26（Android 前端交付修复 + 环境能力表后本机实测）：`python -m pytest tests -q` = **507 passed, 0 failed**（约 13s；原先 skip 的 `TestClient` 用例随死代码挂载一并删除）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
+>
+> 2026-09-26（移除 Android 套壳与环境能力表后本机实测）：`python -m pytest tests -q` = **482 passed, 0 failed**（约 10.9s）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。

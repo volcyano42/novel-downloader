@@ -54,8 +54,7 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
 
 - **顶层 `enabled`**：覆盖出厂启用状态（`shared.config.is_source_enabled`）。
   书源是否「启用」= 读 `sites/{source_name}.yaml` 顶层 `enabled`，无则回落到 `source.json.enabled`。
-  **「启用集」另需叠加环境可用性**：`shared.config.enabled_source_names()` =「出厂/用户 `enabled`」∩「本环境可用」
-  （Android 套壳不支持 `browser`，见 [sources.md](sources.md)「环境能力表」）。
+  **「启用集」**：`shared.config.enabled_source_names()` =「出厂/用户 `enabled`」。
 - **顶层 `concurrency`**：**书源级并发额度**（同一书源同时最多几个请求在飞，**跨任务共享**）；
   用户层顶层覆盖出厂 `source.json` 顶层，缺省 **1**；非正整数忽略回退 1。读取入口
   `shared.config.source_concurrency()`，机制详见 [sources.md](sources.md)。

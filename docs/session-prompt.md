@@ -12,7 +12,6 @@
 D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 ├── novel-downloader\                ← 核心 git 仓库（dev/main 分支）
 │   ├── novelbase/  shared/  backend/  cli/  frontend/  tests/  app_data/  docs/  template/
-│   ├── android/                     ← Android APK 项目（2026-08-02 新增，Chaquopy 嵌入 Python）
 │   ├── scripts/                     ← 构建脚本（workflow 调用）
 │   └── .git
 └── novel-downloader-tools\          ← 衍生产物（仓库外，git 永远管不到）
@@ -22,7 +21,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-26（Android 前端交付修复 + 环境能力表后）：**507 passed, 0 failed**（本机实测，约 13s；原先那个 `@pytest.mark.skip` 的 `TestClient` 用例已随死代码挂载一并删除，故不再有 skip）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-26（移除 Android 套壳 + 环境能力表后）：**482 passed, 0 failed**（本机实测，约 11s）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
@@ -43,8 +42,6 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **书源（Source）架构**（2026-09-25 扁平化后）：`novelbase/sources/{dir}/` **一层**目录，每个书源含空 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件（`search.py` / `novel_info.py` / `chapter_list.py` / `chapter_content.py`）。`novelbase/source.py` 只暴露 4 个能力函数 + 1 个 URL 入口：`list_sources()` / `get_manifest(source_name)` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)` / `resolve_book_url(raw)`。**`platform` 概念已彻底移除**（`platform_from_url` / `register_source` / `NAME` / `SHOW_NAME` / `HOSTS` 全部删除）；书源**没有中文显示名**，界面与日志统一显示 `source_name`（如 `fanqie-requests-default`）。**不设 `_common.py`**：各书源自包含，共享逻辑内联进需要它的能力文件（明确接受书源间重复的代价）
 - **书源 `source.json` 规范**：`source_name` 唯一 id（也是 `sites/{source_name}.yaml` 的文件名）；`enabled` 出厂开关（**api 类默认 `false`，requests/browser 默认 `true`**）；顶层 `common` 段并入每个能力段（能力段覆盖 `common`，且 `common` 的字段必须对**所有出现的 mode** 合法）；**能力段存在 ⇔ 同名 `.py` 文件存在**，不一致直接报 `ManifestError`；字段命名全链用 `retry_times`
 - **下载器 API**（2026-09-25 二次修订）：`async search(sources, query, engines, skip_delay=False, mode_overrides=None, **kwargs)` / `resolve_meta(url, source_name, engines, skip_delay=False, mode_overrides=None, **kwargs)` / `resolve_chapter_list(url, source_name, engines, skip_delay=False, mode_overrides=None, **kwargs)` / `resolve_chapter(chapter, source_name, engines, skip_delay=False, mode_overrides=None, **kwargs)`。`engines` 是 `engines(mode) -> engine` 解析器，由调用方按**有效 mode**（`shared.config.effective_capabilities(source_name)`）懒建并复用；`mode_overrides`（能力名 → mode，可选）由调用方（backend 路由/task_manager、CLI）关键字透传，缺省则用书源声明；`skip_delay=False` 仍经 `**kwargs` 传递到底层函数
-- **环境能力表 —— Android 不支持 browser**（2026-09-26）：`android/.../server.py` 注入 `NLD_PLATFORM=android`；`shared.config.supported_modes()` 是唯一真源（android → `(requests, api)`，桌面/portable/Nuitka 未设 env → 全量，行为不变）。`effective_capabilities()` 忽略本环境不支持的 mode 覆盖（回退书源声明，yaml 不动）；`is_source_available()`（源级**全能力**）把 browser 书源挡在 `enabled_source_names()` 之外；`GET /download/sources` 与 `/config/sources/{name}` 带 `available`，`PUT` 启用/覆盖成不可用引擎 → 400，`GET /config/environment` 给前端 `supported_modes`（界面置灰 + 选源过滤）；core 只兜底（`ModeUnavailableError`，不读环境）。设计见 [superpowers/specs/2026-09-26-android-shell-no-browser-design.md](superpowers/specs/2026-09-26-android-shell-no-browser-design.md)
-- **APK 前端交付**（2026-09-26）：构建期把 `frontend/dist` 打成 `frontend.zip` 随 APK 资产分发，`server.py` 启动时解压到 `$HOME/frontend/dist` 并设 `NLD_FRONTEND_DIR`（`backend/main.py` 的第一候选），复用 SPA fallback——Chaquopy 的源码目录不是真实文件系统，`StaticFiles` 不可用（真机白页的根因）
 - **搜索** 按书源并发（`search(sources, ...)`），失败书源静默跳过；`SearchResult.source_name` 由 **downloader 分发层统一打标**（书源侧不写死，直接调书源 `search()` 会得到空 `source_name`）
 - **SearchResult** 字段为 `source_name: str`（旧 `platform` 已删）。**来源不再挂在 `Novel` 上**（2026-09-25 剥离）：`Novel.source_name` 与 `novel.extra["platform"]` 均已删除，来源改由 `user_data.db` 的 `novel_sources` 表承载（`GET /storage/novel` 与 `/storage/novel/{id}/meta` 据此返回 `source_name`）
 - **搜索缓存** SessionCache 存 `query` / `source_name`（`mode`/`variant` 概念已取消）
@@ -57,7 +54,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
 - **中间态收口状态**（2026-09-25 扁平化 followup + 收尾完成）：core 层遗留中间态**已全部收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**；`source.json` 的 `enabled` **已有消费者**（`shared.config.enabled_source_names()`）；前端 mode/variant 两级选择器**已删除**（搜索改「已启用书源并发」，URL 解析改「手选书源」，书源管理**并入设置页**折叠条）。收尾阶段补齐：① 未知 `source_name` 在 **HTTP 边界统一 404**（`backend/services/source_guard.py` 唯一校验点，覆盖 `download` 与 `config/sources` 全部入口）；② 书源配置表单抽为 `frontend/src/features/sources/sourceConfigForm.tsx` 共享实现（设置页每源一个折叠条 `SourceAccordion` 复用；原独立 `SourcesPage` 已删除，`/sources` 仅重定向 `/settings`、侧边栏无「书源」入口），`useSaveSourceConfig` 同时失效 `["source-config", src]` 与 `["sources"]`；③ CLI `cmd_info` / `cmd_download` 引擎按 mode 懒建（不再共用单引擎）；④ `dev new-source` 脚手架 `source.json.common` 与出厂默认同源（`shared.config.mode_defaults()`）。**仍缺**（后续增强，非缺陷）：前端 URL **自动**匹配书源（core 无 `platform_from_url`，`source` 由用户手选）；重复 `source_name` 无实现层检测（`novel.extra["platform"]` 已于 2026-09-25 剥离）
-- **分支状态**（2026-09-26）：main = **v4.4.0**（`ef7f21d`）；**dev = v4.5.0（`982900b`），已推送并与 `origin/dev` 同步**，未合并 main。dev 内容：书源扁平化（core + backend/CLI/前端收口）、下载并发模型重做、详情页换源、Android 套壳前端交付修复 + 环境能力表、文档与版本号收尾。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`；权威口径用 `git ls-remote origin dev` 对比
+- **分支状态**（2026-09-26）：main = **v4.4.0**（`ef7f21d`）；**dev = v4.5.0，领先 `origin/dev` 若干提交（含本次 Android 套壳与环境能力表移除）**，未合并 main。dev 内容：书源扁平化（core + backend/CLI/前端收口）、下载并发模型重做、详情页换源、**Android 套壳与环境能力表移除（移动端改走 Termux）**、文档与版本号收尾。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`；权威口径用 `git ls-remote origin dev` 对比
 
 ## 文档索引
 
@@ -72,7 +69,6 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 | 项目约定 | [conventions/git.md](conventions/git.md) | Git 提交/分支/workflow/版本号约定 |
 | 构建发布 | [build/packaging.md](build/packaging.md) | 打包方案（pip/portable/CI 矩阵） |
 | 构建发布 | [build/termux.md](build/termux.md) | Termux 构建方案 |
-| 构建发布 | [build/android-apk.md](build/android-apk.md) | Android APK 方案 |
 | 构建发布 | [build/pitfalls.md](build/pitfalls.md) | CI 构建经验（踩坑记录） |
 | 设计文档 | [superpowers/specs/](superpowers/specs/) | 功能设计文档（`-design.md`） |
 | 实施计划 | [superpowers/plans/](superpowers/plans/) | 实施计划 |

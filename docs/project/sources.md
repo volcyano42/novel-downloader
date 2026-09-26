@@ -105,52 +105,20 @@ novelbase/sources/{dir}/
   ② 后端「检查更新」走的独立路由（`GET /storage/novel/{id}/chapters` 等）**不经**该额度——
   同理搜索、远端章节列表等独立路由也不经书源额度；③ `max_workers` 下调最多 1 秒生效（TTL 缓存）。
 
-## 环境能力表 —— Android 不支持 browser（2026-09-26）
-
-APK 是**套壳**（WebView + 内嵌 FastAPI），构建时排除了 `playwright`，因此 `browser` 引擎在本环境不存在。
-这条事实由**环境能力表**贯穿 core → 后端 → 前端，唯一入口全在 `shared/config.py`：
-
-| 函数 | 语义 |
-|------|------|
-| `platform()` | 读 `NLD_PLATFORM`：`android` → `"android"`；其余/未设 → `"desktop"`（桌面行为与历史完全一致） |
-| `supported_modes()` | `android` → `("requests", "api")`；桌面 → `VALID_MODES` 全量。**唯一真源** |
-| `effective_capabilities(source_name)` | 覆盖判定用 `supported_modes()`：本环境不支持的覆盖被**忽略并回退书源声明**（用户 yaml 不动，回桌面版自动生效） |
-| `available_capabilities(source_name)` | 有效能力中 mode 受支持的子集（未知书源 → `{}`） |
-| `is_source_available(source_name)` | **源级、全能力**判定：所有有效能力都受支持才为 `True`。混 mode 私有源在 Android 上整源判不可用（避免「半可用」踩到执行路径），未知书源 → `False` |
-| `enabled_source_names()` | = 「出厂/用户 `enabled`」 ∩ 「本环境可用」 |
-
-- `NLD_PLATFORM` 由 `android/app/src/main/python/server.py` 在模块级 `setdefault` 注入；桌面 / portable / Nuitka 不设该 env。
-- core 只兜底：`novelbase/core/engine.py` 的 `_async_playwright()` 在依赖缺失时抛 `ModeUnavailableError`（而非裸 `ImportError`）；core **不读环境变量**（保持纯库，无站点/环境知识）。
-- CLI 与后端共用 `enabled_source_names()`，因此 Android 上的自动路径不会再碰 browser 书源。
-
-### HTTP 出口
-
-| 端点 | 行为 |
-|------|------|
-| `GET /api/v2/download/sources` | 每源附 `available`（**全量返回**，前端据此置灰；不参与搜索/下载） |
-| `GET /api/v2/config/sources/{name}` | 附 `available`（**GET 一律放行**，否则前端无法置灰展示） |
-| `GET /api/v2/config/environment` | `{platform, supported_modes}`，前端 mode 下拉的选项来源 |
-| `PUT /api/v2/config/sources/{name}` | `enabled: true` 但源不可用 → 400；`config[cap].mode` 不在 `supported_modes()` → 400（校验先于落盘，任一非法整体拒绝）；`enabled: false` / `mode: null` 永远允许 |
-| 执行入口（`/download/search`、`/download/novel*`、下载任务） | `source_guard.require_available_source()` → 400（与 `require_known_source()` 的 404 同处一个「HTTP 边界唯一校验点」） |
-
-前端：设置页仍**列出** browser 书源，但置灰 + 标注「本环境不支持 browser」+ 禁用启用开关；`toSourceOptions()` 会滤掉 `available === false` 的源（搜索 / 换源 / 书架共用），所以选源列表里不出现。
-
-设计文档：[superpowers/specs/2026-09-26-android-shell-no-browser-design.md](../superpowers/specs/2026-09-26-android-shell-no-browser-design.md)。
-
 ## 内置书源
 
-| source_name | mode | enabled（出厂） | Android 可用 |
-|-------------|:----:|:--:|:--:|
-| `92xs-requests-default` | requests | ✅ | ✅ |
-| `fanqie-requests-default` | requests | ✅ | ✅ |
-| `fanqie-browser-default` | browser | ✅ | ❌ |
-| `fanqie-api-rain` | api | ❌ | ✅ |
-| `fanqie-api-oiapi` | api | ❌ | ✅ |
-| `qidian-requests-default` | requests | ✅ | ✅ |
-| `qidian-browser-default` | browser | ✅ | ❌ |
-| `qimao-requests-default` | requests | ✅ | ✅ |
-| `qimao-browser-default` | browser | ✅ | ❌ |
-| `qimao-api-rain` | api | ❌ | ✅ |
+| source_name | mode | enabled（出厂） |
+|-------------|:----:|:--:|
+| `92xs-requests-default` | requests | ✅ |
+| `fanqie-requests-default` | requests | ✅ |
+| `fanqie-browser-default` | browser | ✅ |
+| `fanqie-api-rain` | api | ❌ |
+| `fanqie-api-oiapi` | api | ❌ |
+| `qidian-requests-default` | requests | ✅ |
+| `qidian-browser-default` | browser | ✅ |
+| `qimao-requests-default` | requests | ✅ |
+| `qimao-browser-default` | browser | ✅ |
+| `qimao-api-rain` | api | ❌ |
 
 - 书源**没有中文显示名**，界面、日志、CLI 统一显示 `source_name`。
 - 新增书源只需在 `sources/` 下建一层目录 + 文件，**零注册表修改**；

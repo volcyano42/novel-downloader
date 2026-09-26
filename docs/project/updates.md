@@ -472,3 +472,11 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - APK 未签名（仅可侧载）；真机链路（`HOME` 可写 / 解压 / WebView 显示 / browser 源置灰）未验证
 - **真机上 novelbase 的书源目录遍历仍是未知点**：`list_sources()` 需枚举 `sources/{dir}/source.json`，而 Chaquopy 资产不支持目录列举（与前端白页同一类根因，尚未被真机暴露）
 - APK 内 `versionName` 仍为 gradle 硬编码 `1.0.0`（独立遗留）
+
+## 2026-09-26 变更（移除 Android 套壳与环境能力表）
+
+- **决策**：Chaquopy 套壳维护成本过高（依赖被上游 wheel 清单绑定：`pydantic<2`、`fastapi==0.120.0`、`minSdk 24` 由 lxml/PyYAML 的 `android_24` wheel 决定；且「Chaquopy 资产不是真实文件系统」是一整类根因），移动端改走 Termux（`build-linux-arm64-termux.yml` 产物已存在）
+- **删除 Android 套壳**：`android/`（4 个 .kt 307 行 + `server.py` 159 行 + gradle/构建脚本/资源）、`.github/workflows/build-apk.yml`、`tests/test_android_server.py`、`docs/build/android-apk.md`；`backend/main.py` 移除 `NLD_FRONTEND_DIR` 候选；同步清理 `.gitignore` / `PUBLIC_MANIFEST.md` / `pyproject.toml` / `scripts/check_public.py` / `docs/build/pitfalls.md` 的 android 条目。提交 `02db363`（−1101 行）
+- **移除环境能力表**：删 `shared.config` 的 `platform()` / `supported_modes()` / `available_capabilities()` / `is_source_available()`；`source_guard` 只留 `require_known_source`；删 `GET /config/environment`、`/download/sources` 与 `/config/sources/{name}` 的 `available` 字段、书源配置 PUT 的可用性校验；core 删 `ModeUnavailableError`；前端删 `useEnvironment` / `EnvironmentInfo` / 置灰与选源过滤 / `window.AndroidBridge` 导出桥分支。**「mode 用户覆盖」不受影响，保留**。提交 `082592d`（−418 行）
+- **作废文档**：`superpowers/specs/2026-08-02-android-apk-design.md`、`superpowers/specs/2026-09-26-android-shell-no-browser-design.md`（后者已加作废标记）
+- 测试：`python -m pytest tests -q` = **482 passed, 0 failed**（原 507 − 9 android server − 16 环境能力表）；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
