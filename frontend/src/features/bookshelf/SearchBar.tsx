@@ -2,12 +2,13 @@ import {BookOpen, Link, Loader2, Search, X} from "lucide-react";
 import {type KeyboardEvent, useEffect, useRef, useState} from "react";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
 import {cn} from "@/lib/utils";
+import type {SourceOption} from "@/api/endpoints";
 
 interface SearchBarProps {
   /** 标题搜索并发全部启用书源（source 省略）；URL 直达携带用户手选书源。 */
   onSearch: (query: string, source?: string) => void;
-  /** 全部书源名（URL tab 手选；标题 tab 不使用） */
-  sources?: string[];
+  /** 全部书源（URL tab 手选；标题 tab 不使用）；含 enabled，未启用的源仅标注、仍可选 */
+  sources?: SourceOption[];
   loading?: boolean;
   defaultQuery?: string;
   /** 外部回填（点击搜索历史）：nonce 变化时同步到内部 state，不触发搜索 */
@@ -132,8 +133,13 @@ export function SearchBar({ onSearch, sources = [], loading, defaultQuery = "", 
                 <SelectValue placeholder="选择书源" />
               </SelectTrigger>
               <SelectContent>
-                {sources.map(name => (
-                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                {sources.map(({name, enabled}) => (
+                  <SelectItem key={name} value={name}>
+                    <span className="flex items-center gap-1.5">
+                      <span>{name}</span>
+                      {!enabled && <span className="text-[10px] text-slate-400">未启用</span>}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

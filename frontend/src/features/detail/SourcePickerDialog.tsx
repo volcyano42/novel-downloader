@@ -1,12 +1,13 @@
 import {useEffect, useState} from "react";
 import {Globe} from "lucide-react";
 import {cn} from "@/lib/utils";
+import type {SourceOption} from "@/api/endpoints";
 
 interface SourcePickerDialogProps {
   open: boolean; onClose: () => void;
   novelTitle: string;
-  /** 全部书源名（来自 useSources()） */
-  sources: string[];
+  /** 全部书源（来自 useSources()；含 enabled，未启用的源仅标注、仍可选） */
+  sources: SourceOption[];
   /** 当前书源（有效来源） */
   current?: string;
   /** 换源请求进行中：禁用并改写确定按钮 */
@@ -15,15 +16,15 @@ interface SourcePickerDialogProps {
 }
 
 export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], current, submitting = false, onPick }: SourcePickerDialogProps) {
-  const [selected, setSelected] = useState(current ?? sources[0] ?? "");
+  const [selected, setSelected] = useState(current ?? sources[0]?.name ?? "");
 
   // 打开时同步一次：保留仍在列表中的当前选择，否则回退到当前书源 / 第一项。
   useEffect(() => {
     if (!open) return;
     setSelected(prev => {
-      if (prev && sources.includes(prev)) return prev;
-      if (current && sources.includes(current)) return current;
-      return sources[0] ?? "";
+      if (prev && sources.some(s => s.name === prev)) return prev;
+      if (current && sources.some(s => s.name === current)) return current;
+      return sources[0]?.name ?? "";
     });
   }, [open, current, sources]);
 
@@ -37,7 +38,7 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
         <p className="text-xs text-slate-500 mb-4 truncate">{novelTitle}</p>
 
         <div className="space-y-2 mb-4">
-          {sources.map(name => (
+          {sources.map(({name, enabled}) => (
             <button key={name} onClick={() => setSelected(name)}
               className={cn(
                 "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
@@ -46,7 +47,10 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
                   : "border-white/20 bg-white/60 hover:border-slate-200"
               )}>
               <Globe className={cn("h-5 w-5 shrink-0", selected === name ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
-              <span className={cn("flex-1 text-sm font-medium truncate", selected === name ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{name}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span className={cn("truncate text-sm font-medium", selected === name ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{name}</span>
+                {!enabled && <span className="shrink-0 text-[10px] text-slate-400">未启用</span>}
+              </span>
               {name === current && (
                 <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">当前</span>
               )}

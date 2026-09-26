@@ -226,6 +226,20 @@ export function fetchSources() {
   return apiGet<Record<string, { capabilities: Record<string, string>; enabled: boolean }>>("/download/sources");
 }
 
+/** 选源 UI 用的书源项：携带 enabled 以便标注「未启用」。 */
+export interface SourceOption {
+  name: string;
+  enabled: boolean;
+}
+
+/** 把 useSources() 的响应转成选源列表（未启用的源仍在列，仅由 UI 标注）。 */
+export function toSourceOptions(
+  sources?: Record<string, { capabilities: Record<string, string>; enabled: boolean }> | null,
+): SourceOption[] {
+  if (!sources) return [];
+  return Object.entries(sources).map(([name, info]) => ({ name, enabled: info.enabled }));
+}
+
 // ── Config ─────────────────────────────────────────
 
 export function getGlobalConfig() {

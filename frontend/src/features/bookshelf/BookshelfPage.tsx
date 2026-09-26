@@ -21,7 +21,7 @@ import {
   useSources,
   useTasks
 } from "@/hooks/index";
-import {coverToUrl, deleteTask, type NovelMeta, pauseTask, resumeTask, type SearchResult} from "@/api/endpoints";
+import {coverToUrl, deleteTask, type NovelMeta, pauseTask, resumeTask, type SearchResult, toSourceOptions} from "@/api/endpoints";
 import {SessionCache} from "@/utils/sessionCache";
 import {notifyUser} from "@/utils/notify";
 
@@ -50,6 +50,7 @@ export default function BookshelfPage() {
   // 全部书源名（URL 直达手选 + 结果分组）
   const { data: sources } = useSources();
   const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
+  const sourceOptions = useMemo(() => toSourceOptions(sources), [sources]);
 
   // local state
   const searchQuery = "";
@@ -251,7 +252,7 @@ export default function BookshelfPage() {
 
       {activeNav === "search" && (
         <div className="mx-auto max-w-[1440px] space-y-6 px-6 pt-12 pb-8 md:px-12">
-          <SearchBar onSearch={handleOnlineSearch} sources={sourceNames} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
+          <SearchBar onSearch={handleOnlineSearch} sources={sourceOptions} loading={searching} defaultQuery={searchCachedQuery} prefill={prefill} />
           {!searchParams && !searching && (
             <SearchHistoryPanel onPick={handleHistoryPick} />
           )}

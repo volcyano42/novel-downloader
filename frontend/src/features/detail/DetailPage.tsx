@@ -15,7 +15,8 @@ import {
     fetchChapterList,
     listChapters,
     type NovelMeta,
-    streamChapters
+    streamChapters,
+    toSourceOptions
 } from "@/api/endpoints";
 import {SourcePickerDialog} from "@/features/detail/SourcePickerDialog";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
@@ -41,7 +42,7 @@ export default function DetailPage() {
   const isRemote = !!remoteUrl || (!metaLoading && !localMeta);
   const effectiveRemoteUrl = remoteUrl;
   const { data: sources } = useSources();
-  const sourceNames = useMemo(() => (sources ? Object.keys(sources) : []), [sources]);
+  const sourceOptions = useMemo(() => toSourceOptions(sources), [sources]);
   const { data: remoteChapters } = useRemoteChapters(isRemote ? novelId : undefined, effectiveRemoteUrl, source);
   const downloadMut = useDownloadMutation();
 
@@ -455,7 +456,7 @@ export default function DetailPage() {
       )}
 
       <SourcePickerDialog open={showSourcePicker} onClose={() => setShowSourcePicker(false)}
-        novelTitle={novel?.title ?? ""} sources={sourceNames} current={bookSource}
+        novelTitle={novel?.title ?? ""} sources={sourceOptions} current={bookSource}
         submitting={submittingSource}
         onPick={handlePickSource} />
     </div>
