@@ -90,7 +90,7 @@ def _normalize_blank(key: str, value):
 
 
 def _normalize_delay(value):
-    """真实书源的 delay 写成整数列表 `[3, 5]`；dataclass 默认是 `(3.0, 5.0)`。
+    """真实书源的 delay 写成整数列表 `[0, 0]`；dataclass 默认是 `(0.0, 0.0)`。
 
     仅作 JSON 字面归一（不影响三级合并路径——`merged_source_config` 直读
     `ENGINE_DEFAULTS`，不经过本函数）。
@@ -259,6 +259,32 @@ def is_source_enabled(source_name: str) -> bool:
     return bool(get_manifest(source_name).get("enabled", False))
 
 
+SOURCE_CONCURRENCY_DEFAULT = 1
+
+
+def _is_positive_int(value) -> bool:
+    """非 bool 的正整数（bool 是 int 子类，须排除，避免 True 被当作 1）。"""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def source_concurrency(source_name: str) -> int:
+    """该书源的并发额度：用户层顶层 `concurrency` 覆盖 `source.json` 顶层，缺省 1。
+
+    非法值（非正整数）忽略并回退默认；未知书源同样返回默认。
+    """
+    from novelbase.source import get_manifest
+    from novelbase.sources.manifest import ManifestError
+
+    user = _user_site_cfg(source_name)
+    if _is_positive_int(user.get("concurrency")):
+        return user["concurrency"]
+    try:
+        declared = get_manifest(source_name).get("concurrency")
+    except (KeyError, ManifestError):
+        return SOURCE_CONCURRENCY_DEFAULT
+    return declared if _is_positive_int(declared) else SOURCE_CONCURRENCY_DEFAULT
+
+
 def enabled_source_names() -> list[str]:
     """排序后的启用书源 source_name 列表（「启用集」的唯一入口）。"""
     from novelbase.source import list_sources
@@ -327,7 +353,7 @@ def build_options(source_name: str, mode: str) -> Options:
             timeout=cfg.get("timeout", 30),
             retry_times=cfg.get("retry_times", 3),
             backoff_factor=cfg.get("backoff_factor", 2),
-            delay=tuple(cfg.get("delay", [3, 5])),
+            delay=tuple(cfg.get("delay", [0, 0])),
             viewport=cfg.get("viewport"),
             auto_reconnect=cfg.get("auto_reconnect", False),
         )
@@ -337,7 +363,7 @@ def build_options(source_name: str, mode: str) -> Options:
             timeout=cfg.get("timeout", 30),
             retry_times=cfg.get("retry_times", 3),
             backoff_factor=cfg.get("backoff_factor", 2),
-            delay=tuple(cfg.get("delay", [3, 5])),
+            delay=tuple(cfg.get("delay", [0, 0])),
             params=cfg.get("params", {}),
         )
     elif mode == "requests":
@@ -359,7 +385,7 @@ def build_options(source_name: str, mode: str) -> Options:
             timeout=cfg.get("timeout", 30),
             retry_times=cfg.get("retry_times", 3),
             backoff_factor=cfg.get("backoff_factor", 2),
-            delay=tuple(cfg.get("delay", [3, 5])),
+            delay=tuple(cfg.get("delay", [0, 0])),
         )
 
     options.set_storage_options(backend="sqlite", database_url=get_database_url())

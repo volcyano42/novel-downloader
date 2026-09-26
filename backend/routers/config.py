@@ -96,6 +96,7 @@ async def get_source_config(source_name: str):
     return {
         "source_name": source_name,
         "enabled": config_service.is_source_enabled(source_name),
+        "concurrency": config_service.source_concurrency(source_name),
         "capabilities": effective_capabilities(source_name),
         "declared_capabilities": capabilities(source_name),
         "config": config_service.merged_source_config(source_name),
@@ -114,6 +115,9 @@ async def save_source_config(source_name: str, body: dict):
     existing = config_service.load_yaml(path)
     if isinstance(body.get("enabled"), bool):
         existing["enabled"] = body["enabled"]
+    # 顶层 concurrency 与 enabled 同级：正整数写入用户层，非法值忽略（不写坏 yaml）
+    if "concurrency" in body and config_service._is_positive_int(body["concurrency"]):
+        existing["concurrency"] = body["concurrency"]
     cfg_body = body.get("config")
     if isinstance(cfg_body, dict):
         for cap, partial in cfg_body.items():
