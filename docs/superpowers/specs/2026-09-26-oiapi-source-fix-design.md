@@ -10,6 +10,14 @@
 
 顺带暴露一个既有 UX 缺口：**「换源」弹窗列出的是全部书源（含 `enabled: false`）**，用户因此把这本书换到了这个坏源上——下载任务不检查 `enabled`，于是一路失败。
 
+## 官方文档（已核对，2026-09-26）
+
+<https://oiapi.net/doc/id/115.html> —— 官方 `method` 说明与本次实测一致：
+`ids`（解析 id，参数 `id` 必填）、`search`（`keyword` 必填）、`chapter`（`chapter` 必填）、
+`chapters`（`id` 必填且必须是 bookId）；返回 `data.*` 字段与实现所用字段完全对应。
+补充发现：`chapter` 参数支持**逗号分隔多章**（如 `"1,2"`），本轮**不采用** —— 它会让「每请求一章」的
+并发额度语义失真（一个请求取多章等于绕过额度）。若将来要用，需先把额度语义改成「每请求 N 章」。
+
 ## 实测 API 契约（2026-09-26，`https://oiapi.net/api/FqRead`，POST form + `key`/`type=json`）
 
 | 能力 | 请求 | 成功响应 |
