@@ -339,10 +339,6 @@ async def _run_download_impl(task: dict, source_name: str):
             if not await _wait_if_paused():
                 return
 
-            # 标记章节为下载中
-            with _tasks_lock:
-                ch_data["status"] = "downloading"
-
             ch = Chapter(id=ch_data["id"], url=ch_data["url"], novel_id=task["novel_id"],
                          title=ch_data["title"], order=ch_data["order"],
                          volume=ch_data.get("volume"))
@@ -356,6 +352,10 @@ async def _run_download_impl(task: dict, source_name: str):
                 # 被取消时直接返回。
                 if not await _acquire_source_slot(source_name, task, src_conc):
                     return
+                # 拿到额度后才标记「下载中」：等额度期间保持 pending，前端不显示转圈
+                # （标记早于取额度会让整批章节看起来同时在下载，与实际并发不符）。
+                with _tasks_lock:
+                    ch_data["status"] = "downloading"
                 try:
                     downloaded = await resolve_chapter(ch, source_name, engines,
                                                        mode_overrides=_caps)

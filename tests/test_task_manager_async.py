@@ -292,3 +292,37 @@ def test_list_tasks_exposes_source_name_and_created_at(monkeypatch):
     tid = asyncio.run(_run())
     tm.delete_task(tid)
     tm._tasks.clear()
+
+
+def test_waiting_for_source_slot_stays_pending_not_downloading(monkeypatch):
+    """等书源额度的章节不得显示为「下载中」（前端转圈）：downloading 峰值 = 额度。
+
+    回归背景：状态标记曾早于 `_acquire_source_slot`，`_BATCH_SIZE` 批内协程一挂起
+    就全部变 `downloading` —— 前端「下载管理」看起来像并发 N（实测 10 章全转圈），
+    而真实在飞请求只有 1 个。
+    """
+    from backend.services import task_manager as tm
+
+    chapters = _chapters(5)
+    _install_mocks(monkeypatch, chapters, speed=0.05)
+    # 显式钉住书源额度 = 1：本用例断言「等额度的章节保持 pending」
+    monkeypatch.setattr(tm, "source_concurrency", lambda name: 1)
+    tm._tasks.clear()
+    tm._running_tasks.clear()
+    tm._source_active.clear()
+
+    async def _run():
+        r = tm.create_task("fanqie_1", chapters, "测试", source_name="92xs-requests-default")
+        t = tm._tasks[r["task_id"]]
+        peak = 0
+        for _ in range(1000):
+            peak = max(peak, sum(1 for c in t["chapters"] if c["status"] == "downloading"))
+            if t["status"] in ("completed", "failed", "partial"):
+                break
+            await asyncio.sleep(0.005)
+        assert t["status"] == "completed", t
+        assert t["progress"] == 5, t
+        return peak
+
+    peak = asyncio.run(_run())
+    assert peak == 1, f"等额度的章节被标成 downloading：峰值 {peak}（额度 1）"
