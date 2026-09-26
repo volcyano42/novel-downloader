@@ -80,3 +80,5 @@ android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新�
 > 2026-09-25（来源读点 + mode 用户覆盖 + 前端整合收口后本机实测）：`python -m pytest tests -q` = **444 passed, 1 skipped, 0 failed**；前端 `npx tsc -b` = 0 错。
 >
 > 2026-09-25（详情页换源 + 下载管理书源/时间收口后本机实测）：`python -m pytest tests -q` = **449 passed, 1 skipped, 0 failed**（约 7.6s）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
+>
+> 2026-09-26（Android 前端交付修复 + 环境能力表后本机实测）：`python -m pytest tests -q` = **507 passed, 0 failed**（约 13s；原先 skip 的 `TestClient` 用例随死代码挂载一并删除）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
