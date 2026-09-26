@@ -77,6 +77,23 @@ class FeatureNotSupportedError(NovelDownloaderError):
         super().__init__(message)
 
 
+class ModeUnavailableError(NovelDownloaderError):
+    """本环境不支持该引擎 mode（依赖缺失 / 构建时被排除）。
+
+    与 ``FeatureNotSupportedError`` 的区别：后者是「该功能在这个模式下不支持」
+    （如某书源的 requests 模式不提供搜索）；本异常是「这个 mode 在本环境根本装不上」
+    （如 Android APK 构建时排除了 playwright，无法使用 browser）。
+    调用方的可用性判定在 `shared.config.supported_modes()`（环境能力表）；
+    本异常只负责让「漏网」得到明确语义，而不是裸 `ImportError`。
+    """
+
+    def __init__(self, mode: str, reason: str | None = None):
+        self.mode = mode
+        self.reason = reason
+        detail = f"本环境不支持 {mode} 引擎" + (f"：{reason}" if reason else "")
+        super().__init__(detail)
+
+
 class StorageError(NovelDownloaderError):
     """存储读写操作失败（文件不存在、权限不足、序列化错误等）。"""
 

@@ -12,20 +12,24 @@ from backend.routers.storage import _cover_to_response as encode_cover
 from backend.schemas import FetchMetaRequest, DownloadChapterRequest, SearchResultData, ChapterBrief
 from backend.services import task_manager
 from backend.services.engine_manager import get_cached_engine
-from backend.services.source_guard import require_known_source
+from backend.services.source_guard import require_available_source, require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources
-from shared.config import enabled_source_names, is_source_enabled, effective_capabilities
+from shared.config import (enabled_source_names, is_source_available, is_source_enabled,
+                           effective_capabilities)
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
 
 def _require_source(source: str | None, url: str) -> str:
-    """URL 无法自动推断书源（core 已删 platform_from_url）——需用户显式指定 source。"""
+    """URL 无法自动推断书源（core 已删 platform_from_url）——需用户显式指定 source。
+
+    已知 + 本环境可用（Android 上 browser 书源在此被 400 挡下）。
+    """
     if not source:
         raise HTTPException(400, f"无法自动识别书源 URL，请显式指定 source（书源名）: {url}")
-    return require_known_source(source)
+    return require_available_source(require_known_source(source))
 
 
 def _engines_for(source_name: str):
@@ -65,7 +69,7 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
 
     # 关键字搜索：source 空 → 并发全部启用书源（每源各绑定自己的引擎）；否则单书源。
     if source:
-        source_name = require_known_source(source)
+        source_name = require_available_source(require_known_source(source))
         try:
             results = await search([source_name], query, _engines_for(source_name), page=page,
                                    mode_overrides=_mode_overrides(source_name))
@@ -176,8 +180,14 @@ async def delete_task(task_id: str):
 
 @router.get("/sources")
 async def list_all_sources():
-    """返回全部书源（含未启用）的扁平能力矩阵与启用状态（mode 为**有效值**）。"""
+    """返回全部书源（含未启用）的扁平能力矩阵、启用状态与**本环境可用性**（mode 为有效值）。
+
+    `available=False`（如 Android 上的 browser 书源）时不从列表里剔除：前端要列出并置灰，
+    只是不再参与搜索 / 下载（那由 `enabled_source_names()` 的过滤保证）。
+    """
     return {
-        name: {"capabilities": effective_capabilities(name), "enabled": is_source_enabled(name)}
+        name: {"capabilities": effective_capabilities(name),
+               "enabled": is_source_enabled(name),
+               "available": is_source_available(name)}
         for name in list_sources()
     }

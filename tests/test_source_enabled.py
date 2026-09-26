@@ -21,6 +21,8 @@ def test_is_source_enabled_user_override(monkeypatch, tmp_path):
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr("novelbase.source.list_sources", lambda: ["a-x-default"])
     monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {"enabled": False})
+    # 启用集现在还要求「本环境可用」→ 需要书源声明能力（否则可用性判定视为不可用）
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
     assert sc.is_source_enabled("a-x-default") is False                # 出厂 false
     sc.save_site_config("a-x-default", {"enabled": True})              # 用户层覆盖
     assert sc.is_source_enabled("a-x-default") is True

@@ -201,11 +201,32 @@ def _user_site_cfg(source_name: str) -> dict:
 
 VALID_MODES = ("browser", "requests", "api")
 
+# Android（APK 套壳）不支持 browser：build-apk.sh 已把 playwright 从依赖清单排除
+ANDROID_MODES = ("requests", "api")
+
+
+def platform() -> str:
+    """运行环境标识：`NLD_PLATFORM=android` → `"android"`；其余 / 未设 → `"desktop"`。
+
+    `NLD_PLATFORM` 由 `android/app/src/main/python/server.py` 在模块级注入；
+    桌面 / portable / Nuitka 不设该 env，行为与历史完全一致。
+    """
+    return "android" if os.environ.get("NLD_PLATFORM") == "android" else "desktop"
+
+
+def supported_modes() -> tuple[str, ...]:
+    """本环境可用的引擎 mode 集合（环境能力表的**唯一入口**）。
+
+    Android → `ANDROID_MODES`（无 browser）；其余 → `VALID_MODES`（全量，桌面行为不变）。
+    """
+    return ANDROID_MODES if platform() == "android" else VALID_MODES
+
 
 def effective_capabilities(source_name: str) -> dict[str, str]:
     """有效 mode 映射：用户层 `sites/{source_name}.yaml` 的 `{cap}.mode` 覆盖 `source.json` 声明。
 
-    - 未覆盖 / 覆盖值非法（不在 VALID_MODES）→ 取书源声明
+    - 未覆盖 / 覆盖值非法（不在 `VALID_MODES`）/ 覆盖值在本环境不可用（不在 `supported_modes()`）
+      → 取书源声明（Android 上的 `browser` 覆盖被忽略并回退声明值；用户 yaml 保持不动）
     - 未知书源 → `{}`（与 `capabilities()` 的宽容语义一致）
     """
     from novelbase.source import capabilities
@@ -213,12 +234,36 @@ def effective_capabilities(source_name: str) -> dict[str, str]:
     if not declared:
         return {}
     user = _user_site_cfg(source_name)
+    modes = supported_modes()
     out: dict[str, str] = {}
     for cap, mode in declared.items():
         section = user.get(cap) if isinstance(user.get(cap), dict) else {}
         override = section.get("mode")
-        out[cap] = override if override in VALID_MODES else mode
+        out[cap] = override if override in modes else mode
     return out
+
+
+def available_capabilities(source_name: str) -> dict[str, str]:
+    """该书源在本环境**可用**的能力 → mode（`effective_capabilities()` 中 mode 受支持的条目）。
+
+    未知书源 / 全部能力不可用 → `{}`。
+    """
+    modes = supported_modes()
+    return {cap: mode for cap, mode in effective_capabilities(source_name).items() if mode in modes}
+
+
+def is_source_available(source_name: str) -> bool:
+    """该书源在本环境是否**整体可用**：所有有效能力都在 `supported_modes()` 内。
+
+    取「全能力」而非「至少一个」的原因：混合 mode 的源（只可能来自私有源）在 Android 上
+    会变成「半可用」，而执行路径按能力分发（`engine_manager._capability_for_mode()` 反查、
+    core 按能力调引擎）会踩到那个不可用的能力 —— 整源判不可用比「静默半工作」安全。
+    内置书源都是单一 mode，不受此选择影响。未知书源 → `False`。
+    """
+    effective = effective_capabilities(source_name)
+    if not effective:
+        return False
+    return len(available_capabilities(source_name)) == len(effective)
 
 
 def merged_source_config(source_name: str) -> dict[str, dict]:
@@ -286,9 +331,12 @@ def source_concurrency(source_name: str) -> int:
 
 
 def enabled_source_names() -> list[str]:
-    """排序后的启用书源 source_name 列表（「启用集」的唯一入口）。"""
+    """排序后的启用书源 source_name 列表（「启用集」的唯一入口）。
+
+    = 「用户层 / 出厂 `enabled`」 ∩ 「本环境可用」（如 Android 上 browser 书源被排除）。
+    """
     from novelbase.source import list_sources
-    return sorted(n for n in list_sources() if is_source_enabled(n))
+    return sorted(n for n in list_sources() if is_source_enabled(n) and is_source_available(n))
 
 # ── formats ──
 def load_format_configs():

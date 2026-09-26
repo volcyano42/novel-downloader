@@ -2,6 +2,18 @@ import pytest
 
 from novelbase.models.novel import Illustration, Chapter, Chapters, Novel, SearchResult
 
+
+@pytest.fixture(autouse=True)
+def _isolate_nld_env(monkeypatch):
+    """隔离 NLD_* 环境变量，防止跨用例泄漏。
+
+    `android/app/src/main/python/server.py` 用 `os.environ[...] = ...` / `setdefault` 直接写
+    这些键（生产上正确），但「直接写」的键不受 monkeypatch 管理 → 会泄漏到后续用例：
+    曾把 `NLD_PLATFORM=android` 带给桌面用例，使 browser 覆盖被当作不可用而回退。
+    """
+    for key in ("NLD_PLATFORM", "NLD_APP_DATA", "NLD_FRONTEND_DIR"):
+        monkeypatch.delenv(key, raising=False)
+
 # ── Illustration fixtures ─────────────────────────────────────
 
 @pytest.fixture
