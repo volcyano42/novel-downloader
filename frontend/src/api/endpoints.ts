@@ -79,6 +79,8 @@ export interface GlobalConfig {
 export interface SourceConfig {
   source_name: string;
   enabled: boolean;
+  /** 书源级并发额度（顶层，与 enabled 同级；跨任务共享，默认 1） */
+  concurrency: number;
   /** 能力段 → 有效 mode（如 {search: "api"}） */
   capabilities: Record<string, string>;
   /** 能力段 → 书源声明的 mode（「恢复默认」用） */
@@ -282,7 +284,7 @@ export function getSourceConfig(source: string) {
 
 export function saveSourceConfig(
   source: string,
-  data: { enabled?: boolean; config?: Record<string, Record<string, unknown>> },
+  data: { enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>> },
 ) {
   return apiPut<void>(`/config/sources/${source}`, data);
 }

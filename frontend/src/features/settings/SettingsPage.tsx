@@ -95,10 +95,10 @@ export function SettingsView({ globalConfig, onUpdate }: SettingsViewProps) {
       <SourceSection />
 
       <Section icon={Gauge} title="并发与性能">
-        <Row label="并发线程数" desc="同时下载的章节数">
+        <Row label="最大下载任务数" desc="同时下载几本书；超出的任务会排队等待">
           <Range value={globalConfig.max_workers} onChange={v => updateGlobal("max_workers", v)} min={1} max={10} left="1" right="10" />
         </Row>
-        <Row label="提示" desc="💡 建议 3-5，Browser 模式建议 1-3，过高触发反爬拦截"><span /></Row>
+        <Row label="提示" desc="💡 单本书源的请求并发由该书源「并发数」单独控制（默认 1）"><span /></Row>
       </Section>
 
       <FormatsSection />

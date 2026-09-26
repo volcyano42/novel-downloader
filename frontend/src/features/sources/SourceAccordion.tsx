@@ -1,23 +1,37 @@
 import {useEffect, useState} from "react";
 import {ChevronDown} from "lucide-react";
 import {cn} from "@/lib/utils";
-import {useSaveSourceConfig} from "@/hooks/index";
+import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
 import {SourceConfigEditor, Toggle} from "./sourceConfigForm";
 import {CAP_LABELS} from "./sourceConfigFields";
 
-/** 单个书源的折叠条：名称 + 能力 badge + enabled 开关；展开即编辑配置（含 mode 下拉）。 */
+/** 单个书源的折叠条：名称 + 能力 badge + enabled 开关 + 书源级并发数；展开即编辑配置（含 mode 下拉）。 */
 export function SourceAccordion({ name, info }: { name: string; info: { capabilities: Record<string, string>; enabled: boolean } }) {
   const saveSource = useSaveSourceConfig(name);
+  const { data: cfg } = useSourceConfig(name);
   const [enabled, setEnabled] = useState(info.enabled);
   const [open, setOpen] = useState(false);
+  // 并发数输入用字符串保存，失焦/回车时校验提交（非法值不写）
+  const [concurrency, setConcurrency] = useState("1");
 
   // 列表数据（useSources）刷新后同步开关显示
   useEffect(() => { setEnabled(info.enabled); }, [info.enabled]);
+  // 服务端并发额度（保存成功后 refetch）刷新后同步输入框
+  useEffect(() => { setConcurrency(String(cfg?.concurrency ?? 1)); }, [cfg?.concurrency]);
 
   const caps = info.capabilities ?? {};
   const toggleEnabled = (v: boolean) => {
     setEnabled(v); // 乐观更新，避免受控开关因 refetch 滞后回弹
     saveSource.mutate({ enabled: v });
+  };
+
+  const commitConcurrency = () => {
+    const n = Number(concurrency);
+    if (!Number.isInteger(n) || n < 1) { // 非法：回滚显示，不提交
+      setConcurrency(String(cfg?.concurrency ?? 1));
+      return;
+    }
+    if (n !== (cfg?.concurrency ?? 1)) saveSource.mutate({ concurrency: n });
   };
 
   return (
@@ -36,6 +50,17 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">并发数</span>
+            <input
+              type="number" min={1} step={1}
+              value={concurrency}
+              onChange={e => setConcurrency(e.target.value)}
+              onBlur={commitConcurrency}
+              onKeyDown={e => { if (e.key === "Enter") { commitConcurrency(); (e.target as HTMLInputElement).blur(); } }}
+              className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1 text-right text-xs text-slate-700 outline-none backdrop-blur-sm dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300"
+            />
+          </div>
           <Toggle checked={enabled} onChange={toggleEnabled} />
         </div>
       </div>
