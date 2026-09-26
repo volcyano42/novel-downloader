@@ -6,7 +6,7 @@
 
 用户贴出后端日志：下载某书时 `fetch_meta failed`、`fanqie_api_oiapi/novel_info.py:35 raise NovelNotFoundError()`，而该书的来源记录正是 `fanqie-api-oiapi`（一个出厂 `enabled: false` 的源）。
 
-实测（见下表）表明**该源的实现与实际 API 契约多处不符**，只有 `search` 是对的：`novel_info` 用错 method、`chapter_list` 按错误的数据结构解析、`chapter_content` 也在错误结构上取值。因此它「取不到 meta / 拉不到目录 / 拿不到正文」，只是被 `task_manager` 的容错吞成了 warning（章节能入库是历史用其它源下的）。
+实测（见下表）表明**该源的实现与实际 API 契约多处不符**（`search` 与 `chapter_list` 经复核原本正确）：`novel_info` 用错 method、`chapter_content` 在错误结构上取值。因此它「取不到 meta / 拉不到目录 / 拿不到正文」，只是被 `task_manager` 的容错吞成了 warning（章节能入库是历史用其它源下的）。
 
 顺带暴露一个既有 UX 缺口：**「换源」弹窗列出的是全部书源（含 `enabled: false`）**，用户因此把这本书换到了这个坏源上——下载任务不检查 `enabled`，于是一路失败。
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | `search` | `method=search` + `keyword` + `page` | `code=1`，`data` = `list[dict]`，字段 `thumb/id/title/author/serial/word_number/read_count/docs/tags` |
 | `novel_info` | `method=**ids**` + `id` | `code=1`，`data` = `dict{thumb,id,title,author,serial,word_number,read_count,docs}` |
-| `chapter_list` | `method=chapters` + `id` | `code=1`，`data` = **扁平 `list[dict]`**，字段 `chapter_id/title/index/volume/volume_name/time/pay` |
+| `chapter_list` | `method=chapters` + `id` | `code=1`，`data` = **分卷嵌套 `list[list[dict]]`**（8 卷 / 718 章），叶节点字段 `chapter_id/title/index/volume/volume_name/time/pay` |
 | `chapter_content` | `method=chapter` + `id` + `chapter`(=order) | `code=1`，`data` = **`list`**（首项含 `content`/`word_number`/`chapter_id`/`chapter_title`/`volume_name`…）；`message` 另有「标题+正文」纯文本 |
 
 - 未知 method（如 `detail`/`list`/`info`）→ `code=-5`，`message="default method: search, ids, chapter"`
@@ -30,8 +30,8 @@
 | `search.py` | `method=search` + `keyword`，读 `data[]` 的 `id/title/author/docs/thumb` | ✅ 正确，不动 |
 | `novel_info.py:28` | `method="detail"` | ✗ 应为 `ids` |
 | `novel_info.py:39` | `data.get('cover')` | ✗ 应为 `thumb` |
-| `novel_info.py:48-56` | 再调 `chapters` 并 `sum(len(vol) for vol in data)` 求 serial | ✗ `data` 是扁平 list，求和得垃圾；且 `ids` 已直接返回 `serial` |
-| `chapter_list.py:30-32` | `for chapter_items in data: for item in chapter_items:`（假设分卷嵌套） | ✗ `data` 是扁平 list → 内层遍历到字符串键名，`.get()` 抛 `AttributeError` |
+| `novel_info.py:48-56` | 再调 `chapters` 并 `sum(len(vol) for vol in data)` 求 serial | △ 求和结果其实正确（`data` 是分卷嵌套），但多一次请求；`ids` 已直接返回 `serial`，改为直接取 |
+| `chapter_list.py:30-32` | `for chapter_items in data: for item in chapter_items:`（分卷嵌套） | ✅ **原本正确**（初稿误判；实现改为兼容两种形态） |
 | `chapter_content.py:38-42` | `data_list.values() if isinstance(data_list, dict)` | ✗ `data` 是 `list` → 循环为空 → `content` 从未被赋值 |
 
 ## 目标
@@ -69,15 +69,18 @@ description = data.get("docs")
 ```
 （保留原有的 `Novel(url=..., id=f"fanqie_{novel_id}", ...)` 形态 —— **注意 `id` 前缀不可改**：`tests/test_novel_id_stability.py` 对书源 URL 做 AST 快照，且已有书籍 id 不能漂移。）
 
-**`chapter_list.py`**：扁平解析
+**`chapter_list.py`**：保持分卷嵌套解析（实测契约如此），并兼容扁平形态
+
 ```python
-items = json_data.get("data")
-if not items:
+data = json_data.get("data")
+if not data:
     raise ChapterNotFoundError("OIAPI returned empty chapter list")
-for item in items:                    # 直接遍历，不再假设分卷嵌套
-    chapter_id = item.get("chapter_id")
-    ...
-    order = item["index"]; time = item["time"]; volume = item["volume_name"]
+for group in data:                                  # 真实是 list[list[dict]]
+    items = group if isinstance(group, list) else [group]
+    for item in items:
+        chapter_id = item.get("chapter_id")
+        ...
+        order = item["index"]; time = item["time"]; volume = item["volume_name"]
 ```
 
 **`chapter_content.py`**：按 `list` 解析
@@ -116,7 +119,7 @@ chapter.count = int(first.get("word_number") or 0)
 
 - `tests/`（新增或并入既有源测试文件）：用 **mock 的 `engine.async_fetch_json`** 返回上表实测结构，断言：
   - `novel_info`：`title/author/count/description` 映射正确，`serial` 取自 `ids` 的 `serial`，封面取自 `thumb`，且**不再发起第二次 `chapters` 请求**（可断言调用次数）
-  - `chapter_list`：扁平列表能解析出 N 章，`order/index`、`volume_name`、`chapter_id → url` 正确
+  - `chapter_list`：分卷嵌套能解析出 N 章（另有扁平形态兼容用例），`order/index`、`volume_name`、`chapter_id → url` 正确
   - `chapter_content`：`data` 为 `list` 时能取到 `content` 与 `word_number`；越界 message → `ChapterNotFoundError`
 - **真实 API 验收**（写入报告）：用本机用户层的 key，依次跑 `novel_info` / `chapter_list` / `chapter_content`（取某一章），打印成功结果（标题、章节数、正文字数）；失败则报告实际响应
 - 既有测试：`python -m pytest tests -q` 基线 **471 passed, 1 skipped** → 0 failed
