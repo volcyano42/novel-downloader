@@ -232,6 +232,17 @@ _92XS_SEARCH_HTML = (
     "<td>最新章节</td><td>作者</td><td>100万</td></tr></table>"
 )
 
+# 章节页正文首尾各有一个 id=center_tip 的站内广告位（文案会变）
+_92XS_CHAPTER_HTML = (
+    '<div class="ccontent" id="ccontent">'
+    '<div id="center_tip"><b>最新网址：www.92xs.info</b></div>'
+    "&nbsp;&nbsp;&nbsp;&nbsp;第一段正文。<br />"
+    "<br />"
+    "&nbsp;&nbsp;&nbsp;&nbsp;第二段正文。"
+    '<div id="center_tip"><b>最新网址：www.92xs.info</b></div>'
+    "</div>"
+)
+
 
 class TestQidianQimao92xsCapabilitiesAreAsync:
     """qidian/qimao/92xs 各 mode/variant 的四个能力函数全部 async def。"""
@@ -379,3 +390,21 @@ class Test92xsCapabilities:
         assert novel.author == "张三"
         assert novel.id == ""  # source 层不生成 id，由 resolve_meta 中心赋值（hash id）
         assert novel.cover.raw_data == b"cover-bytes"
+
+    def test_chapter_content_strips_center_tip(self):
+        from importlib import import_module
+        mod = import_module("novelbase.sources.92xs_requests_default.chapter_content")
+        engine = MagicMock()
+        engine.async_fetch_text = AsyncMock(return_value=_92XS_CHAPTER_HTML)
+        chapter = Chapter(
+            id="13831316", url="http://www.92xs.info/html/536/13831316.html",
+            novel_id="", title="第一章", order=1,
+        )
+
+        out = asyncio.run(mod.chapter_content(chapter, engine))
+
+        assert "center_tip" not in out.content
+        assert "最新网址" not in out.content
+        assert "第一段正文。" in out.content
+        assert "第二段正文。" in out.content
+        assert out.count == len(out.content)
