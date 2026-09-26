@@ -20,6 +20,7 @@ def _isolated_state(monkeypatch):
     tm._source_active.clear()
     # 任务级额度放宽到 2，使两个任务能同时运行（否则测不出书源共享）
     monkeypatch.setattr(tm, "_max_workers", lambda: 2)
+    monkeypatch.setattr(tm, "_max_workers_cache", None)
     monkeypatch.setattr(tm, "set_novel_source", lambda *a, **k: None)
     yield
     tm._tasks.clear()
@@ -27,14 +28,20 @@ def _isolated_state(monkeypatch):
     tm._source_active.clear()
 
 
-def _install(monkeypatch, stats: dict, speed: float = 0.05):
-    """spy 版 resolve_chapter：记录在飞请求数与峰值。"""
+def _install(monkeypatch, stats: dict, speed: float = 0.05, meta_speed: float = 0.0):
+    """spy 版 resolve_meta/resolve_chapter：记录在飞请求数与峰值。"""
     from novelbase.models.novel import Novel
 
     engine = MagicMock()
     store = MagicMock()
 
     async def fake_resolve_meta(url, source_name, engines, **kw):
+        stats["inflight"] += 1
+        stats["peak"] = max(stats["peak"], stats["inflight"])
+        stats["events"].append(("enter", "meta"))
+        await asyncio.sleep(meta_speed)
+        stats["inflight"] -= 1
+        stats["events"].append(("exit", "meta"))
         return Novel(title="测试", url=url, id="n1", serial=0,
                      author="", description="")
 
@@ -111,4 +118,29 @@ def test_different_sources_run_in_parallel(monkeypatch):
     asyncio.run(_run())
 
     assert stats["peak"] >= 2, stats
+    assert tm._source_active == {}
+
+
+def test_meta_request_uses_source_slot(monkeypatch):
+    """resolve_meta 也占书源额度：同源（额度 1）两个任务的元数据请求不同时在飞。
+
+    若 meta 绕过了额度，两个任务的 meta 会并行 → peak == 2；覆盖后 peak == 1。
+    """
+    monkeypatch.setattr(tm, "source_concurrency", lambda name: 1)
+    stats = {"inflight": 0, "peak": 0, "events": []}
+    _install(monkeypatch, stats, speed=0.02, meta_speed=0.1)
+    chapters = _chapters(1)
+
+    async def _run():
+        r1 = tm.create_task("n1", chapters, "one", source_name="shared-src",
+                            novel_url="http://x/1")
+        r2 = tm.create_task("n2", chapters, "two", source_name="shared-src",
+                            novel_url="http://x/2")
+        t1, t2 = tm._tasks[r1["task_id"]], tm._tasks[r2["task_id"]]
+        assert await _wait_for(
+            lambda: t1["status"] == "completed" and t2["status"] == "completed"), (t1, t2)
+
+    asyncio.run(_run())
+
+    assert stats["peak"] == 1, stats
     assert tm._source_active == {}
