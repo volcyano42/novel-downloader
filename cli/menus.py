@@ -348,7 +348,7 @@ def do_delete() -> None:
 def _get_delay(source_name: str, capability: str) -> tuple[float, float]:
     """获取某书源某能力段三层合并后的当前延迟范围。"""
     merged = merged_source_config(source_name).get(capability, {})
-    delay = merged.get("delay", (3, 6))
+    delay = merged.get("delay", (0, 0))
     if isinstance(delay, list):
         delay = tuple(delay)
     return delay[0], delay[1]

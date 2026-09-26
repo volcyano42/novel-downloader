@@ -188,12 +188,12 @@ class TestMenus:
         monkeypatch.setattr(menus, "merged_source_config",
                             lambda n: {"search": {"delay": [1, 2]}})
         assert menus._get_delay("a-x-default", "search") == (1.0, 2.0)
-        assert menus._get_delay("a-x-default", "missing") == (3.0, 6.0)
+        assert menus._get_delay("a-x-default", "missing") == (0, 0)
 
     def test_get_delay_default(self, monkeypatch):
         from cli import menus
         monkeypatch.setattr(menus, "merged_source_config", lambda n: {})
-        assert menus._get_delay("a-x-default", "requests") == (3.0, 6.0)
+        assert menus._get_delay("a-x-default", "requests") == (0, 0)
 
     def test_set_delay_writes_user_layer(self, monkeypatch, tmp_path):
         import cli.config as ccfg
