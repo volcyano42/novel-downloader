@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from novelbase import create_engine, Options
 
@@ -237,6 +238,41 @@ def test_browser_engine_sync_fetch_text_isolated_session(monkeypatch):
     assert engine._browser is None
 
 
+def test_browser_engine_sync_fetch_text_uses_user_data_dir(monkeypatch):
+    """同步 fetch_text 也必须带 user_data_dir（否则登录态被静默丢掉）。
+
+    回归防线：曾只让 async 路径走 launch_persistent_context，同步路径匿名 launch
+    → 配了持久化 profile 的书源走同步抓取时表现为「章节内容为空」且无报错。
+    """
+    from novelbase.core.options import BrowserOptions
+    from novelbase.core.engine import BrowserEngine
+    fake = FakePlaywright(monkeypatch)
+    engine = BrowserEngine(BrowserOptions(
+        delay=(0, 0), headless=True, user_data_dir="C:/tmp/ud-sync",
+    ))
+    result = engine.fetch_text("http://sync-persist", skip_delay=True)
+    assert result == "<html>ok</html>"
+    assert ("launch_persistent_context", "C:/tmp/ud-sync") in fake.calls
+    assert not any(c[0] == "launch" for c in fake.calls)
+    # 持久化上下文自带 browser → 只 close context，不 close browser
+    assert ("context_close",) in fake.calls
+    assert not any(c[0] == "browser_close" for c in fake.calls)
+
+
+def test_browser_engine_sync_fetch_text_rejects_when_profile_in_use(monkeypatch):
+    """异步会话已占用 user_data_dir 时，同步 fetch_text 明确报错（而非抢 profile）。"""
+    from novelbase.core.options import BrowserOptions
+    from novelbase.core.engine import BrowserEngine
+    FakePlaywright(monkeypatch)
+    engine = BrowserEngine(BrowserOptions(
+        delay=(0, 0), headless=True, user_data_dir="C:/tmp/ud-busy",
+    ))
+    asyncio.run(engine.async_fetch_text("http://x", skip_delay=True))
+    assert engine._context is not None
+    with pytest.raises(RuntimeError, match="user_data_dir"):
+        engine.fetch_text("http://y", skip_delay=True)
+
+
 def test_browser_engine_sync_fetch_text_raises_network_error_on_fail(monkeypatch):
     """同步 fetch_text 独立会话中 goto 失败后抛 NetworkError（retry/backoff 与 async 对齐）。"""
     from novelbase.core.options import BrowserOptions
@@ -253,9 +289,16 @@ def test_browser_engine_sync_fetch_text_raises_network_error_on_fail(monkeypatch
         async def close(self):
             pass
 
-    class FailingBrowser:
+    class FailingContext:
         async def new_page(self):
             return FailingPage()
+
+        async def close(self):
+            pass
+
+    class FailingBrowser:
+        async def new_context(self, viewport=None):
+            return FailingContext()
 
         async def close(self):
             pass

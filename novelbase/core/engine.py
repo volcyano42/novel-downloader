@@ -470,22 +470,50 @@ class BrowserEngine(Engine):
         return asyncio.run(self._fetch_in_isolated_session(url, skip_delay=skip_delay, **kwargs))
 
     async def _fetch_in_isolated_session(self, url, skip_delay=False, **kwargs) -> str:
+        """同步入口的独立会话：自启自停，不触碰懒启动的 browser。
+
+        与 `_ensure_browser_locked()` 一致地使用 `user_data_dir` —— 否则配了持久化
+        登录态（profile）的书源走同步 `fetch_text` 时会**静默降级为匿名访问**
+        （浏览器里登录过也不生效，症状是「章节内容为空」且无任何报错）。
+        """
+        if self.options.user_data_dir and self._context is not None:
+            # 同一 profile 不能被两个 Chromium 会话同时使用（SingletonLock）
+            raise RuntimeError(
+                "user_data_dir 已被本引擎的持久化会话占用，无法再开同步会话；"
+                "请改用 async_fetch_text"
+            )
         async with _async_playwright() as pw:
             browser_type = getattr(pw, self.options.browser_type, None)
             if browser_type is None:
                 raise ValueError(f"不支持的 browser_type: {self.options.browser_type}")
-            browser = await browser_type.launch(
-                headless=self.options.headless,
-                args=self.options.extra_args or [],
-            )
+            browser = None
+            if self.options.user_data_dir:
+                # 持久化上下文自带 browser，关闭时只 close context
+                context = await browser_type.launch_persistent_context(
+                    str(self.options.user_data_dir),
+                    headless=self.options.headless,
+                    args=self.options.extra_args or [],
+                    viewport=self.options.viewport,
+                )
+            else:
+                browser = await browser_type.launch(
+                    headless=self.options.headless,
+                    args=self.options.extra_args or [],
+                )
+                if self.options.viewport:
+                    context = await browser.new_context(viewport=self.options.viewport)
+                else:
+                    context = await browser.new_context()
             try:
-                page = await browser.new_page()
+                page = await context.new_page()
                 try:
                     return await self._fetch_with_page(page, url, skip_delay=skip_delay)
                 finally:
                     await page.close()
             finally:
-                await browser.close()
+                await context.close()
+                if browser is not None:
+                    await browser.close()
 
     def fetch_json(self, url, skip_delay=False, **kwargs) -> dict[str, Any]:
         text = self.fetch_text(url=url, skip_delay=skip_delay, **kwargs)
