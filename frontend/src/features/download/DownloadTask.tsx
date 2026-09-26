@@ -136,7 +136,7 @@ export function DownloadTask({ title, status, progress = 0, errorMessage, curren
             <button onClick={e => { e.stopPropagation(); onPause(); }} className="rounded-lg p-1 text-slate-400 hover:text-amber-500 transition-colors"><Pause className="h-4 w-4" strokeWidth={1.5} /></button>}
           {status === "paused" && onResume &&
             <button onClick={e => { e.stopPropagation(); onResume(); }} className="rounded-lg p-1 text-slate-400 hover:text-[#5e6ad2] transition-colors"><Play className="h-4 w-4" strokeWidth={1.5} /></button>}
-          {(status === "downloading" || status === "paused") && onCancel &&
+          {(status === "downloading" || status === "paused" || status === "queued") && onCancel &&
             <button onClick={e => { e.stopPropagation(); onCancel(); }} className="rounded-lg p-1 text-slate-400 hover:text-red-500 transition-colors"><X className="h-4 w-4" strokeWidth={1.5} /></button>}
           {status === "failed" && onRetry && (
             <TooltipProvider><Tooltip><TooltipTrigger asChild>

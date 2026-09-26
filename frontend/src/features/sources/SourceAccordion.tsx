@@ -11,7 +11,8 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
   const { data: cfg } = useSourceConfig(name);
   const [enabled, setEnabled] = useState(info.enabled);
   const [open, setOpen] = useState(false);
-  // 并发数输入用字符串保存，失焦/回车时校验提交（非法值不写）
+  // 并发数输入用字符串保存，失焦时校验提交（非法值不写）；回车只触发失焦，
+  // 由 onBlur 统一提交一次，避免 Enter+blur 连发两次相同 PUT
   const [concurrency, setConcurrency] = useState("1");
 
   // 列表数据（useSources）刷新后同步开关显示
@@ -57,7 +58,7 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
               value={concurrency}
               onChange={e => setConcurrency(e.target.value)}
               onBlur={commitConcurrency}
-              onKeyDown={e => { if (e.key === "Enter") { commitConcurrency(); (e.target as HTMLInputElement).blur(); } }}
+              onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
               className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1 text-right text-xs text-slate-700 outline-none backdrop-blur-sm dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300"
             />
           </div>
