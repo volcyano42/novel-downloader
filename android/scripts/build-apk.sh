@@ -21,11 +21,11 @@ echo "pydantic<2" >> .req-android.txt
 echo "--- Android 依赖清单 ---"; cat .req-android.txt
 
 # 2. 复制 Python 运行时模块进 Chaquopy 打包目录（app/src/main/python/，构建产物不提交 git）
-#    server.py 运行时 import 链：backend.* / shared.* / init_config / template / 前端静态文件
+#    server.py 运行时 import 链：backend.* / shared.* / init_config / template / 前端资源 zip
 #    novelbase 通过 build.gradle.kts 的 install("file:../..") 以 pip 包安装，不在此复制
 rm -rf app/src/main/python/backend app/src/main/python/shared \
        app/src/main/python/init_config.py \
-       app/src/main/python/template app/src/main/python/frontend
+       app/src/main/python/template app/src/main/python/frontend.zip
 mkdir -p app/src/main/python
 cp -r ../backend app/src/main/python/backend
 cp -r ../shared app/src/main/python/shared
@@ -33,8 +33,23 @@ find app/src/main/python/backend app/src/main/python/shared \
      -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 cp ../init_config.py app/src/main/python/init_config.py
 cp -r ../template app/src/main/python/template
-mkdir -p app/src/main/python/frontend
-cp -r ../frontend/dist/* app/src/main/python/frontend/
+
+# 2b. 前端产物打成单个 zip 随 APK 资产分发。
+#     Chaquopy 把 src/main/python/ 打成 APK 资产，其中的数据文件不是真实目录
+#     （os.listdir/os.scandir 不可用），StaticFiles 的「真实目录」假设不成立 ——
+#     故改为 zip 交付，由 server.py 启动时解压到可写目录、再交给 SPA fallback 服务。
+#     zip 成员路径相对 frontend/dist 根（index.html 在 zip 根，不带 dist/ 前缀），只打文件。
+python3 - <<'PY'
+import os, zipfile
+src = os.path.join("..", "frontend", "dist")
+dst = os.path.join("app", "src", "main", "python", "frontend.zip")
+with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, _dirs, files in os.walk(src):
+        for name in files:
+            full = os.path.join(root, name)
+            zf.write(full, os.path.relpath(full, src))
+print(f"已生成前端资源 zip：{dst}")
+PY
 
 # 3. 生成 Gradle wrapper（若缺失；CI 由 setup-gradle action 提供 gradle 命令）
 if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then

@@ -1,29 +1,41 @@
 # -*- coding: utf-8 -*-
-"""server.py 逻辑的本地可测部分（Android 环境外验证 env 注入、挂载与 /api/v2/health 可达性）。"""
-import os
-import sys
-import shutil
-import importlib
-from pathlib import Path
-import pytest
-from starlette.routing import Mount
+"""server.py 逻辑的本地可测部分（Android 环境外验证 env 注入、前端交付与 /api/v2/health 可达性）。
 
-SERVER_PY_DIR = str(
-    Path(__file__).resolve().parent.parent / "android" / "app" / "src" / "main" / "python"
-)
-ASSETS_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "android" / "app" / "src" / "main" / "assets" / "frontend"
-FALLBACK_APP_DATA_DIR = Path(__file__).resolve().parent.parent / "android" / "app" / "src" / "main" / "app_data"
+不启 TestClient/lifespan（本仓库有 lifespan 在部分环境下挂起的历史问题），
+统一用 `httpx.ASGITransport` 直接打 ASGI app。
+"""
+import asyncio
+import hashlib
+import importlib
+import os
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+import httpx
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SERVER_PY_DIR = str(REPO_ROOT / "android" / "app" / "src" / "main" / "python")
+FALLBACK_APP_DATA_DIR = REPO_ROOT / "android" / "app" / "src" / "main" / "app_data"
+PLACEHOLDER_TEXT = "前端尚未构建"
+
+
+@pytest.fixture(autouse=True)
+def _restore_server_modules():
+    """每个用例前后快照/恢复 server 与 backend.main，避免模块缓存跨用例污染。"""
+    saved = {name: sys.modules.get(name) for name in ("server", "backend.main")}
+    yield
+    for name, mod in saved.items():
+        if mod is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = mod
 
 
 def _import_server():
-    """确保以全新状态 import server 模块（避免模块缓存污染）。
-
-    importlib.import_module 对已加载模块直接命中 sys.modules 缓存，
-    必须在每次导入前弹出缓存，否则第二个测试会拿到第一个测试加载时的
-    模块实例（那时 assets/frontend 尚不存在，mount 不会生效）。
-    同时弹出 backend.main，避免两次测试共享同一 FastAPI app
-    导致 /api/v2/health 与根挂载重复注册。
-    """
+    """确保以全新状态 import server 模块（弹出缓存，避免共享旧 app / 旧 env）。"""
     sys.path.insert(0, SERVER_PY_DIR)
     try:
         sys.modules.pop("server", None)
@@ -33,79 +45,47 @@ def _import_server():
         sys.path.pop(0)
 
 
-def _remove_frontend_mount(server):
-    """从共享的 backend.main.app 移除本次挂载的根 Mount（name == "frontend"）。
+def _get(app, path: str):
+    """同步打一次 ASGI 请求（每个请求独立事件循环，等价于真实 HTTP 访问）。"""
 
-    server 模块级 mount 挂在进程内共享的 FastAPI app 上，若测试后不清理，
-    会永久污染后续测试（指向已删除目录）。见 I3。
-    """
-    if server is not None:
-        server.app.routes[:] = [
-            r for r in server.app.routes
-            if not (isinstance(r, Mount) and r.name == "frontend")
-        ]
+    async def _call():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(path)
 
+    return asyncio.run(_call())
+
+
+def _write_zip(path: Path, entries: dict) -> str:
+    """按 {成员名: 文本} 写 zip，返回 sha256。"""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, text in entries.items():
+            zf.writestr(name, text)
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# ── env 注入 ──────────────────────────────────────────────────
 
 def test_server_module_sets_nld_app_data_when_env_present(tmp_path, monkeypatch):
     monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
+    monkeypatch.setenv("NLD_FRONTEND_DIR", str(tmp_path / "no-frontend"))
     server = _import_server()
     assert os.environ["NLD_APP_DATA"] == str(tmp_path / "app_data")
     assert server.get_app_data() == (tmp_path / "app_data").resolve()
 
 
-def test_server_module_has_app_with_static_mount(tmp_path, monkeypatch):
-    # 模拟 CI 产物：创建 assets/frontend 目录，确保 mount 生效
-    assets = Path(__file__).resolve().parent.parent / "android" / "app" / "src" / "main" / "assets" / "frontend"
-    assets_existed_before = assets.exists()
-    assets.mkdir(parents=True, exist_ok=True)
-    (assets / "index.html").write_text("<html>test</html>", encoding="utf-8")
-    try:
-        monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
-        server = _import_server()
-        mount_paths = [r.path for r in server.app.routes if isinstance(r, Mount)]
-        assert any(p in ("/", "") for p in mount_paths), f"根挂载缺失，实际 mounts: {mount_paths}"
-    finally:
-        if not assets_existed_before:
-            import shutil
-            shutil.rmtree(assets.parent, ignore_errors=True)
-        else:
-            (assets / "index.html").unlink(missing_ok=True)
-
-
-@pytest.mark.skip(reason="TestClient lifespan 在部分环境下挂起，待 #I4 修复")
-def test_health_route_reachable_via_test_client(tmp_path, monkeypatch):
-    """健康检查复用 backend.main 的 /api/v2/health（注册于 SPA fallback 与根 mount 之前，始终可达）。
-
-    已知问题：TestClient 触发 async lifespan 时在 Windows / CI 的某些 Python 版本下挂起，
-    底层与 Starlette/FastAPI 的事件循环管理有关，暂时 skip 等待 #I4 修复。
-    """
-    import asyncio
-    from fastapi.testclient import TestClient
-    assets_existed_before = ASSETS_FRONTEND_DIR.exists()
-    ASSETS_FRONTEND_DIR.mkdir(parents=True, exist_ok=True)
-    (ASSETS_FRONTEND_DIR / "index.html").write_text("<html>test</html>", encoding="utf-8")
-    server = None
-    try:
-        monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
-        server = _import_server()
-        with TestClient(server.app, raise_server_exceptions=False) as client:
-            resp = client.get("/api/v2/health")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("ok") is True
-        assert body["data"]["status"] == "ok"
-    finally:
-        _remove_frontend_mount(server)
-        if not assets_existed_before:
-            shutil.rmtree(ASSETS_FRONTEND_DIR.parent, ignore_errors=True)
-        else:
-            (ASSETS_FRONTEND_DIR / "index.html").unlink(missing_ok=True)
+def test_server_module_injects_nld_platform_android(tmp_path, monkeypatch):
+    """server 模块必须注入 NLD_PLATFORM=android（环境能力表据此排除 browser）。"""
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
+    monkeypatch.delenv("NLD_PLATFORM", raising=False)
+    _import_server()
+    assert os.environ.get("NLD_PLATFORM") == "android"
 
 
 def test_server_module_injects_app_data_env_when_absent(monkeypatch):
     """无 NLD_APP_DATA env 时，server 模块必须自行注入兜底目录（I1 回归）。"""
-    # 确保 env 不存在，验证模块级注入不是空操作
     monkeypatch.delenv("NLD_APP_DATA", raising=False)
+    monkeypatch.delenv("NLD_FRONTEND_DIR", raising=False)
     app_data_existed_before = FALLBACK_APP_DATA_DIR.exists()
     server = _import_server()
     try:
@@ -118,5 +98,121 @@ def test_server_module_injects_app_data_env_when_absent(monkeypatch):
         if not app_data_existed_before:
             shutil.rmtree(FALLBACK_APP_DATA_DIR, ignore_errors=True)
         else:
-            probe = FALLBACK_APP_DATA_DIR / ".write_probe"
-            probe.unlink(missing_ok=True)
+            (FALLBACK_APP_DATA_DIR / ".write_probe").unlink(missing_ok=True)
+
+
+# ── 端到端：前端交付（NLD_FRONTEND_DIR 指向真实目录） ─────────
+
+def test_frontend_served_end_to_end(tmp_path, monkeypatch):
+    """根路径必须返回前端（不再是占位页），assets / SPA 路由 / health 均可达。"""
+    front = tmp_path / "frontend" / "dist"
+    (front / "assets").mkdir(parents=True)
+    (front / "index.html").write_text("<html><body>SHELL-OK</body></html>", encoding="utf-8")
+    (front / "assets" / "x.js").write_text("console.log('x');", encoding="utf-8")
+
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
+    monkeypatch.setenv("NLD_FRONTEND_DIR", str(front))
+    server = _import_server()
+
+    root = _get(server.app, "/")
+    assert root.status_code == 200
+    assert "SHELL-OK" in root.text
+    assert PLACEHOLDER_TEXT not in root.text  # 关键断言：白页不再出现
+
+    asset = _get(server.app, "/assets/x.js")
+    assert asset.status_code == 200
+    assert "console.log" in asset.text
+
+    spa = _get(server.app, "/novels")  # SPA 路由回 index.html
+    assert spa.status_code == 200
+    assert "SHELL-OK" in spa.text
+
+    health = _get(server.app, "/api/v2/health")
+    assert health.status_code == 200
+    assert health.json()["data"]["status"] == "ok"
+
+
+def test_find_frontend_dist_returns_none_when_candidates_missing(tmp_path, monkeypatch):
+    """候选全部落空时 _find_frontend_dist() 返回 None（这是占位页分支的判据）。
+
+    注意：本地仓库根确实存在 frontend/dist，所以不能用「删目录」制造负例——
+    改为把 _project_root / cwd / NLD_FRONTEND_DIR 全指向空临时目录后直接断言。
+    """
+    import backend.main as bm
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.chdir(empty)
+    monkeypatch.setattr(bm, "_project_root", empty)
+    monkeypatch.delenv("NLD_FRONTEND_DIR", raising=False)
+
+    candidates = bm._frontend_candidates()
+    assert candidates, "候选列表不应为空"
+    assert all(not (c / "index.html").exists() for c in candidates)
+    assert bm._find_frontend_dist() is None
+
+
+# ── zip 解压 ─────────────────────────────────────────────────
+
+def _prepare_extract(tmp_path, monkeypatch, entries: dict):
+    """构造 <tmp>/frontend.zip 并把 server.__file__ 指到同目录，返回 (server, target, digest)。"""
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("NLD_FRONTEND_DIR", raising=False)
+    digest = _write_zip(tmp_path / "frontend.zip", entries)
+
+    server = _import_server()
+    monkeypatch.setattr(server, "__file__", str(tmp_path / "server.py"))
+    return server, tmp_path / "home" / "frontend" / "dist", digest
+
+
+def test_extract_frontend_extracts_and_sets_env(tmp_path, monkeypatch):
+    server, target, digest = _prepare_extract(tmp_path, monkeypatch, {
+        "index.html": "<html>SHELL-OK</html>",
+        "assets/x.js": "console.log('x');",
+    })
+    server._extract_frontend()
+
+    assert (target / "index.html").read_text(encoding="utf-8") == "<html>SHELL-OK</html>"
+    assert (target / "assets" / "x.js").read_text(encoding="utf-8") == "console.log('x');"
+    assert os.environ["NLD_FRONTEND_DIR"] == str(target)
+    assert (target / ".zip-sha256").read_text(encoding="utf-8").strip() == digest
+
+
+def test_extract_frontend_idempotent_via_sha256(tmp_path, monkeypatch):
+    """二次调用命中 sha256 标记 → 不重复解压（被删掉的产物不会被重建）。"""
+    server, target, _ = _prepare_extract(tmp_path, monkeypatch, {
+        "index.html": "<html>ok</html>", "assets/x.js": "x",
+    })
+    server._extract_frontend()
+    assert (target / "index.html").is_file()
+
+    (target / "index.html").unlink()  # 破坏产物：命中标记时不应被重建
+    server._extract_frontend()
+    assert not (target / "index.html").exists()
+    assert os.environ["NLD_FRONTEND_DIR"] == str(target)
+
+
+def test_extract_frontend_rejects_zip_slip(tmp_path, monkeypatch):
+    """含 ../evil.txt 成员的 zip 不得把文件写到目标目录之外。"""
+    server, target, _ = _prepare_extract(tmp_path, monkeypatch, {
+        "index.html": "<html>ok</html>", "../evil.txt": "pwned",
+    })
+    server._extract_frontend()
+
+    assert (target / "index.html").is_file()
+    assert not (tmp_path / "home" / "frontend" / "evil.txt").exists()
+    assert not (tmp_path / "evil.txt").exists()
+
+
+def test_extract_frontend_missing_zip_leaves_env_unset(tmp_path, monkeypatch):
+    """zip 缺失 → 不设 NLD_FRONTEND_DIR（前端回落占位页），且不抛异常。"""
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path / "app_data"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("NLD_FRONTEND_DIR", raising=False)
+    server = _import_server()
+    monkeypatch.setattr(server, "__file__", str(tmp_path / "server.py"))  # 该目录下无 frontend.zip
+
+    server._extract_frontend()
+
+    assert "NLD_FRONTEND_DIR" not in os.environ
