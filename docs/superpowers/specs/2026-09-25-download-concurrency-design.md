@@ -102,6 +102,7 @@ def _source_sem(source_name: str) -> asyncio.Semaphore:
     """按书源取（或建）并发额度；额度取自 shared.config.source_concurrency()。"""
 ```
 
+- **实现采用轮询式计数（已批准偏差）**：`_running_tasks: set[str]` + `_source_active: dict[str, int]`（配 `_tasks_lock` 保护），而不是固定容量的 `asyncio.Semaphore`。理由：`max_workers` 与书源 `concurrency` 都是运行时可改的配置，轮询式改完立即生效（固定容量 Semaphore 需要重建且会丢失在等者）；粒度 0.05–0.2s，无竞争时零等待 —— 与项目既有的 `_wait_if_paused` 轮询风格一致。
 - `create_task`：任务以 `status="queued"` 入表（不再直接进 downloading）
 - `_run_download` 开头：
 
@@ -114,6 +115,7 @@ def _source_sem(source_name: str) -> asyncio.Semaphore:
         ...原有流程...
 ```
 
+- **书源额度覆盖该任务发出的所有请求**（不只章节内容）：`resolve_meta` / `resolve_chapter_list` / `resolve_chapter` 调用前都要 acquire（`resolve_meta`、`resolve_chapter_list` 每个任务各一次，`resolve_chapter` 每章一次），否则「同一书源同时最多 N 个请求」不成立（搜索/目录请求会绕过额度）
 - 章节请求前拿书源额度（`_download_one` 内，包住 `resolve_chapter`）：
 
 ```python
@@ -129,7 +131,7 @@ def _source_sem(source_name: str) -> asyncio.Semaphore:
 |---|---|
 | 超额任务 | `status="queued"`，前端显示「排队中」；拿到额度后转 `downloading` |
 | 排队中删除 | 直接 `cancelled`（`delete_task` 已通用，需保证协程在拿到额度后立即退出） |
-| 排队中暂停 | 允许：置 `_pause` 后，拿到额度立即停在 `paused`（沿用 `_wait_if_paused`） |
+| 排队中暂停 | 允许：置 `_pause` 后**不抢任务槽**（保持 `queued`，不阻塞队列）；`resume` 后才去抢额度并转 `downloading` |
 | `max_workers` 缩小 | 只影响新排队的任务（已持额度的继续跑完） |
 
 ### 5. CLI 侧
@@ -168,6 +170,8 @@ create_task → task(status="queued") → _run_download
 
 - `concurrency` 非法（0/负/非整数/字符串）→ 回退 1（读取侧过滤；写入侧拒绝非正整数）
 - `max_workers` 非法（0/负）→ 回退 1（`max(1, ...)`，现状已如此）
+- **配置读取不得进热路径**：`source_concurrency()` 会读 `sites/*.yaml` 与 `source.json`（无缓存），因此只在任务开始时取一次并缓存进闭包；不得在每章（`_update_eta` 等）重复调用，尤其不得在持锁段内做这类同步 IO
+- **额度必须成对释放**：任务槽与书源槽的 acquire/release 全部包在 `try/finally`；异常、取消、重试分支都要覆盖（配额泄漏会让该源永久卡死）
 - 排队任务取消：协程拿到额度后立即检查 `_cancel` 并退出，不留 `downloading` 残影
 - 书源 Semaphore 池的并发创建：单事件循环内 `dict` 读写在同步段完成（与既有 `_tasks` 同风格），必要时用 `threading.Lock`
 
@@ -176,6 +180,7 @@ create_task → task(status="queued") → _run_download
 - `tests/test_source_concurrency.py`（新增）：缺省 1 / 出厂顶层声明生效 / 用户层顶层覆盖 / 非法值回退 1 / 未知书源返回 1
 - `tests/test_task_queue.py`（新增）：`max_workers=1` 时第二个任务停在 `queued`、第一个完成后转 `downloading`；排队中删除 → `cancelled` 且不进入下载
 - `tests/test_source_concurrency_shared.py`（新增）：同一书源两个任务不会同时进入请求（用 spy 记录 enter/exit 计数，断言不并发）；不同书源可并行
+- 释放路径必须被测：**异常路径**（书源抛错）与**取消路径**（下载中/排队中取消）之后，任务槽与书源额度都要回到零（额度泄漏是最致命的失败模式）
 - `tests/test_delay_default.py`（新增）：未配置 delay 时 `build_options(...)` 的 `options.requests/browser/api.delay == (0, 0)`；用户层显式 `delay` 仍生效
 - 既有测试同步：凡断言 `delay == (3, 5)` 的用例改为 `(0, 0)`（全仓 grep `3, 5` 复核）
 - 前端：`npx tsc -b` 0 错、`npm run lint` 无新增告警；手测清单见下
