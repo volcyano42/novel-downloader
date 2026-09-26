@@ -14,6 +14,7 @@ import {
   fetchMeta,
   fetchSources,
   getChapter,
+  getEnvironment,
   getFavorites,
   getFormatConfig,
   getGlobalConfig,
@@ -110,6 +111,15 @@ export function useSources() {
   return useQuery({
     queryKey: ["sources"],
     queryFn: fetchSources,
+    staleTime: Infinity,
+  });
+}
+
+/** 运行环境（platform / supported_modes）：一次运行内不变，故 staleTime 无限。 */
+export function useEnvironment() {
+  return useQuery({
+    queryKey: ["environment"],
+    queryFn: getEnvironment,
     staleTime: Infinity,
   });
 }

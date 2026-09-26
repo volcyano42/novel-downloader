@@ -5,7 +5,7 @@
  */
 import {useEffect, useState} from "react";
 import type {LucideIcon} from "lucide-react";
-import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
+import {useEnvironment, useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
 import {cn} from "@/lib/utils";
 import {CAP_LABELS, ENGINE_FIELDS, MODE_META} from "./sourceConfigFields";
 import type {EngineField} from "./sourceConfigFields";
@@ -22,10 +22,10 @@ export function Row({ label, desc, children }: { label: string; desc?: string; c
   );
 }
 
-export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+export function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <button onClick={() => onChange(!checked)}
-      className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${checked ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"}`}>
+    <button onClick={() => onChange(!checked)} disabled={disabled}
+      className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${disabled ? "cursor-not-allowed opacity-40" : ""} ${checked ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"}`}>
       <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ${checked ? "translate-x-4" : "translate-x-0"}`} />
     </button>
   );
@@ -131,10 +131,16 @@ export function Section({ icon: Icon, title, children }: { icon: LucideIcon; tit
 export function SourceConfigEditor({ name }: { name: string }) {
   const { data: cfg } = useSourceConfig(name);
   const saveSource = useSaveSourceConfig(name);
+  const { data: env } = useEnvironment();
 
   const caps = cfg?.capabilities ?? {};
   const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
+  // mode 下拉只列**本环境支持**的选项（Android 下没有 browser）；env 未就绪时退回全量，避免闪动
+  const supported = env?.supported_modes;
+  const modeOptions = Object.entries(MODE_META)
+    .filter(([m]) => !supported || supported.includes(m))
+    .map(([m, meta]) => ({ value: m, label: meta.label }));
 
   const updateField = (cap: string, key: string, value: unknown) => {
     saveSource.mutate({ config: { [cap]: { [key]: value } } });
@@ -184,7 +190,10 @@ export function SourceConfigEditor({ name }: { name: string }) {
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
               <Select value={mode}
                 onChange={v => saveSource.mutate({ config: { [cap]: { mode: v } } })}
-                options={Object.entries(MODE_META).map(([m, meta]) => ({ value: m, label: meta.label }))} />
+                // 当前 mode 若不在受支持列表（env 未就绪或历史覆盖），仍补进选项，避免下拉空白
+                options={modeOptions.some(o => o.value === mode)
+                  ? modeOptions
+                  : [...modeOptions, { value: mode, label: MODE_META[mode]?.label ?? mode }]} />
               {declared[cap] && declared[cap] !== mode && (
                 <button onClick={() => saveSource.mutate({ config: { [cap]: { mode: null } } })}
                   className="text-[10px] font-medium text-indigo-500 hover:underline">

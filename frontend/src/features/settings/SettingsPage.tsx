@@ -18,7 +18,7 @@ function SourceSection() {
 
   return (
     <Section icon={Layers} title="书源">
-      {names.map(name => <SourceAccordion key={name} name={name} info={sources![name]} />)}
+      {names.map(name => <SourceAccordion key={name} name={name} info={sources![name]} available={sources![name].available} />)}
       {names.length === 0 && <div className="py-3 text-xs text-slate-400">暂无书源</div>}
     </Section>
   );

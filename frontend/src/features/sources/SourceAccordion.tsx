@@ -5,12 +5,16 @@ import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
 import {SourceConfigEditor, Toggle} from "./sourceConfigForm";
 import {CAP_LABELS} from "./sourceConfigFields";
 
-/** 单个书源的折叠条：名称 + 能力 badge + enabled 开关 + 书源级并发数；展开即编辑配置（含 mode 下拉）。 */
-export function SourceAccordion({ name, info }: { name: string; info: { capabilities: Record<string, string>; enabled: boolean } }) {
+/** 单个书源的折叠条：名称 + 能力 badge + enabled 开关 + 书源级并发数；展开即编辑配置（含 mode 下拉）。
+ *
+ * `available=false`（本环境不支持，如 Android 上的 browser 源）时置灰 + 标注 + 禁用启用开关：
+ * 书源仍**列出**（让用户知道它存在、为什么用不了），但不参与搜索 / 下载。 */
+export function SourceAccordion({ name, info, available }: { name: string; info: { capabilities: Record<string, string>; enabled: boolean }; available: boolean }) {
   const saveSource = useSaveSourceConfig(name);
   const { data: cfg } = useSourceConfig(name);
   const [enabled, setEnabled] = useState(info.enabled);
   const [open, setOpen] = useState(false);
+  const unavailable = !available;
   // 并发数输入用字符串保存，失焦时校验提交（非法值不写）；回车只触发失焦，
   // 由 onBlur 统一提交一次，避免 Enter+blur 连发两次相同 PUT
   const [concurrency, setConcurrency] = useState("1");
@@ -22,6 +26,7 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
 
   const caps = info.capabilities ?? {};
   const toggleEnabled = (v: boolean) => {
+    if (unavailable) return; // 本环境不支持：只读展示，不允许切换
     setEnabled(v); // 乐观更新，避免受控开关因 refetch 滞后回弹
     saveSource.mutate({ enabled: v });
   };
@@ -40,8 +45,14 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
       <div className="flex items-center justify-between gap-4 py-2.5">
         <button onClick={() => setOpen(o => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200", open && "rotate-180")} strokeWidth={1.5} />
-          <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{name}</span>
+          <span className={cn("truncate text-sm font-medium", unavailable ? "text-slate-400 dark:text-slate-500" : "text-slate-700 dark:text-slate-200")}>{name}</span>
           <span className="flex flex-wrap gap-1">
+            {unavailable && (
+              // 目前唯一会「本环境不可用」的引擎就是 browser（APK 构建时排除了 playwright）
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+                本环境不支持 browser
+              </span>
+            )}
             {Object.keys(caps).length === 0 && <span className="text-[11px] text-slate-400">无能力</span>}
             {Object.entries(caps).map(([cap, mode]) => (
               <span key={cap} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -62,7 +73,7 @@ export function SourceAccordion({ name, info }: { name: string; info: { capabili
               className="w-14 rounded-lg border border-white/20 bg-white/50 px-2 py-1 text-right text-xs text-slate-700 outline-none backdrop-blur-sm dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300"
             />
           </div>
-          <Toggle checked={enabled} onChange={toggleEnabled} />
+          <Toggle checked={enabled} onChange={toggleEnabled} disabled={unavailable} />
         </div>
       </div>
       {open && <SourceConfigEditor name={name} />}
