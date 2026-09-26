@@ -18,7 +18,8 @@
 | 已入库 | **69 本 / 63 527 章 / 2 367 张章节插图**（其中**本次新建 65 本**，另 4 本是项目原有的同书异名） |
 | 分组 | 本次新建的 **65 本已归入「迁移」分组**（`finalize.py --group-only`，按 `meta.created_at` 排除项目原有的书） |
 | 完整性校验 | 48 本抽样中 **46 本完整**（1 本缺 1 章、1 本未知） |
-| 遗留 | 失败章节清单 838 章（正在用 browser 补）、13 本未能迁移 |
+| 遗留 | ~~失败章节清单 838 章~~（**2026-09-27 已清零**）、13 本未能迁移 |
+| 空章节收尾（2026-09-27） | 补回 **148 章 `content` 为空**的章节（迁移 106 + 项目原有 42）→ 全库 **82199 章 / 空内容 0** |
 
 ## 二、数据源盘点（`scan_legacy.py`）
 
@@ -63,6 +64,7 @@
 | `rebuild_locates.py` | 从历史报告回填 `locates.json` 定位缓存 | 否 |
 | `open_browser.py` | 单独开持久化 profile 浏览器供登录 | 是 |
 | `debug_page.py` | 诊断 browser 实际取到的页面（排查「内容为空」） | 是 |
+| `fix_empty_chapters.py` | **扫库里 `content` 为空的章节 → 用 rain 逐章重取写回**（不依赖 `locates.json`；在 `scripts/` 而非本目录，2026-09-27 新增） | 是 |
 
 产物：`plan.json`、`dedupe.json`、`locates.json`、`state.json`、`quota.json`、
 `failed_chapters.json`、`reports/*.json`。
@@ -81,7 +83,7 @@ python finalize.py                         # 6 校验 + 归入「迁移」分组
 python retry_failed.py --login-wait 30     # 7 补失败章节（browser，需登录态）
 ```
 
-## 五、遗留与继续（**明天从这里接**）
+## 五、遗留与继续（2026-09-26 状态 —— 其中 1、2、4 已于 2026-09-27 完成，见「八」）
 
 1. **失败章节清单**：`failed_chapters.json`（启动补缺口时 838 条、10 本书）。
    其中《全民求生：E级天赋的塔之魔女》804 章是大头，正在用 browser 逐章补。
@@ -152,6 +154,7 @@ python retry_failed.py --login-wait 30     # 7 补失败章节（browser，需�
 7. **Windows 大文件写入**：1.8 GB 的 cache JSON 曾因 `os.replace` 报 `WinError 5`
    （杀毒/索引占用）失败 → `dump_json` 加重试与目标清理；图片字节改存
    `cache/blobs/*.bin`（JSON 里记 `off/len`），省 33% 体积、读写更快。
+8. **「完整性校验」看不见「内容为空」**（2026-09-27 发现）：`finalize.py` 的完整性是**按章节数量**比对（库内 N / 远端 M），`migrate.py --repair` 的缺口判定也只看**章节记录是否存在**——两者都**不检查 `content` 是否为空**。结果：库里 148 章内容为空，校验却一路报「50 完整 / 2 有遗漏」。**凡以数量当完整性判据的地方，都要补一个「内容非空」的断言。**
 
 ## 七、关键参数（可复用）
 
@@ -168,3 +171,54 @@ python retry_failed.py --login-wait 30     # 7 补失败章节（browser，需�
 | `--verify-desc-threshold` | 0.5 | 简介相似度阈值 |
 | `--max-candidates` | 3 | 定位阶段最多尝试的候选书数 |
 | `--login-wait` | 0（本次用 30） | 启动后等用户登录的秒数（检测到即继续，最多 3 分钟） |
+
+## 八、补空章节（2026-09-27，迁移真正收尾）
+
+### 现象与真相
+
+迁移收尾时 `failed_chapters.json` 已清零、`finalize.py` 报「50 完整 / 2 有遗漏」，
+但**库里实际有 148 章 `content` 为空**：
+
+| 书 | 空章 | `meta.created_at` | 归属 |
+|----|------|-------------------|------|
+| 转生萝莉，我即为神明的终焉 | 53 | 2026-09-25 17:22 | **迁移新建** |
+| 国养灭世耄耋，哈气装傻贴贴 | 45 | 2026-09-25 17:23 | **迁移新建** |
+| 待我拼好身体，旧日重临人间 | 8 | 2026-09-25 17:24 | **迁移新建** |
+| 我在精神病院学斩神 | 31 | 2026-07-11 | 项目原有 |
+| 原神：开局成为璃月阴阳两仪仙君 | 6 | 2026-07-21 | 项目原有 |
+| 星穹铁道：揽星河入梦 | 5 | 2026-07-21 | 项目原有 |
+
+**这 148 章不是图片章节**：`illustrations` 里没有它们的记录（那 3 本迁移书的插图总数
+只有 1/3/2 张，且都挂在别的章上）。它们就是**正文没取到** —— 迁移时以匿名身份抓取
+→ 番茄返回空页（同踩坑 5）。
+
+### 为什么 `--repair` 没补上（两个盲区）
+
+1. `repair_book()` 一进来就要求 `locates.json` 里有该书，没有就直接 `return failed`
+   —— 这 3 本**不在定位缓存里**，连迭代都进不去；
+2. 即使进去了，它的缺口判定是 `if rid not in existing`（只看章节记录是否存在），
+   **认不出「记录在、内容空」的章节**。
+
+### 补法（不依赖定位缓存）
+
+新增 `scripts/fix_empty_chapters.py`：直接扫 `app_data/storage/novels/*.db` 中
+`content` 为空的章节 → 用 `fanqie-api-rain` 逐章 `resolve_chapter()` → `save_chapter()` 写回。
+
+```bash
+cd D:/Linux/novel-downloader/novel-downloader-tools/scripts
+python fix_empty_chapters.py --dry-run                # 只列缺口，不写
+python fix_empty_chapters.py --interval 1             # 实补
+python fix_empty_chapters.py --books <novel_id,...>    # 限定某几本书
+```
+
+**结果：146 章 / 0 失败 / 3 分 7 秒**（另 2 章在试跑时已补）。
+复核：`--dry-run` 报「0 章」，全库 **82199 章 / 空内容 0**。
+
+**全程未使用 browser** —— rain API 足够，所以 chromium 登录态那个坑对本次不构成阻塞。
+
+### 仍然遗留
+
+- `failed_chapters.json` 里还留着 35 条失败记录（8 本书），但它们对应的章节**不在「空内容」集合里**（内容都在）→ 属于**过时记录**，可直接清掉。
+- **browser 持久化 profile 的问题仍未解决**：脚本运行时既读不到那个 profile 的登录态、也写不回它（`Last Browser` / `Cookies` 时间戳不动；日志 cookie 只有 10 条，而 profile 里有 25 个 fanqie cookie）。当前不需要（无图片章节），但将来若要用登录态章节，这是必须查的点。
+- 一个候选根因：`migrate.py` / `retry_failed.py` 的 `--browser-user-data-dir` **默认值是相对路径**（`app_data/browser/Chromium/User Data`），代码按 `Path.cwd() / path` 解析 → 换个目录跑就换了 profile；而 `common.py` 里明明有 `SCRIPT_DIR` 却没用它。
+- `common.py::prepare_browser_profile()` 的「杀残留 Chromium」只有 Windows 实现（`wmic` + `taskkill`，且被 `except: pass` 吞掉），**Linux/Termux 上静默失效**（清锁文件那半段是纯文件操作，仍然有效）。
