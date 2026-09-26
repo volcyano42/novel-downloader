@@ -133,6 +133,7 @@ def _source_sem(source_name: str) -> asyncio.Semaphore:
 | 排队中删除 | 直接 `cancelled`（`delete_task` 已通用，需保证协程在拿到额度后立即退出） |
 | 排队中暂停 | 允许：置 `_pause` 后**不抢任务槽**（保持 `queued`，不阻塞队列）；`resume` 后才去抢额度并转 `downloading` |
 | `max_workers` 缩小 | 只影响新排队的任务（已持额度的继续跑完） |
+| 章节等额度 | 章节 `downloading` **在拿到书源额度后**才置位；等额度期间保持 `pending`（前端显示「待下载」，不转圈）——标记早于取额度会让 `_BATCH_SIZE` 整批章节看起来同时在下载（实测 10 章全转圈、真实在飞仅 1） |
 
 ### 5. CLI 侧
 
