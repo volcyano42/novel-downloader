@@ -54,8 +54,9 @@ chaquopy {
             // 依赖清单由 android/scripts/build-apk.sh 生成：已过滤 playwright/psutil
             // （Chaquopy 的 pip 块只有 install/options，没有 exclude，无法在此排除包）
             install("-r", "../.req-android.txt")
-            // novelbase 有 pyproject.toml，按 pip 包安装（public 无 pyproject，改由脚本复制源码）
-            install("file:../..")
+            // novelbase 不在这里安装：pip 会解析它的 pyproject.toml dependencies（含 playwright），
+            // 而 Chaquopy 仓库没有 playwright wheel → generateReleasePythonRequirements 必失败。
+            // 改由 build-apk.sh 复制 ../novelbase 源码进 src/main/python/（依赖由上面的清单提供）
         }
     }
     sourceSets {

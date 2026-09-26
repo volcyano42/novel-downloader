@@ -21,15 +21,18 @@ echo "pydantic<2" >> .req-android.txt
 echo "--- Android 依赖清单 ---"; cat .req-android.txt
 
 # 2. 复制 Python 运行时模块进 Chaquopy 打包目录（app/src/main/python/，构建产物不提交 git）
-#    server.py 运行时 import 链：backend.* / shared.* / init_config / template / 前端资源 zip
-#    novelbase 通过 build.gradle.kts 的 install("file:../..") 以 pip 包安装，不在此复制
+#    server.py 运行时 import 链：backend.* / shared.* / novelbase.* / init_config / template / 前端资源 zip
+#    novelbase 也走源码复制：以 pip 包安装（install("file:../..")）会让 pip 解析 pyproject.toml
+#    的 dependencies（含被我们排除的 playwright）→ Chaquopy 仓库没有该 wheel，构建必失败
+#    （2026-09-26 run 36240609118 实测）。依赖由第 1b 步的 .req-android.txt 提供，二者同源。
 rm -rf app/src/main/python/backend app/src/main/python/shared \
-       app/src/main/python/init_config.py \
+       app/src/main/python/novelbase app/src/main/python/init_config.py \
        app/src/main/python/template app/src/main/python/frontend.zip
 mkdir -p app/src/main/python
 cp -r ../backend app/src/main/python/backend
 cp -r ../shared app/src/main/python/shared
-find app/src/main/python/backend app/src/main/python/shared \
+cp -r ../novelbase app/src/main/python/novelbase
+find app/src/main/python/backend app/src/main/python/shared app/src/main/python/novelbase \
      -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 cp ../init_config.py app/src/main/python/init_config.py
 cp -r ../template app/src/main/python/template
