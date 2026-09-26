@@ -22,7 +22,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-25（详情页换源 + 下载管理书源/时间收口后）：**449 passed, 1 skipped, 0 failed**（本机实测，约 7.6s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint` 0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-25（下载并发模型重做后）：**469 passed, 1 skipped, 0 failed**（本机实测，约 12s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
@@ -37,7 +37,8 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **引擎** 三种模式：`browser`（**Playwright**，2026-08-16 从 DrissionPage 迁移）、`requests`（httpx）、`api`（Rain.ink 代理）。**mode 默认由书源在 `source.json` 里声明**（`common.mode` 并入各能力段）；**用户可逐能力覆盖**（`sites/{source_name}.yaml` 的 `{cap}.mode`，唯一入口 `shared.config.effective_capabilities()`，2026-09-25 二次修订；覆盖为「值 + 引擎默认字段」替换，`null` 表示恢复声明）。core 的 `capabilities()` / `resolve()` 恒取声明值，覆盖只在调用方生效
 - **存储** SQLite，每本书独立 `.db` 文件，包含 meta/chapters/illustrations 表
 - **Rain API** key 在配置文件中，fanqie 和 qimao 各有独立 key
-- **配置** `app_data/config/config.yaml` 控制下载并发、通知等；**逐书源配置**在 `app_data/config/sites/{source_name}.yaml`（2026-09-25 起旧 `sites/*.yaml` 不迁移，用户重配）
+- **配置** `app_data/config/config.yaml` 控制下载任务数、通知等；**逐书源配置**在 `app_data/config/sites/{source_name}.yaml`（2026-09-25 起旧 `sites/*.yaml` 不迁移，用户重配）
+- **并发模型**（2026-09-25 重做，见 [superpowers/specs/2026-09-25-download-concurrency-design.md](superpowers/specs/2026-09-25-download-concurrency-design.md)）三层：① **任务级** `download.max_workers`（默认 3）= **最多同时运行的下载任务数**（超额任务 `status="queued"`、前端「排队中」；排队中暂停**不占任务槽**，`resume` 后抢额度）；② **书源级** `concurrency`（`source.json` 顶层可选 + 用户层 `sites/{name}.yaml` **顶层**覆盖，默认 1，**跨任务共享**，约束任务内 `resolve_meta`/`resolve_chapter` 的请求，读取入口 `shared.config.source_concurrency()`，非正整数回退 1）；③ **逐能力** `delay`（每请求前随机等待，**出厂默认由 `[3,5]` 改为 `[0,0]` = 不限速**；优先级 `dataclass 默认 → source.json 的 common → 能力段自身 → 用户层 sites yaml`）。CLI 章节并发上限 = `min(max_workers, source_concurrency)`，默认即单章串行（提速靠 `delay=0`）。**已知边界**：已是 `downloading` 的任务被暂停仍占任务槽；独立路由（检查更新 `GET /storage/novel/{id}/chapters` / 搜索 / 远端章节列表）**不经**书源额度；`max_workers` 下调最多 1 秒生效（TTL 缓存）
 - **BS4 选择器** 使用 `select_one`/`select`（CSS 选择器），不用 `find`/`find_all`
 - **书源（Source）架构**（2026-09-25 扁平化后）：`novelbase/sources/{dir}/` **一层**目录，每个书源含空 `__init__.py` + `source.json`（`source_name`/`enabled`/`common`/`default_config`）+ 4 个能力文件（`search.py` / `novel_info.py` / `chapter_list.py` / `chapter_content.py`）。`novelbase/source.py` 只暴露 4 个能力函数 + 1 个 URL 入口：`list_sources()` / `get_manifest(source_name)` / `capabilities(source_name) -> {capability: mode}` / `resolve(source_name, capability) -> (fn, mode)` / `resolve_book_url(raw)`。**`platform` 概念已彻底移除**（`platform_from_url` / `register_source` / `NAME` / `SHOW_NAME` / `HOSTS` 全部删除）；书源**没有中文显示名**，界面与日志统一显示 `source_name`（如 `fanqie-requests-default`）。**不设 `_common.py`**：各书源自包含，共享逻辑内联进需要它的能力文件（明确接受书源间重复的代价）
 - **书源 `source.json` 规范**：`source_name` 唯一 id（也是 `sites/{source_name}.yaml` 的文件名）；`enabled` 出厂开关（**api 类默认 `false`，requests/browser 默认 `true`**）；顶层 `common` 段并入每个能力段（能力段覆盖 `common`，且 `common` 的字段必须对**所有出现的 mode** 合法）；**能力段存在 ⇔ 同名 `.py` 文件存在**，不一致直接报 `ManifestError`；字段命名全链用 `retry_times`

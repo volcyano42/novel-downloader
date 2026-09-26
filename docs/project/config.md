@@ -6,7 +6,7 @@
 
 ```yaml
 download:
-  max_workers: 3            # 下载并发数
+  max_workers: 3            # 最多同时运行的下载任务数（超额任务排队）
   notify:                   # 完成/未完成通知
     on_complete: true
     on_incomplete: true
@@ -16,7 +16,10 @@ storage:                    # ⚠️ 遗留死配置，见下
   database_url: sqlite:///app_data/storage/novels/.dir
 ```
 
-- `download.max_workers`：下载并发数（后端 `/api/v2/config` 可写）。
+- `download.max_workers`：**最多同时运行的下载任务数**（默认 3；后端 `/api/v2/config` 可写）。
+  超出的任务以 `status="queued"`（前端显示「排队中」）等待，拿到额度才转「下载中」；
+  **不再是「任务内章节并发」**。排队中的任务被暂停**不占任务槽**，`resume` 后才重新抢额度；
+  下调该值仅影响之后排队/启动的任务（已在跑的不受影响），最多 1 秒后生效（读取带 1s TTL 缓存）。
 - `download.notify`：下载完成/未完成通知。
 - **全局 `mode` 已删除**（2026-09-25）：mode **默认**由书源在 `source.json` 里声明，用户可**逐能力覆盖**
   （`sites/{source_name}.yaml` 的 `{cap}.mode`，见下）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
@@ -36,11 +39,12 @@ storage:                    # ⚠️ 遗留死配置，见下
 
 ```yaml
 enabled: true              # 顶层：启用状态，覆盖 source.json 的出厂值
+concurrency: 1             # 顶层：书源级并发额度（同一书源同时最多几个请求在飞，跨任务共享）
 search:                    # 逐能力段：search / novel_info / chapter_list / chapter_content
   mode: requests           # 逐能力覆盖：合法值 browser/requests/api；不写则继承声明；null = 恢复声明
   timeout: 30
   retry_times: 3
-  delay: [3, 5]
+  delay: [0, 0]            # 每请求前随机等待（[0, 0] = 不限速，出厂默认）
   backoff_factor: 2
   headers: {User-Agent: "..."}
   cookies: {}
@@ -50,6 +54,14 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
 
 - **顶层 `enabled`**：覆盖出厂启用状态（`shared.config.is_source_enabled`）。
   书源是否「启用」= 读 `sites/{source_name}.yaml` 顶层 `enabled`，无则回落到 `source.json.enabled`。
+- **顶层 `concurrency`**：**书源级并发额度**（同一书源同时最多几个请求在飞，**跨任务共享**）；
+  用户层顶层覆盖出厂 `source.json` 顶层，缺省 **1**；非正整数忽略回退 1。读取入口
+  `shared.config.source_concurrency()`，机制详见 [sources.md](sources.md)。
+- **逐能力 `delay`**：每个请求前的随机等待（`asyncio.sleep(random.uniform(delay))`，语义不变）；
+  **出厂默认改为 `[0, 0]`（不设置 = 不限速；旧出厂值为 `[3,5]`）**。生效优先级：
+  `dataclass 默认 → source.json 的 common → 能力段自身 → 用户层 sites yaml`。
+  ⚠️ 本机历史上已写入 `sites/*.yaml` 的 `delay: [3,5]` 仍会覆盖新出厂默认（三层合并的正常结果），
+  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。
 - **逐能力段**：字段随该能力的**有效 mode** 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
 - **用户层可逐能力覆盖 mode**：`{cap}.mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
   写 `null`（或删除该键）= 恢复声明；非法值忽略回退声明。唯一入口 `shared.config.effective_capabilities()`；

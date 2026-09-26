@@ -417,3 +417,14 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **下载管理条目新增书源与下载时间**：`create_task` 记录 `created_at`，`list_tasks` 透出 `source_name`/`created_at`，下载任务项在书名下方显示「书源名 · 下载时间」小字
 - 测试：`python -m pytest tests -q` = **449 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint` 0 告警
 - 设计：`docs/superpowers/specs/2026-09-25-detail-source-switch-design.md`
+
+## 2026-09-25 变更（下载并发模型重做）
+
+- **`max_workers` 语义反转**：不再表示「任务内章节并发」，改为「**最多同时运行的下载任务数**」（`download.max_workers`，默认 3）；超额任务进 `status="queued"`（前端「排队中」），拿到额度才转 `downloading`；排队中暂停**不占任务槽**（`resume` 后才抢额度）；下调该值最多 1 秒生效（TTL 缓存，仅影响之后排队/启动的任务）。设置页并发标签 →「**最大下载任务数**」（原「并发线程数」口径）
+- **新增书源级 `concurrency`**（默认 1，可配）：`source.json` 顶层可选字段 + 用户层 `sites/{name}.yaml` **顶层**覆盖（与 `enabled` 同级），语义为「该书源同时最多几个请求在飞，**跨任务共享**」；读取入口 `shared.config.source_concurrency()`（非正整数忽略回退 1）；约束任务内 `resolve_meta` 与每章 `resolve_chapter` 的请求；`GET /api/v2/config/sources/{name}` 返回有效值、`PUT` 支持顶层写入，前端书源折叠条加「并发数」输入
+- **`delay` 出厂默认 `[3,5]` → `[0, 0]`**（不设置 = 不限速）：10 个 `novelbase/sources/*/source.json` 的 `common.delay` 与代码兜底（`shared/config.py`、`backend/services/engine_manager.py`、`novelbase/core/options.py` 的 dataclass 默认）同步；用户层显式值仍优先（本机历史 `sites/*.yaml` 里已写入的 `[3,5]` 会继续覆盖新出厂默认，属三层合并语义的正常结果）
+- **用户层模板精简**：`template/config/sites/*.yaml` 只留必要字段（非 api 源仅 `enabled`；api 类源为 `enabled` + 四个能力段各 `key: ''`）
+- **CLI**：章节并发上限改为 `min(max_workers, source_concurrency(source_name))`，默认 `concurrency=1` 下即**单章串行**（提速靠 `delay=0`）；`cli/main.py --workers`、`cli/menus.py` 文案改为「并行章节数（受书源并发额度约束）」
+- **已知边界**（如实写明）：① 已是 `downloading` 的任务被暂停仍占任务槽；② 独立路由（检查更新 `GET /storage/novel/{id}/chapters`、搜索、远端章节列表）**不经**书源额度；③ `max_workers` 下调最多 1 秒生效（TTL 缓存）
+- 测试：`python -m pytest tests -q` = **469 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
+- 设计：`docs/superpowers/specs/2026-09-25-download-concurrency-design.md`

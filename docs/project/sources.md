@@ -47,9 +47,10 @@ novelbase/sources/{dir}/
 {
   "source_name": "fanqie-requests-default",
   "enabled": true,
+  "concurrency": 1,
   "common": {
     "mode": "requests", "timeout": 30, "retry_times": 3,
-    "delay": [3, 5], "backoff_factor": 2,
+    "delay": [0, 0], "backoff_factor": 2,
     "headers": {"User-Agent": "..."}, "cookies": {}, "proxies": {}
   },
   "default_config": {
@@ -62,6 +63,7 @@ novelbase/sources/{dir}/
 |------|------|
 | `source_name` | 唯一 id；也是 `sites/{source_name}.yaml` 的文件名 |
 | `enabled` | 出厂启用状态（**api 类默认 `false`，requests/browser 默认 `true`**）；`sites/{source_name}.yaml` 顶层 `enabled` 可覆盖 |
+| `concurrency` | （**可选**，顶层）书源级并发额度，缺省 **1**；`sites/{source_name}.yaml` 顶层可覆盖（见下） |
 | `common` | 并入每个能力段（能力段覆盖 `common`）；其字段必须对**所有出现的 mode** 都合法 |
 | `default_config` | 逐能力段；每段 `mode` 缺省继承 `common.mode` |
 
@@ -84,6 +86,24 @@ novelbase/sources/{dir}/
 - API：`GET /api/v2/config/sources/{name}` 返回 `capabilities`（有效）与 `declared_capabilities`（声明）；
   `PUT` 传 `config[cap].mode = null` 即删除覆盖
 - 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用
+
+### 书源级并发 `concurrency`（2026-09-25）
+
+书源**同时最多几个请求在飞**，**跨任务共享**（同一书源的两个下载任务共用这一额度）。
+
+- **存储**：`source.json` **顶层**（与 `source_name` / `enabled` 同级，**可选**，缺省 1）；
+  用户层 `app_data/config/sites/{source_name}.yaml` **顶层**可覆盖（与 `enabled` 同级）。
+  ⚠️ 不能放 `common`：`common` 的字段会被并入各能力段并受 `MODE_FIELDS` 校验，`concurrency` 不在其中。
+- **读取**：唯一入口 `shared.config.source_concurrency(source_name)`——用户层顶层 `concurrency` 覆盖出厂顶层，
+  缺省 1；非法值（非正整数）忽略回退 1；未知书源返回 1。
+- **覆盖范围**：任务内发出的请求都受该额度约束（`resolve_meta` 与每章 `resolve_chapter`）。
+  CLI 章节并发上限 = `min(max_workers, source_concurrency(source_name))`，
+  默认 `concurrency=1` 下即**单章串行**（提速靠 `delay=0`）。
+- **API**：`GET /api/v2/config/sources/{name}` 返回有效 `concurrency`；
+  `PUT` 支持顶层 `concurrency`（正整数写入用户层顶层，非法值忽略，不写坏 yaml）。
+- **已知边界**：① 已是 `downloading` 的任务被暂停仍占任务槽；
+  ② 后端「检查更新」走的独立路由（`GET /storage/novel/{id}/chapters` 等）**不经**该额度——
+  同理搜索、远端章节列表等独立路由也不经书源额度；③ `max_workers` 下调最多 1 秒生效（TTL 缓存）。
 
 ## 内置书源
 
