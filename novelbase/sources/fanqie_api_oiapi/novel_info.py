@@ -25,35 +25,29 @@ async def novel_info(url: str, engine, **kwargs):
     post_data = {
         "id": novel_id,
         "key": engine.options.key,
-        "method": "detail",
+        "method": "ids",
         "type": "json"
     }
     json_data = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
+    # 契约实测 2026-09-26：method=ids 直接返回
+    # dict{thumb,id,title,author,serial,word_number,read_count,docs}
     data = json_data.get('data')
-    if not data:
+    if not data or json_data.get('code') not in (1, "1"):
         raise NovelNotFoundError()
 
     url = f"https://fanqienovel.com/page/{data.get('id')}"
     novel_id = str(data.get('id'))
 
-    book_cover_url = data.get('cover')
+    book_cover_url = data.get('thumb')
     book_cover_data = (await engine.async_fetch_images([book_cover_url]))[0] if book_cover_url else b""
     name = data.get('title')
     novel_image = Illustration(raw_data=book_cover_data, alt=name, url=book_cover_url)
     author = data.get('author')
-    word_number: int = int(data.get('word_number', 0))
+    word_number: int = int(data.get('word_number') or 0)
 
-    # 通过获取章节列表获取 serial
-    serial_post_data = {
-        "id": novel_id,
-        "key": engine.options.key,
-        "method": "chapters",
-        "type": "json"
-    }
-    chapters_json = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=serial_post_data, **kwargs)
-    chapter_items_volume = chapters_json.get('data', [])
-    serial = sum(len(vol) for vol in chapter_items_volume)
+    # serial 直接取自 ids 响应（不再二次请求 chapters，后者对扁平 list 求和会得垃圾）
+    serial = int(data.get('serial') or 0)
 
     novel = Novel(url=url,
                   id=f"fanqie_{novel_id}",

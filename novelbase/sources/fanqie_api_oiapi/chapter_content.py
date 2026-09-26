@@ -32,19 +32,21 @@ async def chapter_content(chapter, engine, **kwargs):
     }
     response = await engine.async_fetch_json(url="https://oiapi.net/api/FqRead", post_data=post_data, **kwargs)
 
-    data_list: dict = response.get('data', {})
+    data_list = response.get('data')
     if not data_list:
         message = response.get('message', "")
-        if message == "请检测章节选择是否正确":
+        if message == "请检测章节选择是否正确":          # 章节越界（code=-3）
             raise ChapterNotFoundError(message=f"Invalid chapter order: {chapter.order}")
-        elif message == "实例化失败：Trying to access array offset on value of type bool line 197 in api.php":
+        elif "Trying to access array offset" in message:   # 频控（保留既有特判）
             raise AntiCrawlError("OIAPI request frequency too high, PHP backend rejected")
         else:
             raise ChapterNotFoundError(message=f"OIAPI unexpected response: {message}")
 
-    for data in data_list.values() if isinstance(data_list, dict) else []:
-        chapter.content = data.get('content', '').replace(f"{data.get('chapter_title', '')}\n\n", "")
-        chapter.count = data.get('word_number', 0)
-        break
+    # 契约实测 2026-09-26：data 为 list（首项含 content/word_number/
+    # chapter_id/chapter_title/volume_name…）；兼容 dict 形态。
+    first = data_list[0] if isinstance(data_list, list) else next(iter(data_list.values()), {})
+    chapter.content = (first.get('content') or '').replace(
+        f"{first.get('chapter_title', '')}\n\n", "")
+    chapter.count = int(first.get('word_number') or 0)
 
     return chapter

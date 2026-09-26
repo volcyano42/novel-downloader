@@ -35,7 +35,11 @@ async def chapter_list(url: str, engine, **kwargs) -> list:
         raise ChapterNotFoundError("OIAPI returned empty chapter list")
     results = []
 
-    for chapter_items in chapter_items_volume:
+    # 契约实测 2026-09-26：真实 data 为**分卷嵌套** list[list[dict]]（每卷若干章）；
+    # 兼容扁平 list[dict]（个别响应/书可能直接给扁平列表），两种形态都解析。
+    # 章节字段：chapter_id/index/title/time/volume_name（另有 volume/pay）。
+    for group in chapter_items_volume:
+        chapter_items = group if isinstance(group, list) else [group]
         for chapter_item in chapter_items:
             chapter_id: int = chapter_item.get("chapter_id")
             chapter_url = "https://fanqienovel.com/reader/" + str(chapter_id)
