@@ -480,3 +480,13 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **移除环境能力表**：删 `shared.config` 的 `platform()` / `supported_modes()` / `available_capabilities()` / `is_source_available()`；`source_guard` 只留 `require_known_source`；删 `GET /config/environment`、`/download/sources` 与 `/config/sources/{name}` 的 `available` 字段、书源配置 PUT 的可用性校验；core 删 `ModeUnavailableError`；前端删 `useEnvironment` / `EnvironmentInfo` / 置灰与选源过滤 / `window.AndroidBridge` 导出桥分支。**「mode 用户覆盖」不受影响，保留**。提交 `082592d`（−418 行）
 - **作废文档**：`superpowers/specs/2026-08-02-android-apk-design.md`、`superpowers/specs/2026-09-26-android-shell-no-browser-design.md`（后者已加作废标记）
 - 测试：`python -m pytest tests -q` = **482 passed, 0 failed**（原 507 − 9 android server − 16 环境能力表）；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
+
+## 2026-09-26 变更（v4.5.1 发布：两处修复 + CI 触发 + 合并 main）
+
+- **修复（同步 `fetch_text` 丢登录态）**：`_fetch_in_isolated_session()` 原本直接 `launch()` + `new_page()`，**完全不读 `user_data_dir`** → 配了持久化 profile 的书源走同步路径时静默降级为匿名访问（浏览器里登录过也不生效，症状是「章节内容为空」且无报错）。书源侧都走 `async_fetch_text` 所以当时不暴露，但 `fetch_text` 是公开 API（`fetch_json` 经它），外部脚本一调就丢登录态。现与 `async_fetch_text` 对齐（有 `user_data_dir` 走 `launch_persistent_context`），新增「profile 已被异步会话占用」明确报错，顺带让同步路径支持 `viewport`。提交 `e6f5d36`；+2 回归用例（**已实测修复前必然失败**，证明测试有效）
+- **修复（CI 从未在 dev 上运行）**：`ci.yml` 的 `on.push` / `on.pull_request` 只写了 `branches: [main]` → dev 上的提交从未经过 CI（此前文档里的「CI 全部通过」实为本机实测；这也是「CI 全绿、真机白页」能长期共存的原因之一）。现改为 `[main, dev]`；`release.yml` 的 `inputs.version` 默认值同步刷新。提交 `d667d06`
+- **版本**：`pyproject.toml` / `novelbase/__init__.py` 4.5.0 → **4.5.1**；`CHANGELOG.md` 的 `## Unreleased` 升级为正式 `## v4.5.1` 段落
+- **合并**：dev → main **快进合并**（`git rev-list --count dev..main` = 0，无冲突）；main 与 dev 同为 v4.5.1
+- **Windows x64 产物形态**：portable（`build-windows.yml` + `build-portable.ps1`）与 Nuitka onefile（`build-windows-nuitka.yml` + `build-nuitka.ps1`）保持**分离**，后者不进 `build-dist.yml` / `release.yml`（Nuitka 编译 30–60 分钟，会让全平台构建超时）
+- ⚠️ **workflow 注册陷阱（实测确认）**：`build-windows-nuitka.yml` 是 2026-09-19 在 dev 上拆出的，因此在它随 main 上去之前，`workflow_dispatch` API 对它是 **404 Not Found**（GitHub 只认默认分支上的 workflow）。先合并 main 才能 dispatch
+- 测试：`python -m pytest tests -q` = **484 passed, 0 failed**

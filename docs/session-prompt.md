@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = v4.4.0，dev = v4.5.0**，dev 未合并 main；v4.2.3 的 Windows portable 漏打包 init_config.py 问题早已修复）。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.1**，dev 已合并 main；v4.2.3 的 Windows portable 漏打包 init_config.py 问题早已修复）。
 
 ## 目录结构（2026-08-13 重组后）
 
@@ -54,7 +54,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
 - **中间态收口状态**（2026-09-25 扁平化 followup + 收尾完成）：core 层遗留中间态**已全部收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**；`source.json` 的 `enabled` **已有消费者**（`shared.config.enabled_source_names()`）；前端 mode/variant 两级选择器**已删除**（搜索改「已启用书源并发」，URL 解析改「手选书源」，书源管理**并入设置页**折叠条）。收尾阶段补齐：① 未知 `source_name` 在 **HTTP 边界统一 404**（`backend/services/source_guard.py` 唯一校验点，覆盖 `download` 与 `config/sources` 全部入口）；② 书源配置表单抽为 `frontend/src/features/sources/sourceConfigForm.tsx` 共享实现（设置页每源一个折叠条 `SourceAccordion` 复用；原独立 `SourcesPage` 已删除，`/sources` 仅重定向 `/settings`、侧边栏无「书源」入口），`useSaveSourceConfig` 同时失效 `["source-config", src]` 与 `["sources"]`；③ CLI `cmd_info` / `cmd_download` 引擎按 mode 懒建（不再共用单引擎）；④ `dev new-source` 脚手架 `source.json.common` 与出厂默认同源（`shared.config.mode_defaults()`）。**仍缺**（后续增强，非缺陷）：前端 URL **自动**匹配书源（core 无 `platform_from_url`，`source` 由用户手选）；重复 `source_name` 无实现层检测（`novel.extra["platform"]` 已于 2026-09-25 剥离）
-- **分支状态**（2026-09-26）：main = **v4.4.0**（`ef7f21d`）；**dev = v4.5.0，领先 `origin/dev` 若干提交（含本次 Android 套壳与环境能力表移除）**，未合并 main。dev 内容：书源扁平化（core + backend/CLI/前端收口）、下载并发模型重做、详情页换源、**Android 套壳与环境能力表移除（移动端改走 Termux）**、文档与版本号收尾。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`；权威口径用 `git ls-remote origin dev` 对比
+- **分支状态**（2026-09-26）：**main = dev = v4.5.1**（已合并、已推送）。v4.5.1 内容：书源扁平化（core + backend/CLI/前端收口）、下载并发模型重做、详情页换源、**Android 套壳与环境能力表移除（移动端改走 Termux）**、同步 `fetch_text` 登录态修复、CI 触发分支加 `dev`、文档与版本号收尾。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`；权威口径用 `git ls-remote origin dev` 对比
 
 ## 文档索引
 

@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = v4.4.0，dev = v4.5.0**，dev 未合并 main）。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.1**）。
 
 ## 目录结构（2026-08-02 重组后）
 

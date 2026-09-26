@@ -1,13 +1,18 @@
 # 更新日志
 
-## Unreleased
+## v4.5.1
 
-> 2026-09-26。移除 Android 套壳与环境能力表（移动端改走 Termux）。
+> 2026-09-26。移除 Android 套壳与环境能力表（移动端改走 Termux），并修两处缺陷。
 
 ### 移除
 
 1. **Android 套壳（Chaquopy APK 方案）整体移除** — 依赖被上游 wheel 清单绑架（`pydantic<2`、`fastapi==0.120.0`、`minSdk 24` 由 `lxml`/`PyYAML` 的 `android_24` wheel 决定），且「Chaquopy 资产不是真实文件系统」是一整类根因（前端白页已踩、`list_sources()` 目录枚举是同一根因的下一处）。删除 `android/`、`build-apk.yml`、`tests/test_android_server.py`、`docs/build/android-apk.md`，以及 `NLD_FRONTEND_DIR` 候选和文档/公开清单里的 android 条目；移动端改走已有的 Termux 产物
 2. **环境能力表移除** — 其唯一注入点（APK 的 `server.py`）已随套壳消失。删除 `platform()` / `supported_modes()` / `available_capabilities()` / `is_source_available()`、`GET /config/environment`、各处 `available` 字段、书源配置 PUT 的可用性校验、`ModeUnavailableError`，以及前端的 `useEnvironment` / 置灰 / 选源过滤。**「mode 用户覆盖」不受影响，保留**
+
+### 修复
+
+1. **同步 `fetch_text` 的独立会话丢掉登录态** — `_fetch_in_isolated_session()` 原本直接 `launch()` + `new_page()`，**完全不读 `user_data_dir`** → 配了持久化 profile（登录态）的书源走同步路径时静默降级为匿名访问（浏览器里登录过也不生效，症状是「章节内容为空」且无报错）。现与 `async_fetch_text` 路径对齐：有 `user_data_dir` 走 `launch_persistent_context()`，并新增「profile 已被异步会话占用」的明确报错；顺带让同步路径支持 `viewport`
+2. **CI 从未在 dev 上运行** — `ci.yml` 的 `on.push` / `on.pull_request` 只写了 `branches: [main]`，dev 上的提交从未经过 CI（此前文档里的「CI 全部通过」实为本机实测）。现改为 `[main, dev]`；`release.yml` 的 `inputs.version` 默认值同步刷新
 
 ## v4.5.0
 
