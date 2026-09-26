@@ -426,5 +426,5 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **用户层模板精简**：`template/config/sites/*.yaml` 只留必要字段（非 api 源仅 `enabled`；api 类源为 `enabled` + 四个能力段各 `key: ''`）
 - **CLI**：章节并发上限改为 `min(max_workers, source_concurrency(source_name))`，默认 `concurrency=1` 下即**单章串行**（提速靠 `delay=0`）；`cli/main.py --workers`、`cli/menus.py` 文案改为「并行章节数（受书源并发额度约束）」
 - **已知边界**（如实写明）：① 已是 `downloading` 的任务被暂停仍占任务槽；② 独立路由（检查更新 `GET /storage/novel/{id}/chapters`、搜索、远端章节列表）**不经**书源额度；③ `max_workers` 下调最多 1 秒生效（TTL 缓存）
-- 测试：`python -m pytest tests -q` = **469 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
+- 测试：`python -m pytest tests -q` = **471 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
 - 设计：`docs/superpowers/specs/2026-09-25-download-concurrency-design.md`

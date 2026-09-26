@@ -22,7 +22,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 ## CI 测试状态 — ✅ 全部通过
 
-> 2026-09-25（下载并发模型重做后）：**469 passed, 1 skipped, 0 failed**（本机实测，约 12s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
+> 2026-09-25（下载并发模型重做后）：**471 passed, 1 skipped, 0 failed**（本机实测，约 12s；1 个 skip 是 `test_android_server.py` 既有的 `@pytest.mark.skip`）；前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。注：Windows 上 Steam++ 加速器运行期间 pytest 每个 tmp_path 会因 symlink 慢约 31s。
 
 ## 关键约定
 
