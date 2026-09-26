@@ -40,6 +40,12 @@ _source_active: dict[str, int] = {}
 
 _QUEUE_POLL_INTERVAL = 0.2
 _SOURCE_POLL_INTERVAL = 0.05
+# 等书源额度时退避轮询：间隔从 _SOURCE_POLL_INTERVAL 逐次倍增到上限 _SOURCE_POLL_MAX，
+# 减少大批章节同时抢同一书源额度时的无效唤醒（上限 0.5s 保证取消最迟 0.5s 内退出）。
+_SOURCE_POLL_MAX = 0.5
+# 章节分批提交：把「同时挂起、以轮询抢书源额度」的协程数从全部章节压到每批 _BATCH_SIZE，
+# 批间串行；批内仍受书源额度约束。避免千章书一次性挂起 N 个协程 → N/0.05 次/s 唤醒 + 锁竞争。
+_BATCH_SIZE = 32
 _MAX_WORKERS_TTL = 1.0
 # (time.monotonic() 时间戳, max_workers) —— 短 TTL 缓存，避免排队轮询每 0.2s 读 config.yaml
 _max_workers_cache: tuple[float, int] | None = None
@@ -56,9 +62,23 @@ def _max_workers() -> int:
     cached = _max_workers_cache
     if cached is not None and now - cached[0] < _MAX_WORKERS_TTL:
         return cached[1]
-    value = max(1, load_config().get("download", {}).get("max_workers", 3))
+    value = _read_max_workers()
     _max_workers_cache = (now, value)
     return value
+
+
+def _read_max_workers() -> int:
+    """安全读取 `download.max_workers`，任何非法/异常值一律回退出厂默认 3。
+
+    调用点 `_acquire_task_slot` 位于 `_run_download` 的 try 之外：若这里把异常抛出去
+    （例如 config.yaml 被手改成非数字 → `int(...)` 抛 TypeError），异常会逃逸到事件循环，
+    任务永久停在 `queued`。故对结构异常（download 非 dict）与类型异常一并兜住，绝不外抛。
+    """
+    try:
+        return max(1, int(load_config().get("download", {}).get("max_workers", 3)))
+    except (TypeError, ValueError, AttributeError):
+        _log.warning("download.max_workers 非法，回退 3", exc_info=True)
+        return 3
 
 
 async def _acquire_task_slot(task: dict) -> bool:
@@ -101,8 +121,13 @@ async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool
     `limit` 由调用方在任务开始时取一次并缓存（`source_concurrency()` 会读
     `sites/*.yaml` 与 `source.json`，不得进每请求热路径）。等待期间若任务被暂停，
     则不占额度地停在 `paused`（优雅暂停：未开始的请求停住，已在飞的请求跑完）。
+
+    等待间隔**退避递增**（`_SOURCE_POLL_INTERVAL` 起，逐次 ×2 到 `_SOURCE_POLL_MAX`）：
+    大批章节同时抢同一书源额度时，避免固定 0.05s 轮询造成的海量无效唤醒/锁竞争；
+    上限 0.5s 保证取消后最迟 0.5s 内退出。
     """
     limit = max(1, limit)
+    interval = _SOURCE_POLL_INTERVAL
     while True:
         if task["_cancel"].is_set():
             return False
@@ -110,12 +135,14 @@ async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool
             with _tasks_lock:
                 task["status"] = "paused"
             await asyncio.sleep(0.1)
+            interval = _SOURCE_POLL_INTERVAL   # 恢复后重新从最小间隔退避
             continue
         with _tasks_lock:
             if _source_active.get(source_name, 0) < limit:
                 _source_active[source_name] = _source_active.get(source_name, 0) + 1
                 return True
-        await asyncio.sleep(_SOURCE_POLL_INTERVAL)
+        await asyncio.sleep(interval)
+        interval = min(interval * 2, _SOURCE_POLL_MAX)
 
 
 def _release_source_slot(source_name: str) -> None:
@@ -312,14 +339,25 @@ async def _run_download_impl(task: dict, source_name: str):
             with _tasks_lock:
                 task["progress"] += 1
 
-        # 章节并发由书源额度决定（不再有任务内 Semaphore + max_workers）
-        results = await asyncio.gather(
-            *(_download_one(ch) for ch in task["chapters"]),
-            return_exceptions=True,
-        )
-        for r in results:
-            if isinstance(r, Exception):
-                _log.warning("章节下载协程异常", exc_info=r)
+        # 章节并发由书源额度决定（不再有任务内 Semaphore + max_workers）。
+        # 分批提交：批内并发（受书源额度约束），批间串行。一次性挂起全部章节协程会让
+        # 「等额度」的协程数 = 章节数，千章书下每个协程都按轮询抢同一书源额度 →
+        # 海量无效唤醒 + 锁竞争（3000 章 ≈ 6 万次/s）。分批把同时挂起的协程压到
+        # _BATCH_SIZE 量级；批间检查取消，保证取消仍能及时退出。
+        async def _run_batches(chapters_list: list[dict]) -> None:
+            for start in range(0, len(chapters_list), _BATCH_SIZE):
+                if task["_cancel"].is_set():
+                    return
+                batch = chapters_list[start:start + _BATCH_SIZE]
+                results = await asyncio.gather(
+                    *(_download_one(ch) for ch in batch),
+                    return_exceptions=True,
+                )
+                for r in results:
+                    if isinstance(r, Exception):
+                        _log.warning("章节下载协程异常", exc_info=r)
+
+        await _run_batches(task["chapters"])
 
         # 收尾：被取消时不覆盖状态
         if task["_cancel"].is_set():
@@ -335,13 +373,7 @@ async def _run_download_impl(task: dict, source_name: str):
 
         pending = [ch for ch in task["chapters"] if ch.get("status") == "pending"]
         if pending:
-            results = await asyncio.gather(
-                *(_download_one(ch) for ch in pending),
-                return_exceptions=True,
-            )
-            for r in results:
-                if isinstance(r, Exception):
-                    _log.warning("章节下载协程异常", exc_info=r)
+            await _run_batches(pending)
 
         if task["errors"]:
             task["status"] = "partial"
