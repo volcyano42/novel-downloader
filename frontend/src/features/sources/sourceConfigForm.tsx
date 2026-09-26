@@ -157,10 +157,10 @@ export function SourceConfigEditor({ name }: { name: string }) {
       case "range-delay":
         return (
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <input type="number" value={(val as number[])?.[0] ?? 3} onChange={e => set([Number(e.target.value), (val as number[])?.[1] ?? 5])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[0] ?? 0} onChange={e => set([Number(e.target.value), (val as number[])?.[1] ?? 0])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span>~</span>
-            <input type="number" value={(val as number[])?.[1] ?? 5} onChange={e => set([(val as number[])?.[0] ?? 3, Number(e.target.value)])} min={f.min} max={f.max}
+            <input type="number" value={(val as number[])?.[1] ?? 0} onChange={e => set([(val as number[])?.[0] ?? 0, Number(e.target.value)])} min={f.min} max={f.max}
               className="w-14 rounded-lg border border-white/20 bg-white/50 backdrop-blur-sm px-2 py-1.5 text-xs text-slate-700 text-right outline-none dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/30" />
             <span className="text-[11px] text-slate-400">{f.unit}</span>
           </div>
