@@ -22,9 +22,8 @@ from novelbase.models.novel import Chapters, Novel, SearchResult
 
 
 def _allow_sources(monkeypatch, *names):
-    """把边界校验（require_known_source / require_available_source）收窄为给定的虚拟名。"""
+    """把边界校验（require_known_source）收窄为给定的虚拟名。"""
     monkeypatch.setattr(source_guard, "list_sources", lambda: list(names))
-    monkeypatch.setattr(source_guard, "is_source_available", lambda n: n in names)
 
 
 def _patch_engine_factory(monkeypatch):
@@ -43,10 +42,9 @@ def test_sources_shape_is_flat(monkeypatch):
     monkeypatch.setattr(dl, "list_sources", lambda: ["92xs-requests-default"])
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
-    monkeypatch.setattr(dl, "is_source_available", lambda n: True)
     out = asyncio.run(dl.list_all_sources())
     assert out == {"92xs-requests-default": {"capabilities": {"search": "requests"},
-                                             "enabled": True, "available": True}}
+                                             "enabled": True}}
 
 
 def test_sources_include_disabled(monkeypatch):
@@ -298,23 +296,21 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
 
 def test_get_source_config_shape(monkeypatch):
     """GET /config/sources/{name} 契约形状：{source_name, enabled, concurrency,
-    capabilities, declared_capabilities, available, config}（capabilities 为有效 mode）。"""
+    capabilities, declared_capabilities, config}（capabilities 为有效 mode）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(cfg, "effective_capabilities", lambda n: {"search": "browser"})
-    monkeypatch.setattr(cfg, "is_source_available", lambda n: True)
     _allow_sources(monkeypatch, "demo-requests-default")
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
     assert set(out.keys()) == {"source_name", "enabled", "concurrency",
-                               "capabilities", "declared_capabilities", "available", "config"}
+                               "capabilities", "declared_capabilities", "config"}
     assert out["source_name"] == "demo-requests-default"
     assert out["enabled"] is False
     assert out["concurrency"] == 1
     assert out["capabilities"] == {"search": "browser"}
     assert out["declared_capabilities"] == {"search": "requests"}
-    assert out["available"] is True
     assert out["config"] == {"search": {"mode": "requests"}}
 
 

@@ -226,8 +226,6 @@ export function deleteTask(taskId: string) {
 export interface SourceInfo {
   capabilities: Record<string, string>;
   enabled: boolean;
-  /** 本环境是否支持该书源（Android 不支持 browser 源 → false）。 */
-  available: boolean;
 }
 
 export function fetchSources() {
@@ -241,12 +239,10 @@ export interface SourceOption {
 }
 
 /** 把 useSources() 的响应转成选源列表（未启用的源仍在列，仅由 UI 标注）。
- * 本环境**不可用**（available === false）的源在此滤除 —— 搜索页 / 换源对话框 / 书架共用本函数。 */
+ * 搜索页 / 换源对话框 / 书架共用本函数。 */
 export function toSourceOptions(sources?: Record<string, SourceInfo> | null): SourceOption[] {
   if (!sources) return [];
-  return Object.entries(sources)
-    .filter(([, info]) => info.available !== false)
-    .map(([name, info]) => ({ name, enabled: info.enabled }));
+  return Object.entries(sources).map(([name, info]) => ({ name, enabled: info.enabled }));
 }
 
 // ── Config ─────────────────────────────────────────
@@ -257,16 +253,6 @@ export function getGlobalConfig() {
 
 export function saveGlobalConfig(data: Partial<GlobalConfig>) {
   return apiPut<void>("/config", data);
-}
-
-/** 运行环境：platform=desktop|android；supported_modes=本环境可用的引擎 mode。 */
-export interface EnvironmentInfo {
-  platform: string;
-  supported_modes: string[];
-}
-
-export function getEnvironment() {
-  return apiGet<EnvironmentInfo>("/config/environment");
 }
 
 export function getGroups() {

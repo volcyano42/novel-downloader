@@ -5,7 +5,7 @@
  */
 import {useEffect, useState} from "react";
 import type {LucideIcon} from "lucide-react";
-import {useEnvironment, useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
+import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
 import {cn} from "@/lib/utils";
 import {CAP_LABELS, ENGINE_FIELDS, MODE_META} from "./sourceConfigFields";
 import type {EngineField} from "./sourceConfigFields";
@@ -131,15 +131,11 @@ export function Section({ icon: Icon, title, children }: { icon: LucideIcon; tit
 export function SourceConfigEditor({ name }: { name: string }) {
   const { data: cfg } = useSourceConfig(name);
   const saveSource = useSaveSourceConfig(name);
-  const { data: env } = useEnvironment();
 
   const caps = cfg?.capabilities ?? {};
   const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
-  // mode 下拉只列**本环境支持**的选项（Android 下没有 browser）；env 未就绪时退回全量，避免闪动
-  const supported = env?.supported_modes;
   const modeOptions = Object.entries(MODE_META)
-    .filter(([m]) => !supported || supported.includes(m))
     .map(([m, meta]) => ({ value: m, label: meta.label }));
 
   const updateField = (cap: string, key: string, value: unknown) => {

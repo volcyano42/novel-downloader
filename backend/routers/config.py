@@ -4,9 +4,8 @@ from fastapi import APIRouter, HTTPException
 
 import shared.config as config_service
 from novelbase.source import capabilities
-from shared.config import effective_capabilities, is_source_available, platform, supported_modes
-from backend.services.source_guard import (require_available_source, require_known_source,
-                                          require_supported_mode)
+from shared.config import effective_capabilities
+from backend.services.source_guard import require_known_source
 
 router = APIRouter(prefix="/api/v2/config", tags=["config"])
 
@@ -43,19 +42,6 @@ async def save_config(body: dict):
     if changed:
         config_service.save_yaml(_cfg_dir / "config.yaml", raw)
     return {"status": "ok"}
-
-
-@router.get("/environment")
-async def get_environment():
-    """运行环境：`platform`（desktop/android）与本环境可用的引擎 mode。
-
-    前端据此裁剪「书源 mode 下拉」的选项（Android 下不出现 Browser）；
-    唯一真源是 `shared.config.supported_modes()`。
-    """
-    return {
-        "platform": platform(),
-        "supported_modes": list(supported_modes()),
-    }
 
 
 # ── groups（DB）──────────────────────────────────────
@@ -113,7 +99,6 @@ async def get_source_config(source_name: str):
         "concurrency": config_service.source_concurrency(source_name),
         "capabilities": effective_capabilities(source_name),
         "declared_capabilities": capabilities(source_name),
-        "available": is_source_available(source_name),
         "config": config_service.merged_source_config(source_name),
     }
 
@@ -126,15 +111,6 @@ async def save_source_config(source_name: str, body: dict):
     能力段的 `mode` 键特判：传入字符串 → 覆盖；传入 `null` → 删除该键（恢复书源声明）。
     """
     require_known_source(source_name)
-    # 写入口的可用性校验（Android 上不得启用 / 覆盖成 browser）；校验先于落盘，
-    # 任一 mode 不合法就整体拒绝，避免半写。
-    if body.get("enabled") is True:
-        require_available_source(source_name)
-    cfg_body = body.get("config")
-    if isinstance(cfg_body, dict):
-        for cap, partial in cfg_body.items():
-            if isinstance(partial, dict) and partial.get("mode") is not None:
-                require_supported_mode(partial["mode"], source_name=source_name, capability=cap)
     path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
     existing = config_service.load_yaml(path)
     if isinstance(body.get("enabled"), bool):

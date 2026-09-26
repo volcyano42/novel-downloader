@@ -17,7 +17,6 @@ from .core.exceptions import (
     ParseError,
     SourceNotFoundError,
     FeatureNotSupportedError,
-    ModeUnavailableError,
     StorageError,
     AntiCrawlError,
 )
@@ -68,7 +67,6 @@ __all__ = [
     "ParseError",
     "SourceNotFoundError",
     "FeatureNotSupportedError",
-    "ModeUnavailableError",
     "StorageError",
     "AntiCrawlError",
     # 模型

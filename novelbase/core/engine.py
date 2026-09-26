@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from .exceptions import ModeUnavailableError, NetworkError
+from .exceptions import NetworkError
 from .options import Options, BrowserOptions, APIOptions, RequestsOptions
 from ..utils.encoding import detect_encoding
 from ..utils.logger import get_logger, mask_key
@@ -18,17 +18,8 @@ _log = get_logger("novelbase.core.engine")
 
 
 def _async_playwright():
-    """惰性 import playwright；本环境装不上时抛 ModeUnavailableError（而非裸 ImportError）。
-
-    Android APK 构建时已把 playwright 从依赖清单排除（见 android/scripts/build-apk.sh），
-    因此 browser 引擎在该环境不可用 —— 可用性判定在 `shared.config.supported_modes()`，
-    这里只保证漏网时有明确异常。
-    """
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError as e:
-        raise ModeUnavailableError(
-            "browser", "playwright 未安装（Android APK 已从依赖清单排除）") from e
+    """惰性 import playwright（依赖缺失时抛 ImportError）。"""
+    from playwright.async_api import async_playwright
     return async_playwright()
 
 
