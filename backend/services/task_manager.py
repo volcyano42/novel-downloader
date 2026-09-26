@@ -57,7 +57,7 @@ _max_workers_cache: tuple[float, int] | None = None
 
 
 def _max_workers() -> int:
-    """运行时可改的任务并发上限（`download.max_workers`，非法值回退 1）。
+    """运行时可改的任务并发上限（`download.max_workers`，非法值回退出厂默认 3）。
 
     带 `_MAX_WORKERS_TTL`（1s）TTL 缓存：排队轮询每 `_QUEUE_POLL_INTERVAL` 判断一次
     上限，不必每次都读 config.yaml；改配置后最多 1s 生效。
