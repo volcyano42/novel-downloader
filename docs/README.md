@@ -18,6 +18,7 @@
 | [project/sources.md](project/sources.md) | 书源机制（source.json + 4 个公共 API + 能力声明） |
 | [project/config.md](project/config.md) | 配置文件说明(config.yaml / sites/{source_name}.yaml / formats/*.yaml) |
 | [project/development.md](project/development.md) | 验证命令、开发环境、衍生产物(novel-downloader-tools/) |
+| [project/legacy-migration.md](project/legacy-migration.md) | 旧版本数据迁移总结(I:\NOVEL → 当前项目):方案、脚本、结果、遗留与次日续跑命令、踩坑记录 |
 
 ## 项目约定(conventions/)
 
