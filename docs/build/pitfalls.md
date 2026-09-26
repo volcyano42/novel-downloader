@@ -16,5 +16,7 @@
   ⑥ `Python.start()` 只接受 `Python.Platform`（旧写法 `Python.start(cls, "module")` 编译不过），且模块不会以 `__main__` 执行 → `Python.start(AndroidPlatform(this))` 后显式 `getModule("server").callAttr("_start")`；
   ⑦ `MainActivity` 里不存在的标签 `this@healthPoll` → 改为直接引用 `healthPoll` 字段；
   ⑧ Kotlin 属性在**初始化表达式内不能自引用**：`healthPoll` 的 `run()` 里要写 `this`（不能写 `healthPoll`），并显式标注类型（`: Runnable`）避免类型推断自循环。
-  首次成功：run `35975357459`（artifact `novel-crawler-apk-dev` ≈28.6 MB，**未签名**，真机未验证）
+  ⑨ **不要用 `pip { install("file:../..") }` 安装 novelbase**（2026-09-26 踩到）：pip 会解析它 `pyproject.toml` 的 `dependencies`，其中 `playwright` 正是被清单刻意排除的包 → Chaquopy 仓库无该 wheel → `generateReleasePythonRequirements` 必失败（`ERROR: No matching distribution found for playwright (from novelbase==4.4.1)`）。改为由 `build-apk.sh` 复制 `../novelbase` 源码进 `src/main/python/`（依赖仍由 `.req-android.txt` 提供，两者同源）。
+  ⑩ **Chaquopy 的 `src/main/python/` 不是真实文件系统**（数据文件按需提取、不支持目录列举）：`StaticFiles` 的「真实目录」假设不成立，前端**不能**靠挂载源码目录里的 `frontend/` 来提供 → 改为「构建期打成单个 `frontend.zip` + 启动时解压到可写目录（`$HOME/frontend/dist`）+ `NLD_FRONTEND_DIR` 交给 SPA fallback」。历史实现（注册在 catch-all 之后的死挂载 + 少一层 `dist`）曾让真机 WebView 只显示「前端尚未构建」占位页。
+  首次成功：公开库 run `35975357459`（artifact `novel-crawler-apk-dev` ≈28.6 MB）；本仓库 run `36240821327`（artifact `novel-downloader-apk-4.5.0` ≈28.6 MB）。两者均**未签名**、真机未验证
 - **前端源码改了必须重新 `npm run build`，否则后端 / 手机端 / 打包产物仍是旧 UI**（2026-09-25 实测踩到）：`frontend/dist` **不入库**（`.gitignore` 的 `dist/`），但它是被消费的那份 —— 后端 `StaticFiles` 托管它（`backend/main.py`）、`android/scripts/build-apk.sh` 从它 `cp` 进 APK、portable/nuitka 用 `--include-data-dir` 打包它。所以只改 `frontend/src` 而不重建，`git status` **不会有任何提示**，而手机浏览器访问后端服务时看到的还是旧界面。典型症状：dev server 上已经删掉的入口在手机上仍然存在（本轮删掉的独立「书源」页就这样在手机端残留）。修复：`cd frontend && npm run build`（产出新 hash 资源、旧文件自动清理），浏览器强刷一次；后端无需重启（每次请求读磁盘）

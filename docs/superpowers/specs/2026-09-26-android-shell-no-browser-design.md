@@ -188,6 +188,8 @@ Chaquopy 把源码目录打成 APK 资产（`.imy`/zip），`.py` 走自定义 i
 
 桌面行为不变。`cli/main.py`、`cli/interactive.py` 的显式 `--source <name>` 分支：若该源不可用 → 打印明确错误并退出（而非跑到引擎层 `ImportError`）。`enabled_source_names()` 的自动路径已由 6.2.2 覆盖。
 
+> **实施说明（2026-09-26）**：该预校验**未实现**——`NLD_PLATFORM` 只由 APK 的 `server.py` 注入，而 APK 内没有 CLI；桌面 `supported_modes()` 是全量，因此 CLI 里的可用性预校验**恒不触发**（写了即死代码）。CLI 显式指定不可用源时的明确错误由 core 兜底（`ModeUnavailableError`，中文说明），已满足本节的实质目标。详见 §12。
+
 ### 6.3 数据流
 
 ```
@@ -291,3 +293,19 @@ Chaquopy 把源码目录打成 APK 资产（`.imy`/zip），`.py` 走自定义 i
 - `docs/project/sources.md`（书源结构、`source.json` 规范、`concurrency` 与 mode 覆盖）
 - [chaquopy#745](https://github.com/chaquo/chaquopy/issues/745)、[Asset Management](https://deepwiki.com/chaquo/chaquopy/3.2-asset-management)、[FAQ - Read files in Python](https://chaquo.com/chaquopy/doc/16.0/faq.html#faq-read)（Chaquopy 数据文件访问语义）
 - `docs/superpowers/specs/2026-09-25-flattening-closeout-design.md`（`source_guard` 唯一校验点、前端书源配置合并的既有决策）
+
+## 12. 实施记录（2026-09-26）
+
+已按本文实施并推送 `dev`：`372d95f`（前端 zip 交付）→ `6419ed9`（环境能力表）→ `810c8b5`（前端）→ `b414856`（文档）→ `b1ffb66`（APK 构建修复）→ `982900b`（版本号 4.5.0）。
+
+验证：`python -m pytest tests -q` = **507 passed / 0 failed**（基线 471）；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警；APK 构建 run `36240821327` **success**（artifact `novel-downloader-apk-4.5.0` ≈28.6 MB，未签名）。另做两轮本机等价演练（其中一轮只把「APK 内运行时目录」加入 `sys.path`，等价 Chaquopy srcDir）：`/` 返回真实前端、SPA 与 assets 正常、`platform=android`、browser 源 `available=False`。
+
+### 12.1 与本文设计的两处偏差（如实记录）
+
+1. **6.2.6 的 CLI 预校验未实现**：`NLD_PLATFORM` 只由 APK 的 `server.py` 注入，而 APK 内没有 CLI；桌面 `supported_modes()` 是全量 → CLI 里的可用性预校验**恒不触发**（写进去就是死代码）。CLI 显式指定不可用源时的明确错误由 core 兜底（`cli/core.py::_get_engine` → `create_engine` → 引擎启动时 `ModeUnavailableError`，中文说明而非裸 `ImportError`），已满足该节的实质目标；`enabled_source_names()` 的自动路径照常受可用性过滤。
+2. **新增范围：APK 构建修复**（本文未预见）：dispatch 构建时发现本仓库 `build-apk.yml` **从未成功过** —— `pip { install("file:../..") }` 会让 pip 解析 `novelbase` 的 `dependencies`（含被清单刻意排除的 `playwright`）→ `generateReleasePythonRequirements` 必失败。改为与 `backend/`、`shared/` 同法复制 `../novelbase` 源码（依赖仍由 `.req-android.txt` 提供，与 `pyproject.toml.dependencies` 同源）。详见 `docs/build/android-apk.md` 与 `docs/build/pitfalls.md` ⑨。
+
+### 12.2 本次未覆盖、留给真机验证的点
+
+- 真机链路：`HOME` 可写 → 解压 → WebView 显示前端 → browser 源置灰。
+- **`list_sources()` 在真机上的书源目录遍历**：它需要枚举 `sources/{dir}/source.json`，而 Chaquopy 资产不支持目录列举 —— 与前端白页同一类根因，本次未验证，若真机表现为「书源列表为空」则需按同样思路处理（例如构建期生成书源清单随资产分发）。

@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（main 已发布 v4.4.0，dev 领先）。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = v4.4.0，dev = v4.5.0**，dev 未合并 main）。
 
 ## 目录结构（2026-08-02 重组后）
 
@@ -68,7 +68,8 @@ tests/                check_imports.py, test_downloader.py, test_export_config.p
                       test_options.py, test_storage.py, test_android_server.py, conftest.py 等
 
 android/              ← Android APK（Chaquopy 嵌入 Python，2026-08-02 新增，见「Android APK 方案」章节）
-  app/src/main/python/   server.py + backend/ + frontend/（构建时复制）+ init_config.py + template/
+  app/src/main/python/   server.py + backend/ + shared/ + novelbase/ + init_config.py + template/（构建时复制）
+                         + frontend.zip（构建期打包，启动时解压到 $HOME/frontend/dist 并经 NLD_FRONTEND_DIR 交给 SPA fallback）
   app/src/main/java/     MainActivity.kt, ServerService.kt, AndroidBridge.kt, EnvironmentCompat.kt
   scripts/build-apk.sh   CI 构建脚本
 ```

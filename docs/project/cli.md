@@ -20,9 +20,10 @@
 - `--source/-s`：书源名 `source_name`（如 `fanqie-requests-default`）。
 - **mode 默认由书源在 `source.json` 里声明，用户可逐能力覆盖**（`sites/{source_name}.yaml` 的 `{cap}.mode`，
   唯一入口 `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎并透传 `mode_overrides`）——旧的 `--platform/-p`、
-  `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。
-- `search` 省略 `--source` 时**并发全部启用书源**（`shared.config.enabled_source_names()`）；
-  单个源失败静默跳过，并在结果里标注来源 `source_name`。
+  `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。**本环境不支持**的覆盖值会被忽略并回退声明
+  （如 Android 套壳不支持 `browser`，见 [sources.md](sources.md)「环境能力表」）。
+- `search` 省略 `--source` 时**并发全部启用书源**（`shared.config.enabled_source_names()` =
+  「出厂/用户 `enabled`」∩「本环境可用」）；单个源失败静默跳过，并在结果里标注来源 `source_name`。
 - `download` / `info` 的 `--source` 必填：core 已删 URL→书源推断，无法自动识别 URL 归属。
 - `dev new-source` 生成**一层结构**（`__init__.py` + `source.json` + 4 能力文件），默认同时写
   `app_data/config/sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 已删除。

@@ -1,6 +1,8 @@
 # 更新记录 — v4.2.3（9a51b561）之后
 
-> 基准：tag v4.2.3 = commit `9a51b561`（main 分支）。以下为 dev 分支在 9a51b561 之后的全部非合并提交（21 个），日期均为 2026-08-02。
+> 基准：tag v4.2.3 = commit `9a51b561`（main 分支）。
+> 本文按**日期分节**记录 dev 分支在此之后的变更：先是 2026-08-02 那批 21 个非合并提交（提交时间线 + 主题归纳），
+> 再往下按日期追加后续批次（最新在最下方）。面向发布的跨版本汇总见仓库根 `CHANGELOG.md`。
 
 ## 提交时间线（倒序）
 
@@ -370,6 +372,7 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **Chaquopy wheel tag 规则**：pip 只接受 tag ≤ app `minSdk` 的 wheel；`android_24` 的包在 `minSdk=21` 下匹配不上，会回退 sdist 源码编译（Android 上必然失败）。Chaquopy 17.0 已把 **24 定为官方最低要求**（24 也是其 build-wheel 默认 API level）。
 - **pydantic v2 在 Android 上不可用**：`pydantic-core` 是 Rust 扩展、PyPI 无 Android wheel，ChaquoPy 官方建议装 `pydantic<2`（v1 纯 Python）。为此 `backend/schemas/export_config.py` 做了 **v1/v2 双兼容**（`field_validator`/`model_config` ↔ `validator`/`class Config`），桌面端行为不变（v1.10.26 与 v2.13.4 两端实测一致）。
 - **public 仓库没有 `pyproject.toml`**（`PUBLIC_MANIFEST.md` 规定 public 自维护版本元数据），而 `android/app/build.gradle.kts` 里 `install("file:../..")` 需要它 → 公开库必然报 `Directory '.' is not installable`。改为由 `build-apk.sh` 复制 `novelbase/` 源码进 `src/main/python/`（与 `backend/`、`shared/` 同法）。
+  > **2026-09-26 修正**：这与「有 `pyproject.toml` 的仓库」最终走同一条路。本仓库（**有** `pyproject.toml`）用 `install("file:../..")` 同样必然失败 —— pip 会解析 `dependencies` 里的 `playwright`（被清单刻意排除、Chaquopy 仓库无 wheel）→ `No matching distribution found for playwright`。**两个仓库现在都改由 `build-apk.sh` 复制 `novelbase/` 源码**，见本文 2026-09-26 节与 `docs/build/android-apk.md`。
 - **Android 依赖清单在 `build-apk.sh` 第 1b 步生成**：排除 `playwright`/`psutil`/`pillow-heif`（Chaquopy 仓库无 wheel），pin `lxml==5.3.0`、`Pillow==11.0.0`、`yarl==1.9.3`、`PyYAML==6.0.3`、`fastapi==0.120.0`，`uvicorn[standard]` → `uvicorn`（去 C/Rust extras），追加 `pydantic<2`。
 
 ### 遗留
@@ -428,3 +431,44 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **已知边界**（如实写明）：① 已是 `downloading` 的任务被暂停仍占任务槽；② 独立路由（检查更新 `GET /storage/novel/{id}/chapters`、搜索、远端章节列表）**不经**书源额度；③ `max_workers` 下调最多 1 秒生效（TTL 缓存）
 - 测试：`python -m pytest tests -q` = **471 passed, 1 skipped**；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
 - 设计：`docs/superpowers/specs/2026-09-25-download-concurrency-design.md`
+
+## 2026-09-26 变更（Android 套壳前端交付 + 环境能力表 + APK 构建修复）
+
+> 触发：真机装 APK 后 WebView 显示后端的「前端尚未构建」占位页。排查发现这不是单个 bug ——「APK 内前端资源如何交付给后端」这一机制从未被验证过（CI 全绿、真机白页）。
+
+### 前端交付（修白页）
+
+- **根因 1（层级）**：`build-apk.sh` 把 `frontend/dist/*` 复制到 `src/main/python/frontend/`（少了 `dist` 层），而 `backend/main.py` 的 `_find_frontend_dist()` 只认 `frontend/dist` → `_frontend=None` → 占位页
+- **根因 2（机制）**：Chaquopy 把 `src/main/python/` 打成 APK 资产，其中数据文件**不是真实目录**（`os.listdir`/`os.scandir` 不可用）→ `StaticFiles` 的「真实目录」假设不成立；`server.py` 里注册在 SPA catch-all 之后的根挂载是**永不命中的死代码**，而 `tests/test_android_server.py` 只断言「mount 存在」→ 掩盖了问题
+- **改法**：构建期把 `frontend/dist` 打成 `frontend.zip` 随 APK 资产分发；`server.py` 新增 `_extract_frontend()`，在 `import backend.main` **之前**解压到 `$HOME/frontend/dist`（`HOME` 缺失回退 `NLD_APP_DATA/.frontend/dist`；sha256 标记幂等 + zip-slip 防护；失败只打日志并回落占位页），经 `NLD_FRONTEND_DIR` 交给 SPA fallback；`backend/main.py` 的候选列表抽为 `_frontend_candidates()`，第一候选即该 env（其余候选与顺序不变 → 桌面/portable/Nuitka 零变化）；删除死挂载与 `assets/frontend` 旧路径
+- **测试**：`tests/test_android_server.py` 重写——删除「只断言 mount 存在」的用例，改为止端到端断言（`httpx.ASGITransport`：`/` 必须返回前端 index.html 而非占位页、`/assets/*` 200、SPA 路由回 index.html、`/api/v2/health` 200）+ zip 解压幂等、zip-slip、候选全落空等用例
+
+### 环境能力表：Android 不支持 browser
+
+- APK 构建时排除 `playwright`（Chaquopy 无浏览器内核）→ 本环境无 `browser` 引擎；此前**没有任何一层知道**这件事：3 个 browser 书源出厂 `enabled=true`，会被 `enabled_source_names()` 收进搜索并发
+- `NLD_PLATFORM=android`（`server.py` 注入）→ `shared.config.supported_modes()` = `(requests, api)`，**全链唯一真源**（桌面/portable/Nuitka 未设该 env → 全量，行为逐字不变）
+- `effective_capabilities()` 的覆盖判定改用 `supported_modes()`：本环境不支持的 `{cap}.mode` 覆盖被**忽略并回退书源声明**（用户 yaml 不动，回桌面版自动生效）
+- 新增 `available_capabilities()` / `is_source_available()`（**源级全能力**判定，避免混 mode 私有源「半可用」踩到执行路径）；`enabled_source_names()` 追加可用性过滤
+- API：`GET /download/sources` 与 `GET /config/sources/{name}` 带 `available`（前者仍**全量**返回，供前端置灰）；新增 `GET /config/environment`；`PUT` 启用不可用源或覆盖成不可用 mode → 400（校验先于落盘，整体拒绝）；执行入口经 `source_guard.require_available_source()`（沿用「HTTP 边界唯一校验点」）
+- core：新增 `ModeUnavailableError`，`engine._async_playwright()` 在依赖缺失时抛它（而非裸 `ImportError`）；core **不读环境变量**（保持纯库边界）
+- 前端：browser 源折叠条置灰 + 标注「本环境不支持 browser」+ 禁用启用开关（仍列出）；`toSourceOptions()` 滤掉 `available=false`（搜索 / 换源 `SourcePickerDialog` / 书架共用）；`SourceConfigEditor` 的 mode 下拉只列 `supported_modes`（新增 `useEnvironment()`）；`Toggle` 支持 `disabled`
+- 测试：新增 `tests/test_source_availability.py`（环境声明三态、覆盖回退、可用性与启用集、API available/400/environment、core 兜底）；`tests/conftest.py` 增 autouse fixture 隔离 `NLD_*`（`server.py` 直接写 `os.environ` 的键不受 monkeypatch 管理，曾把 `NLD_PLATFORM=android` 泄漏给桌面用例）
+- 设计：`docs/superpowers/specs/2026-09-26-android-shell-no-browser-design.md`
+
+### APK 构建修复（本仓库首次构建成功）
+
+- run `36240609118` 失败在 `:app:generateReleasePythonRequirements`：`No matching distribution found for playwright (from novelbase==4.4.1)` —— `install("file:../..")` 让 pip 解析 novelbase 的 `dependencies`，而 `playwright` 正是被清单刻意排除的包
+- 改为与 `backend/`、`shared/` 同法：`build-apk.sh` 复制 `../novelbase` 源码进 `src/main/python/`，`build.gradle.kts` 删除 `install("file:../..")`；依赖仍由 `.req-android.txt` 提供（与 `pyproject.toml` 的 `dependencies` 同源，已核对覆盖一致）
+- 结果：run `36240821327` **success**，artifact `novel-downloader-apk-4.5.0`（≈28.6 MB，未签名）
+- 本机等价演练（只把「APK 内运行时目录」加入 `sys.path` 后导入 `server`）：`/` 返回真实前端、SPA 与 assets 正常、`platform=android`、browser 源 `available=False`
+
+### 版本号
+
+- `pyproject.toml` / `novelbase/__init__.py`：4.4.1 → **4.5.0**（并对外导出 `ModeUnavailableError`）；`CHANGELOG.md` 的 `## Unreleased（书源扁平化收口）` 升级为正式 `## v4.5.0` 段落
+- 测试：`python -m pytest tests -q` = **507 passed, 0 failed**；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警
+
+### 遗留（需真机确认）
+
+- APK 未签名（仅可侧载）；真机链路（`HOME` 可写 / 解压 / WebView 显示 / browser 源置灰）未验证
+- **真机上 novelbase 的书源目录遍历仍是未知点**：`list_sources()` 需枚举 `sources/{dir}/source.json`，而 Chaquopy 资产不支持目录列举（与前端白页同一类根因，尚未被真机暴露）
+- APK 内 `versionName` 仍为 gradle 硬编码 `1.0.0`（独立遗留）
