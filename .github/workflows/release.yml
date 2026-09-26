@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 4.2.1 或 4.2.3-dev，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
+        description: '版本号（如 4.5.0 或 4.5.1-dev，无需 v 前缀，需与 CHANGELOG.md 中 ## v{version} 段落对应）'
         required: true
-        default: '4.2.3-dev'
+        default: '4.5.0'
 
 permissions:
   contents: write

@@ -1,15 +1,15 @@
 # ═══════════════════════════════════════════════════════════════
 #  novel-downloader CI
-#  每次 push / PR 到 main 时运行：语法检查 + 导入验证 + 单元测试
+#  每次 push / PR 到 main / dev 时运行：语法检查 + 导入验证 + 单元测试
 # ═══════════════════════════════════════════════════════════════
 
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   test:
