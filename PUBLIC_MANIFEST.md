@@ -18,8 +18,6 @@
   - **排除**：`frontend/node_modules/**`、`frontend/dist/**`
 - `cli/**`
 - `shared/**`
-- `android/**`
-  - **排除**：`android/.gradle/**`、`android/app/build/**`、`android/local.properties`、`android/keystore.properties`、`android/*.jks`
 - `scripts/**`
 - `tests/**`
 

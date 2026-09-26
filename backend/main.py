@@ -1,5 +1,4 @@
 """Novel Downloader — FastAPI 后端入口。"""
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -90,15 +89,8 @@ async def health():
 
 # ── 前端静态文件 ──
 def _frontend_candidates() -> list[Path]:
-    """前端构建产物目录候选（按优先级）。
-
-    第一候选是 `NLD_FRONTEND_DIR`（Android `server.py` 解压 frontend.zip 后设置；
-    桌面联调也可用它显式指定）。其余候选与顺序保持历史行为不变。
-    """
+    """前端构建产物目录候选（按优先级）。"""
     candidates: list[Path] = []
-    env_dir = os.environ.get("NLD_FRONTEND_DIR")
-    if env_dir:
-        candidates.append(Path(env_dir))
     # Nuitka：不设 sys.frozen/_MEIPASS；onefile 数据文件解压到 __file__ 所在目录（对齐 init_config._get_root，sys.executable 指向 bootstrap exe 不可用）
     if "__compiled__" in globals():
         candidates.append(Path(__file__).resolve().parent / "frontend" / "dist")

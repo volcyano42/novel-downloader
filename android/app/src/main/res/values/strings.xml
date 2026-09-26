@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">小说下载器</string>
-    <string name="notification_channel_name">小说下载器服务</string>
-    <string name="notification_title">小说下载器运行中</string>
-    <string name="storage_permission_guide">请在系统设置中允许"所有文件访问"，以便保存小说数据到公共目录</string>
-    <string name="backend_not_ready">服务未就绪，请重启应用</string>
-</resources>

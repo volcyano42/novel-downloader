@@ -32,7 +32,6 @@ INCLUDE_PATTERNS = [
     "frontend/**",
     "cli/**",
     "shared/**",
-    "android/**",
     "scripts/**",
     "tests/**",
     ".github/workflows/**",
