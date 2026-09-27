@@ -55,7 +55,14 @@ jobs:
                 # → 去掉 uvicorn[standard] 的 C/Rust extras，只装纯 Python 的 uvicorn
                 #   （与 APK 的 build-apk.sh、pydantic<2 同一条思路）
                 grep -v "^playwright" /src/requirements.txt \
-                  | sed 's/^uvicorn\[standard\]/uvicorn/' > /src/.req-termux.txt
+                  | sed 's/^uvicorn\.standard\./uvicorn/' > /src/.req-termux.txt
+                # 自检：替换若未生效就立刻失败，别等 uvloop 编译十几分钟才暴露
+                echo "--- .req-termux.txt 的 uvicorn 行 ---"
+                grep -n "uvicorn" /src/.req-termux.txt || true
+                if grep -q "uvloop\|\[standard\]" /src/.req-termux.txt; then
+                  echo "::error::requirements 仍含 uvicorn 的 extras（uvloop 在 Termux/bionic 编不过）"
+                  exit 1
+                fi
                 pip install --break-system-packages -r /src/.req-termux.txt
                 # 导出依赖 site-packages
                 mkdir -p /src/deps
