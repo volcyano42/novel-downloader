@@ -259,6 +259,51 @@ def is_source_enabled(source_name: str) -> bool:
     return bool(get_manifest(source_name).get("enabled", False))
 
 
+def _user_top(source_name: str, key: str) -> str:
+    """用户层顶层字符串字段（strip 后）；非字符串 / 缺失 → ""。"""
+    value = _user_site_cfg(source_name).get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _declared_top(source_name: str, key: str) -> str:
+    """出厂 `source.json` 顶层字符串字段；缺失 / manifest 异常 / 非字符串 → ""。"""
+    from novelbase.source import get_manifest
+    from novelbase.sources.manifest import ManifestError
+    try:
+        value = get_manifest(source_name).get(key)
+    except (KeyError, ManifestError):
+        return ""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def source_group(source_name: str) -> str:
+    """书源分组名：用户层顶层 `source_group` → 出厂 `source.json` 顶层 → `""`（未分组）。
+
+    空串视为「未设」（PUT 用空串表达「清除覆盖」），故 `or` 短路即可。
+    """
+    return _user_top(source_name, "source_group") or _declared_top(source_name, "source_group")
+
+
+def source_alias(source_name: str) -> str:
+    """书源别名：用户层顶层 `source_alias` → 出厂 `source.json` 顶层 → `""`（未设）。"""
+    return _user_top(source_name, "source_alias") or _declared_top(source_name, "source_alias")
+
+
+def display_name(source_name: str) -> str:
+    """显示名（CLI / 日志的唯一入口）：别名优先，未设则回落 `source_name`。"""
+    return source_alias(source_name) or source_name
+
+
+def default_source_names() -> list[str]:
+    """默认参与集：**全部**书源（无任何环境相关过滤）。
+
+    取代旧的 `enabled_source_names()`——`enabled` 已废弃（见 spec D1/D2）；
+    「本环境不支持的引擎」这一维度也随 v4.5.1 移除 Android 套壳而消失。
+    """
+    from novelbase.source import list_sources
+    return sorted(list_sources())
+
+
 SOURCE_CONCURRENCY_DEFAULT = 1
 
 
