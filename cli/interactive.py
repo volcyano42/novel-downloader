@@ -10,7 +10,7 @@ from cli.config import (
     build_options, get_novel_group, load_groups,
 )
 from cli.ui import _select, _text_input
-from shared.config import effective_capabilities, enabled_source_names, source_concurrency
+from shared.config import effective_capabilities, default_source_names, display_name, source_concurrency
 from novelbase import (
     resolve_meta, resolve_chapter_list, resolve_chapter, search,
     create_engine,
@@ -53,7 +53,7 @@ def _make_engines(source_name: str):
 def do_search(query: str) -> tuple[str | None, str | None]:
     """搜索小说。返回 (url, source_name) 或 (None, None)。
 
-    关键字分支：并发全部「启用书源」（`enabled_source_names()`），结果汇总标注来源
+    关键字分支：并发全部可用书源（`default_source_names()`），结果汇总标注来源
     后由用户选择；URL 分支：core 已无 URL→书源推断能力，需用户手选书源。
     """
     if query.startswith("http://") or query.startswith("https://"):
@@ -80,8 +80,8 @@ def do_search(query: str) -> tuple[str | None, str | None]:
                 except Exception:
                     pass
 
-    # 关键字搜索 → 并发全部启用书源，结果汇总标注来源
-    sources = enabled_source_names()
+    # 关键字搜索 → 并发全部可用书源，结果汇总标注来源
+    sources = default_source_names()
     if not sources:
         print("没有启用的书源")
         return None, None
@@ -113,8 +113,8 @@ def do_search(query: str) -> tuple[str | None, str | None]:
 
     print(f"\n搜索 '{query}' 的结果:")
     for i, r in enumerate(results, 1):
-        print(f" {i}. {r.title} — {r.author}  [{getattr(r, 'source_name', '')}]")
-    choices_list = [(f"{r.title} — {r.author} [{getattr(r, 'source_name', '')}]", i - 1)
+        print(f" {i}. {r.title} — {r.author}  [{display_name(getattr(r, 'source_name', ''))}]")
+    choices_list = [(f"{r.title} — {r.author} [{display_name(getattr(r, 'source_name', ''))}]", i - 1)
                     for i, r in enumerate(results, 1)]
     sel = _select("选择小说", choices_list)
     if sel is None:

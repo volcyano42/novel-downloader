@@ -214,32 +214,17 @@ class TestMenus:
         menus.do_settings(cfg)
         assert cfg["download"]["max_workers"] == 8
 
-    def test_settings_source_toggle_enabled(self, monkeypatch, tmp_path):
-        import cli.config as ccfg
-        monkeypatch.setattr(ccfg, "CONFIG_DIR", tmp_path)
-        from cli import menus
-        monkeypatch.setattr(menus, "list_sources", lambda: ["a-x-default"])
-        monkeypatch.setattr(menus, "effective_capabilities", lambda n: {"search": "requests"})
-        monkeypatch.setattr(menus, "is_source_enabled", lambda n: False)
-        monkeypatch.setattr(menus, "_select", lambda *a, **k: "a-x-default")
-        inputs = iter(["2", "1", "0", "0"])
-        monkeypatch.setattr("builtins.input", lambda _="": next(inputs))
-        menus.do_settings({})
-        from cli.config import load_site_config
-        assert load_site_config("a-x-default")["enabled"] is True
-
     def test_settings_source_edit_capability_field(self, monkeypatch, tmp_path):
         import cli.config as ccfg
         monkeypatch.setattr(ccfg, "CONFIG_DIR", tmp_path)
         from cli import menus
         monkeypatch.setattr(menus, "list_sources", lambda: ["a-x-default"])
         monkeypatch.setattr(menus, "effective_capabilities", lambda n: {"search": "requests"})
-        monkeypatch.setattr(menus, "is_source_enabled", lambda n: True)
         monkeypatch.setattr(menus, "merged_source_config",
                             lambda n: {"search": {"mode": "requests", "timeout": 30, "delay": [3, 6]}})
         monkeypatch.setattr(menus, "_select", lambda *a, **k: "a-x-default")
-        # do_settings=2 → _select 选源 → 详情=2(search 配置) → 编辑=2(超时) → 输入 42 → 0 → 0 → 0
-        inputs = iter(["2", "2", "2", "42", "0", "0", "0"])
+        # do_settings=2 → _select 选源 → 详情=1(search 配置) → 编辑=2(超时) → 输入 42 → 0 → 0 → 0
+        inputs = iter(["2", "1", "2", "42", "0", "0", "0"])
         monkeypatch.setattr("builtins.input", lambda _="": next(inputs))
         menus.do_settings({})
         from cli.config import load_site_config
@@ -261,7 +246,7 @@ class _FakeResult:
 class TestInteractive:
     def test_do_search_keyword_uses_enabled_not_select(self, monkeypatch, capsys):
         from cli import interactive as mod
-        monkeypatch.setattr(mod, "enabled_source_names", lambda: ["a-x-default"])
+        monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default"])
         seen = []
 
         async def fake_search(sources, query, engines, **kw):
@@ -279,7 +264,7 @@ class TestInteractive:
         async def boom(*a, **k):
             raise RuntimeError("网络错误")
 
-        monkeypatch.setattr(mod, "enabled_source_names", lambda: ["fanqie-requests-default"])
+        monkeypatch.setattr(mod, "default_source_names", lambda: ["fanqie-requests-default"])
         monkeypatch.setattr(mod, "search", boom)
         url, name = mod.do_search("测试")
         assert url is None and name is None
@@ -294,7 +279,7 @@ class TestInteractive:
             src = sources[0]
             return (_FakeResult(f"书-{src}", "作者", f"https://x/{src}", src),)
 
-        monkeypatch.setattr(mod, "enabled_source_names", lambda: ["a-x-default", "b-y-default"])
+        monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default", "b-y-default"])
         monkeypatch.setattr(mod, "search", fake_search)
         monkeypatch.setattr(mod, "_select", lambda *a, **k: 0)
         url, name = mod.do_search("测试")
@@ -304,7 +289,7 @@ class TestInteractive:
 
     def test_do_search_no_enabled_sources(self, monkeypatch, capsys):
         from cli import interactive as mod
-        monkeypatch.setattr(mod, "enabled_source_names", lambda: [])
+        monkeypatch.setattr(mod, "default_source_names", lambda: [])
         url, name = mod.do_search("测试")
         assert url is None and name is None
         assert "没有启用的书源" in capsys.readouterr().out

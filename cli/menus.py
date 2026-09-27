@@ -8,7 +8,7 @@ from cli.config import (
     save_site_config, load_site_config, load_groups,
 )
 from cli.ui import _select, _text_input, _input_int, _input_float
-from shared.config import merged_source_config, is_source_enabled, effective_capabilities
+from shared.config import merged_source_config, effective_capabilities
 from novelbase.source import list_sources
 from novelbase.utils.logger import get_logger
 
@@ -80,37 +80,24 @@ def _settings_source(cfg: dict) -> None:
 
 
 def _settings_source_detail(cfg: dict, source_name: str) -> None:
-    """单书源详情：启用开关 + 各能力段入口。"""
+    """单书源详情：别名/分组信息 + 各能力段入口。"""
+    from shared.config import display_name, source_group
     while True:
         caps = effective_capabilities(source_name)
-        enabled = is_source_enabled(source_name)
-        print(f"\n[{source_name} 设置]  状态: {'启用' if enabled else '禁用'}")
-        print(f" 1. {'禁用' if enabled else '启用'}该书源")
+        print(f"\n[{display_name(source_name)} 设置]  {source_name}  分组: {source_group(source_name) or '未分组'}")
         entries = list(caps.items())
-        for i, (cap, mode) in enumerate(entries, 2):
+        for i, (cap, mode) in enumerate(entries, 1):
             print(f" {i}. {cap}（{mode}）配置")
         print(" 0. 返回")
         ch = input("请选择: ").strip()
         if ch == "0":
             return
-        if ch == "1":
-            _toggle_source_enabled(source_name)
-            continue
         try:
-            idx = int(ch) - 2
+            idx = int(ch) - 1
         except ValueError:
             continue
         if 0 <= idx < len(entries):
             _edit_capability(source_name, entries[idx][0], entries[idx][1])
-
-
-def _toggle_source_enabled(source_name: str) -> None:
-    """切换书源启用状态（写入用户层顶层 enabled）。"""
-    user = load_site_config(source_name)
-    new_val = not is_source_enabled(source_name)
-    user["enabled"] = new_val
-    save_site_config(source_name, user)
-    print(f"{source_name} 已{'启用' if new_val else '禁用'}")
 
 
 def _set_cap_field(source_name: str, capability: str, field: str, value) -> None:

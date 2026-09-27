@@ -121,9 +121,9 @@ def _apply_export_options(options) -> dict:
 def cmd_search(args):
     from novelbase.core.downloader import search
     from cli.core import _make_engines
-    from shared.config import enabled_source_names
+    from shared.config import default_source_names
 
-    sources = [args.source] if args.source else enabled_source_names()
+    sources = [args.source] if args.source else default_source_names()
     if not sources:
         print("没有启用的书源")
         return
@@ -311,8 +311,9 @@ def cmd_novel(args):
 
 
 def cmd_source(args):
-    """书源管理（mode 显示有效值：用户层覆盖优先）。"""
+    """书源管理（mode 显示有效值；显示别名与分组）。"""
     from novelbase.source import list_sources
+    from shared.config import display_name, source_group
 
     if args.source_command != "list":
         return
@@ -322,8 +323,9 @@ def cmd_source(args):
         import json
         payload = {
             name: {
-                "name": name,
-                "show_name": name,
+                "source_name": name,
+                "source_alias": display_name(name),
+                "source_group": source_group(name),
                 "capabilities": effective_capabilities(name),
             }
             for name in names
@@ -335,7 +337,7 @@ def cmd_source(args):
     for name in names:
         caps = effective_capabilities(name)
         cap_str = ", ".join(f"{c}:{m}" for c, m in caps.items()) or "无"
-        print(f"  - {name}   capabilities: {cap_str}")
+        print(f"  - {display_name(name)}  [{source_group(name) or '未分组'}]  ({name})  capabilities: {cap_str}")
 
 
 def cmd_dev(args):

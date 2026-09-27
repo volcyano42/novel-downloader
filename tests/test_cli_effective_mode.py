@@ -75,3 +75,24 @@ def test_download_inner_passes_mode_overrides_by_keyword(monkeypatch):
     assert captured["meta_skip_delay"] is False
     assert captured["cl_overrides"] == {"novel_info": "requests"}
     assert captured["cl_skip_delay"] is False
+
+
+def test_cmd_source_list_shows_group_and_alias(monkeypatch, capsys):
+    """`sources list` 显示别名与分组；`--json` 用 source_name / source_alias / source_group 键。"""
+    from cli import main as cli_main
+
+    monkeypatch.setattr("novelbase.source.list_sources", lambda: ["demo-requests-default"])
+    monkeypatch.setattr(cli_main, "effective_capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("shared.config.source_alias", lambda n: "演示源")
+    monkeypatch.setattr("shared.config.source_group", lambda n: "演示组")
+
+    class Args:
+        source_command = "list"
+        json = True
+
+    cli_main.cmd_source(Args())
+    out = capsys.readouterr().out
+    assert '"source_name": "demo-requests-default"' in out
+    assert '"source_alias": "演示源"' in out
+    assert '"source_group": "演示组"' in out
+    assert '"enabled"' not in out
