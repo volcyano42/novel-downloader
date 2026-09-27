@@ -45,12 +45,25 @@ def test_duplicate_across_roots_raises(tmp_path):
         scan_source_names([builtin, private])
 
 
+def test_duplicate_message_names_both_dirs(tmp_path):
+    """报错消息必须同时给出「先占者」与「后来者」两个目录，才可操作。"""
+    first = _source(tmp_path, "demo_a", "demo-requests-default")
+    second = _source(tmp_path, "demo_b", "demo-requests-default")
+    with pytest.raises(DuplicateSourceNameError) as ei:
+        scan_source_names([tmp_path])
+    msg = str(ei.value)
+    assert str(first) in msg
+    assert str(second) in msg
+
+
 def test_distinct_names_across_roots_ok(tmp_path):
     builtin, private = tmp_path / "builtin", tmp_path / "private"
     _source(builtin, "demo_a", "demo-requests-default")
     _source(private, "demo_b", "other-requests-default")
-    assert sorted(scan_source_names([builtin, private])) == [
-        "demo-requests-default", "other-requests-default"]
+    result = scan_source_names([builtin, private])
+    assert sorted(result) == ["demo-requests-default", "other-requests-default"]
+    assert result["demo-requests-default"] == builtin / "demo_a"
+    assert result["other-requests-default"] == private / "demo_b"
 
 
 def test_invalid_manifest_skipped_when_not_strict(tmp_path):
@@ -119,3 +132,12 @@ def test_private_dir_same_name_as_builtin_rejected(tmp_path, monkeypatch):
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
     with pytest.raises(DuplicateSourceNameError):
         s.list_sources()
+
+
+def test_duplicate_is_manifest_error_subclass(tmp_path):
+    """`DuplicateSourceNameError` ⊂ `ManifestError`：既有 `except ManifestError` 依赖它。"""
+    assert issubclass(DuplicateSourceNameError, ManifestError)
+    _source(tmp_path, "demo_a", "demo-requests-default")
+    _source(tmp_path, "demo_b", "demo-requests-default")
+    with pytest.raises(ManifestError):
+        scan_source_names([tmp_path])
