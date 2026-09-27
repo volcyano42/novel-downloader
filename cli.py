@@ -1,4 +1,4 @@
-"""novel-crawler 非交互 CLI 入口 — 委托到 cli.main。
+"""novel-downloader 非交互 CLI 入口 — 委托到 cli.main。
 
 用法:
     python cli.py search "关键词"
@@ -11,6 +11,7 @@
     python cli.py sources list [--json]
     python cli.py info --source fanqie-requests-default --url "https://fanqienovel.com/page/7123456789012345678"
     python cli.py dev new-source --name <name> / dev list-sources
+    python cli.py config init [--all | --main | --sites NAME | --formats FMT | --user-db]
 
 子命令定义与实现见 cli/main.py，命令一览见 docs/project/cli.md。
 """

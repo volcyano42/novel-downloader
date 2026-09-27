@@ -7,7 +7,12 @@
     python cli.py download --source fanqie-requests-default --url "https://..."
     python cli.py update
     python cli.py export --group default --format epub
+    python cli.py delete --id <novel_id>
+    python cli.py novel list [--group <g>]
+    python cli.py sources list [--json]
     python cli.py info --source fanqie-requests-default --url "https://..."
+    python cli.py dev new-source --name <name> | dev list-sources
+    python cli.py config init [--all | --main | --sites NAME | --formats FMT | --user-db]
 """
 
 import argparse
@@ -64,7 +69,7 @@ def _parse_args() -> argparse.Namespace:
 
     # ── delete ──
     dp2 = sub.add_parser("delete", help="删除已下载小说")
-    dp2.add_argument("--id", required=True, help="小说 ID（如 fanqie_7123456789012345678）")
+    dp2.add_argument("--id", required=True, help="小说 ID（sha256(url)[:32]；可用 `novel list` 查看）")
 
     # ── novel ──
     np = sub.add_parser("novel", help="已下载小说管理")
@@ -83,9 +88,21 @@ def _parse_args() -> argparse.Namespace:
     ip.add_argument("--source", "-s", required=True, help="书源名 source_name")
     ip.add_argument("--url", "-u", required=True, help="小说页面 URL")
 
+    # ── config ──
+    cf = sub.add_parser("config", help="配置管理")
+    cf_sub = cf.add_subparsers(dest="config_command", required=True)
+    cf_init = cf_sub.add_parser("init", help="初始化缺失的配置文件（不覆盖已有）")
+    cf_init.add_argument("--all", action="store_true", help="初始化全部（默认）")
+    cf_init.add_argument("--main", action="store_true", help="只初始化 config.yaml")
+    cf_init.add_argument("--sites", default=None, metavar="NAME",
+                         help="只初始化 sites/NAME.yaml；NAME=all 表示全部")
+    cf_init.add_argument("--formats", default=None, metavar="FMT",
+                         help="只初始化 formats/FMT.yaml；FMT=all 表示全部")
+    cf_init.add_argument("--user-db", action="store_true", help="只初始化 user_data.db")
+
     # ── dev ──
     dv = sub.add_parser("dev", help="开发工具")
-    dv_sub = dv.add_subparsers(dest="dev_command")
+    dv_sub = dv.add_subparsers(dest="dev_command", required=True)
 
     ns = dv_sub.add_parser("new-source", help="创建新书源脚手架")
     ns.add_argument("--name", required=True, help="书源名 source_name（如 demo-requests-default）")
@@ -94,7 +111,7 @@ def _parse_args() -> argparse.Namespace:
                     help="不生成默认用户配置 app_data/config/sites/{source_name}.yaml")
 
     ls = dv_sub.add_parser("list-sources", help="列出所有可用书源")
-    ls.add_argument("--json", action="store_true", help="仅列出 JSON 规则源")
+    ls.add_argument("--json", action="store_true", help="以 JSON 输出")
 
     return p.parse_args()
 
@@ -340,6 +357,41 @@ def cmd_source(args):
         print(f"  - {display_name(name)}  [{source_group(name) or '未分组'}]  ({name})  capabilities: {cap_str}")
 
 
+def cmd_config(args):
+    """配置管理（一期只提供 `config init`）。
+
+    只补缺失、不覆盖已有（沿用 init_config.py 的语义）；`--main` / `--sites` /
+    `--formats` / `--user-db` 互斥，无参等价 `--all`。
+    """
+    if args.config_command != "init":
+        return
+    import init_config
+
+    exclusive = [args.main, args.sites is not None,
+                 args.formats is not None, args.user_db]
+    if sum(exclusive) > 1:
+        print("错误：--main / --sites / --formats / --user-db 只能选一个（不加参数则等价 --all）",
+              file=sys.stderr)
+        raise SystemExit(2)
+    if args.main:
+        created = init_config.init_main_config()
+    elif args.sites is not None:
+        created = init_config.init_site_config(args.sites)
+    elif args.formats is not None:
+        created = init_config.init_export_config(args.formats)
+    elif args.user_db:
+        created = init_config.init_user_db()
+    else:  # 无参 或 --all
+        created = init_config.init_all_config()
+
+    if created:
+        print(f"已初始化 {len(created)} 个配置项：")
+        for path in created:
+            print(f"  - {path}")
+    else:
+        print("配置已完整，无需初始化。")
+
+
 def cmd_dev(args):
     """开发工具。"""
     if args.dev_command == "list-sources":
@@ -424,6 +476,7 @@ def main():
         "novel":    cmd_novel,
         "sources":  cmd_source,
         "info":     cmd_info,
+        "config":   cmd_config,
         "dev":      cmd_dev,
     }
     dispatch[args.command](args)
