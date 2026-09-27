@@ -122,7 +122,7 @@ search: { ... }          # 逐能力段（不变）
 | `GET /api/v2/download/sources` | 每源 `{capabilities, source_group, source_alias}`；**删除 `enabled`**（仍**全量**返回；某源是否参与搜索完全由搜索页的勾选表达） |
 | `GET /api/v2/config/sources/{name}` | 加 `source_group` / `source_alias`；删除 `enabled` |
 | `PUT /api/v2/config/sources/{name}` | 接受顶层 `source_group` / `source_alias`（字符串；**空串 = 删除该键**，回落出厂/`source_name`）；不再接受 `enabled`（即使传入也忽略，且保存时清理旧键） |
-| `GET /api/v2/download/search` | **新增 `sources` 查询参数**（逗号分隔的 `source_name` 列表）；`sources` 缺省或为空 → `default_source_names()`；提供时只跑其中**存在且可用**的源（未知/不可用**静默跳过**，与既有「单源失败静默跳过」一致）；筛完为空 → **400**（`本环境没有可用的书源` / `未指定有效书源`）。`source`（单源，URL 直达）行为不变；两者**同时出现时以 `sources` 为准**（`source` 只服务 URL 直达路径） |
+| `GET /api/v2/download/search` | **新增 `sources` 查询参数**（逗号分隔的 `source_name` 列表）；`sources` 缺省或为空 → `default_source_names()`；提供时只跑其中**存在且可用**的源（未知/不可用**静默跳过**，与既有「单源失败静默跳过」一致）；筛完为空 → **400**（`本环境没有可用的书源` / `未指定有效书源`）。`source`（单源，URL 直达）行为不变；两者同时出现时 **`source`（单源）优先**（`if source:` 分支在前，保持既有控制流） |
 | `GET /api/v2/config/environment` | 不变 |
 
 - 与 `source_guard` 的关系：`source_guard` 只保留 `require_known_source()`（v4.5.1 已删除 `require_available_source()`）；`sources` 的过滤在路由内一次完成（只做**存在性**检查）。

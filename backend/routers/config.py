@@ -99,6 +99,8 @@ async def get_source_config(source_name: str):
         "concurrency": config_service.source_concurrency(source_name),
         "capabilities": effective_capabilities(source_name),
         "declared_capabilities": capabilities(source_name),
+        "source_group": config_service.source_group(source_name),
+        "source_alias": config_service.source_alias(source_name),
         "config": config_service.merged_source_config(source_name),
     }
 
@@ -118,6 +120,15 @@ async def save_source_config(source_name: str, body: dict):
     # 顶层 concurrency 与 enabled 同级：正整数写入用户层，非法值忽略（不写坏 yaml）
     if "concurrency" in body and config_service._is_positive_int(body["concurrency"]):
         existing["concurrency"] = body["concurrency"]
+    # 顶层元信息：字符串写入用户层（strip 后非空），空串 = 删除该键（回落出厂 / source_name）
+    for key in ("source_group", "source_alias"):
+        if key in body:
+            raw = body[key]
+            text = raw.strip() if isinstance(raw, str) else ""
+            if text:
+                existing[key] = text
+            else:
+                existing.pop(key, None)
     cfg_body = body.get("config")
     if isinstance(cfg_body, dict):
         for cap, partial in cfg_body.items():

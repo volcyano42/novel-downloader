@@ -2,8 +2,8 @@
 
 不启 TestClient/lifespan（避免 Windows 下 lifespan 挂起），直接 `asyncio.run`
 调 async 路由函数；monkeypatch 书源 `resolve`、引擎工厂、模块级依赖，验证：
-- `/sources` 平铺形状 `{source_name: {capabilities: {cap: mode}, enabled: bool}}`。
-- `/search`：`source` 空 → 并发全部启用书源（`enabled_source_names()`）；单书源 →
+- `/sources` 平铺形状 `{source_name: {capabilities: {cap: mode}, enabled: bool, source_group: str, source_alias: str}}`。
+- `/search`：`source` 空 → 按 `sources` 并发所选书源（缺省 → `default_source_names()`）；单书源 →
   引擎按 `source_name` 绑定；`query` 为 URL 时 `source` 必填（400）；URL 结果带 `source_name`。
 - `/novel`、`/novel/{id}`、`/novel/{id}/chapters` 的 Query 仅 `source`（=source_name），
   URL 无法推断书源时要求显式 `source`。
@@ -42,9 +42,12 @@ def test_sources_shape_is_flat(monkeypatch):
     monkeypatch.setattr(dl, "list_sources", lambda: ["92xs-requests-default"])
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
+    monkeypatch.setattr(dl, "source_group", lambda n: "")
+    monkeypatch.setattr(dl, "source_alias", lambda n: "")
     out = asyncio.run(dl.list_all_sources())
     assert out == {"92xs-requests-default": {"capabilities": {"search": "requests"},
-                                             "enabled": True}}
+                                             "enabled": True,
+                                             "source_group": "", "source_alias": ""}}
 
 
 def test_sources_include_disabled(monkeypatch):
@@ -59,7 +62,7 @@ def test_sources_include_disabled(monkeypatch):
 
 def test_search_empty_source_uses_enabled(monkeypatch):
     """空 source → 对每个启用书源各发一次 search(...)，每次只带该源。"""
-    monkeypatch.setattr(dl, "enabled_source_names", lambda: ["a-x-default", "b-y-default"])
+    monkeypatch.setattr(dl, "default_source_names", lambda: ["a-x-default", "b-y-default"])
     called = []
 
     async def fake_search(sources, query, engines, **kw):
@@ -88,7 +91,7 @@ def test_search_single_source_binds_engine(monkeypatch):
 
 def test_parallel_same_mode_uses_per_source_engine(monkeypatch):
     """并发多个同 mode 书源时，每个源必须拿到自己的引擎（修复共享首个源引擎的缺陷）。"""
-    monkeypatch.setattr(dl, "enabled_source_names",
+    monkeypatch.setattr(dl, "default_source_names",
                         lambda: ["a-requests-default", "b-requests-default"])
     engine_calls = []
     monkeypatch.setattr(dl, "get_cached_engine",
@@ -116,7 +119,7 @@ def test_parallel_same_mode_uses_per_source_engine(monkeypatch):
 
 def test_parallel_one_source_fails_others_survive(monkeypatch):
     """单个源抛错时不影响其它源（复刻 core 的单源静默跳过）。"""
-    monkeypatch.setattr(dl, "enabled_source_names",
+    monkeypatch.setattr(dl, "default_source_names",
                         lambda: ["bad-requests-default", "good-requests-default"])
     monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
 
@@ -296,16 +299,20 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
 
 def test_get_source_config_shape(monkeypatch):
     """GET /config/sources/{name} 契约形状：{source_name, enabled, concurrency,
-    capabilities, declared_capabilities, config}（capabilities 为有效 mode）。"""
+    capabilities, declared_capabilities, source_group, source_alias, config}
+    （capabilities 为有效 mode）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(cfg, "effective_capabilities", lambda n: {"search": "browser"})
+    monkeypatch.setattr(cfg.config_service, "source_group", lambda n: "番茄", raising=False)
+    monkeypatch.setattr(cfg.config_service, "source_alias", lambda n: "番茄·直连", raising=False)
     _allow_sources(monkeypatch, "demo-requests-default")
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
     assert set(out.keys()) == {"source_name", "enabled", "concurrency",
-                               "capabilities", "declared_capabilities", "config"}
+                               "capabilities", "declared_capabilities", "config",
+                               "source_group", "source_alias"}
     assert out["source_name"] == "demo-requests-default"
     assert out["enabled"] is False
     assert out["concurrency"] == 1
@@ -377,4 +384,56 @@ def test_engine_router_and_schemas_gone():
     import backend.main as main_mod
     paths = set(main_mod.app.openapi()["paths"])
     assert not any(p.startswith("/api/v2/engine") for p in paths)
+
+
+def test_sources_include_group_and_alias(monkeypatch):
+    """`/sources` 每源带 source_group / source_alias（Task 6 后再去掉 enabled）。"""
+    monkeypatch.setattr(dl, "list_sources", lambda: ["a-requests-default"])
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
+    monkeypatch.setattr(dl, "source_group", lambda n: "番茄")
+    monkeypatch.setattr(dl, "source_alias", lambda n: "番茄·直连")
+    out = asyncio.run(dl.list_all_sources())
+    assert out["a-requests-default"]["source_group"] == "番茄"
+    assert out["a-requests-default"]["source_alias"] == "番茄·直连"
+
+
+def test_search_uses_selected_sources(monkeypatch):
+    """`sources=a,b` → 只对 a、b 各发一次 search。"""
+    monkeypatch.setattr(dl, "list_sources", lambda: ["a-r-default", "b-r-default", "c-r-default"])
+    called = []
+
+    async def fake_search(sources, query, engines, **kw):
+        called.append(list(sources))
+        return ()
+
+    monkeypatch.setattr(dl, "search", fake_search)
+    monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
+    asyncio.run(dl.search_novels(query="关键词", source="", sources="a-r-default,b-r-default"))
+    assert sorted(called) == [["a-r-default"], ["b-r-default"]]
+
+
+def test_search_skips_unknown_sources(monkeypatch):
+    """未知源静默跳过；全部无效 → 400。"""
+    monkeypatch.setattr(dl, "list_sources", lambda: ["a-r-default"])
+    with pytest.raises(HTTPException) as ei:
+        asyncio.run(dl.search_novels(query="关键词", source="", sources="nope-1,nope-2"))
+    assert ei.value.status_code == 400
+
+
+def test_search_default_sources_when_param_absent(monkeypatch):
+    """`sources` 缺省 → 走 default_source_names()。"""
+    monkeypatch.setattr(dl, "default_source_names", lambda: ["a-r-default", "b-r-default"])
+    called = []
+
+    async def fake_search(sources, query, engines, **kw):
+        called.append(list(sources))
+        return ()
+
+    monkeypatch.setattr(dl, "search", fake_search)
+    monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
+    asyncio.run(dl.search_novels(query="关键词", source=""))
+    assert sorted(called) == [["a-r-default"], ["b-r-default"]]
 

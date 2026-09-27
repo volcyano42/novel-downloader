@@ -55,3 +55,23 @@ def test_download_sources_returns_effective_mode(isolated_sites):
     data = asyncio.run(dl.list_all_sources())
 
     assert data[KNOWN]["capabilities"]["search"] == "browser"
+
+
+def test_put_source_meta_group_and_alias(isolated_sites):
+    """顶层 source_group / source_alias 写入用户层；空串删除该键。"""
+    asyncio.run(cfg.save_source_config(KNOWN, {"source_group": " 番茄 ", "source_alias": "番茄·直连"}))
+    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    assert saved["source_group"] == "番茄"       # 已 strip
+    assert saved["source_alias"] == "番茄·直连"
+
+    asyncio.run(cfg.save_source_config(KNOWN, {"source_group": ""}))
+    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    assert "source_group" not in saved
+    assert saved["source_alias"] == "番茄·直连"
+
+
+def test_get_source_config_includes_meta(isolated_sites):
+    asyncio.run(cfg.save_source_config(KNOWN, {"source_group": "番茄", "source_alias": "番茄·直连"}))
+    data = asyncio.run(cfg.get_source_config(KNOWN))
+    assert data["source_group"] == "番茄"
+    assert data["source_alias"] == "番茄·直连"

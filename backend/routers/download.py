@@ -1,7 +1,7 @@
 """Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。
 
-契约（spec §3.1）：`source` Query 即 `source_name`；`/search` 的 `source` 为空时并发
-全部启用书源（`shared.config.enabled_source_names()`）；MODE 默认由书源在 `source.json` 声明，用户可逐能力覆盖（`shared.config.effective_capabilities()`），由路由以关键字 `mode_overrides=` 透传给 core 分发层。
+契约（spec §3.1）：`source` Query 即 `source_name`；`/search` 的 `source` 为空时按
+`sources`（逗号分隔，缺省/空 → `shared.config.default_source_names()`）并发所选书源；MODE 默认由书源在 `source.json` 声明，用户可逐能力覆盖（`shared.config.effective_capabilities()`），由路由以关键字 `mode_overrides=` 透传给 core 分发层。
 """
 
 import asyncio
@@ -16,8 +16,8 @@ from backend.services.source_guard import require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources
-from shared.config import (enabled_source_names, is_source_enabled,
-                           effective_capabilities)
+from shared.config import (default_source_names, enabled_source_names, is_source_enabled,
+                           effective_capabilities, source_alias, source_group)
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -47,9 +47,26 @@ def _resolve_url(raw: str) -> str:
         raise HTTPException(400, str(e))
 
 
+def _selected_sources(sources: str) -> list[str]:
+    """解析 `sources=a,b,c`：按序去重，过滤未知源（静默跳过）。
+
+    缺省 / 空 → `default_source_names()`（全部书源）。
+    直调路由函数（绕过 FastAPI）时 `sources` 可能是 `Query` 默认对象，非字符串一律按空处理。
+    """
+    if not isinstance(sources, str) or not sources.strip():
+        return default_source_names()
+    known = set(list_sources())
+    picked: list[str] = []
+    for raw in sources.split(","):
+        name = raw.strip()
+        if name and name in known and name not in picked:
+            picked.append(name)
+    return picked
+
+
 @router.get("/search")
 async def search_novels(query: str = Query(...), source: str = Query(""),
-                        page: int = Query(1)):
+                        sources: str = Query(""), page: int = Query(1)):
     if query.startswith("http://") or query.startswith("https://"):
         # URL 直达：source 必填（core 无 URL→书源推断能力）。
         source_name = _require_source(source, query)
@@ -76,6 +93,10 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
         except Exception as e:
             raise HTTPException(500, str(e))
     else:
+        names = _selected_sources(sources)
+        if not names:
+            raise HTTPException(400, "未指定有效书源" if sources.strip() else "本环境没有可用的书源")
+
         async def _search_one(name: str):
             # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。
             try:
@@ -84,7 +105,7 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
             except Exception:
                 # 复刻 core.search 的「单源失败静默跳过」：某源出错不影响其它源。
                 return ()
-        groups = await asyncio.gather(*(_search_one(n) for n in enabled_source_names()))
+        groups = await asyncio.gather(*(_search_one(n) for n in names))
         results = [r for group in groups for r in group]
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
@@ -177,9 +198,11 @@ async def delete_task(task_id: str):
 
 @router.get("/sources")
 async def list_all_sources():
-    """返回全部书源（含未启用）的扁平能力矩阵与启用状态（mode 为有效值）。"""
+    """全部书源的扁平能力矩阵 + 元信息（mode 为有效值）。"""
     return {
         name: {"capabilities": effective_capabilities(name),
-               "enabled": is_source_enabled(name)}
+               "enabled": is_source_enabled(name),
+               "source_group": source_group(name),
+               "source_alias": source_alias(name)}
         for name in list_sources()
     }
