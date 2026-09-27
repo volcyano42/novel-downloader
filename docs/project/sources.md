@@ -45,7 +45,7 @@ novelbase/sources/{dir}/
 - 所有公开 API 均以 **`source_name` 为键**；目录名只在 `import_module` 时使用。
 - `resolve()` 动态 import `novelbase.sources.{dir}.{capability}` 并取同名函数，返回前用
   `inspect.signature` 校验必需参数名（契约见 `novelbase/sources/contracts.py` 的 `CAPABILITY_META`）。
-- 未知书源：`get_manifest()` 抛 `KeyError`；`capabilities()` 吞掉异常返回 `{}`。
+- 未知书源：`get_manifest()` 抛 `KeyError`；`capabilities()` 吞掉异常返回 `{}`（**撞名例外**：`source_name` 重复时直接抛 `DuplicateSourceNameError`，不吞成空能力）。
 
 ## `source.json` 规范
 
