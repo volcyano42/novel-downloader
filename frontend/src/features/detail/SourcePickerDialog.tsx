@@ -33,11 +33,12 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        className="w-[400px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl p-6 animate-in zoom-in-95 fade-in duration-200">
-        <h2 className="text-base font-semibold text-slate-800 mb-1">选择书源</h2>
-        <p className="text-xs text-slate-500 mb-4 truncate">{novelTitle}</p>
+        className="flex w-[400px] max-h-[80vh] flex-col rounded-2xl border border-white/20 bg-white/95 backdrop-blur-xl shadow-2xl p-6 animate-in zoom-in-95 fade-in duration-200">
+        <h2 className="shrink-0 text-base font-semibold text-slate-800 mb-1">选择书源</h2>
+        <p className="shrink-0 text-xs text-slate-500 mb-4 truncate">{novelTitle}</p>
 
-        <div className="space-y-2 mb-4">
+        {/* 只有列表滚动：标题与底部按钮常驻（不必滚到底才能点确定） */}
+        <div className="mb-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
           {sources.map(({name, alias}) => (
             <button key={name} onClick={() => setSelected(name)}
               className={cn(
@@ -58,7 +59,7 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
           {sources.length === 0 && <p className="py-2 text-xs text-slate-400">没有可用的书源</p>}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <button onClick={onClose}
             className="flex-1 rounded-xl border border-white/20 bg-white/60 backdrop-blur-sm py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
             取消
