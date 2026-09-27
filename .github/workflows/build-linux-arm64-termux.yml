@@ -54,8 +54,11 @@ jobs:
                 # 另：Termux(bionic) 编不了 uvloop（要 libuv 的 ./configure，容器无 autotools）
                 # → 去掉 uvicorn[standard] 的 C/Rust extras，只装纯 Python 的 uvicorn
                 #   （与 APK 的 build-apk.sh、pydantic<2 同一条思路）
+                # ！这里必须用双引号：整个脚本外层是 bash -c '...'，
+                #   内层再用单引号会提前终止外层字符串，导致 \[ 的反斜杠被 shell 吃掉，
+                #   sed 收到 [standard] 字符类 → 匹配不到 uvicorn[standard]（2026-09-27 踩到）
                 grep -v "^playwright" /src/requirements.txt \
-                  | sed 's/^uvicorn\.standard\./uvicorn/' > /src/.req-termux.txt
+                  | sed "s/^uvicorn\[standard\]/uvicorn/" > /src/.req-termux.txt
                 # 自检：替换若未生效就立刻失败，别等 uvloop 编译十几分钟才暴露
                 echo "--- .req-termux.txt 的 uvicorn 行 ---"
                 grep -n "uvicorn" /src/.req-termux.txt || true

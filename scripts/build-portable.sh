@@ -179,7 +179,7 @@ elif ! "$PY" -c "import uvicorn" >/dev/null 2>&1; then
     echo "[首次运行] 安装项目依赖（需联网，约 10-20 分钟）..."
     export ANDROID_API_LEVEL=24
     # 去掉 uvicorn[standard] 的 C/Rust extras（uvloop 在 Termux/bionic 上编不了）
-    grep -v '^playwright' requirements.txt | sed 's/^uvicorn\.standard\./uvicorn/' > req-termux.txt
+    grep -v '^playwright' requirements.txt | sed 's/^uvicorn\[standard\]/uvicorn/' > req-termux.txt
     grep -n "uvicorn" req-termux.txt || true
     "$PY" -m pip install -r req-termux.txt
 fi
