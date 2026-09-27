@@ -115,3 +115,44 @@ def test_cmd_source_list_json_alias_empty_when_unset(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert '"source_alias": ""' in out
     assert '"source_alias": "demo-requests-default"' not in out
+
+
+def test_cmd_config_only_touches_missing(monkeypatch, capsys):
+    """`config init` 只对缺失项调用 init_* —— 不整体调用（避免覆盖用户配置）。
+
+    `init_config.init_*()` 内部是无条件 copy2，因此命令必须先取 check_config 的
+    缺失清单再逐项调用；本用例用记录器钉住这一行为（不碰文件系统）。
+    """
+    import init_config
+    from cli import main as cli_main
+
+    calls: list[str] = []
+
+    class Args:
+        config_command = "init"
+        all = False
+        main = False
+        sites = None
+        formats = None
+        user_db = False
+
+    monkeypatch.setattr(init_config, "check_config",
+                        lambda: {"missing": ["config.yaml", "sites/demo-r-default.yaml"],
+                                 "all_missing": False})
+    monkeypatch.setattr(init_config, "init_main_config",
+                        lambda: (calls.append("main"), ["/tmp/config.yaml"])[1])
+    monkeypatch.setattr(init_config, "init_site_config",
+                        lambda name: (calls.append(f"sites:{name}"), [f"/tmp/sites/{name}.yaml"])[1])
+    monkeypatch.setattr(init_config, "init_user_db",
+                        lambda: (calls.append("user-db"), [])[1])
+
+    def _forbidden(*_a, **_k):  # 若命令走了 init_export_config 就说明过滤失效
+        raise AssertionError("不该调用 init_export_config（formats 不在缺失清单里）")
+
+    monkeypatch.setattr(init_config, "init_export_config", _forbidden)
+
+    cli_main.cmd_config(Args())
+
+    assert calls == ["main", "sites:demo-r-default", "user-db"]
+    out = capsys.readouterr().out
+    assert "已初始化 2 个配置项" in out

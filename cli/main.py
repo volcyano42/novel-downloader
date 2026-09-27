@@ -358,10 +358,15 @@ def cmd_source(args):
 
 
 def cmd_config(args):
-    """配置管理（一期只提供 `config init`）。
+    """配置管理（一期只提供 `config init`）：**只补缺失，绝不覆盖已有配置**。
 
-    只补缺失、不覆盖已有（沿用 init_config.py 的语义）；`--main` / `--sites` /
-    `--formats` / `--user-db` 互斥，无参等价 `--all`。
+    实现要点：`init_config.init_main_config()` / `init_site_config(name)` /
+    `init_export_config(fmt)` 内部是**无条件** `shutil.copy2`（模块注释也写明
+    「初始化（不检查，直接复制）」），因此**不能**整体调用 —— 先由
+    `check_config()` 取缺失清单，再按项（且只传单个名字）调用，只可能写入确实
+    不存在的文件。`user_data.db` 的 `init_user_db()` 自带「不存在才复制」判断。
+
+    `--main` / `--sites` / `--formats` / `--user-db` 互斥；无参等价 `--all`。
     """
     if args.config_command != "init":
         return
@@ -373,23 +378,45 @@ def cmd_config(args):
         print("错误：--main / --sites / --formats / --user-db 只能选一个（不加参数则等价 --all）",
               file=sys.stderr)
         raise SystemExit(2)
-    if args.main:
-        created = init_config.init_main_config()
-    elif args.sites is not None:
-        created = init_config.init_site_config(args.sites)
-    elif args.formats is not None:
-        created = init_config.init_export_config(args.formats)
-    elif args.user_db:
-        created = init_config.init_user_db()
-    else:  # 无参 或 --all
-        created = init_config.init_all_config()
+
+    missing = init_config.check_config()["missing"]  # ['config.yaml', 'sites/x.yaml', ...]
+    created: list[str] = []
+
+    for item in missing:
+        kind, _, fname = item.partition("/")
+        if not fname:  # 顶层文件（config.yaml）
+            kind, stem = "main", ""
+        else:
+            stem = fname[:-5] if fname.endswith(".yaml") else fname
+        if args.main and kind != "main":
+            continue
+        if args.sites is not None and kind != "sites":
+            continue
+        if args.formats is not None and kind != "formats":
+            continue
+        if args.user_db:
+            continue  # user_data.db 不在 yaml 缺失清单中，单独处理
+        if kind == "sites" and args.sites not in (None, "all") and stem != args.sites:
+            continue
+        if kind == "formats" and args.formats not in (None, "all") and stem != args.formats:
+            continue
+        if kind == "main":
+            created += init_config.init_main_config()
+        elif kind == "sites":
+            created += init_config.init_site_config(stem)
+        elif kind == "formats":
+            created += init_config.init_export_config(stem)
+
+    # user_data.db：单独指定时只做它；未限定类别（无参 / --all）时顺带补齐
+    if args.user_db or (not args.main and args.sites is None and args.formats is None):
+        created += init_config.init_user_db()
 
     if created:
         print(f"已初始化 {len(created)} 个配置项：")
         for path in created:
             print(f"  - {path}")
     else:
-        print("配置已完整，无需初始化。")
+        print("配置已完整，无需初始化（已有的配置不会被改动）。")
 
 
 def cmd_dev(args):

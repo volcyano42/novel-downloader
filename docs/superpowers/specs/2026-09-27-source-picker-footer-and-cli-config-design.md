@@ -48,7 +48,7 @@ python cli.py config init [--all] [--main] [--sites NAME] [--formats FMT] [--use
 | `config init --formats FMT` | 只补 `formats/{FMT}.yaml`；`FMT=all` 表示全部 | `init_export_config(FMT)` |
 | `config init --user-db` | 只补 `user_data.db` | `init_user_db()` |
 
-- **只补缺失、不覆盖已有**（沿用 `init_config.py` 现有语义；不新增 `--force`）。
+- **只补缺失、绝不覆盖已有**：`init_config.init_main_config()` / `init_site_config(name)` / `init_export_config(fmt)` 内部是**无条件** `shutil.copy2`（模块注释亦写明「初始化（不检查，直接复制）」），因此实现**不能**整体调用它们 —— 必须先 `check_config()` 取缺失清单，再按项（且只传单个名字）调用；`user_data.db` 的 `init_user_db()` 自带「不存在才复制」判断。不新增 `--force`。
 - `--main` / `--sites` / `--formats` / `--user-db` **互斥**：同时给多个 → `stderr` 提示 + 退出码 2。
 - 输出：有新建时 `已初始化 N 个配置项：` + 逐行 `  - <路径>`；无缺失时 `配置已完整，无需初始化。`
 - 一期**只做 `init`**；`config check`（对应已有的 `check_config()`）留作后续。
