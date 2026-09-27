@@ -438,9 +438,10 @@ git commit -m "feat(backend): 书源元信息出口与搜索多源参数"
 ### Task 3: 前端设置页（别名/分组显示与编辑、去开关、并发数移位）
 
 **Files:**
-- Modify: `frontend/src/api/endpoints.ts`（`SourceInfo` 加两个字段）
+- Modify: `frontend/src/api/endpoints.ts`（`SourceInfo` 加两字段；`SourceConfig` 与 `saveSourceConfig` 的 data 类型同步）
 - Modify: `frontend/src/features/sources/SourceAccordion.tsx`（顶部信息行；删开关与并发数）
 - Modify: `frontend/src/features/sources/sourceConfigForm.tsx`（展开区加分组/别名/并发数）
+- Modify: `frontend/src/hooks/index.ts`（`useSaveSourceConfig` 的 `mutationFn` data 是内联字面量，必须补 `source_group?` / `source_alias?`，否则 `mutate({ source_group })` 报 TS2353）
 - Test: 无单测基建 → 验证靠 `npx tsc -b` + `npm run lint` + 手工验收
 
 **Interfaces:**
