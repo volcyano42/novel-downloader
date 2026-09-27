@@ -4,9 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from novelbase.sources.manifest import (
-    DuplicateSourceNameError, ManifestError, scan_source_names,
-)
+from novelbase.sources.manifest import (DuplicateSourceNameError, ManifestError, scan_source_names)
 
 
 def _source(root: Path, dirname: str, source_name: str) -> Path:
@@ -78,3 +76,46 @@ def test_underscore_and_manifestless_dirs_skipped(tmp_path):
     (tmp_path / "__pycache__").mkdir()
     (tmp_path / "no_manifest").mkdir()
     assert list(scan_source_names([tmp_path])) == ["demo-requests-default"]
+
+
+def _builtin_root(tmp_path: Path, *names: str) -> Path:
+    """造一个「内置根」：每个名字一个目录。"""
+    root = tmp_path / "builtin_sources"
+    for i, name in enumerate(names):
+        _source(root, f"demo_{i}", name)
+    return root
+
+
+def test_list_sources_raises_on_duplicate_builtin(tmp_path, monkeypatch):
+    import novelbase.source as s
+
+    monkeypatch.setattr(s, "_SOURCES_DIR",
+                        _builtin_root(tmp_path, "demo-requests-default", "demo-requests-default"))
+    monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", None)
+    with pytest.raises(DuplicateSourceNameError):
+        s.list_sources()
+
+
+def test_get_manifest_and_capabilities_raise_on_duplicate_builtin(tmp_path, monkeypatch):
+    """get_manifest 与 capabilities 都不得把撞名吞成空/第一个。"""
+    import novelbase.source as s
+
+    monkeypatch.setattr(s, "_SOURCES_DIR",
+                        _builtin_root(tmp_path, "demo-requests-default", "demo-requests-default"))
+    monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", None)
+    with pytest.raises(DuplicateSourceNameError):
+        s.get_manifest("demo-requests-default")
+    with pytest.raises(DuplicateSourceNameError):
+        s.capabilities("demo-requests-default")
+    with pytest.raises(DuplicateSourceNameError):
+        s.resolve("demo-requests-default", "search")
+
+
+def test_private_dir_same_name_as_builtin_rejected(tmp_path, monkeypatch):
+    """全局唯一（真实内置根 + tmp 私有根）：私有源复用内置 source_name → 报错。"""
+    import novelbase.source as s
+
+    _source(tmp_path, "92xs_requests_default", "92xs-requests-default")
+    monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
+    with pytest.raises(DuplicateSourceNameError):
+        s.list_sources()

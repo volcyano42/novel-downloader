@@ -120,13 +120,15 @@ def test_private_source_merged(tmp_path, monkeypatch):
     assert callable(fn) and mode == "requests"
 
 
-def test_builtin_wins_over_private(tmp_path, monkeypatch):
-    """同名书源的同名能力文件：内置优先于私有。
+def test_duplicate_source_name_across_roots_rejected(tmp_path, monkeypatch):
+    """跨根同名 → DuplicateSourceNameError（全局唯一，2026-09-27）。
 
-    必须在私有侧真的放一个**同名目录 + 可区分的 search 实现**，否则「私有优先」
-    与「内置优先」结果相同，测试无区分力。
+    这里原先是 test_builtin_wins_over_private：私有源复用内置 source_name 时
+    「同名能力内置优先」。该机制已被全局唯一取消，机制本身不再存在——
+    见 docs/superpowers/specs/2026-09-27-source-name-uniqueness-design.md。
     """
     import novelbase.source as s
+    from novelbase.sources.manifest import DuplicateSourceNameError
 
     d = tmp_path / "92xs_requests_default"   # 与内置目录同名
     d.mkdir()
@@ -136,20 +138,16 @@ def test_builtin_wins_over_private(tmp_path, monkeypatch):
         "default_config": {"search": {"mode": "requests"}},
     }, ensure_ascii=False), encoding="utf-8")
     (d / "search.py").write_text(
-        "PRIVATE_MARKER = 'private'\n"
-        "async def search(query, engine, **kwargs):\n"
-        "    return ('private',)\n",
+        "async def search(query, engine, **kwargs):\n    return ('private',)\n",
         encoding="utf-8",
     )
 
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
-    fn, mode = s.resolve("92xs-requests-default", "search")
 
-    # 拿到的是内置模块的实现，而非刚写入的私有文件（私有模块名形如
-    # novelbase_private.sources.92xs_requests_default.search）
-    assert fn.__module__ == "novelbase.sources.92xs_requests_default.search"
-    assert fn.__module__ != "novelbase_private.sources.92xs_requests_default.search"
-    assert mode == "requests"
+    with pytest.raises(DuplicateSourceNameError):
+        s.list_sources()
+    with pytest.raises(DuplicateSourceNameError):
+        s.resolve("92xs-requests-default", "search")
 
 
 def test_private_dir_not_exist_graceful(monkeypatch):
