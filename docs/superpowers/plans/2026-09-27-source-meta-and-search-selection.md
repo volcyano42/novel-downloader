@@ -4,7 +4,7 @@
 
 **Goal:** 让书源以「别名 + 分组」呈现并可编辑，彻底移除 `enabled` 概念，搜索时由用户勾选参与的书源（默认全选）。
 
-**Architecture:** 元信息（`source_group` / `source_alias`）只存**用户层** `sites/{source_name}.yaml` 顶层，出厂 `source.json` 可提供默认值，读取统一走 `shared/config.py` 的新入口（`source_group()` / `source_alias()` / `display_name()`）。`enabled` 从 core 契约、配置、模板、脚手架、后端、CLI、前端、测试中完整删除；「默认参与集」由 `enabled ∩ available` 变为 `default_source_names()` = 全部**可用**源。搜索新增 `sources=a,b,c` 查询参数，前端标题 tab 用它传勾选集合。
+**Architecture:** 元信息（`source_group` / `source_alias`）只存**用户层** `sites/{source_name}.yaml` 顶层，出厂 `source.json` 可提供默认值，读取统一走 `shared/config.py` 的新入口（`source_group()` / `source_alias()` / `display_name()`）。`enabled` 从 core 契约、配置、模板、脚手架、后端、CLI、前端、测试中完整删除；「默认参与集」由 `enabled` 过滤后的集合变为 `default_source_names()` = 全部书源。搜索新增 `sources=a,b,c` 查询参数，前端标题 tab 用它传勾选集合。
 
 **Tech Stack:** Python 3.10（core/`shared`/FastAPI/CLI）、React 19 + TypeScript + TanStack Query + Tailwind + shadcn/ui、pytest、oxlint。
 
@@ -14,7 +14,7 @@
 
 - **不重命名 `source_name`**：它是全书源体系的唯一键（`source.json` / 公共 API / API 键 / `sites/{source_name}.yaml` 文件名 / `SearchResult.source_name`）。新字段一律带 `source_` 前缀。
 - **`enabled` 彻底删除**：`source.json` 与用户层都不再有；旧配置里的残留键**不读**、PUT 时清理；旧自定义 `source.json` 里的 `enabled` 因 manifest 对未知顶层字段宽容而被忽略，不得报错。
-- **可用性过滤不得倒退**：`default_source_names()` 与前端选源列表都必须排除 `is_source_available()` 为假的源（Android 下 browser 源）。
+- **不引入环境相关过滤**：`available` / `supported_modes()` / `NLD_PLATFORM` 已随 v4.5.1 整套移除（Android 套壳改走 Termux）。`default_source_names()` = 全部书源；搜索的过滤维度只有「用户勾选」与「源是否存在」。
 - **搜索选择不持久化**：每次进入搜索页默认全选（spec D6）。
 - **提交纪律**（仓库约定）：中文 commit 消息；一个方面一条 commit；**禁止 `git add -A`**（显式指定文件）；dev 分支可自动提交/推送。
 - **测试基线**（2026-09-27，dev `e820704`）：`python -m pytest tests -q` = **499 passed, 0 failed**；前端 `cd frontend && npx tsc -b` = 0 错、`npm run lint` = 0 告警。每个任务结束时这两条都必须保持。
@@ -64,7 +64,7 @@
 - Test: `tests/test_source_metadata.py`（新建）
 
 **Interfaces:**
-- Consumes: 现有 `_user_site_cfg(source_name)`、`is_source_available(source_name)`
+- Consumes: 现有 `_user_site_cfg(source_name)`（读用户层 `sites/{name}.yaml` 原始 dict）
 - Produces: `source_group(source_name) -> str`、`source_alias(source_name) -> str`、`display_name(source_name) -> str`、`default_source_names() -> list[str]`
 
 - [ ] **Step 1: 写失败测试**
@@ -130,20 +130,12 @@ def test_meta_unknown_source_is_tolerant(tmp_path, monkeypatch):
     assert sc.display_name("nope-default") == "nope-default"
 
 
-def test_default_source_names_desktop_is_everything(tmp_path, monkeypatch):
+def test_default_source_names_lists_all_sources(tmp_path, monkeypatch):
+    """默认参与集 = 全部书源（无任何环境相关过滤）。"""
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
-    monkeypatch.delenv("NLD_PLATFORM", raising=False)
-    _patch_sources(monkeypatch, {"a-browser-default": BROWSER_CAPS,
-                                 "b-requests-default": REQUESTS_CAPS})
+    _patch_sources(monkeypatch, {"b-requests-default": REQUESTS_CAPS,
+                                 "a-browser-default": BROWSER_CAPS})
     assert sc.default_source_names() == ["a-browser-default", "b-requests-default"]
-
-
-def test_default_source_names_android_excludes_unavailable(tmp_path, monkeypatch):
-    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
-    monkeypatch.setenv("NLD_PLATFORM", "android")
-    _patch_sources(monkeypatch, {"a-browser-default": BROWSER_CAPS,
-                                 "b-requests-default": REQUESTS_CAPS})
-    assert sc.default_source_names() == ["b-requests-default"]
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -192,18 +184,19 @@ def display_name(source_name: str) -> str:
 
 
 def default_source_names() -> list[str]:
-    """默认参与集：本环境**可用**的全部书源（桌面 = 全部；Android = 排除不可用引擎的源）。
+    """默认参与集：**全部**书源（无任何环境相关过滤）。
 
-    取代旧的 `enabled_source_names()`（enabled ∩ available）——`enabled` 已废弃（见 spec D1/D2）。
+    取代旧的 `enabled_source_names()`——`enabled` 已废弃（见 spec D1/D2）；
+    「本环境不支持的引擎」这一维度也随 v4.5.1 移除 Android 套壳而消失。
     """
     from novelbase.source import list_sources
-    return sorted(n for n in list_sources() if is_source_available(n))
+    return sorted(list_sources())
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_source_metadata.py -q`
-Expected: `6 passed`
+Expected: `5 passed`
 
 - [ ] **Step 5: 跑全量确认没破坏别处**
 
@@ -230,7 +223,7 @@ git commit -m "feat(config): 书源元信息读取入口与默认参与集"
 **Interfaces:**
 - Consumes: Task 1 的 `default_source_names()` / `source_alias()` / `source_group()`
 - Produces:
-  - `GET /api/v2/download/sources` → `{name: {capabilities, enabled, available, source_group, source_alias}}`（`enabled` 在 Task 6 删除）
+  - `GET /api/v2/download/sources` → `{name: {capabilities, enabled, source_group, source_alias}}`（`enabled` 在 Task 6 删除）
   - `GET /api/v2/config/sources/{name}` → 增 `source_group` / `source_alias`
   - `PUT /api/v2/config/sources/{name}` → 接受顶层 `source_group` / `source_alias`（空串 = 删除键）
   - `GET /api/v2/download/search?query=&sources=a,b,c`（缺省/空 → `default_source_names()`；筛完为空 → 400）
@@ -253,7 +246,6 @@ def test_sources_include_group_and_alias(monkeypatch):
     monkeypatch.setattr(dl, "list_sources", lambda: ["a-requests-default"])
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
-    monkeypatch.setattr(dl, "is_source_available", lambda n: True)
     monkeypatch.setattr(dl, "source_group", lambda n: "番茄")
     monkeypatch.setattr(dl, "source_alias", lambda n: "番茄·直连")
     out = asyncio.run(dl.list_all_sources())
@@ -264,7 +256,6 @@ def test_sources_include_group_and_alias(monkeypatch):
 def test_search_uses_selected_sources(monkeypatch):
     """`sources=a,b` → 只对 a、b 各发一次 search。"""
     monkeypatch.setattr(dl, "list_sources", lambda: ["a-r-default", "b-r-default", "c-r-default"])
-    monkeypatch.setattr(dl, "is_source_available", lambda n: True)
     called = []
 
     async def fake_search(sources, query, engines, **kw):
@@ -278,12 +269,11 @@ def test_search_uses_selected_sources(monkeypatch):
     assert sorted(called) == [["a-r-default"], ["b-r-default"]]
 
 
-def test_search_skips_unknown_and_unavailable(monkeypatch):
-    """未知 / 不可用源静默跳过；全部无效 → 400。"""
+def test_search_skips_unknown_sources(monkeypatch):
+    """未知源静默跳过；全部无效 → 400。"""
     monkeypatch.setattr(dl, "list_sources", lambda: ["a-r-default"])
-    monkeypatch.setattr(dl, "is_source_available", lambda n: n == "a-r-default")
     with pytest.raises(HTTPException) as ei:
-        asyncio.run(dl.search_novels(query="关键词", source="", sources="nope,browser-x"))
+        asyncio.run(dl.search_novels(query="关键词", source="", sources="nope-1,nope-2"))
     assert ei.value.status_code == 400
 
 
@@ -336,7 +326,7 @@ Expected: FAIL（`sources` 参数不被接受 / 返回缺少 `source_group`）
 import 行改为：
 
 ```python
-from shared.config import (default_source_names, is_source_available, is_source_enabled,
+from shared.config import (default_source_names, is_source_enabled,
                            effective_capabilities, source_alias, source_group)
 ```
 
@@ -346,9 +336,9 @@ from shared.config import (default_source_names, is_source_available, is_source_
 
 ```python
 def _selected_sources(sources: str) -> list[str]:
-    """解析 `sources=a,b,c`：按序去重，过滤未知与不可用源（静默跳过）。
+    """解析 `sources=a,b,c`：按序去重，过滤未知源（静默跳过）。
 
-    缺省 / 空 → `default_source_names()`（本环境全部可用源）。
+    缺省 / 空 → `default_source_names()`（全部书源）。
     """
     if not sources.strip():
         return default_source_names()
@@ -356,7 +346,7 @@ def _selected_sources(sources: str) -> list[str]:
     picked: list[str] = []
     for raw in sources.split(","):
         name = raw.strip()
-        if name and name in known and is_source_available(name) and name not in picked:
+        if name and name in known and name not in picked:
             picked.append(name)
     return picked
 ```
@@ -393,14 +383,10 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
 ```python
 @router.get("/sources")
 async def list_all_sources():
-    """全部书源（含不可用）的扁平能力矩阵 + 元信息（mode 为有效值）。
-
-    `available=False`（如 Android 上的 browser 书源）不从列表剔除：前端要列出并置灰。
-    """
+    """全部书源的扁平能力矩阵 + 元信息（mode 为有效值）。"""
     return {
         name: {"capabilities": effective_capabilities(name),
                "enabled": is_source_enabled(name),
-               "available": is_source_available(name),
                "source_group": source_group(name),
                "source_alias": source_alias(name)}
         for name in list_sources()
@@ -409,10 +395,9 @@ async def list_all_sources():
 
 - [ ] **Step 5: 实现 `backend/routers/config.py`**
 
-`get_source_config` 返回体加两行（放在 `available` 附近）：
+`get_source_config` 返回体加两行：
 
 ```python
-        "available": is_source_available(source_name),
         "source_group": config_service.source_group(source_name),
         "source_alias": config_service.source_alias(source_name),
 ```
@@ -468,8 +453,6 @@ git commit -m "feat(backend): 书源元信息出口与搜索多源参数"
 export interface SourceInfo {
   capabilities: Record<string, string>;
   enabled: boolean;
-  /** 本环境是否支持该书源（Android 不支持 browser 源 → false）。 */
-  available: boolean;
   /** 分组名（"" = 未分组；出厂预置 + 用户层覆盖）。 */
   source_group: string;
   /** 显示别名（"" = 未设，显示 source_name）。 */
@@ -491,11 +474,9 @@ import {CAP_LABELS} from "./sourceConfigFields";
 
 /** 单个书源的折叠条：顶部显示「别名（未设则 source_name）+ 分组 + 能力」；展开即编辑。
  *
- * `available=false`（本环境不支持，如 Android 上的 browser 源）时置灰 + 标注 —— 书源仍**列出**
- * （让用户知道它存在、为什么用不了），但不可选。启用开关已随 `enabled` 废弃删除。 */
-export function SourceAccordion({ name, info, available }: { name: string; info: SourceInfo; available: boolean }) {
+ * 启用开关已随 `enabled` 废弃删除；本组件不再有任何开关语义。 */
+export function SourceAccordion({ name, info }: { name: string; info: SourceInfo }) {
   const [open, setOpen] = useState(false);
-  const unavailable = !available;
   const display = info.source_alias || name;
   const caps = info.capabilities ?? {};
 
@@ -504,18 +485,12 @@ export function SourceAccordion({ name, info, available }: { name: string; info:
       <div className="flex items-center justify-between gap-4 py-2.5">
         <button onClick={() => setOpen(o => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200", open && "rotate-180")} strokeWidth={1.5} />
-          <span className={cn("shrink-0 text-sm font-medium", unavailable ? "text-slate-400 dark:text-slate-500" : "text-slate-700 dark:text-slate-200")}>{display}</span>
+          <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{display}</span>
           {info.source_alias && <span className="shrink-0 font-mono text-[10px] text-slate-400">{name}</span>}
           {info.source_group && (
             <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-500 dark:bg-indigo-500/15 dark:text-indigo-400">{info.source_group}</span>
           )}
           <span className="flex flex-wrap gap-1">
-            {unavailable && (
-              // 目前唯一会「本环境不可用」的引擎就是 browser（APK 构建时排除了 playwright）
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-                本环境不支持 browser
-              </span>
-            )}
             {Object.keys(caps).length === 0 && <span className="text-[11px] text-slate-400">无能力</span>}
             {Object.entries(caps).map(([cap, mode]) => (
               <span key={cap} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -624,17 +599,15 @@ export interface SourceOption {
   enabled: boolean;     // Task 6 随 enabled 废弃删除
 }
 
-/** 把 useSources() 的响应转成选源列表：滤掉本环境不可用的源；未设别名时 alias 回落 source_name。 */
+/** 把 useSources() 的响应转成选源列表：未设别名时 alias 回落 source_name，未设分组时 group 为空串。 */
 export function toSourceOptions(sources?: Record<string, SourceInfo> | null): SourceOption[] {
   if (!sources) return [];
-  return Object.entries(sources)
-    .filter(([, info]) => info.available !== false)
-    .map(([name, info]) => ({
-      name,
-      alias: info.source_alias || name,
-      group: info.source_group || "",
-      enabled: info.enabled,
-    }));
+  return Object.entries(sources).map(([name, info]) => ({
+    name,
+    alias: info.source_alias || name,
+    group: info.source_group || "",
+    enabled: info.enabled,
+  }));
 }
 
 export function searchDownload(params: { query: string; source?: string; sources?: string[] }) {
@@ -1160,11 +1133,11 @@ Expected: FAIL（`source_group` 非空校验尚未实现）
           ))}
 ```
 
-并把该文件 props 注释里的「含 enabled，未启用的源仅标注、仍可选」改为「已过滤本环境不可用源」。
+并把该文件 props 注释里的「含 enabled，未启用的源仅标注、仍可选」改为「全量书源列表（来自 `/sources`）」。
 
 - [ ] **Step 9: 改剩余测试断言**
 
-- `tests/test_source_availability.py`：3 处 `sc.enabled_source_names()` → `sc.default_source_names()`；删除与 `tests/test_source_metadata.py` 重复的用例（只保留环境能力表相关：`supported_modes` / `effective_capabilities` 覆盖回退 / `is_source_available` / API `available` 与 400 / core 兜底）。
+- `tests/test_source_availability.py`：**该文件已随 v4.5.1 删除**（环境能力表移除），本任务无需处理。
 - `tests/test_backend_download_routes.py`：`test_sources_shape_is_flat` 的期望去掉 `"enabled": True`（并去掉 `monkeypatch.setattr(dl, "is_source_enabled", ...)`）；`test_sources_include_disabled` 整例删除（`enabled` 已废弃）。
 - `tests/test_backend_config_routes.py`：若断言 `GET /config/sources/{name}` 含 `enabled`，去掉该断言。
 
@@ -1183,11 +1156,10 @@ Expected: pytest 全绿；三条 grep 均打印 OK；tsc 0 错、lint 0 告警
 
 ```bash
 git add novelbase/sources/manifest.py novelbase/sources/*/source.json template/config/sites/*.yaml shared/config.py backend/routers/download.py backend/routers/config.py backend/services/source_guard.py frontend/src/api/endpoints.ts frontend/src/features/detail/SourcePickerDialog.tsx tests/test_source_metadata.py tests/test_source_availability.py tests/test_backend_download_routes.py tests/test_backend_config_routes.py
-git rm --cached tests/test_source_enabled.py 2>/dev/null || true
 git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与别名表达"
 ```
 
-（若上一步 `git rm` 已在 Step 4 执行，`git rm --cached` 会被跳过。）
+（`tests/test_source_enabled.py` 的删除已在 Step 4 用 `git rm` 暂存；此处**不要**再把它列进 `git add`——列一个已删除的路径会让 `git add` 报 `pathspec did not match`。）
 
 ---
 
@@ -1200,7 +1172,7 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 
 - `source.json` 规范段：从字段表删除 `enabled` 行；新增 `source_alias` / `source_group`（**可选**顶层，字符串；出厂默认值，用户层可覆盖）；示例 JSON 同步。
 - 「内置书源」表：加两列 `source_alias` / `source_group`（值取 Task 6 Step 2 的表），并删掉「enabled（出厂）」列。
-- 环境能力表段：`enabled_source_names()` 的相关描述改为 `default_source_names()`（= 全部可用源）。
+- 若文档里仍有「环境能力表 / Android 不可用 / `available`」的段落（v4.5.1 后应已删），一并核对；`enabled_source_names()` 的相关描述统一改为 `default_source_names()`（= 全部书源）。
 
 - [ ] **Step 2: `docs/project/config.md`**
 
@@ -1222,12 +1194,12 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 - **书源元信息与选择（2026-09-27）**：`enabled` **已彻底废弃**（`source.json` 与用户层都不再有；旧键不读、PUT 时清理）。书源以 `source_group`（分组，一个源一个组，空 = 未分组）+ `source_alias`（显示别名，未设回落 `source_name`）表达；读取入口 `shared.config.source_group()/source_alias()/display_name()`。默认参与集 = `shared.config.default_source_names()`（本环境**可用**的全部源；Android 仍排除 browser 源）。搜索支持 `GET /download/search?sources=a,b,c`（缺省 = 默认参与集；未知/不可用源静默跳过，全无效 400）。前端搜索页（标题 tab）为「全选/分组」分段单选 + 逐源复选（**默认全选、不持久化**），URL tab 单选按分组分节显示别名。
 ```
 
-并把「环境能力表」条目里 `enabled_source_names()` 的表述改为 `default_source_names()`。
+并把任何提到 `enabled_source_names()` 的地方改为 `default_source_names()`；若文档里仍有「环境能力表 / Android 不可用 / `available`」的段落，一并删除或标注「已随 v4.5.1 移除」。
 
 - [ ] **Step 4: `docs/project/cli.md`**
 
 - `sources list` 的输出说明：改为「显示 `别名 [分组] (source_name) capabilities`」；`--json` 的键说明同步（`source_name` / `source_alias` / `source_group` / `capabilities`）。
-- 「书源与模式」段里 `enabled_source_names()` 的表述改为 `default_source_names()`（并注明缺省 = 全部可用源）。
+- 「书源与模式」段里 `enabled_source_names()` 的表述改为 `default_source_names()`（并注明缺省 = 全部书源）。
 - 交互式入口：删除「启用/停用书源」菜单项的说明（若存在）。
 
 - [ ] **Step 5: `docs/project/updates.md` + `CHANGELOG.md`**
@@ -1238,12 +1210,12 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 ### 书源元信息（分组/别名）与按选择搜索
 
 - **`enabled` 彻底废弃**：`source.json` 与用户层都不再有该字段；`is_source_enabled()` /
-  `enabled_source_names()` 删除，改为 `default_source_names()`（= 本环境全部**可用**源）。
+  `enabled_source_names()` 删除，改为 `default_source_names()`（= 全部书源）。
   旧用户层残留键不读，PUT 时清理
 - **新增元信息**：用户层顶层 `source_group`（一个源一个组，空 = 未分组）/ `source_alias`
   （显示别名，未设回落 `source_name`）；读取入口 `source_group()` / `source_alias()` /
   `display_name()`；10 个内置源出厂预置分组与别名（`source.json` 可选字段，用户层可覆盖）
-- **搜索多源**：`GET /download/search?sources=a,b,c`（缺省 = 默认参与集；未知/不可用源静默跳过，
+- **搜索多源**：`GET /download/search?sources=a,b,c`（缺省 = 默认参与集；未知源静默跳过，
   全无效 400）；前端标题 tab 双框（「全选/分组」分段单选 + 逐源复选，默认全选、不持久化），
   URL tab 单选按分组分节显示别名；结果来源 tab 显示别名
 - **设置页**：折叠条顶部显示「别名 + 分组 + 能力」，**移除启用开关**，并发数移入展开区；
