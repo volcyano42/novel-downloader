@@ -47,3 +47,22 @@ def test_build_generates_when_unique(tmp_path, monkeypatch):
     text = out.read_text(encoding="utf-8")
     assert "'demo-requests-default': 'demo_a'" in text
     assert "SOURCES: dict[str, dict] = {" in text
+
+
+def test_build_bad_manifest_does_not_claim_duplicate(tmp_path, monkeypatch):
+    """非撞名的坏 manifest 自然冒泡，不得被贴上「重复」文案（真因是 JSON 语法错）。"""
+    from novelbase.sources.manifest import ManifestError
+
+    src = tmp_path / "sources"
+    bad = src / "demo_bad"
+    bad.mkdir(parents=True)
+    (bad / "source.json").write_text('{"source_name": ', encoding="utf-8")
+    out = tmp_path / "_manifest.py"
+    monkeypatch.setattr(bm, "SRC", src)
+    monkeypatch.setattr(bm, "OUT", out)
+
+    with pytest.raises(ManifestError) as ei:
+        bm.build()
+
+    assert "重复" not in str(ei.value)
+    assert not out.exists()

@@ -14,7 +14,7 @@ onefile 产物无法扫描文件系统，`source.py` 在编译模式下改读本
 """
 from pathlib import Path
 
-from ..sources.manifest import ManifestError, load_manifest, scan_source_names
+from ..sources.manifest import DuplicateSourceNameError, load_manifest, scan_source_names
 
 SRC = Path(__file__).parent.parent / "sources"
 OUT = Path(__file__).parent / "_manifest.py"
@@ -26,11 +26,12 @@ def build() -> None:
         return
 
     try:
-        # 撞名 → DuplicateSourceNameError；strict=True 让坏 manifest 也直接中止
-        # （编译模式的 SOURCE_DIRS 撞名会静默覆盖，且编译分支 list_sources()
-        # 不去重、会把同一个名字返回两次——必须在构建期拦住）
+        # 撞名 → DuplicateSourceNameError（编译模式的 SOURCE_DIRS 撞名会静默覆盖，
+        # 且编译分支 list_sources() 不去重、会把同一个名字返回两次——必须在构建期拦住）。
+        # strict=True 让坏 manifest 也中止；那不是撞名，故不在此捕获：让 ManifestError
+        # 自然冒泡，traceback 直接给出真因，避免误报「重复」。
         by_name = scan_source_names([SRC], strict=True)
-    except ManifestError as e:
+    except DuplicateSourceNameError as e:
         raise SystemExit(f"ERROR: source_name 重复，构建中止：{e}")
 
     sources: dict[str, dict] = {}
