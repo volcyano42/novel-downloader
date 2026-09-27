@@ -115,7 +115,7 @@ jobs:
               echo "=== python --version ==="
               python --version 2>&1 || true
               echo "=== 启动 uvicorn ==="
-              python -m uvicorn services.backend.main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
+              python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
               SERVER_PID=$!
               CODE="000"
               for i in $(seq 1 20); do
@@ -128,7 +128,7 @@ jobs:
               echo ""
               curl -s http://127.0.0.1:8000/api/v2/novels | head -c 80
               echo ""
-              head -8 server.log 2>/dev/null || echo "无 server.log"
+              tail -40 server.log 2>/dev/null || echo "无 server.log"
               [ "$CODE" = "200" ] || { echo "启动验证失败"; exit 1; }
               kill $SERVER_PID 2>/dev/null || true
             '
