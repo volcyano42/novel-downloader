@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.1**）。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.1**；2026-09-27 起 dev 领先 main 一批提交且尚未合并，main 停在 `fd12a2c`）。
 
 ## 目录结构（2026-08-02 重组后）
 
@@ -78,3 +78,5 @@ tests/                check_imports.py, test_downloader.py, test_export_config.p
 > 2026-09-26（Android 前端交付修复 + 环境能力表后本机实测）：`python -m pytest tests -q` = **507 passed, 0 failed**（约 13s；原先 skip 的 `TestClient` 用例随死代码挂载一并删除）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
 >
 > 2026-09-26（移除 Android 套壳与环境能力表后本机实测）：`python -m pytest tests -q` = **482 passed, 0 failed**（约 10.9s）；前端 `npx tsc -b` = 0 错、`npm run lint` 0 告警。
+>
+> 2026-09-27（`source_name` 全局唯一检测后本机实测）：`python -m pytest tests -q` = **499 passed, 0 failed**（约 12.4s）；前端 `npx tsc -b` = 0 错、`npm run lint`（oxlint）0 告警。

@@ -8,7 +8,7 @@
 # 后端导入验证
 python -c "from novelbase import *; print('OK')"
 
-# 运行测试（449 passed, 1 skipped）
+# 运行测试（499 passed, 0 failed）
 python -m pytest tests/ -v --tb=short
 
 # 启动 CLI（交互式）
