@@ -36,9 +36,9 @@ novelbase/sources/{dir}/
 
 | 函数 | 返回 |
 |------|------|
-| `list_sources()` | 全部书源 `source_name`（内置 + 私有，去重排序） |
+| `list_sources()` | 全部书源 `source_name`（内置 + 私有，排序；重名抛 `DuplicateSourceNameError`） |
 | `get_manifest(source_name)` | 该书的 `source.json` 内容（`default_config` 已合并 `common`；非编译模式校验能力段 ⇔ `.py` 文件） |
-| `capabilities(source_name)` | `{capability: mode}`，如 `{"search": "requests", "novel_info": "requests", ...}`；未知书源返回 `{}` |
+| `capabilities(source_name)` | `{capability: mode}`，如 `{"search": "requests", "novel_info": "requests", ...}`；未知书源或声明非法返回 `{}`（**撞名例外**：直接抛 `DuplicateSourceNameError`，不吞成空能力） |
 | `resolve(source_name, capability)` | `(函数, 该能力的 mode)`；动态 import 并校验必需参数名 |
 | `resolve_book_url(raw)` | 把输入规范成完整 URL（仅接受 http(s)，否则 `ValueError`） |
 
