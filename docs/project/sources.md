@@ -22,6 +22,12 @@ novelbase/sources/{dir}/
 - **目录名 `{dir}`**：合法标识符（下划线），如 `fanqie_requests_default`，仅在 `import_module` 时使用。
 - **`source_name`**：`source.json` 里的唯一 id（连字符），如 `fanqie-requests-default`——
   是全部公共 API、后端/前端/CLI、`sites/{source_name}.yaml` 的键。两者解耦。
+- **`source_name` 全局唯一**（2026-09-27）：内置根与私有根（`NLD_PRIVATE_SOURCES`）
+  是**同一命名空间**，任何两个目录声明同一个 `source_name` 都会在加载期抛
+  `DuplicateSourceNameError`（`ManifestError` 子类），检测点唯一：
+  `novelbase/sources/manifest.py::scan_source_names()`。私有源必须自带独立
+  `source_name`，**不能**作为内置源的替代实现（「同名能力内置优先、内置缺失再用
+  私有补齐」的旧机制已取消）。
 - **不设 `_common.py`**：各书源自包含，共享逻辑内联进需要它的能力文件（接受书源间重复的代价）。
 
 ## 公共 API（`novelbase/source.py`）
@@ -141,8 +147,13 @@ Novel.id = sha256(url)[:32]      # 32 位 hex，无前缀
 ## 私有源隔离（`NLD_PRIVATE_SOURCES`）
 
 环境变量 `NLD_PRIVATE_SOURCES` 指向外部目录，镜像 `sources/{dir}/` 结构。
-`list_sources()` / `capabilities()` 合并内置与私有书源；`resolve()` 中**同名能力内置优先**，
-内置缺失再用私有补齐（私有目录在包外，走 `importlib.util.spec_from_file_location` 加载）。
+`list_sources()` / `capabilities()` 合并内置与私有书源（私有目录在包外，走
+`importlib.util.spec_from_file_location` 加载）。
+**私有源须自带独立 `source_name`**：内置根与私有根是同一命名空间，任何重名（含私有源
+复用内置 id）都会在加载期抛 `DuplicateSourceNameError`——原「同名能力内置优先、
+内置缺失再用私有补齐」的机制已于 **2026-09-27 取消**。已有复用内置 id 的私有目录，
+升级后需改其 `source.json` 的 `source_name`（目录名可不变）并同步
+`app_data/config/sites/{新名}.yaml`。
 
 ```
 $NLD_PRIVATE_SOURCES/
