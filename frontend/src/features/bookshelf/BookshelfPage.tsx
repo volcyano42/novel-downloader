@@ -64,7 +64,7 @@ export default function BookshelfPage() {
 
   // search — using React Query
   const [searchParams, setSearchParams] = useState<{
-    query: string; source?: string;
+    query: string; source?: string; sources?: string[];
   } | null>(null);
   const { data: searchResults = [], isFetching: searching, error: searchError } = useSearch(searchParams);
 
@@ -96,7 +96,8 @@ export default function BookshelfPage() {
   }, [tasks, toast, refetchNovels, globalConfig?.notify?.sound]);
 
 
-  const handleOnlineSearch = useCallback(async (query: string, source?: string) => {
+  const handleOnlineSearch = useCallback(async (query: string, opts?: { source?: string; sources?: string[] }) => {
+    const source = opts?.source;
     if (!query.trim()) { setSearchParams(null); SessionCache.clearSearch(); return; }
     SessionCache.saveSearch(query, source);
     addHistoryMut.mutate({ source_name: source ?? "", keyword: query.trim() });
@@ -110,7 +111,7 @@ export default function BookshelfPage() {
       } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); }
       return;
     }
-    setSearchParams({ query, source });
+    setSearchParams({ query, source, sources: opts?.sources });
   }, [navigate, toast, fetchMetaMut, addHistoryMut]);
 
   const handleHistoryPick = useCallback((item: { source_name: string; keyword: string }) => {
@@ -274,9 +275,10 @@ export default function BookshelfPage() {
           {searchResults.length > 0 && (() => {
             // 并发搜索（未指定书源）时结果跨多个书源，按 source_name 分组 tab
             const showSourceTabs = !searchParams?.source && sourceNames.length > 0;
+            const aliasOf = new Map(sourceOptions.map(o => [o.name, o.alias]));
             const SOURCE_TABS = [
               { id: "all", label: "全部" },
-              ...sourceNames.map(name => ({ id: name, label: name })),
+              ...sourceNames.map(name => ({ id: name, label: aliasOf.get(name) ?? name })),
             ];
             const grouped = showSourceTabs && resultTab !== "all" ? searchResults.filter(r => r.source_name === resultTab) : searchResults;
             const counts: Record<string, number> = { all: searchResults.length, ...Object.fromEntries(sourceNames.map(name => [name, searchResults.filter(r => r.source_name === name).length])) };

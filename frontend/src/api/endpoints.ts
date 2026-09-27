@@ -176,9 +176,10 @@ export function streamChapters(
 
 // ── Download ───────────────────────────────────────
 
-export function searchDownload(params: { query: string; source?: string }) {
+export function searchDownload(params: { query: string; source?: string; sources?: string[] }) {
   const qs = new URLSearchParams({ query: params.query });
   if (params.source) qs.set("source", params.source);
+  if (params.sources?.length) qs.set("sources", params.sources.join(","));
   return apiGet<SearchResult[]>(`/download/search?${qs}`);
 }
 
@@ -240,17 +241,24 @@ export function fetchSources() {
   return apiGet<Record<string, SourceInfo>>("/download/sources");
 }
 
-/** 选源 UI 用的书源项：携带 enabled 以便标注「未启用」。 */
+/** 选源 UI 用的书源项：name = source_name（技术键，提交用），alias/group 供显示与分组。 */
 export interface SourceOption {
   name: string;
-  enabled: boolean;
+  alias: string;
+  group: string;        // "" = 未分组
+  enabled: boolean;     // Task 6 随 enabled 废弃删除
 }
 
-/** 把 useSources() 的响应转成选源列表（未启用的源仍在列，仅由 UI 标注）。
+/** 把 useSources() 的响应转成选源列表：未设别名时 alias 回落 source_name，未设分组时 group 为空串。
  * 搜索页 / 换源对话框 / 书架共用本函数。 */
 export function toSourceOptions(sources?: Record<string, SourceInfo> | null): SourceOption[] {
   if (!sources) return [];
-  return Object.entries(sources).map(([name, info]) => ({ name, enabled: info.enabled }));
+  return Object.entries(sources).map(([name, info]) => ({
+    name,
+    alias: info.source_alias || name,
+    group: info.source_group || "",
+    enabled: info.enabled,
+  }));
 }
 
 // ── Config ─────────────────────────────────────────

@@ -1,13 +1,12 @@
 import {BookOpen, Link, Loader2, Search, X} from "lucide-react";
-import {type KeyboardEvent, useEffect, useRef, useState} from "react";
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+import {type KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
+import {Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue} from "@/components/ui/select";
 import {cn} from "@/lib/utils";
 import type {SourceOption} from "@/api/endpoints";
 
 interface SearchBarProps {
-  /** 标题搜索并发全部启用书源（source 省略）；URL 直达携带用户手选书源。 */
-  onSearch: (query: string, source?: string) => void;
-  /** 全部书源（URL tab 手选；标题 tab 不使用）；含 enabled，未启用的源仅标注、仍可选 */
+  /** 标题搜索并发勾选的书源；URL 直达携带用户手选的单个书源。 */
+  onSearch: (query: string, opts?: { source?: string; sources?: string[] }) => void;
   sources?: SourceOption[];
   loading?: boolean;
   defaultQuery?: string;
@@ -23,6 +22,26 @@ export function SearchBar({ onSearch, sources = [], loading, defaultQuery = "", 
   const [source, setSource] = useState("");
   const [shake, setShake] = useState(false);
 
+  // 勾选集合：null = 未初始化（= 全选）。不持久化、不在 sources 刷新时重置用户选择。
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const allNames = useMemo(() => sources.map(s => s.name), [sources]);
+  const selected = picked ?? allNames;
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  // 分组 → 该组书源（"" 走「未分组」桶，排在最后）
+  const groupedSources = useMemo(() => {
+    const groups = new Map<string, SourceOption[]>();
+    for (const s of sources) {
+      if (!groups.has(s.group)) groups.set(s.group, []);
+      groups.get(s.group)!.push(s);
+    }
+    return [...groups.entries()].sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
+  }, [sources]);
+
+  const toggleAll = () => setPicked(selected.length === allNames.length ? [] : allNames);
+  const pickGroup = (group: string) => setPicked(sources.filter(s => s.group === group).map(s => s.name));
+  const toggleOne = (name: string) => setPicked(selectedSet.has(name) ? selected.filter(n => n !== name) : [...allNames.filter(n => selectedSet.has(n) || n === name)]);
+
   const trigger = () => {
     const q = query.trim();
     if (!q) return;
@@ -32,9 +51,11 @@ export function SearchBar({ onSearch, sources = [], loading, defaultQuery = "", 
         setTimeout(() => setShake(false), 400);
         return;
       }
-      onSearch(q, source);
+      onSearch(q, { source });
     } else {
-      onSearch(q);
+      // 勾选为空：按钮已 disabled；此处再 guard 一次，防止 Enter 键绕过（spec §6.5：不发请求）
+      if (selected.length === 0) return;
+      onSearch(q, { sources: selected });
     }
   };
 
@@ -133,13 +154,13 @@ export function SearchBar({ onSearch, sources = [], loading, defaultQuery = "", 
                 <SelectValue placeholder="选择书源" />
               </SelectTrigger>
               <SelectContent>
-                {sources.map(({name, enabled}) => (
-                  <SelectItem key={name} value={name}>
-                    <span className="flex items-center gap-1.5">
-                      <span>{name}</span>
-                      {!enabled && <span className="text-[10px] text-slate-400">未启用</span>}
-                    </span>
-                  </SelectItem>
+                {groupedSources.map(([group, items]) => (
+                  <SelectGroup key={group}>
+                    <SelectLabel className="px-2 py-1 text-[10px] text-slate-400">{group || "未分组"}</SelectLabel>
+                    {items.map(({ name, alias }) => (
+                      <SelectItem key={name} value={name}>{alias}</SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
@@ -176,13 +197,56 @@ export function SearchBar({ onSearch, sources = [], loading, defaultQuery = "", 
             </div>
             <button
               onClick={trigger}
-              disabled={loading || !query.trim()}
+              disabled={loading || !query.trim() || selected.length === 0}
               className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors disabled:opacity-50 shrink-0"
             >
               搜索
             </button>
           </div>
-          <p className="px-1 text-[11px] text-slate-400">并发搜索全部已启用书源</p>
+          {selected.length === 0 && (
+            <p className="px-1 text-[11px] text-red-400">请至少勾选一个书源</p>
+          )}
+          <div className={cn("flex flex-col gap-2 rounded-xl border border-white/20 bg-white/50 p-2 backdrop-blur-sm dark:border-slate-600/30 dark:bg-slate-800/40",
+                             shake && "border-red-300 bg-red-50 animate-shake")}>
+            {/* 框 1：批量单选（全选 / 各分组 / 未分组） */}
+            <div className="flex flex-wrap items-center gap-1">
+              <button onClick={toggleAll}
+                className={cn("rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  selected.length === allNames.length
+                    ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
+                {selected.length === allNames.length ? "全不选" : "全选"}
+              </button>
+              {groupedSources.map(([group, items]) => {
+                const names = items.map(i => i.name);
+                const active = selected.length === names.length && names.every(n => selectedSet.has(n));
+                return (
+                  <button key={group} onClick={() => pickGroup(group)}
+                    className={cn("rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      active ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300"
+                             : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
+                    {group || "未分组"}
+                  </button>
+                );
+              })}
+              <span className="ml-auto text-[11px] text-slate-400">已选 {selected.length}/{allNames.length}</span>
+            </div>
+            {/* 框 2：逐源复选（显示别名，按分组分节） */}
+            <div className="flex flex-col gap-1">
+              {groupedSources.map(([group, items]) => (
+                <div key={group} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="w-16 shrink-0 truncate text-[10px] text-slate-400">{group || "未分组"}</span>
+                  {items.map(s => (
+                    <label key={s.name} className="flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                      <input type="checkbox" checked={selectedSet.has(s.name)} onChange={() => toggleOne(s.name)} className="h-3.5 w-3.5 rounded border-slate-300" />
+                      <span>{s.alias}</span>
+                    </label>
+                  ))}
+                </div>
+              ))}
+              {sources.length === 0 && <span className="px-1 text-[11px] text-slate-400">没有可用的书源</span>}
+            </div>
+          </div>
         </div>
       )}
     </div>

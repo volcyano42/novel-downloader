@@ -123,7 +123,7 @@ export function useTasks(enabled: boolean) {
   });
 }
 
-export function useSearch(params: { query: string; source?: string } | null) {
+export function useSearch(params: { query: string; source?: string; sources?: string[] } | null) {
   return useQuery({
     queryKey: ["search", params],
     queryFn: () => searchDownload(params!),

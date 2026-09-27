@@ -5,6 +5,7 @@ import type {ComponentPropsWithoutRef} from "react";
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
+const SelectLabel = SelectPrimitive.Label;
 const SelectValue = SelectPrimitive.Value;
 
 function SelectTrigger({ className, children, ...props }: ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>) {
@@ -76,4 +77,4 @@ function SelectSeparator({ className, ...props }: ComponentPropsWithoutRef<typeo
   return <SelectPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-slate-100", className)} {...props} />;
 }
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };
+export { Select, SelectGroup, SelectLabel, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };
