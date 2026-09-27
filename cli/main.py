@@ -380,8 +380,6 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
     - 生成空 `__init__.py` + `source.json` + 4 个能力文件（`search` /
       `novel_info` / `chapter_list` / `chapter_content`）。
     - `write_config=True` 时额外生成默认用户配置 `sites/{name}.yaml`。
-
-    出厂 `enabled`（D4）：api 类默认 `false`，requests/browser 类默认 `true`。
     """
     mode = (modes[0].strip() if modes else "") or "requests"
     source_dir = _SOURCES_ROOT / name.replace("-", "_")
@@ -389,11 +387,9 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
 
     (source_dir / "__init__.py").write_text("", encoding="utf-8")
 
-    enabled = mode != "api"
     from shared.config import mode_defaults
     manifest = {
         "source_name": name,
-        "enabled": enabled,
         "common": {"mode": mode, **mode_defaults(mode)},
         "default_config": {fn: {} for fn in _SCAFFOLD_FUNCTIONS},
     }
@@ -406,8 +402,7 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
 
     if write_config:
         from shared.config import save_site_config
-        save_site_config(name, {"enabled": enabled,
-                                **{fn: {} for fn in _SCAFFOLD_FUNCTIONS}})
+        save_site_config(name, {fn: {} for fn in _SCAFFOLD_FUNCTIONS})
 
     print(f"书源脚手架已创建: novelbase/sources/{source_dir.name}/")
     print("  __init__.py, source.json, "
