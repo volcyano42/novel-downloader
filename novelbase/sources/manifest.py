@@ -7,6 +7,7 @@
 """
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,10 @@ MANIFEST_NAME = "source.json"
 
 class ManifestError(ValueError):
     """`source.json` 缺失、字段非法或与目录内容不一致。"""
+
+
+class DuplicateSourceNameError(ManifestError):
+    """同一个 `source_name` 被两个书源目录声明（全局唯一被破坏）。"""
 
 
 def load_manifest(source_dir: Path) -> dict[str, Any]:
@@ -120,6 +125,44 @@ def check_capability_files(source_dir: Path, manifest: dict[str, Any]) -> None:
         raise ManifestError(
             f"{source_dir} 有文件但 default_config 未声明: {sorted(extra)}"
         )
+
+
+def scan_source_names(roots: Iterable[Path], *, strict: bool = False) -> dict[str, Path]:
+    """扫多个根下的书源目录，返回 `{source_name: 目录}`。
+
+    `source_name` 是全局唯一 id：内置根与私有根是同一命名空间，同一个名字出现
+    第二次（含跨根）即抛 `DuplicateSourceNameError`。
+
+    - 非目录项、`_` 开头的目录、无 `source.json` 的目录 → 跳过
+    - 单源 `load_manifest()` 抛 `ManifestError`：`strict=True` 冒泡，否则跳过该目录
+      （沿用运行时容错；构建期用 `strict=True` 保证不漏）
+    - 根不存在或不是目录 → 跳过该根
+    - `roots` 有序，先出现的目录先占名（报错消息里是「先占者 vs 后来者」）
+    """
+    found: dict[str, Path] = {}
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for entry in sorted(root.iterdir()):
+            if not entry.is_dir() or entry.name.startswith("_"):
+                continue
+            if not (entry / MANIFEST_NAME).is_file():
+                continue
+            try:
+                manifest = load_manifest(entry)
+            except ManifestError:
+                if strict:
+                    raise
+                continue
+            name = manifest["source_name"]
+            if name in found:
+                raise DuplicateSourceNameError(
+                    f"source_name {name!r} 重复：{found[name]} 与 {entry} 都声明了它。"
+                    f"请给其中一个书源换 source_name（目录名可不变，二者本就解耦）"
+                )
+            found[name] = entry
+    return found
 
 
 def _capability_names() -> tuple[str, ...]:
