@@ -81,7 +81,7 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
                                  source_name=source_name,
                                  extra=dict(novel.extra) if getattr(novel, "extra", None) else None)]
 
-    # 关键字搜索：source 空 → 并发全部启用书源（每源各绑定自己的引擎）；否则单书源。
+    # 关键字搜索：source 空 → 并发全部书源（`sources` 缺省时）；否则单书源。
     if source:
         source_name = require_known_source(source)
         try:
@@ -95,7 +95,8 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
     else:
         names = _selected_sources(sources)
         if not names:
-            raise HTTPException(400, "未指定有效书源" if sources.strip() else "本环境没有可用的书源")
+            specified = isinstance(sources, str) and sources.strip()
+            raise HTTPException(400, "未指定任何有效书源" if specified else "没有可用的书源")
 
         async def _search_one(name: str):
             # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。

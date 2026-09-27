@@ -244,7 +244,7 @@ class _FakeResult:
 
 
 class TestInteractive:
-    def test_do_search_keyword_uses_enabled_not_select(self, monkeypatch, capsys):
+    def test_do_search_keyword_uses_all_sources(self, monkeypatch, capsys):
         from cli import interactive as mod
         monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default"])
         seen = []
@@ -287,12 +287,12 @@ class TestInteractive:
         assert name == "a-x-default"
         assert url == "https://x/a-x-default"
 
-    def test_do_search_no_enabled_sources(self, monkeypatch, capsys):
+    def test_do_search_no_sources(self, monkeypatch, capsys):
         from cli import interactive as mod
         monkeypatch.setattr(mod, "default_source_names", lambda: [])
         url, name = mod.do_search("测试")
         assert url is None and name is None
-        assert "没有启用的书源" in capsys.readouterr().out
+        assert "没有可用的书源" in capsys.readouterr().out
 
     def test_do_search_url_manual_source(self, monkeypatch, capsys):
         from cli import interactive as mod

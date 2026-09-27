@@ -78,8 +78,7 @@ export interface GlobalConfig {
 
 export interface SourceConfig {
   source_name: string;
-  enabled: boolean;
-  /** 书源级并发额度（顶层，与 enabled 同级；跨任务共享，默认 1） */
+  /** 书源级并发额度（顶层；跨任务共享，默认 1） */
   concurrency: number;
   /** 能力段 → 有效 mode（如 {search: "api"}） */
   capabilities: Record<string, string>;
@@ -317,7 +316,7 @@ export function getSourceConfig(source: string) {
 export function saveSourceConfig(
   source: string,
   data: {
-    enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>>;
+    concurrency?: number; config?: Record<string, Record<string, unknown>>;
     source_group?: string; source_alias?: string;
   },
 ) {

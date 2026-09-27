@@ -83,7 +83,7 @@ def do_search(query: str) -> tuple[str | None, str | None]:
     # 关键字搜索 → 并发全部可用书源，结果汇总标注来源
     sources = default_source_names()
     if not sources:
-        print("没有启用的书源")
+        print("没有可用的书源")
         return None, None
 
     async def _run():

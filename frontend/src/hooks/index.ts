@@ -232,7 +232,7 @@ export function useSaveSourceConfig(source: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: {
-      enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>>;
+      concurrency?: number; config?: Record<string, Record<string, unknown>>;
       source_group?: string; source_alias?: string;
     }) =>
       saveSourceConfig(source, data),

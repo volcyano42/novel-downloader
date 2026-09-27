@@ -48,8 +48,8 @@ def test_sources_shape_is_flat(monkeypatch):
                                              "source_group": "", "source_alias": ""}}
 
 
-def test_search_empty_source_uses_enabled(monkeypatch):
-    """空 source → 对每个启用书源各发一次 search(...)，每次只带该源。"""
+def test_search_empty_source_uses_default_sources(monkeypatch):
+    """空 source → 对每个书源各发一次 search(...)，每次只带该源。"""
     monkeypatch.setattr(dl, "default_source_names", lambda: ["a-x-default", "b-y-default"])
     called = []
 

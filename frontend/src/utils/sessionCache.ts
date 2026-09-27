@@ -14,7 +14,7 @@ export const SessionCache = {
   getSearchQuery(): string {
     return sessionStorage.getItem(KEYS.query) ?? "";
   },
-  /** 恢复最近一次搜索参数；source 为空表示「并发全部启用书源」。 */
+  /** 恢复最近一次搜索参数；source 为空表示「并发全部书源」。 */
   getSearchParams(): { source: string; query: string } | null {
     const query = this.getSearchQuery();
     if (!query) return null;

@@ -2,7 +2,7 @@
 """非交互命令行入口。
 
 用法:
-    python cli.py search "关键词"                          # 并发全部启用书源
+    python cli.py search "关键词"                          # 并发全部书源
     python cli.py search --source fanqie-requests-default "关键词"
     python cli.py download --source fanqie-requests-default --url "https://..."
     python cli.py update
@@ -40,7 +40,7 @@ def _parse_args() -> argparse.Namespace:
     sp = sub.add_parser("search", help="搜索小说")
     sp.add_argument("query", help="搜索关键词")
     sp.add_argument("--source", "-s", default="",
-                    help="书源名 source_name；省略 = 并发全部启用书源")
+                    help="书源名 source_name；省略 = 并发全部书源")
     sp.add_argument("--page", type=int, default=1, help="页码")
 
     # ── download ──
@@ -121,11 +121,11 @@ def _apply_export_options(options) -> dict:
 def cmd_search(args):
     from novelbase.core.downloader import search
     from cli.core import _make_engines
-    from shared.config import default_source_names
+    from shared.config import default_source_names, display_name
 
     sources = [args.source] if args.source else default_source_names()
     if not sources:
-        print("没有启用的书源")
+        print("没有可用的书源")
         return
 
     async def _search_one(name: str):
@@ -157,7 +157,7 @@ def cmd_search(args):
         desc = (r.description or "")[:80]
         print(f"  {i:2d}. {r.title}")
         print(f"      作者: {r.author}")
-        print(f"      书源: {getattr(r, 'source_name', '')}")
+        print(f"      书源: {display_name(getattr(r, 'source_name', ''))}")
         print(f"      URL:  {r.url}")
         if desc:
             print(f"      简介: {desc}")
@@ -313,7 +313,7 @@ def cmd_novel(args):
 def cmd_source(args):
     """书源管理（mode 显示有效值；显示别名与分组）。"""
     from novelbase.source import list_sources
-    from shared.config import display_name, source_group
+    from shared.config import display_name, source_alias, source_group
 
     if args.source_command != "list":
         return
@@ -324,7 +324,7 @@ def cmd_source(args):
         payload = {
             name: {
                 "source_name": name,
-                "source_alias": display_name(name),
+                "source_alias": source_alias(name),
                 "source_group": source_group(name),
                 "capabilities": effective_capabilities(name),
             }

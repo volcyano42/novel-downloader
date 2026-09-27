@@ -96,3 +96,22 @@ def test_cmd_source_list_shows_group_and_alias(monkeypatch, capsys):
     assert '"source_alias": "演示源"' in out
     assert '"source_group": "演示组"' in out
     assert '"enabled"' not in out
+
+
+def test_cmd_source_list_json_alias_empty_when_unset(monkeypatch, capsys):
+    """未设别名时 `--json` 的 source_alias 为 ""（与 source_group 一致，不回落 source_name）。"""
+    from cli import main as cli_main
+
+    monkeypatch.setattr("novelbase.source.list_sources", lambda: ["demo-requests-default"])
+    monkeypatch.setattr(cli_main, "effective_capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("shared.config.source_alias", lambda n: "")
+    monkeypatch.setattr("shared.config.source_group", lambda n: "")
+
+    class Args:
+        source_command = "list"
+        json = True
+
+    cli_main.cmd_source(Args())
+    out = capsys.readouterr().out
+    assert '"source_alias": ""' in out
+    assert '"source_alias": "demo-requests-default"' not in out

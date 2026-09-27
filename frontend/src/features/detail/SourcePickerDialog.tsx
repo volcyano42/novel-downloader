@@ -55,7 +55,7 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
               )}
             </button>
           ))}
-          {sources.length === 0 && <p className="py-2 text-xs text-slate-400">无可用书源，请在设置中启用书源</p>}
+          {sources.length === 0 && <p className="py-2 text-xs text-slate-400">没有可用的书源</p>}
         </div>
 
         <div className="flex gap-2">
