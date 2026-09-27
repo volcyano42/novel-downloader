@@ -1,6 +1,7 @@
 {
   "source_name": "fanqie-api-rain",
-  "enabled": false,
+  "source_alias": "番茄·Rain API",
+  "source_group": "番茄",
   "common": {
     "mode": "api",
     "timeout": 30,

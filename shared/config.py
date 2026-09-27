@@ -250,15 +250,6 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     return out
 
 
-def is_source_enabled(source_name: str) -> bool:
-    """书源是否启用：用户层顶层 `enabled` 覆盖 `source.json` 的出厂值。"""
-    from novelbase.source import get_manifest
-    user = _user_site_cfg(source_name)
-    if isinstance(user.get("enabled"), bool):
-        return user["enabled"]
-    return bool(get_manifest(source_name).get("enabled", False))
-
-
 def _user_top(source_name: str, key: str) -> str:
     """用户层顶层字符串字段（strip 后）；非字符串 / 缺失 → ""。"""
     value = _user_site_cfg(source_name).get(key)
@@ -297,8 +288,8 @@ def display_name(source_name: str) -> str:
 def default_source_names() -> list[str]:
     """默认参与集：**全部**书源（无任何环境相关过滤）。
 
-    取代旧的 `enabled_source_names()`——`enabled` 已废弃（见 spec D1/D2）；
-    「本环境不支持的引擎」这一维度也随 v4.5.1 移除 Android 套壳而消失。
+    历史：曾按 「用户层 / 出厂 `enabled`」的启用集过滤，该机制已随 spec D1/D2
+    废弃并删除；「本环境不支持的引擎」这一维度也随 v4.5.1 移除 Android 套壳而消失。
     """
     from novelbase.source import list_sources
     return sorted(list_sources())
@@ -329,14 +320,6 @@ def source_concurrency(source_name: str) -> int:
         return SOURCE_CONCURRENCY_DEFAULT
     return declared if _is_positive_int(declared) else SOURCE_CONCURRENCY_DEFAULT
 
-
-def enabled_source_names() -> list[str]:
-    """排序后的启用书源 source_name 列表（「启用集」的唯一入口）。
-
-    = 「用户层 / 出厂 `enabled`」。
-    """
-    from novelbase.source import list_sources
-    return sorted(n for n in list_sources() if is_source_enabled(n))
 
 # ── formats ──
 def load_format_configs():

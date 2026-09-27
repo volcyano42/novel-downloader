@@ -2,7 +2,7 @@
 
 不启 TestClient/lifespan（避免 Windows 下 lifespan 挂起），直接 `asyncio.run`
 调 async 路由函数；monkeypatch 书源 `resolve`、引擎工厂、模块级依赖，验证：
-- `/sources` 平铺形状 `{source_name: {capabilities: {cap: mode}, enabled: bool, source_group: str, source_alias: str}}`。
+- `/sources` 平铺形状 `{source_name: {capabilities: {cap: mode}, source_group: str, source_alias: str}}`。
 - `/search`：`source` 空 → 按 `sources` 并发所选书源（缺省 → `default_source_names()`）；单书源 →
   引擎按 `source_name` 绑定；`query` 为 URL 时 `source` 必填（400）；URL 结果带 `source_name`。
 - `/novel`、`/novel/{id}`、`/novel/{id}/chapters` 的 Query 仅 `source`（=source_name），
@@ -41,23 +41,11 @@ def _patch_engine_factory(monkeypatch):
 def test_sources_shape_is_flat(monkeypatch):
     monkeypatch.setattr(dl, "list_sources", lambda: ["92xs-requests-default"])
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
-    monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
     monkeypatch.setattr(dl, "source_group", lambda n: "")
     monkeypatch.setattr(dl, "source_alias", lambda n: "")
     out = asyncio.run(dl.list_all_sources())
     assert out == {"92xs-requests-default": {"capabilities": {"search": "requests"},
-                                             "enabled": True,
                                              "source_group": "", "source_alias": ""}}
-
-
-def test_sources_include_disabled(monkeypatch):
-    """列全部书源（含未启用），enabled 走 is_source_enabled(name)。"""
-    monkeypatch.setattr(dl, "list_sources", lambda: ["a-x-default", "b-y-default"])
-    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
-    monkeypatch.setattr(dl, "is_source_enabled", lambda n: n == "a-x-default")
-    out = asyncio.run(dl.list_all_sources())
-    assert out["a-x-default"]["enabled"] is True
-    assert out["b-y-default"]["enabled"] is False
 
 
 def test_search_empty_source_uses_enabled(monkeypatch):
@@ -291,30 +279,27 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(cfg.config_service, "merged_source_config",
                         lambda n: {"search": {"mode": "requests", "timeout": 30}})
-    monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: True)
     monkeypatch.setattr(cfg.config_service, "capabilities", lambda n: {"search": "requests"}, raising=False)
     out = asyncio.run(cfg.get_source_config("92xs-requests-default"))
-    assert out["enabled"] is True and out["config"]["search"]["timeout"] == 30
+    assert out["config"]["search"]["timeout"] == 30
 
 
 def test_get_source_config_shape(monkeypatch):
-    """GET /config/sources/{name} 契约形状：{source_name, enabled, concurrency,
+    """GET /config/sources/{name} 契约形状：{source_name, concurrency,
     capabilities, declared_capabilities, source_group, source_alias, config}
     （capabilities 为有效 mode）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
-    monkeypatch.setattr(cfg.config_service, "is_source_enabled", lambda n: False)
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr(cfg, "effective_capabilities", lambda n: {"search": "browser"})
     monkeypatch.setattr(cfg.config_service, "source_group", lambda n: "番茄", raising=False)
     monkeypatch.setattr(cfg.config_service, "source_alias", lambda n: "番茄·直连", raising=False)
     _allow_sources(monkeypatch, "demo-requests-default")
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
-    assert set(out.keys()) == {"source_name", "enabled", "concurrency",
+    assert set(out.keys()) == {"source_name", "concurrency",
                                "capabilities", "declared_capabilities", "config",
                                "source_group", "source_alias"}
     assert out["source_name"] == "demo-requests-default"
-    assert out["enabled"] is False
     assert out["concurrency"] == 1
     assert out["capabilities"] == {"search": "browser"}
     assert out["declared_capabilities"] == {"search": "requests"}
@@ -333,21 +318,36 @@ def test_get_config_has_no_mode(monkeypatch):
 
 
 def test_save_source_config_writes_user_layer_only(monkeypatch, tmp_path):
-    """PUT /config/sources/{name} 只写用户层：顶层 enabled + 逐能力段 deep_merge，不写三层全量。"""
+    """PUT /config/sources/{name} 只写用户层：逐能力段 deep_merge，不写三层全量。"""
     import yaml
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
     _allow_sources(monkeypatch, "demo-requests-default")
     asyncio.run(cfg.save_source_config(
         "demo-requests-default",
-        {"enabled": False, "config": {"search": {"timeout": 99}}},
+        {"config": {"search": {"timeout": 99}}},
     ))
     path = tmp_path / "sites" / "demo-requests-default.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert data["enabled"] is False
     assert data["search"]["timeout"] == 99
     # 未提供的出厂字段 / 其它能力段不应被灌入用户层
-    assert set(data.keys()) == {"enabled", "search"}
+    assert set(data.keys()) == {"search"}
+
+
+def test_save_source_config_strips_legacy_enabled(monkeypatch, tmp_path):
+    """旧用户层残留的顶层 enabled 键在下次 PUT 时被清理（enabled 已废弃）。"""
+    from backend.routers import config as cfg
+    monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
+    _allow_sources(monkeypatch, "demo-requests-default")
+    cfg.config_service.save_yaml(
+        tmp_path / "sites" / "demo-requests-default.yaml",
+        {"enabled": True, "search": {"timeout": 5}},
+    )
+    asyncio.run(cfg.save_source_config(
+        "demo-requests-default", {"config": {"search": {"timeout": 9}}}))
+    data = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
+    assert "enabled" not in data
+    assert data["search"]["timeout"] == 9
 
 
 def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
@@ -387,10 +387,9 @@ def test_engine_router_and_schemas_gone():
 
 
 def test_sources_include_group_and_alias(monkeypatch):
-    """`/sources` 每源带 source_group / source_alias（Task 6 后再去掉 enabled）。"""
+    """`/sources` 每源带 source_group / source_alias。"""
     monkeypatch.setattr(dl, "list_sources", lambda: ["a-requests-default"])
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
-    monkeypatch.setattr(dl, "is_source_enabled", lambda n: True)
     monkeypatch.setattr(dl, "source_group", lambda n: "番茄")
     monkeypatch.setattr(dl, "source_alias", lambda n: "番茄·直连")
     out = asyncio.run(dl.list_all_sources())

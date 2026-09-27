@@ -16,8 +16,8 @@ from backend.services.source_guard import require_known_source
 from novelbase import resolve_meta, resolve_chapter_list, search
 from novelbase.core.exceptions import FeatureNotSupportedError
 from novelbase.source import resolve_book_url, list_sources
-from shared.config import (default_source_names, enabled_source_names, is_source_enabled,
-                           effective_capabilities, source_alias, source_group)
+from shared.config import (default_source_names, effective_capabilities,
+                           source_alias, source_group)
 
 router = APIRouter(prefix="/api/v2/download", tags=["download"])
 
@@ -201,7 +201,6 @@ async def list_all_sources():
     """全部书源的扁平能力矩阵 + 元信息（mode 为有效值）。"""
     return {
         name: {"capabilities": effective_capabilities(name),
-               "enabled": is_source_enabled(name),
                "source_group": source_group(name),
                "source_alias": source_alias(name)}
         for name in list_sources()

@@ -105,7 +105,6 @@ def test_private_source_merged(tmp_path, monkeypatch):
     d.mkdir()
     (d / "source.json").write_text(json.dumps({
         "source_name": "demo-requests-default",   # source_name：连字符（与目录名解耦）
-        "enabled": True,
         "default_config": {"search": {"mode": "requests"}},
     }, ensure_ascii=False), encoding="utf-8")
     (d / "search.py").write_text(
@@ -134,7 +133,6 @@ def test_duplicate_source_name_across_roots_rejected(tmp_path, monkeypatch):
     d.mkdir()
     (d / "source.json").write_text(json.dumps({
         "source_name": "92xs-requests-default",
-        "enabled": True,
         "default_config": {"search": {"mode": "requests"}},
     }, ensure_ascii=False), encoding="utf-8")
     (d / "search.py").write_text(

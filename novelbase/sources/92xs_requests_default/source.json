@@ -1,6 +1,7 @@
 {
   "source_name": "92xs-requests-default",
-  "enabled": true,
+  "source_alias": "92xs",
+  "source_group": "92xs",
   "common": {
     "mode": "requests",
     "timeout": 30,

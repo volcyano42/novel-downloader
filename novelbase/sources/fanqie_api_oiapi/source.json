@@ -1,6 +1,7 @@
 {
   "source_name": "fanqie-api-oiapi",
-  "enabled": false,
+  "source_alias": "番茄·oiapi",
+  "source_group": "番茄",
   "common": {
     "mode": "api",
     "timeout": 30,

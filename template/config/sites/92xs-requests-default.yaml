@@ -1,1 +1,1 @@
-enabled: true
+# 该书的用户层配置（可选字段：source_group / source_alias / concurrency 与逐能力段）

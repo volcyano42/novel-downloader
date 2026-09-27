@@ -1,6 +1,7 @@
 {
   "source_name": "qimao-browser-default",
-  "enabled": true,
+  "source_alias": "七猫·浏览器",
+  "source_group": "七猫",
   "common": {
     "mode": "browser",
     "timeout": 30,

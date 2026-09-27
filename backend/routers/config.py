@@ -85,9 +85,9 @@ async def remove_favorite(novel_id: str):
 
 @router.get("/sources/{source_name}")
 async def get_source_config(source_name: str):
-    """三层合并后的书源配置 + 启用状态 + 能力映射。
+    """三层合并后的书源配置 + 能力映射。
 
-    形状：`{source_name, enabled, capabilities: {cap: 有效mode}, declared_capabilities: {cap: 声明mode},
+    形状：`{source_name, capabilities: {cap: 有效mode}, declared_capabilities: {cap: 声明mode},
     config: {cap: {…完整合并字段（含 mode）…}}}`。
     `capabilities` 为**有效 mode**（用户层 `{cap}.mode` 覆盖书源声明），
     `declared_capabilities` 为书源声明值（前端「恢复默认」用）。
@@ -95,7 +95,6 @@ async def get_source_config(source_name: str):
     require_known_source(source_name)
     return {
         "source_name": source_name,
-        "enabled": config_service.is_source_enabled(source_name),
         "concurrency": config_service.source_concurrency(source_name),
         "capabilities": effective_capabilities(source_name),
         "declared_capabilities": capabilities(source_name),
@@ -107,7 +106,7 @@ async def get_source_config(source_name: str):
 
 @router.put("/sources/{source_name}")
 async def save_source_config(source_name: str, body: dict):
-    """只写用户层 `sites/{source_name}.yaml`：顶层 `enabled` + 逐能力段 `deep_merge`。
+    """只写用户层 `sites/{source_name}.yaml`：顶层元信息 + 逐能力段 `deep_merge`。
 
     不把三层合并后的全量写回（否则用户层被灌满出厂/系统默认值）。
     能力段的 `mode` 键特判：传入字符串 → 覆盖；传入 `null` → 删除该键（恢复书源声明）。
@@ -115,9 +114,8 @@ async def save_source_config(source_name: str, body: dict):
     require_known_source(source_name)
     path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
     existing = config_service.load_yaml(path)
-    if isinstance(body.get("enabled"), bool):
-        existing["enabled"] = body["enabled"]
-    # 顶层 concurrency 与 enabled 同级：正整数写入用户层，非法值忽略（不写坏 yaml）
+    existing.pop("enabled", None)   # enabled 已废弃：顺手清理旧用户层残留键
+    # 顶层 concurrency：正整数写入用户层，非法值忽略（不写坏 yaml）
     if "concurrency" in body and config_service._is_positive_int(body["concurrency"]):
         existing["concurrency"] = body["concurrency"]
     # 顶层元信息：字符串写入用户层（strip 后非空），空串 = 删除该键（回落出厂 / source_name）

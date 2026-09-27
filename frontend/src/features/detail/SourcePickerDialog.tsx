@@ -6,7 +6,7 @@ import type {SourceOption} from "@/api/endpoints";
 interface SourcePickerDialogProps {
   open: boolean; onClose: () => void;
   novelTitle: string;
-  /** 全部书源（来自 useSources()；含 enabled，未启用的源仅标注、仍可选） */
+  /** 全量书源列表（来自 `/sources`） */
   sources: SourceOption[];
   /** 当前书源（有效来源） */
   current?: string;
@@ -38,7 +38,7 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
         <p className="text-xs text-slate-500 mb-4 truncate">{novelTitle}</p>
 
         <div className="space-y-2 mb-4">
-          {sources.map(({name, enabled}) => (
+          {sources.map(({name, alias}) => (
             <button key={name} onClick={() => setSelected(name)}
               className={cn(
                 "w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
@@ -48,8 +48,7 @@ export function SourcePickerDialog({ open, onClose, novelTitle, sources = [], cu
               )}>
               <Globe className={cn("h-5 w-5 shrink-0", selected === name ? "text-indigo-500" : "text-slate-400")} strokeWidth={1.5} />
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                <span className={cn("truncate text-sm font-medium", selected === name ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{name}</span>
-                {!enabled && <span className="shrink-0 text-[10px] text-slate-400">未启用</span>}
+                <span className={cn("truncate text-sm font-medium", selected === name ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700")}>{alias}</span>
               </span>
               {name === current && (
                 <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">当前</span>

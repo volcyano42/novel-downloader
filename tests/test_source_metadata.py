@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""书源元信息（分组/别名）与默认参与集。"""
+"""书源元信息（分组/别名）、默认参与集与出厂 manifest 契约。"""
+import pytest
+
 from shared import config as sc
 
 BROWSER_CAPS = {"search": "browser", "novel_info": "browser",
@@ -62,3 +64,49 @@ def test_default_source_names_lists_all_sources(tmp_path, monkeypatch):
     _patch_sources(monkeypatch, {"b-requests-default": REQUESTS_CAPS,
                                  "a-browser-default": BROWSER_CAPS})
     assert sc.default_source_names() == ["a-browser-default", "b-requests-default"]
+
+
+def test_manifest_rejects_blank_optional_meta(tmp_path, monkeypatch):
+    """出厂 manifest 的 source_alias / source_group 必须是非空字符串。"""
+    import json
+    from novelbase.sources import manifest as mf
+
+    src = tmp_path / "demo"
+    src.mkdir()
+    (src / "source.json").write_text(json.dumps({
+        "source_name": "demo-requests-default",
+        "source_group": "   ",
+        "default_config": {},
+    }), encoding="utf-8")
+    with pytest.raises(mf.ManifestError):
+        mf.load_manifest(src)
+
+
+def test_manifest_without_enabled_is_valid(tmp_path):
+    """source.json 不再需要 enabled。"""
+    import json
+    from novelbase.sources import manifest as mf
+
+    src = tmp_path / "demo2"
+    src.mkdir()
+    (src / "source.json").write_text(json.dumps({
+        "source_name": "demo2-requests-default",
+        "source_group": "演示",
+        "default_config": {},
+    }), encoding="utf-8")
+    assert mf.load_manifest(src)["source_name"] == "demo2-requests-default"
+
+
+def test_merged_source_config_three_layers(tmp_path, monkeypatch):
+    """三层合并（自 test_source_enabled.py 迁移）：系统默认 → 出厂 manifest → 用户层。"""
+    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
+        "source_name": n,
+        "default_config": {"search": {"mode": "requests", "timeout": 30, "retry_times": 3}},
+    })
+    merged = sc.merged_source_config("demo-requests-default")
+    assert merged["search"]["mode"] == "requests"
+    assert merged["search"]["timeout"] == 30          # 第 2 层
+    sc.save_site_config("demo-requests-default", {"search": {"timeout": 99}})
+    assert sc.merged_source_config("demo-requests-default")["search"]["timeout"] == 99

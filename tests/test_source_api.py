@@ -15,7 +15,7 @@ def test_list_sources_contains_ten_new_names():
 def test_get_manifest_identity():
     m = get_manifest("92xs-requests-default")
     assert m["source_name"] == "92xs-requests-default"
-    assert isinstance(m["enabled"], bool)
+    assert m["source_group"] == "92xs"
 
 
 def test_get_manifest_unknown():
@@ -66,7 +66,7 @@ def test_get_manifest_checks_capability_files(tmp_path, monkeypatch):
     d = tmp_path / "demo_requests_default"
     d.mkdir()
     (d / "source.json").write_text(
-        '{"source_name": "demo-requests-default", "enabled": true, '
+        '{"source_name": "demo-requests-default", '
         '"default_config": {"search": {"mode": "requests"}}}', encoding="utf-8")
     # 缺 search.py → check_capability_files 抛 ManifestError
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
@@ -80,7 +80,6 @@ def test_compiled_mode_reads_manifest(monkeypatch):
 
     fake_sources = {"demo_requests_default": {
         "source_name": "demo-requests-default",
-        "enabled": True,
         "default_config": {"search": {"mode": "requests"}},
     }}
     monkeypatch.setattr(s, "_is_compiled", lambda: True)
@@ -90,4 +89,4 @@ def test_compiled_mode_reads_manifest(monkeypatch):
 
     assert s.list_sources() == ["demo-requests-default"]
     assert s.capabilities("demo-requests-default") == {"search": "requests"}
-    assert s.get_manifest("demo-requests-default")["enabled"] is True
+    assert s.get_manifest("demo-requests-default")["source_name"] == "demo-requests-default"

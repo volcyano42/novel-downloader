@@ -1,6 +1,7 @@
 {
   "source_name": "qimao-requests-default",
-  "enabled": true,
+  "source_alias": "七猫·直连",
+  "source_group": "七猫",
   "common": {
     "mode": "requests",
     "timeout": 30,

@@ -45,7 +45,7 @@ def test_config_put_unknown_source_404(monkeypatch):
     """PUT 不得凭空创建 sites/unknown.yaml。"""
     _only_known(monkeypatch)
     with pytest.raises(HTTPException) as ei:
-        asyncio.run(cfg.save_source_config("nope-default", {"enabled": True}))
+        asyncio.run(cfg.save_source_config("nope-default", {}))
     assert ei.value.status_code == 404
 
 

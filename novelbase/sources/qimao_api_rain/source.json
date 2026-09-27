@@ -1,6 +1,7 @@
 {
   "source_name": "qimao-api-rain",
-  "enabled": false,
+  "source_alias": "七猫·Rain API",
+  "source_group": "七猫",
   "common": {
     "mode": "api",
     "timeout": 30,

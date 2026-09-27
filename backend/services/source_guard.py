@@ -2,7 +2,7 @@
 
 core 层对未知书源是宽容语义（`novelbase.source.capabilities()` 与
 `shared.config.merged_source_config()` 都返回 `{}`），但 HTTP 入口不应把
-「书源名写错」当成空配置继续跑（`is_source_enabled()` 会 `KeyError` → 500）。
+「书源名写错」当成空配置继续跑（读未知书源的配置会 `KeyError` → 500）。
 本模块是**唯一**校验点，避免各路由各写一份。
 """
 

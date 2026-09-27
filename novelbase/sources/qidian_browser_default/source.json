@@ -1,6 +1,7 @@
 {
   "source_name": "qidian-browser-default",
-  "enabled": true,
+  "source_alias": "起点·浏览器",
+  "source_group": "起点",
   "common": {
     "mode": "browser",
     "timeout": 30,

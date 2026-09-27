@@ -47,7 +47,6 @@ def test_new_source_manifest_valid(monkeypatch, tmp_path):
     d = root / "demo_requests_default"
     manifest = load_manifest(d)  # 不抛 ManifestError
     assert manifest["source_name"] == "demo-requests-default"
-    assert manifest["enabled"] is True
     assert set(manifest["default_config"]) == set(_FUNCS)
     for cap in _FUNCS:
         assert manifest["default_config"][cap]["mode"] == "requests"
@@ -105,14 +104,6 @@ def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, 
     assert common["delay"] == [0, 0], common["delay"]
     # 类型也须为 int（JSON 字面 0 而非 0.0）；否则 [0.0, 0.0] == [0, 0] 也会通过
     assert all(type(x) is int for x in common["delay"]), common["delay"]
-
-
-def test_new_source_api_disabled_by_default(monkeypatch, tmp_path):
-    """D4：api 类出厂 `enabled: false`。"""
-    root, _ = _setup(monkeypatch, tmp_path)
-    cli.main._scaffold_source("demo-api-rain", ["api"])
-    data = json.loads((root / "demo_api_rain" / "source.json").read_text(encoding="utf-8"))
-    assert data["enabled"] is False
 
 
 def test_new_source_no_config_skips_user_config(monkeypatch, tmp_path):

@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-IDENTITY_FIELDS = ("source_name", "enabled")
+IDENTITY_FIELDS = ("source_name",)
 
 # 字段集按 mode 划分，与 novelbase/core/options.py 的三个 dataclass 一一对应
 _MODE_COMMON = ("mode", "timeout", "retry_times", "delay", "backoff_factor")
@@ -50,8 +50,9 @@ def load_manifest(source_dir: Path) -> dict[str, Any]:
             raise ManifestError(f"{path} 缺少必填字段 {field}")
     if not isinstance(manifest["source_name"], str) or not manifest["source_name"]:
         raise ManifestError(f"{path} 的 source_name 必须是非空字符串")
-    if not isinstance(manifest["enabled"], bool):
-        raise ManifestError(f"{path} 的 enabled 必须是布尔值")
+    for optional in ("source_alias", "source_group"):
+        if optional in manifest and not (isinstance(manifest[optional], str) and manifest[optional].strip()):
+            raise ManifestError(f"{path} 的 {optional} 必须是非空字符串")
 
     config = manifest.get("default_config", {})
     if not isinstance(config, dict):

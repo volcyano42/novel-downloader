@@ -1,6 +1,7 @@
 {
   "source_name": "fanqie-requests-default",
-  "enabled": true,
+  "source_alias": "番茄·直连",
+  "source_group": "番茄",
   "common": {
     "mode": "requests",
     "timeout": 30,

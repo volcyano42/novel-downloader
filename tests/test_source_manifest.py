@@ -14,7 +14,6 @@ def _write(tmp_path, manifest: dict, files: tuple[str, ...] = ()):  # 帮助函�
 
 BASE = {
     "source_name": "demo-requests-default",
-    "enabled": True,
     "default_config": {
         "search": {"mode": "requests", "timeout": 30, "retry_times": 3},
     },
@@ -34,9 +33,9 @@ def test_load_manifest_missing_file(tmp_path):
 
 
 def test_load_manifest_missing_identity_field(tmp_path):
-    bad = {k: v for k, v in BASE.items() if k != "enabled"}
+    bad = {k: v for k, v in BASE.items() if k != "source_name"}
     d = _write(tmp_path, bad)
-    with pytest.raises(ManifestError, match="enabled"):
+    with pytest.raises(ManifestError, match="source_name"):
         load_manifest(d)
 
 
@@ -88,7 +87,6 @@ def test_common_field_illegal_for_one_mode(tmp_path):
     """同时存在 api / browser 能力时，common 不能放 api 专属字段。"""
     m = {
         "source_name": "demo-two-modes",
-        "enabled": True,
         "common": {"key": "xxx"},                       # key 只属于 api
         "default_config": {
             "search": {"mode": "api"},
@@ -116,7 +114,6 @@ def test_common_nonempty_without_capability_sections(tmp_path):
     """common 非空但 default_config 零能力段 → ManifestError（而非 TypeError）。"""
     m = {
         "source_name": "demo-empty",
-        "enabled": True,
         "common": {"timeout": 30},
         "default_config": {},
     }

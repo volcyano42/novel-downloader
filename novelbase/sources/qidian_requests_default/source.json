@@ -1,6 +1,7 @@
 {
   "source_name": "qidian-requests-default",
-  "enabled": true,
+  "source_alias": "起点·直连",
+  "source_group": "起点",
   "common": {
     "mode": "requests",
     "timeout": 30,

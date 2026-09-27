@@ -12,7 +12,6 @@ def _source(root: Path, dirname: str, source_name: str) -> Path:
     d.mkdir(parents=True, exist_ok=True)
     (d / "source.json").write_text(json.dumps({
         "source_name": source_name,
-        "enabled": True,
         "default_config": {"search": {"mode": "requests"}},
     }, ensure_ascii=False), encoding="utf-8")
     (d / "search.py").write_text(

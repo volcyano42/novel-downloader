@@ -230,7 +230,6 @@ export function deleteTask(taskId: string) {
 /** 单个书源的运行时信息（GET /download/sources 的条目）。 */
 export interface SourceInfo {
   capabilities: Record<string, string>;
-  enabled: boolean;
   /** 分组名（"" = 未分组；出厂预置 + 用户层覆盖）。 */
   source_group: string;
   /** 显示别名（"" = 未设，显示 source_name）。 */
@@ -246,7 +245,6 @@ export interface SourceOption {
   name: string;
   alias: string;
   group: string;        // "" = 未分组
-  enabled: boolean;     // Task 6 随 enabled 废弃删除
 }
 
 /** 把 useSources() 的响应转成选源列表：未设别名时 alias 回落 source_name，未设分组时 group 为空串。
@@ -257,7 +255,6 @@ export function toSourceOptions(sources?: Record<string, SourceInfo> | null): So
     name,
     alias: info.source_alias || name,
     group: info.source_group || "",
-    enabled: info.enabled,
   }));
 }
 
