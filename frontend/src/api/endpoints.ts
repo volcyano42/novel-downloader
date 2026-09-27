@@ -87,6 +87,10 @@ export interface SourceConfig {
   declared_capabilities: Record<string, string>;
   /** 能力段 → 三层合并后的完整配置 */
   config: Record<string, Record<string, unknown>>;
+  /** 分组名（"" = 未分组；出厂预置 + 用户层覆盖）。 */
+  source_group: string;
+  /** 显示别名（"" = 未设，显示 source_name）。 */
+  source_alias: string;
 }
 
 export type GroupsConfig = Record<string, Record<string, object>>;
@@ -226,6 +230,10 @@ export function deleteTask(taskId: string) {
 export interface SourceInfo {
   capabilities: Record<string, string>;
   enabled: boolean;
+  /** 分组名（"" = 未分组；出厂预置 + 用户层覆盖）。 */
+  source_group: string;
+  /** 显示别名（"" = 未设，显示 source_name）。 */
+  source_alias: string;
 }
 
 export function fetchSources() {
@@ -303,7 +311,10 @@ export function getSourceConfig(source: string) {
 
 export function saveSourceConfig(
   source: string,
-  data: { enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>> },
+  data: {
+    enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>>;
+    source_group?: string; source_alias?: string;
+  },
 ) {
   return apiPut<void>(`/config/sources/${source}`, data);
 }

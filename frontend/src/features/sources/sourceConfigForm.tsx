@@ -135,6 +135,17 @@ export function SourceConfigEditor({ name }: { name: string }) {
   const caps = cfg?.capabilities ?? {};
   const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
+  // 并发数：与折叠条旧实现同样的「字符串 + 失焦校验提交」策略（非法不写）
+  const [concurrency, setConcurrency] = useState("1");
+  useEffect(() => { setConcurrency(String(cfg?.concurrency ?? 1)); }, [cfg?.concurrency]);
+  const commitConcurrency = () => {
+    const n = Number(concurrency);
+    if (!Number.isInteger(n) || n < 1) {
+      setConcurrency(String(cfg?.concurrency ?? 1));
+      return;
+    }
+    if (n !== (cfg?.concurrency ?? 1)) saveSource.mutate({ concurrency: n });
+  };
   const modeOptions = Object.entries(MODE_META)
     .map(([m, meta]) => ({ value: m, label: meta.label }));
 
@@ -177,6 +188,22 @@ export function SourceConfigEditor({ name }: { name: string }) {
       <p className="pb-1 text-[11px] text-slate-400">
         切换引擎模式可能不可用（不同模式的接口/参数互不通用）；不可用时点「恢复默认」回退。
       </p>
+      <Row label="分组" desc="搜索页可按分组批量勾选">
+        <TextField value={String(cfg?.source_group ?? "")} onChange={v => saveSource.mutate({ source_group: v })} />
+      </Row>
+      <Row label="别名" desc="界面显示名；留空则显示 source_name">
+        <TextField value={String(cfg?.source_alias ?? "")} onChange={v => saveSource.mutate({ source_alias: v })} />
+      </Row>
+      <Row label="并发数" desc="该书源同时最多几个请求在飞（跨任务共享，默认 1）">
+        <input
+          type="number" min={1} step={1}
+          value={concurrency}
+          onChange={e => setConcurrency(e.target.value)}
+          onBlur={commitConcurrency}
+          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          className="w-16 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-right text-xs text-slate-700 outline-none dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300"
+        />
+      </Row>
       {Object.entries(caps).length === 0 && <p className="py-1 text-[11px] text-slate-400">该书源未声明能力</p>}
       {Object.entries(caps).map(([cap, mode]) => {
         const fields = ENGINE_FIELDS[mode] ?? [];

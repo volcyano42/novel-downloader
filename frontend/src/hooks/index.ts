@@ -231,7 +231,10 @@ export function useDeleteSearchHistory() {
 export function useSaveSourceConfig(source: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>> }) =>
+    mutationFn: (data: {
+      enabled?: boolean; concurrency?: number; config?: Record<string, Record<string, unknown>>;
+      source_group?: string; source_alias?: string;
+    }) =>
       saveSourceConfig(source, data),
     onSuccess: () => {
       // 两侧都要失效：设置页读 ["source-config", src]，设置页折叠条（SourceAccordion）读 ["sources"]
