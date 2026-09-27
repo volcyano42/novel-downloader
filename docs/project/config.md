@@ -38,7 +38,8 @@ storage:                    # ⚠️ 遗留死配置，见下
 ```
 
 ```yaml
-enabled: true              # 顶层：启用状态，覆盖 source.json 的出厂值
+source_group: 番茄         # 顶层：分组名（一个源一个组；留空 / 删键 = 未分组，回落出厂）
+source_alias: 番茄·直连    # 顶层：显示别名（留空 / 删键 = 回落出厂 / source_name）
 concurrency: 1             # 顶层：书源级并发额度（同一书源同时最多几个请求在飞，跨任务共享）
 search:                    # 逐能力段：search / novel_info / chapter_list / chapter_content
   mode: requests           # 逐能力覆盖：合法值 browser/requests/api；不写则继承声明；null = 恢复声明
@@ -52,9 +53,10 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
 # novel_info / chapter_list / chapter_content 同上
 ```
 
-- **顶层 `enabled`**：覆盖出厂启用状态（`shared.config.is_source_enabled`）。
-  书源是否「启用」= 读 `sites/{source_name}.yaml` 顶层 `enabled`，无则回落到 `source.json.enabled`。
-  **「启用集」**：`shared.config.enabled_source_names()` =「出厂/用户 `enabled`」。
+- **顶层 `source_group` / `source_alias`**：书源的分组名与显示别名；用户层覆盖出厂 `source.json` 的同名字段。
+  空串（或删除该键）= 回落出厂值 / `source_name`。读取入口 `shared.config.source_group()` /
+  `source_alias()` / `display_name()`。**`enabled` 已废弃**（2026-09-27）：书源不再有启用概念，
+  搜索时由用户勾选参与的书源（默认全选），默认参与集 = `shared.config.default_source_names()`。
 - **顶层 `concurrency`**：**书源级并发额度**（同一书源同时最多几个请求在飞，**跨任务共享**）；
   用户层顶层覆盖出厂 `source.json` 顶层，缺省 **1**；非正整数忽略回退 1。读取入口
   `shared.config.source_concurrency()`，机制详见 [sources.md](sources.md)。
@@ -62,7 +64,7 @@ search:                    # 逐能力段：search / novel_info / chapter_list /
   **出厂默认改为 `[0, 0]`（不设置 = 不限速；旧出厂值为 `[3,5]`）**。生效优先级：
   `dataclass 默认 → source.json 的 common → 能力段自身 → 用户层 sites yaml`。
   ⚠️ **历史写入过 `delay` 的老用户**（旧版曾在 `sites/*.yaml` 落过 `delay: [3,5]`）会因三层合并语义继续以用户层为准，
-  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 `enabled` / api 源的能力段 `key`），新用户不受影响。
+  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 api 源的能力段 `key`），新用户不受影响。
 - **逐能力段**：字段随该能力的**有效 mode** 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
 - **用户层可逐能力覆盖 mode**：`{cap}.mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
   写 `null`（或删除该键）= 恢复声明；非法值忽略回退声明。唯一入口 `shared.config.effective_capabilities()`；

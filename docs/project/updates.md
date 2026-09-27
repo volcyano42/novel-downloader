@@ -512,3 +512,31 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **流程**：4 个 task 走 subagent-driven-development（每 task 一轮 review）+ final 全分支 review（判定 With fixes）→ fix 波 → scoped re-review 6/6 ADDRESSED
 - 测试：`python -m pytest tests -q` = **499 passed, 0 failed**（484 → 499）；前端 `npx tsc -b` 0 错
 - **未合并 main**：本批只在 `dev`（`05413db`），main 停在 `fd12a2c`
+
+### 书源元信息（分组/别名）与按选择搜索
+
+- **`enabled` 彻底废弃**：`source.json` 与用户层都不再有该字段；`is_source_enabled()` /
+  `enabled_source_names()` 删除，改为 `default_source_names()`（= `sorted(list_sources())`，全部书源，无任何过滤）。
+  旧用户层残留键不读，`PUT /config/sources/{name}` 保存时清理
+- **新增元信息**：用户层顶层 `source_group`（一个源一个组，空 = 未分组）/ `source_alias`
+  （显示别名，未设回落 `source_name`）；读取入口 `shared.config.source_group()` / `source_alias()` /
+  `display_name()`；10 个内置源出厂预置分组与别名（`source.json` 可选字段，用户层可覆盖）——
+  番茄四源（`番茄·直连` / `番茄·浏览器` / `番茄·Rain API` / `番茄·oiapi`，组 `番茄`）、
+  起点两源（`起点·直连` / `起点·浏览器`，组 `起点`）、七猫三源（`七猫·直连` / `七猫·浏览器` / `七猫·Rain API`，组 `七猫`）、
+  `92xs-requests-default`（组 / 别名均 `92xs`）
+- **搜索多源**：`GET /download/search?sources=a,b,c`（逗号分隔；缺省 = 全部书源；未知源静默跳过，
+  筛完为空 400）；前端标题 tab 双框（「全选/分组/未分组」分段单选 + 逐源复选，默认全选、不持久化），
+  URL tab 单选按分组分节显示别名；结果来源 tab 显示别名
+- **设置页**：折叠条顶部显示「别名 + 分组 + 能力」，**移除启用开关**，并发数移入展开区；
+  展开区新增「分组 / 别名」输入
+- **CLI**：`sources list` 显示 `别名  [分组]  (source_name)  capabilities`（`--json` 键
+  `source_name` / `source_alias` / `source_group` / `capabilities`）、交互式单源详情菜单删除启用开关、
+  `cmd_source` 默认源集改为 `default_source_names()`
+- 设计见 `docs/superpowers/specs/2026-09-27-source-meta-and-search-selection-design.md`，
+  计划见 `docs/superpowers/plans/2026-09-27-source-meta-and-search-selection.md`
+- 测试：全量 `python -m pytest tests -q` 本机**未跑通**（每个 `tmp_path` 用例约 62s），
+  改做定向验证——`tests/test_source_metadata.py` 5 个 `tmp_path` 关键用例逐个 PASSED
+  （`test_meta_declared_then_user_override` / `test_meta_blank_user_value_falls_back` /
+  `test_default_source_names_lists_all_sources` / `test_manifest_rejects_blank_optional_meta` /
+  `test_manifest_without_enabled_is_valid`），三条 grep 验收通过；前端 `npx tsc -b` 0 错、
+  `npm run lint`（oxlint）0 告警。**全量待 CI / 本机复核**

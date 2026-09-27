@@ -2,19 +2,23 @@
 
 ## Unreleased
 
-> 2026-09-27。`source_name` 全局唯一（实现层检测）与 Termux 构建链路修复。
+> 2026-09-27。`source_name` 全局唯一（实现层检测）、Termux 构建链路修复，以及书源元信息（分组/别名）与按选择搜索（`enabled` 废弃）。
 
 ### 新增
 
 1. **`source_name` 全局唯一（实现层检测）** — `source_name` 是全书源体系的唯一键（公共 API / 后端 / 前端 / CLI / `sites/{name}.yaml`），此前只有测试层兜底，实现层撞名时静默错（`list_sources()` 用 `set` 静默去重、`get_manifest()` / `resolve()` 静默取字典序第一个目录、`build_manifest` 静默覆盖 `SOURCE_DIRS`）。现新增唯一检测点 `novelbase/sources/manifest.py::scan_source_names()`：内置根与私有根视为**同一命名空间**，任何两个目录声明同一 `source_name` 一律抛 `DuplicateSourceNameError`（`ManifestError` 子类）。四条公开入口与 `build_manifest`（撞名即 `SystemExit`，不写出半成品 `_manifest.py`）全部接入；`capabilities()` 对撞名 `raise` 而非 `return {}`，避免后端 `GET /config/sources/{name}` 静默显示「无能力」
+2. **书源元信息（分组 / 别名）** — 用户层顶层 `source_group`（分组，一个源一个组，空 = 未分组）/ `source_alias`（显示别名，未设回落 `source_name`），读取入口 `shared.config.source_group()` / `source_alias()` / `display_name()`；10 个内置源出厂预置分组与别名（`source.json` 可选字段，用户层可覆盖）
 
 ### 变更（破坏性）
 
 1. **私有源同名叠加机制取消** — `resolve()` 原「同名能力内置优先、内置缺失再用私有补齐」不再存在：私有源必须自带独立 `source_name`，**不能复用内置 id**（不留 `overrides` 之类的逃生舱）。`NLD_PRIVATE_SOURCES` 下若已有复用内置 id 的目录，升级后加载即报错，需改其 `source.json` 的 `source_name`（目录名可不变，二者本就解耦）并同步 `app_data/config/sites/{新名}.yaml`
+2. **`enabled` 彻底废弃** — 书源不再有「启用」概念：`source.json` 与用户层都不再有该字段，`is_source_enabled()` / `enabled_source_names()` 删除，默认参与集改为 `shared.config.default_source_names()`（= 全部书源，无任何过滤）。旧用户层残留键不读、`PUT /config/sources/{name}` 保存时清理。搜索改为按用户勾选参与的书源（前端默认全选、不持久化），并支持 `GET /download/search?sources=a,b,c`（缺省 = 全部书源；未知源静默跳过，筛完为空 400）
 
 ### 修复
 
 1. **Termux 构建链路** — 预装 `sed` 写法（外层 `bash -c` 的单引号嵌套会吃掉反斜杠）、`uvicorn[standard]` 的 `uvloop` extras 在 bionic 编不了、验证步骤 app 路径写错（`services.backend.main` → `backend.main`）
+
+> 测试：本机`python -m pytest tests -q`全量未跑通（每个`tmp_path`用例约 62s）——定向验证：`tests/test_source_metadata.py` 5 个`tmp_path`关键用例逐个 PASSED、三条 grep 验收通过；前端`npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。全量待 CI / 本机复核。
 
 ## v4.5.1
 
