@@ -48,7 +48,7 @@
 - `frontend/src/features/detail/SourcePickerDialog.tsx` — 去掉「未启用」标注、显示别名
 
 **测试**
-- 新增 `tests/test_source_metadata.py`；改写 `tests/test_source_availability.py`、`tests/test_source_enabled.py`、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_cli_effective_mode.py`、`tests/test_interactive_cli.py`
+- 新增 `tests/test_source_metadata.py`（并从 `tests/test_source_enabled.py` 迁入三层合并用例后删除该文件）；改写 `tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_cli_effective_mode.py`、`tests/test_interactive_cli.py`（`tests/test_source_availability.py` 已随 v4.5.1 删除）
 
 **文档**
 - `docs/session-prompt.md`、`docs/project/{sources,config,cli,updates}.md`、`CHANGELOG.md`
@@ -970,7 +970,7 @@ git commit -m "feat(cli): 书源显示别名与分组，默认源集改为全部
 - Modify: `shared/config.py`（删 `is_source_enabled` / `enabled_source_names`）
 - Modify: `backend/routers/download.py`、`backend/routers/config.py`、`backend/services/source_guard.py`（docstring）
 - Modify: `frontend/src/api/endpoints.ts`、`frontend/src/features/detail/SourcePickerDialog.tsx`
-- Test: `tests/test_source_metadata.py`（合并三层合并用例）、删除 `tests/test_source_enabled.py`、`tests/test_source_availability.py`、`tests/test_backend_download_routes.py`
+- Test: `tests/test_source_metadata.py`（合并三层合并用例）、`git rm tests/test_source_enabled.py`、`tests/test_backend_download_routes.py`
 
 **Interfaces:**
 - Produces: `source.json` 无 `enabled`（其余键不变）；`SourceInfo` 无 `enabled`；`SourceOption` 无 `enabled`
@@ -1156,7 +1156,7 @@ Expected: pytest 全绿；三条 grep 均打印 OK；tsc 0 错、lint 0 告警
 - [ ] **Step 11: 提交**
 
 ```bash
-git add novelbase/sources/manifest.py novelbase/sources/*/source.json template/config/sites/*.yaml shared/config.py backend/routers/download.py backend/routers/config.py backend/services/source_guard.py frontend/src/api/endpoints.ts frontend/src/features/detail/SourcePickerDialog.tsx tests/test_source_metadata.py tests/test_source_availability.py tests/test_backend_download_routes.py tests/test_backend_config_routes.py
+git add novelbase/sources/manifest.py novelbase/sources/*/source.json template/config/sites/*.yaml shared/config.py backend/routers/download.py backend/routers/config.py backend/services/source_guard.py frontend/src/api/endpoints.ts frontend/src/features/detail/SourcePickerDialog.tsx tests/test_source_metadata.py tests/test_backend_download_routes.py tests/test_backend_config_routes.py
 git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与别名表达"
 ```
 
@@ -1192,7 +1192,7 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 在「关键约定」里更新/新增：
 
 ```markdown
-- **书源元信息与选择（2026-09-27）**：`enabled` **已彻底废弃**（`source.json` 与用户层都不再有；旧键不读、PUT 时清理）。书源以 `source_group`（分组，一个源一个组，空 = 未分组）+ `source_alias`（显示别名，未设回落 `source_name`）表达；读取入口 `shared.config.source_group()/source_alias()/display_name()`。默认参与集 = `shared.config.default_source_names()`（本环境**可用**的全部源；Android 仍排除 browser 源）。搜索支持 `GET /download/search?sources=a,b,c`（缺省 = 默认参与集；未知/不可用源静默跳过，全无效 400）。前端搜索页（标题 tab）为「全选/分组」分段单选 + 逐源复选（**默认全选、不持久化**），URL tab 单选按分组分节显示别名。
+- **书源元信息与选择（2026-09-27）**：`enabled` **已彻底废弃**（`source.json` 与用户层都不再有；旧键不读、PUT 时清理）。书源以 `source_group`（分组，一个源一个组，空 = 未分组）+ `source_alias`（显示别名，未设回落 `source_name`）表达；读取入口 `shared.config.source_group()/source_alias()/display_name()`。默认参与集 = `shared.config.default_source_names()`（**全部**书源，无任何环境相关过滤）。搜索支持 `GET /download/search?sources=a,b,c`（缺省 = 默认参与集；未知源静默跳过，全无效 400）。前端搜索页（标题 tab）为「全选/分组」分段单选 + 逐源复选（**默认全选、不持久化**），URL tab 单选按分组分节显示别名。
 ```
 
 并把任何提到 `enabled_source_names()` 的地方改为 `default_source_names()`；若文档里仍有「环境能力表 / Android 不可用 / `available`」的段落，一并删除或标注「已随 v4.5.1 移除」。

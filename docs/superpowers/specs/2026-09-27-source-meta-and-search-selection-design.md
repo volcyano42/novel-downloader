@@ -177,7 +177,7 @@ search: { ... }          # 逐能力段（不变）
 设置页编辑分组/别名 ──PUT /config/sources/{name}──> sites/{name}.yaml（顶层 source_group/source_alias）
                                                   └─ 保存时清理旧 enabled 键
 列表展示           <──GET /download/sources──────── {capabilities, source_group, source_alias}
-搜索页勾选          ──GET /download/search?query=&sources=a,b,c──> 过滤（存在 + 可用）
+搜索页勾选          ──GET /download/search?query=&sources=a,b,c──> 过滤（仅存在性）
                                                                   └─ 逐源并发 search([源], …)
 默认参与集 = default_source_names() = 全部书源
 ```
@@ -216,7 +216,7 @@ search: { ... }          # 逐能力段（不变）
 - `frontend/src/features/detail/SourcePickerDialog.tsx`
 
 **测试 / 文档**
-- `tests/test_source_metadata.py`（新，替代 `test_source_enabled.py`）、`tests/test_source_availability.py`、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_interactive_cli.py`、`tests/test_cli_effective_mode.py` 等
+- `tests/test_source_metadata.py`（新，替代 `test_source_enabled.py`；后者已删，`test_source_availability.py` 亦已随 v4.5.1 删除）、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_interactive_cli.py`、`tests/test_cli_effective_mode.py` 等
 - `docs/session-prompt.md`、`docs/project/{sources,config,cli,updates}.md`、`CHANGELOG.md`
 
 ## 8. 测试
