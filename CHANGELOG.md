@@ -1,5 +1,21 @@
 # 更新日志
 
+## Unreleased
+
+> 2026-09-27。`source_name` 全局唯一（实现层检测）与 Termux 构建链路修复。
+
+### 新增
+
+1. **`source_name` 全局唯一（实现层检测）** — `source_name` 是全书源体系的唯一键（公共 API / 后端 / 前端 / CLI / `sites/{name}.yaml`），此前只有测试层兜底，实现层撞名时静默错（`list_sources()` 用 `set` 静默去重、`get_manifest()` / `resolve()` 静默取字典序第一个目录、`build_manifest` 静默覆盖 `SOURCE_DIRS`）。现新增唯一检测点 `novelbase/sources/manifest.py::scan_source_names()`：内置根与私有根视为**同一命名空间**，任何两个目录声明同一 `source_name` 一律抛 `DuplicateSourceNameError`（`ManifestError` 子类）。四条公开入口与 `build_manifest`（撞名即 `SystemExit`，不写出半成品 `_manifest.py`）全部接入；`capabilities()` 对撞名 `raise` 而非 `return {}`，避免后端 `GET /config/sources/{name}` 静默显示「无能力」
+
+### 变更（破坏性）
+
+1. **私有源同名叠加机制取消** — `resolve()` 原「同名能力内置优先、内置缺失再用私有补齐」不再存在：私有源必须自带独立 `source_name`，**不能复用内置 id**（不留 `overrides` 之类的逃生舱）。`NLD_PRIVATE_SOURCES` 下若已有复用内置 id 的目录，升级后加载即报错，需改其 `source.json` 的 `source_name`（目录名可不变，二者本就解耦）并同步 `app_data/config/sites/{新名}.yaml`
+
+### 修复
+
+1. **Termux 构建链路** — 预装 `sed` 写法（外层 `bash -c` 的单引号嵌套会吃掉反斜杠）、`uvicorn[standard]` 的 `uvloop` extras 在 bionic 编不了、验证步骤 app 路径写错（`services.backend.main` → `backend.main`）
+
 ## v4.5.1
 
 > 2026-09-26。移除 Android 套壳与环境能力表（移动端改走 Termux），并修两处缺陷。

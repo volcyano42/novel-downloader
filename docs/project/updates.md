@@ -490,3 +490,25 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **Windows x64 产物形态**：portable（`build-windows.yml` + `build-portable.ps1`）与 Nuitka onefile（`build-windows-nuitka.yml` + `build-nuitka.ps1`）保持**分离**，后者不进 `build-dist.yml` / `release.yml`（Nuitka 编译 30–60 分钟，会让全平台构建超时）
 - ⚠️ **workflow 注册陷阱（实测确认）**：`build-windows-nuitka.yml` 是 2026-09-19 在 dev 上拆出的，因此在它随 main 上去之前，`workflow_dispatch` API 对它是 **404 Not Found**（GitHub 只认默认分支上的 workflow）。先合并 main 才能 dispatch
 - 测试：`python -m pytest tests -q` = **484 passed, 0 failed**
+
+## 2026-09-27 变更（Termux 构建链路修复 + `source_name` 全局唯一）
+
+### Termux 构建链路修复（6 个提交）
+
+- `f3185be` docs(git)：补三条约定（CI 触发范围、GCM API 凭据用法、新 workflow 注册陷阱）
+- `4fe2bd7` docs：记录迁移补空章节的真相与两个校验盲区
+- `7ad4b7e` fix(ci)：Termux 构建去掉 `uvicorn[standard]` 的 extras（`uvloop` 在 bionic 编不了）
+- `5ca32c6` fix(ci)：Termux 预装 `sed` 换写法 + 加自检，让失败 1 分钟内自曝
+- `9be69b2` fix(ci)：外层 `bash -c` 单引号嵌套吃掉反斜杠 → `sed` 改双引号
+- `fd12a2c` fix(ci)：Termux 验证步骤的 app 路径写错（`services.backend.main` → `backend.main`）
+
+### `source_name` 全局唯一（实现层检测，9 个提交）
+
+- **问题**：`source_name` 是全书源体系的唯一键（公共 API / 后端 / 前端 / CLI / `sites/{name}.yaml`），但唯一性**只有测试层兜底**（`tests/test_source_contracts.py::test_source_names_unique`，且本就是「内置 + 私有合并计数」的全局口径）；实现层撞名时静默错：`list_sources()` 用 `set` 静默去重、`get_manifest()` / `resolve()` 静默取字典序第一个目录、`build_manifest` 静默覆盖 `SOURCE_DIRS`（且编译分支 `list_sources()` 不去重、会返回重复条目）。触发场景很常见：拷贝一个书源目录做新源、忘了改 `source.json` 的 `source_name`
+- **决策**：**严格全局唯一** —— 内置根与私有根视为**同一命名空间**，任何两个目录声明同一 `source_name` 一律 `DuplicateSourceNameError`，**含私有源复用内置 id**；不留 `overrides` 之类的逃生舱。**破坏性变更（已确认接受）**：原 `resolve()` 的「同名能力内置优先、内置缺失再用私有补齐」私有源叠加机制**取消**，私有源必须自带独立 `source_name`
+- **实现**：① 新增唯一检测点 `novelbase/sources/manifest.py::scan_source_names(roots, *, strict=False)`（子类异常 `DuplicateSourceNameError(ManifestError)`；`strict` 区分运行时「跳过坏 manifest」与构建期「坏 manifest 直接炸」）；② `novelbase/source.py` 删除 `_iter_source_dirs()`，收敛为 `_source_dirs()` / `_source_dir()` / `_resolve_private()`，`list_sources()` / `get_manifest()` / `capabilities()` / `resolve()` 全部走同一张全局唯一表 —— `capabilities()` 对撞名 `raise` 而非 `return {}`（否则后端 `GET /config/sources/{name}` 会静默显示「无能力」）；③ `novelbase/utils/build_manifest.py` 复用同一函数，撞名时 `SystemExit` 且**不写出** `_manifest.py`（窄化 `except DuplicateSourceNameError`，让坏 JSON 等 `ManifestError` 自然冒泡，不误报「重复」）；④ 不改「单源 manifest 非法」的既有容错分工，不引入加载缓存
+- **测试**：新增 `tests/test_source_names_unique.py`（唯一性扫描 + 四个入口级 raise）、`tests/test_build_manifest_unique.py`（撞名中止 / 坏 manifest 不误报 / 生成形状）；改写 `tests/test_source_contracts.py::test_builtin_wins_over_private` → `test_duplicate_source_name_across_roots_rejected`（机制已取消）
+- **文档**：`docs/project/sources.md`（书源结构 + 私有源隔离 + 公共 API 表）、`docs/session-prompt.md`、`AGENTS.md` 口径同步；设计见 `docs/superpowers/specs/2026-09-27-source-name-uniqueness-design.md`，计划见 `docs/superpowers/plans/2026-09-27-source-name-uniqueness.md`
+- **流程**：4 个 task 走 subagent-driven-development（每 task 一轮 review）+ final 全分支 review（判定 With fixes）→ fix 波 → scoped re-review 6/6 ADDRESSED
+- 测试：`python -m pytest tests -q` = **499 passed, 0 failed**（484 → 499）；前端 `npx tsc -b` 0 错
+- **未合并 main**：本批只在 `dev`（`05413db`），main 停在 `fd12a2c`
