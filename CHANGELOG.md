@@ -17,8 +17,9 @@
 ### 修复
 
 1. **Termux 构建链路** — 预装 `sed` 写法（外层 `bash -c` 的单引号嵌套会吃掉反斜杠）、`uvicorn[standard]` 的 `uvloop` extras 在 bionic 编不了、验证步骤 app 路径写错（`services.backend.main` → `backend.main`）
+2. **browser 书源出厂默认不再是空 profile** — `user_data_dir` 的出厂默认从 `""` 改为 `app_data/browser/Chromium/User Data`（持久化 profile，相对路径按**仓库根**解析）。此前出厂默认为空 → `shared.config.build_options()` 得到 `None` → `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录**不落盘**、进程一退就失效，表现为「每次启动登录态重置」；`sites/*.yaml` 迁移把旧的持久化路径写丢后暴露。三个内置 browser 源（`fanqie` / `qidian` / `qimao`）同步修改；回归用例 `tests/test_source_contracts.py::test_builtin_browser_sources_default_to_persistent_profile`（**已实测修复前必然失败**）
 
-> 测试：本机`python -m pytest tests -q`全量未跑通（每个`tmp_path`用例约 62s）——定向验证：`tests/test_source_metadata.py` 5 个`tmp_path`关键用例逐个 PASSED、三条 grep 验收通过；前端`npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。全量待 CI / 本机复核。
+> 测试（2026-09-30 复核）：本机全量 `python -m pytest tests -q` → **513 passed, 0 failed**（22.7s；此前记录「全量未跑通」的 `tmp_path` 拖慢已不复现）；CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387) 三个 Python 版本全绿；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。
 
 ## v4.5.1
 

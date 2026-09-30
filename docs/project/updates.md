@@ -534,9 +534,35 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
   `cmd_source` 默认源集改为 `default_source_names()`
 - 设计见 `docs/superpowers/specs/2026-09-27-source-meta-and-search-selection-design.md`，
   计划见 `docs/superpowers/plans/2026-09-27-source-meta-and-search-selection.md`
-- 测试：全量 `python -m pytest tests -q` 本机**未跑通**（每个 `tmp_path` 用例约 62s），
-  改做定向验证——`tests/test_source_metadata.py` 5 个 `tmp_path` 关键用例逐个 PASSED
-  （`test_meta_declared_then_user_override` / `test_meta_blank_user_value_falls_back` /
-  `test_default_source_names_lists_all_sources` / `test_manifest_rejects_blank_optional_meta` /
-  `test_manifest_without_enabled_is_valid`），三条 grep 验收通过；前端 `npx tsc -b` 0 错、
-  `npm run lint`（oxlint）0 告警。**全量待 CI / 本机复核**
+- 测试：**2026-09-30 复核**——全量 `python -m pytest tests -q` → **513 passed, 0 failed**（22.7s；
+  当时记录的「每个 `tmp_path` 用例约 62s」拖慢已不复现），CI 三个 Python 版本全绿；前端
+  `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。（当次执行时的定向验证：`tests/test_source_metadata.py`
+  5 个 `tmp_path` 关键用例逐个 PASSED、三条 grep 验收通过。）
+
+## 2026-09-30 变更（browser 登录态修复 + 计划收尾）
+
+### browser 书源出厂默认不再为空 profile（修「每次启动登录态重置」）
+
+- **根因**：三个内置 browser 源（`fanqie-browser-default` / `qidian-browser-default` /
+  `qimao-browser-default`）的 `user_data_dir` 出厂默认是 `""` → `shared/config.py::build_options()`
+  得到 `None` → `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录
+  **不落盘**、进程一退就失效。`app_data/config/sites/*-browser-default.yaml`（2026-09-26 sites
+  迁移产物）里同样是空串——而**用户层的空串会经 `deep_merge` 覆盖出厂默认**，所以此前两边都是空；
+  旧的 `sites/fanqie.yaml` / `qidian.yaml` / `qimao.yaml` 里虽写着
+  `app_data\browser\Chromium\User Data`，但那些平台级文件自书源扁平化后**已不再是读取源**
+  （`_user_site_cfg()` 只读 `sites/{source_name}.yaml`）——「看起来配了，其实没生效」。
+- **修复**：出厂 `source.json` 的 `common.user_data_dir` → `app_data/browser/Chromium/User Data`
+  （`common` 并入每个能力段，见 `novelbase/sources/manifest.py:98`）；本机用户层同步该路径。
+  相对路径由 `build_options()` 按仓库根解析为绝对路径后交给 `launch_persistent_context()`。
+- **回归用例**：`tests/test_source_contracts.py::test_builtin_browser_sources_default_to_persistent_profile`
+  （**已实测修复前必然失败**：回滚出厂值为 `""` 后 `assert '' == 'app_data/…/User Data'`）。
+- **未改 template**：`template/config/sites/*.yaml` 不写该字段——出厂默认已覆盖；模板写死会让
+  新装用户的用户层多一个**覆盖项**，将来出厂默认变更不会跟随。
+- **注意**：三个 browser 源共用同一 profile，同一时刻只能有一个 Chromium 实例（`engine.py`
+  已有「profile 已被本引擎的持久化会话占用」的明确报错）。
+
+### 计划收尾：`2026-09-27-source-meta-and-search-selection`
+
+- 7 个 Task 的实现此前均已落地（对应各 `feat` / `fix` 提交），本次补齐**验证**并勾选计划里的
+  checkbox；完成记录见该 plan 末节。全量 `python -m pytest tests -q` **513 passed**、
+  `npx tsc -b` 0 错、`npx oxlint` 0 告警、`python cli.py sources list` 冒烟通过。

@@ -82,6 +82,11 @@ novelbase/sources/{dir}/
   - `browser`：`mode, timeout, retry_times, delay, backoff_factor, browser_type, headless, user_data_dir, viewport, extra_args, auto_reconnect`
   - `api`：`mode, timeout, retry_times, delay, backoff_factor, key, params`
 - 字段命名全链统一用 `retry_times`。
+- `browser` 的 `user_data_dir`：**出厂默认** = `app_data/browser/Chromium/User Data`（持久化
+  profile，登录态落盘）。相对路径由 `shared/config.py::build_options()` 按**仓库根**解析成绝对
+  路径后交给 `launch_persistent_context()`；用户层写成空串 = 匿名 context（窗口里登录不落盘，
+  进程退出即失效，`deep_merge` 的空串会覆盖出厂默认）。2026-09-30 前出厂默认为空串，
+  导致三个内置 browser 源每次启动都丢登录态。
 - **元信息读取入口**（`shared.config`）：`source_group(name)` / `source_alias(name)`（用户层顶层覆盖出厂 `source.json` 顶层，空串 = 未设）/ `display_name(name)`（别名优先、未设回落 `source_name`）。`enabled` 已彻底废弃（2026-09-27，见下）。
 
 ### mode 的用户覆盖（2026-09-25）

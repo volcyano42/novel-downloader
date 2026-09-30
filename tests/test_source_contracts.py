@@ -185,3 +185,30 @@ def test_required_params_unchanged():
     assert CAPABILITY_META["novel_info"]["required_params"] == ("url", "engine")
     assert CAPABILITY_META["chapter_list"]["required_params"] == ("url", "engine")
     assert CAPABILITY_META["chapter_content"]["required_params"] == ("chapter", "engine")
+
+
+def test_builtin_browser_sources_default_to_persistent_profile(tmp_path, monkeypatch):
+    """内置 browser 书源的**出厂**默认 `user_data_dir` = 持久化 profile，非空。
+
+    回归（2026-09-30）：出厂默认曾是 `""` → `build_options` 返回 `None` →
+    `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录
+    不落盘，表现为「每次启动登录态重置」。且 `deep_merge` 里用户层的空串会覆盖
+    出厂值，所以这一层必须给出非空路径（只靠用户层自觉填不可靠）。
+
+    `CONFIG_DIR` 指向空目录以隔离本机 `app_data/config/sites` —— 只校验出厂层。
+    """
+    import shared.config as sc
+
+    monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
+    expected_suffix = "app_data/browser/Chromium/User Data"
+
+    for name in ("fanqie-browser-default", "qidian-browser-default", "qimao-browser-default"):
+        merged = sc.merged_source_config(name)
+        for cap in CAPABILITY_META:
+            assert merged[cap]["user_data_dir"] == expected_suffix, (name, cap)
+
+        ud = sc.build_options(name, "browser").browser.user_data_dir
+        assert ud is not None, name                      # None = 匿名 context（回归点）
+        path = Path(ud)
+        assert path.is_absolute(), (name, ud)
+        assert str(path).replace("\\", "/").endswith(expected_suffix), (name, ud)

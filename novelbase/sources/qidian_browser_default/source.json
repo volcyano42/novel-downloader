@@ -10,7 +10,7 @@
     "backoff_factor": 2,
     "browser_type": "chromium",
     "headless": false,
-    "user_data_dir": "",
+    "user_data_dir": "app_data/browser/Chromium/User Data",
     "viewport": {},
     "extra_args": [],
     "auto_reconnect": false

@@ -222,3 +222,11 @@ python fix_empty_chapters.py --books <novel_id,...>    # 限定某几本书
 - **browser 持久化 profile 的问题仍未解决**：脚本运行时既读不到那个 profile 的登录态、也写不回它（`Last Browser` / `Cookies` 时间戳不动；日志 cookie 只有 10 条，而 profile 里有 25 个 fanqie cookie）。当前不需要（无图片章节），但将来若要用登录态章节，这是必须查的点。
 - 一个候选根因：`migrate.py` / `retry_failed.py` 的 `--browser-user-data-dir` **默认值是相对路径**（`app_data/browser/Chromium/User Data`），代码按 `Path.cwd() / path` 解析 → 换个目录跑就换了 profile；而 `common.py` 里明明有 `SCRIPT_DIR` 却没用它。
 - `common.py::prepare_browser_profile()` 的「杀残留 Chromium」只有 Windows 实现（`wmic` + `taskkill`，且被 `except: pass` 吞掉），**Linux/Termux 上静默失效**（清锁文件那半段是纯文件操作，仍然有效）。
+
+> **2026-09-30 更新（主程序侧已定位并修复，非本节脚本问题）**：主程序的 browser 书源存在同一
+> 类症状——`app_data/config/sites/*-browser-default.yaml`（2026-09-26 迁移产物）把 `user_data_dir`
+> 写成空串，而空的**用户层**值会经 `deep_merge` 覆盖出厂默认 → `build_options()` 返回 `None` →
+> 走匿名 context，登录态永不落盘。修法：出厂 `source.json` 的 `common.user_data_dir` 改为
+> `app_data/browser/Chromium/User Data`（三个内置 browser 源），本机用户层同步该路径；
+> 见 `docs/project/updates.md` 2026-09-30 节与 CHANGELOG。**本文上面三条讲的是 `novel-downloader-tools`
+> 侧的迁移脚本**（相对路径按 `Path.cwd()` 解析、杀残留进程只有 Windows 实现），不在此修复范围内。
