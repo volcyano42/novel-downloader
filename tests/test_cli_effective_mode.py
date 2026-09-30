@@ -26,7 +26,9 @@ def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
 
     out = capsys.readouterr().out
     # 逐源取行：仓库内其它源本就声明 search:requests，断言不可作用于整体输出。
-    line = next(ln for ln in out.splitlines() if ln.lstrip().startswith(f"- {KNOWN}"))
+    # 输出行形如「- <别名>  [<分组>]  (<source_name>)  capabilities: ...」——按括号里的
+    # source_name 定位，不依赖行首（别名可被用户覆盖、分组可为空）。
+    line = next(ln for ln in out.splitlines() if f"({KNOWN})" in ln)
     assert "search:browser" in line          # 有效 mode
     assert "search:requests" not in line     # 该源声明值不再直出
 
