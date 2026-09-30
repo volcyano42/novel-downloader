@@ -1264,6 +1264,6 @@ git commit -m "docs: 追平书源元信息与按选择搜索（enabled 废弃）
   - CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387)（`e7f769b`）Python 3.10 / 3.11 / 3.12 **全绿**。
   - 前端 `npx tsc -b` → 0 错；`npx oxlint` → 0 warnings / 0 errors（37 files）。
   - CLI 冒烟（T5 Step 7）：`python cli.py sources list` → 10 源，行形如 `- <别名>  [<分组>]  (<source_name>)  capabilities: …`。
-- **手工验收的自动化替代（T3 Step 5 / T4 Step 9）**：本机起 `uvicorn backend.main:app`（服务已构建的 `frontend/dist`）+ headless Chromium 冒烟。设置页：折叠条显示「别名 + `source_name` + 分组 badge + 能力 badge」，全文无任何「启用」字样；展开区有「分组 / 别名」输入（值 `番茄` / `番茄·浏览器`）与 browser 源的「用户数据目录」。搜索页：「标题搜索」tab 有分组分段按钮 + 「全不选」（默认全选）+ 「已选 10/10」+ 逐源复选（显示别名），「URL 直达」tab 存在。截图见 `%TEMP%/nld-ui/`。**注意**：`frontend/dist` 此前是旧构建（旧 `toSourceOptions`），本次已 `npm run build` 重建（该目录未入库）。
+- **手工验收的自动化替代（T3 Step 5 / T4 Step 9）**：本机起 `uvicorn backend.main:app`（服务已构建的 `frontend/dist`）+ headless Chromium 冒烟。设置页：折叠条显示「别名 + `source_name` + 分组 badge + 能力 badge」，全文无任何「启用」字样；展开区有「分组 / 别名」输入（值 `番茄` / `番茄·浏览器`）与 browser 源的「用户数据目录」。搜索页：「标题搜索」tab 有分组分段按钮 + 「全不选」（默认全选）+ 「已选 10/10」+ 逐源复选（显示别名），「URL 直达」tab 存在。截图存于 `tmp/nld-ui-20260930/`（工作区根目录，未入库）。**注意**：`frontend/dist` 此前是旧构建（旧 `toSourceOptions`），本次已 `npm run build` 重建（该目录未入库）。
 - **顺带修复**：`tests/test_cli_effective_mode.py::test_cmd_source_list_shows_effective_mode` 的行首断言在 T5 改了输出格式后失效（CI #73~#76 三个 Python 版本红灯），改为按 `(source_name)` 定位（`e7f769b`）。
 - **已知残留（按设计容忍，非缺陷）**：`app_data/config/sites/*.yaml` 10 个用户层文件仍带旧 `enabled:` 键——spec §6.8 明确「不读、PUT 时清理」，且该目录不入库；`tests/test_cli_dev_new_source.py` 里一处「并发全部启用书源」注释已同步改为「全部书源」。
