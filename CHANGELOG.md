@@ -18,8 +18,9 @@
 
 1. **Termux 构建链路** — 预装 `sed` 写法（外层 `bash -c` 的单引号嵌套会吃掉反斜杠）、`uvicorn[standard]` 的 `uvloop` extras 在 bionic 编不了、验证步骤 app 路径写错（`services.backend.main` → `backend.main`）
 2. **browser 书源出厂默认不再是空 profile** — `user_data_dir` 的出厂默认从 `""` 改为 `app_data/browser/Chromium/User Data`（持久化 profile，相对路径按**仓库根**解析）。此前出厂默认为空 → `shared.config.build_options()` 得到 `None` → `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录**不落盘**、进程一退就失效，表现为「每次启动登录态重置」；`sites/*.yaml` 迁移把旧的持久化路径写丢后暴露。三个内置 browser 源（`fanqie` / `qidian` / `qimao`）同步修改；回归用例 `tests/test_source_contracts.py::test_builtin_browser_sources_default_to_persistent_profile`（**已实测修复前必然失败**）
+3. **章节下载顺序改严格 FIFO** — 书源额度的等待队列此前不是 FIFO：`_SOURCE_WAIT_TIMEOUT`(0.2s) 超时兜底对「单章耗时长于 0.2s」（真实网络必然）的等待者，会让它们集体超时 → 出队 → 重查 → 重新 append 到队尾，加上 `_release_source_slot` 当时是「唤醒全部等待者 + 清队列、各自重查额度竞争接手」，接手顺序被随机化。表现为**并发 1（严格串行）时下载顺序仍乱**，界面上「待下载 / 下载中 / 已下载」交错，且乱序范围恰是 `_BATCH_SIZE`(32) 章 —— 像在限定区间里随机挑章节下载（实测 8 章 / 额度 1 / 单章 0.3s：修复前开始顺序 = `章1,章7,章2,章6,章4,章5,章8,章3`）。现改为**交接式 FIFO**：释放时把额度直接交接给队首（占用数不变、所有权转移），队首 Future 置 `True` 且不移出队列，由接手协程自行出队；等待改用 `asyncio.shield`，超时不再丢队列位置；取消 / 暂停路径补归还以防额度泄漏。见 `backend/services/task_manager.py`；回归用例 2 个（**已实测修复前必然失败**）
 
-> 测试（2026-09-30 复核）：本机全量 `python -m pytest tests -q` → **513 passed, 0 failed**（22.7s；此前记录「全量未跑通」的 `tmp_path` 拖慢已不复现）；CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387) 三个 Python 版本全绿；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。
+> 测试（2026-09-30 复核）：本机全量 `python -m pytest tests -q` → **515 passed, 0 failed**（15.8s；此前记录「全量未跑通」的 `tmp_path` 拖慢已不复现）；CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387) 三个 Python 版本全绿；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。
 
 ## v4.5.1
 

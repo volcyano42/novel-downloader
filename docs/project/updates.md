@@ -539,7 +539,7 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
   `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。（当次执行时的定向验证：`tests/test_source_metadata.py`
   5 个 `tmp_path` 关键用例逐个 PASSED、三条 grep 验收通过。）
 
-## 2026-09-30 变更（browser 登录态修复 + 计划收尾）
+## 2026-09-30 变更（browser 登录态修复 + 下载顺序 FIFO + 计划收尾）
 
 ### browser 书源出厂默认不再为空 profile（修「每次启动登录态重置」）
 
@@ -560,6 +560,33 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
   新装用户的用户层多一个**覆盖项**，将来出厂默认变更不会跟随。
 - **注意**：三个 browser 源共用同一 profile，同一时刻只能有一个 Chromium 实例（`engine.py`
   已有「profile 已被本引擎的持久化会话占用」的明确报错）。
+
+### 章节下载顺序改严格 FIFO（修「限定区间内随机下载」）
+
+- **症状**：并发 1（严格串行、毫无并发收益）时下载顺序仍然乱——界面上「待下载 / 下载中 /
+  已下载」交错，且乱序范围恰好是 `_BATCH_SIZE`(32) 章，像在限定区间里随机挑章节。
+- **根因**：书源额度的等待队列不是 FIFO。`_SOURCE_WAIT_TIMEOUT`(0.2s) 超时兜底本意是
+  「最迟 0.2s 感知取消/暂停」，但单章耗时长于 0.2s（真实网络必然）时，**所有等待者集体
+  超时 → 出队 → 重查 → 重新 append 到队尾**；`_release_source_slot` 又是「唤醒全部等待者
+  + 清空队列、各自重查额度竞争接手」，接手顺序于是由协程唤醒顺序决定。
+- **实测证据**（8 章 / 额度 1 / 单章 0.3s）：
+  - 修复前开始顺序 = `章1,章7,章2,章6,章4,章5,章8,章3`（完成顺序同）
+  - 对照：`_SOURCE_WAIT_TIMEOUT=5` → 顺序正确；`_BATCH_SIZE=1` → 正确；单章 0.05s（< 超时）
+    → 正确；超时改 0.05s → 更乱 ⇒ 确认即此机制
+- **修复**（`backend/services/task_manager.py`）：**交接式 FIFO**
+  - `_release_source_slot`：有等待者时把额度**直接交接给队首**（占用数不变、所有权转移，
+    不经过「空闲」窗口），无等待者时才递减计数
+  - `_handoff_source_slot`（原 `_wake_source_waiters`）：只给队首 Future 置 `True` 且
+    **不移出队列**，由接手协程自行出队
+  - `_acquire_source_slot`：仅队列无人时才走「直接拿」快路径（防插队）；等待改用
+    `asyncio.shield`，超时不再丢队列位置
+  - 取消 / 暂停路径补归还：已接手但没能交给调用方时归还额度（否则泄漏；既有的
+    `test_slots_released_on_cancel_during_download` 抓到了这条）
+- **回归用例**（`tests/test_task_queue.py`，**已实测修复前必然失败**）：
+  `test_chapter_download_order_is_fifo_when_slower_than_wait_timeout`、
+  `test_chapter_download_order_is_fifo_with_multiple_slots`（额度 3 也按章节顺序依次占用）。
+- **未改**：`_BATCH_SIZE`(32) 的分批预取保留；未改用 `asyncio.Semaphore`（其容量固定，
+  而额度是运行时可改配置）；暂停会让出队列位置、resume 后重排（顺序保证以正常下载为准）。
 
 ### 计划收尾：`2026-09-27-source-meta-and-search-selection`
 
