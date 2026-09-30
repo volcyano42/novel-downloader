@@ -30,10 +30,12 @@ def _isolated_state(monkeypatch):
     tm._source_active.clear()
 
 
-def _install(monkeypatch, speed: float = 0.15, error: Exception | None = None):
+def _install(monkeypatch, speed: float = 0.15, error: Exception | None = None,
+             record: list | None = None):
     """把书源/引擎/存储替换为异步 mock；resolve_chapter 每章耗时 speed。
 
     `error` 非空时 resolve_chapter 每章抛该异常（用于验证异常路径的额度释放）。
+    `record` 非空时把每章标题按**实际开始下载的顺序**追加进去（用于验证下载顺序）。
     """
     from novelbase.models.novel import Novel
 
@@ -45,6 +47,8 @@ def _install(monkeypatch, speed: float = 0.15, error: Exception | None = None):
                      author="", description="")
 
     async def fake_resolve_chapter(ch, source_name, engines, **kw):
+        if record is not None:
+            record.append(ch.title)   # 追加的是「实际开始下载」的顺序
         await asyncio.sleep(speed)
         if error is not None:
             raise error
@@ -205,3 +209,40 @@ def test_slots_released_on_cancel_during_download(monkeypatch):
     asyncio.run(_run())
     assert tm._running_tasks == set()
     assert tm._source_active == {}
+
+
+def test_chapter_download_order_is_fifo_when_slower_than_wait_timeout(monkeypatch):
+    """额度 1 且单章耗时长于 `_SOURCE_WAIT_TIMEOUT` 时，仍必须按章节顺序下载。
+
+    回归（2026-09-30）：额度等待不是 FIFO —— `_SOURCE_WAIT_TIMEOUT`(0.2s) 兜底让所有
+    等待者集体超时后重新登记到队尾，接手顺序被随机化，即使并发 1（严格串行、毫无并发
+    收益）下载顺序也乱，界面上「待下载 / 下载中 / 已下载」交错。
+    修复前实测顺序：章1, 章7, 章2, 章6, 章4, 章5, 章8, 章3。
+    """
+    started: list[str] = []
+    _install(monkeypatch, speed=0.3, record=started)   # 0.3s > _SOURCE_WAIT_TIMEOUT(0.2s)
+    chapters = _chapters(8)
+
+    async def _run():
+        r = tm.create_task("n1", chapters, "order", source_name="92xs-requests-default")
+        t = tm._tasks[r["task_id"]]
+        assert await _wait_for(lambda: t["status"] == "completed"), t
+        assert started == [f"章{i}" for i in range(1, 9)], started
+
+    asyncio.run(_run())
+
+
+def test_chapter_download_order_is_fifo_with_multiple_slots(monkeypatch):
+    """额度 3：按章节顺序依次占用额度（前 3 章并发起步，第 4 章等其中之一腾出）。"""
+    started: list[str] = []
+    _install(monkeypatch, speed=0.25, record=started)
+    monkeypatch.setattr(tm, "source_concurrency", lambda name: 3)
+    chapters = _chapters(6)
+
+    async def _run():
+        r = tm.create_task("n1", chapters, "order3", source_name="92xs-requests-default")
+        t = tm._tasks[r["task_id"]]
+        assert await _wait_for(lambda: t["status"] == "completed"), t
+        assert started == [f"章{i}" for i in range(1, 7)], started
+
+    asyncio.run(_run())

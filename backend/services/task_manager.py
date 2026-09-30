@@ -141,82 +141,126 @@ def _discard_waiter(waiters: list[asyncio.Future], fut: asyncio.Future) -> None:
         pass
 
 
-def _wake_source_waiters(source_name: str) -> None:
-    """释放额度后唤醒该书源的全部等待者（同一事件循环线程，直接 set_result）。
+def _handoff_source_slot(source_name: str) -> bool:
+    """把刚释放的额度**直接交接**给等待队列的队首（严格 FIFO），返回是否交接成功。
 
-    唤醒后等待者会在各自协程里重查额度、竞争出唯一的接手者，其余重新登记等待。
+    交接方式：给队首的 Future `set_result(True)`（=「额度已归你」），**不把它移出队列**，
+    由接手的协程自己出队。因此「谁接手」由登记先后唯一决定，与协程唤醒顺序无关。
+
+    历史实现（2026-09-30 前）是「唤醒全部等待者 + 清空队列、各自重查额度竞争接手」：
+    配合 `_SOURCE_WAIT_TIMEOUT` 超时兜底（每个超时者出队后重新 append 到队尾），接手
+    顺序被随机化 → 下载顺序不再等于章节顺序（并发 1、严格串行时也会乱）。
     """
     waiters = _source_waiters.get(source_name)
     if not waiters:
-        return
+        return False
     for fut in waiters:
         if not fut.done():
-            fut.set_result(None)
-    waiters.clear()
+            fut.set_result(True)
+            return True
+    return False
 
 
 async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool:
     """等待书源级额度（跨任务共享）：拿到返回 True，任务被取消返回 False。
 
+    **严格 FIFO**：队列无人且额度可用时直接拿（无等待者时零开销）；否则登记 Future
+    排队，额度由 `_release_source_slot` 交接给队首 —— 接手顺序恒等于登记顺序（= 章节
+    顺序），不受 `_SOURCE_WAIT_TIMEOUT` 超时影响（超时只为感知取消/暂停，Future 与其
+    队列位置都保留）。
+
     `limit` 由调用方在任务开始时取一次并缓存（`source_concurrency()` 会读
     `sites/*.yaml` 与 `source.json`，不得进每请求热路径）。等待期间若任务被暂停，
     则不占额度地停在 `paused`（优雅暂停：未开始的请求停住，已在飞的请求跑完）。
-
-    **释放即唤醒**（事件驱动，取代定时/退避轮询）：额度已满时在 `_source_waiters`
-    登记 Future，`_release_source_slot` 释放后立即 set_result 唤醒 —— 无竞争时零等待、
-    有竞争时释放后毫秒级接手，避免定时轮询在「单请求耗时 < 检查间隔」时空转
-    （默认 concurrency=1 会退化成 ~2 章/s）。每个 Future 仍带 `_SOURCE_WAIT_TIMEOUT`
-    有界超时兜底，超时后重查取消/暂停，保证取消/暂停最迟 ~0.2s 内被感知。
     """
     limit = max(1, limit)
-    while True:
-        if task["_cancel"].is_set():
-            return False
-        if task["_pause"].is_set():
+    loop = asyncio.get_running_loop()
+    waiters = _source_waiters_for(source_name)
+    fut = loop.create_future()
+    queued = False    # 当前 Future 是否还在等待队列里
+    handed = False    # 额度所有权是否已交给调用方（由调用方的 finally 释放）
+    try:
+        while True:
+            if task["_cancel"].is_set():
+                return False
+            if task["_pause"].is_set():
+                # 排队中暂停：不占额度（已接手的先归还）、让出队列位置，resume 后重排
+                if queued:
+                    _discard_waiter(waiters, fut)
+                    queued = False
+                if _is_slot_handoff(fut):
+                    _release_source_slot(source_name)   # 刚接手就暂停 → 归还，不占额度
+                fut = loop.create_future()
+                with _tasks_lock:
+                    task["status"] = "paused"
+                await asyncio.sleep(0.1)
+                continue
+            if queued and fut.done():
+                if _is_slot_handoff(fut):
+                    # 被交接：额度已归本协程，交给调用方释放
+                    handed = True
+                    return True
+                _discard_waiter(waiters, fut)   # 防御：非交接完成 → 出队重排
+                queued = False
+                fut = loop.create_future()
             with _tasks_lock:
-                task["status"] = "paused"
-            await asyncio.sleep(0.1)
-            continue
-        with _tasks_lock:
-            if _source_active.get(source_name, 0) < limit:
-                _source_active[source_name] = _source_active.get(source_name, 0) + 1
-                return True
-        # 额度已满：登记唤醒 Future，并做一次「登记后」复检以关闭竞态
-        # （释放可能恰好发生在「检查满」与「登记」之间 → 唤醒会落空）。
-        waiters = _source_waiters_for(source_name)
-        fut = asyncio.get_running_loop().create_future()
-        waiters.append(fut)
-        with _tasks_lock:
-            if _source_active.get(source_name, 0) < limit:
-                _source_active[source_name] = _source_active.get(source_name, 0) + 1
-                _discard_waiter(waiters, fut)
-                return True
-        try:
-            await asyncio.wait_for(fut, _SOURCE_WAIT_TIMEOUT)
-        except asyncio.TimeoutError:
+                if not queued:
+                    # 快路径：队列无人等待且额度可用 → 直接拿
+                    if not any(not f.done() for f in waiters) \
+                            and _source_active.get(source_name, 0) < limit:
+                        _source_active[source_name] = \
+                            _source_active.get(source_name, 0) + 1
+                        return True
+                    waiters.append(fut)
+                    queued = True
+                    # 登记后复检：额度可能恰在「检查」与「登记」之间被释放（交接落空）
+                    if waiters[0] is fut and _source_active.get(source_name, 0) < limit:
+                        _source_active[source_name] = \
+                            _source_active.get(source_name, 0) + 1
+                        _discard_waiter(waiters, fut)
+                        queued = False
+                        return True
+            try:
+                # shield：超时只结束本次等待，fut 与其队列位置都保留（顺序不被打乱）
+                await asyncio.wait_for(asyncio.shield(fut), _SOURCE_WAIT_TIMEOUT)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        if queued:
             _discard_waiter(waiters, fut)
-        except asyncio.CancelledError:
-            _discard_waiter(waiters, fut)
-            raise
+        if not handed and _is_slot_handoff(fut):
+            # 已接手但没能交给调用方（被取消 / 异常 / 上层未及释放）→ 归还，防额度泄漏
+            _release_source_slot(source_name)
+
+
+def _is_slot_handoff(fut) -> bool:
+    """该 Future 是否已被交接额度（`done` 且 result 为 `True`；防御 `cancelled`）。"""
+    return fut.done() and not fut.cancelled() and fut.result() is True
 
 
 def _release_source_slot(source_name: str) -> None:
-    """释放书源额度，并**立即唤醒**等待该源额度的协程（释放即唤醒）。
+    """释放书源额度：**有等待者时交接给队首**（占用数不变，所有权转移），否则递减。
 
     下界保护：计数已为 0 时说明出现了双释放 / 漏 acquire（额度泄漏会让该源永久
     卡死），记录 error 而非静默 `pop`，使其在日志中暴露。
     """
     with _tasks_lock:
-        n = _source_active.get(source_name, 0) - 1
-        if n < 0:
+        active = _source_active.get(source_name, 0)
+        if active <= 0:
             _log.error("书源额度释放不匹配（重复释放/漏 acquire）: %s", source_name)
-            n = 0
-        if n > 0:
-            _source_active[source_name] = n
+            active = 0
+        queued = any(not f.done() for f in _source_waiters.get(source_name) or [])
+        if queued:
+            # 交接：原持有者退出、队首接手 → 占用数不变（不经过「空闲」窗口，避免插队）
+            _source_active[source_name] = active
         else:
-            _source_active.pop(source_name, None)
-    # 无论是否归零都唤醒：可能有多个额度，等待者醒来后各自重查、竞争接手。
-    _wake_source_waiters(source_name)
+            n = active - 1
+            if n > 0:
+                _source_active[source_name] = n
+            else:
+                _source_active.pop(source_name, None)
+    if queued:
+        _handoff_source_slot(source_name)
 
 
 async def _run_download(task: dict, source_name: str):
