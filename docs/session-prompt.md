@@ -19,9 +19,11 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 
 > **docs/ 已纳入 private 版本库**（2026-08-21 起，位于 `novel-downloader/docs/`）；公开迁移时 superpowers/session-prompt/learning 在红名单不迁 public。架构速览见 [project/overview.md](project/overview.md)。
 
-## CI 测试状态 — ✅ 定向通过（全量待复核）
+## CI 测试状态 — ✅ 全量通过
 
-> 2026-09-27（书源元信息与按选择搜索后）：本机**全量 `python -m pytest tests -q` 未跑通**——每个 `tmp_path` 用例约 62s（Steam++ 加速器 symlink 拖慢），超出单次命令窗口。**定向验证**：`tests/test_source_metadata.py` 5 个 `tmp_path` 关键用例逐个 **PASSED**（`test_meta_declared_then_user_override` / `test_meta_blank_user_value_falls_back` / `test_default_source_names_lists_all_sources` / `test_manifest_rejects_blank_optional_meta` / `test_manifest_without_enabled_is_valid`）；三条 grep 验收通过。前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。**全量结果待 CI / 本机复核**。更早一次全量：2026-09-27 `source_name` 全局唯一检测后 **499 passed, 0 failed**（本机实测，约 12s）。
+> **2026-09-30 复核**：本机全量 `python -m pytest tests -q` → **513 passed, 0 failed**（22.7s）——2026-09-27 记录的「每个 `tmp_path` 用例约 62s（Steam++ 加速器 symlink 拖慢）、全量跑不完」已不复现。CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387)（dev `e7f769b`）Python 3.10 / 3.11 / 3.12 **全绿**。前端 `npx tsc -b` = 0 错（`tsconfig.json` 是 solution 风格，`tsc --noEmit` 会空转，须用 `tsc -b`）、`npm run lint`（oxlint）0 告警。UI 冒烟：headless Chromium 打开设置页 / 搜索页，别名、分组、分组双框与 browser 源「用户数据目录」均按预期渲染（截图 `%TEMP%/nld-ui/`）。
+>
+> 历史：2026-09-27 只做了定向验证（`tests/test_source_metadata.py` 5 个 `tmp_path` 用例逐个 PASSED + 三条 grep 验收），全量当时未跑通；更早一次全量 = 2026-09-27 `source_name` 全局唯一检测后 **499 passed, 0 failed**（约 12s）。
 
 ## 关键约定
 

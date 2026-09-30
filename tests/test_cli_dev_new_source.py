@@ -133,7 +133,7 @@ def test_new_variant_and_platform_helpers_removed():
 def test_cli_search_source_optional(monkeypatch):
     monkeypatch.setattr("sys.argv", ["cli", "search", "关键词"])
     args = cli.main._parse_args()
-    assert args.source == ""          # 可空 = 并发全部启用书源
+    assert args.source == ""          # 可空 = 并发全部书源（default_source_names()）
     assert args.page == 1
     assert not hasattr(args, "platform")
     assert not hasattr(args, "mode")

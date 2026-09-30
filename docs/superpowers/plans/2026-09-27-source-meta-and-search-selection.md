@@ -1,6 +1,6 @@
 # 书源元信息（分组/别名）与按选择搜索 —— 实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 让书源以「别名 + 分组」呈现并可编辑，彻底移除 `enabled` 概念，搜索时由用户勾选参与的书源（默认全选）。
 
@@ -67,7 +67,7 @@
 - Consumes: 现有 `_user_site_cfg(source_name)`（读用户层 `sites/{name}.yaml` 原始 dict）
 - Produces: `source_group(source_name) -> str`、`source_alias(source_name) -> str`、`display_name(source_name) -> str`、`default_source_names() -> list[str]`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 新建 `tests/test_source_metadata.py`：
 
@@ -138,12 +138,12 @@ def test_default_source_names_lists_all_sources(tmp_path, monkeypatch):
     assert sc.default_source_names() == ["a-browser-default", "b-requests-default"]
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_source_metadata.py -q`
 Expected: FAIL —— `AttributeError: module 'shared.config' has no attribute 'source_alias'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `shared/config.py` 的 `is_source_enabled()` 之后插入：
 
@@ -193,17 +193,17 @@ def default_source_names() -> list[str]:
     return sorted(list_sources())
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_source_metadata.py -q`
 Expected: `5 passed`
 
-- [ ] **Step 5: 跑全量确认没破坏别处**
+- [x] **Step 5: 跑全量确认没破坏别处**
 
 Run: `python -m pytest tests -q`
 Expected: `499 passed`（旧函数仍在，无调用点变化）
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add shared/config.py tests/test_source_metadata.py
@@ -229,14 +229,14 @@ git commit -m "feat(config): 书源元信息读取入口与默认参与集"
   - `GET /api/v2/download/search?query=&sources=a,b,c`（缺省/空 → `default_source_names()`；筛完为空 → 400）
   - 模块内 `_selected_sources(sources: str) -> list[str]`
 
-- [ ] **Step 1: 先改 spec 那一句**
+- [x] **Step 1: 先改 spec 那一句**
 
 把 `docs/superpowers/specs/2026-09-27-source-meta-and-search-selection-design.md` 6.3 表格里 search 行的
 「两者**同时出现时以 `sources` 为准**（`source` 只服务 URL 直达路径）」
 改为
 「两者同时出现时 **`source`（单源）优先**（`if source:` 分支在前，保持既有控制流）」。
 
-- [ ] **Step 2: 写失败测试（后端下载路由）**
+- [x] **Step 2: 写失败测试（后端下载路由）**
 
 在 `tests/test_backend_download_routes.py` 追加：
 
@@ -316,12 +316,12 @@ def test_get_source_config_includes_meta(isolated_sites):
     assert data["source_alias"] == "番茄·直连"
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_backend_download_routes.py tests/test_backend_config_routes.py -q`
 Expected: FAIL（`sources` 参数不被接受 / 返回缺少 `source_group`）
 
-- [ ] **Step 4: 实现 `backend/routers/download.py`**
+- [x] **Step 4: 实现 `backend/routers/download.py`**
 
 import 行改为：
 
@@ -393,7 +393,7 @@ async def list_all_sources():
     }
 ```
 
-- [ ] **Step 5: 实现 `backend/routers/config.py`**
+- [x] **Step 5: 实现 `backend/routers/config.py`**
 
 `get_source_config` 返回体加两行：
 
@@ -416,17 +416,17 @@ async def list_all_sources():
                 existing.pop(key, None)
 ```
 
-- [ ] **Step 6: 跑测试确认通过**
+- [x] **Step 6: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_backend_download_routes.py tests/test_backend_config_routes.py -q`
 Expected: 全部通过
 
-- [ ] **Step 7: 跑全量**
+- [x] **Step 7: 跑全量**
 
 Run: `python -m pytest tests -q`
 Expected: `499 passed`（既有 `test_sources_shape_is_flat` 会在 Task 6 才改；本步不破坏它）
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add backend/routers/download.py backend/routers/config.py tests/test_backend_download_routes.py tests/test_backend_config_routes.py docs/superpowers/specs/2026-09-27-source-meta-and-search-selection-design.md
@@ -448,7 +448,7 @@ git commit -m "feat(backend): 书源元信息出口与搜索多源参数"
 - Consumes: Task 2 的 `GET /config/sources/{name}`（新增 `source_group` / `source_alias`）、`PUT`（接受顶层两字段）、`GET /download/sources`（新增两字段）
 - Produces: `SourceInfo` 含 `source_group: string` / `source_alias: string`（Task 4 复用）
 
-- [ ] **Step 1: `endpoints.ts` 的 `SourceInfo` 加字段**
+- [x] **Step 1: `endpoints.ts` 的 `SourceInfo` 加字段**
 
 ```ts
 export interface SourceInfo {
@@ -461,7 +461,7 @@ export interface SourceInfo {
 }
 ```
 
-- [ ] **Step 2: 改写 `SourceAccordion.tsx`（顶部信息行；删除开关与并发数）**
+- [x] **Step 2: 改写 `SourceAccordion.tsx`（顶部信息行；删除开关与并发数）**
 
 整文件替换为：
 
@@ -509,7 +509,7 @@ export function SourceAccordion({ name, info }: { name: string; info: SourceInfo
 
 （相对旧版删掉了：`useSaveSourceConfig` 引入、`enabled`/`concurrency` state、两个 `useEffect`、`toggleEnabled`/`commitConcurrency`、`<Toggle>` 与并发数输入框。）
 
-- [ ] **Step 3: `sourceConfigForm.tsx` 的 `SourceConfigEditor` 加三行**
+- [x] **Step 3: `sourceConfigForm.tsx` 的 `SourceConfigEditor` 加三行**
 
 在 `const merged = cfg?.config ?? {};` 之后加：
 
@@ -550,16 +550,16 @@ export function SourceAccordion({ name, info }: { name: string; info: SourceInfo
 
 （`TextField` 的 `onChange` 是「失焦 / 回车提交」语义，与本页其它字段一致；清空即传 `""`，后端按「删除该键」处理。）
 
-- [ ] **Step 4: 类型检查 + lint**
+- [x] **Step 4: 类型检查 + lint**
 
 Run: `cd frontend && npx tsc -b && npm run lint`
 Expected: 0 错、0 告警
 
-- [ ] **Step 5: 手工验收**
+- [x] **Step 5: 手工验收**
 
 Run: `python cli.py`（或 `python app.py` 起服务）→ 设置页：折叠条顶部显示「别名 + 分组 + 能力」，**没有启用开关**；展开后有「分组 / 别名 / 并发数」三行；改分组为「番茄」、别名为「番茄·直连」→ 刷新后仍在，且顶部随之更新。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add frontend/src/api/endpoints.ts frontend/src/features/sources/SourceAccordion.tsx frontend/src/features/sources/sourceConfigForm.tsx
@@ -581,7 +581,7 @@ git commit -m "feat(frontend): 设置页显示别名与分组并支持编辑，�
 - Consumes: Task 3 的 `SourceInfo.source_group/source_alias`；Task 2 的 `sources=a,b,c`
 - Produces: `SourceOption { name, alias, group, enabled }`、`searchDownload({query, source?, sources?})`、`useSearch(params: {query, source?, sources?} | null)`
 
-- [ ] **Step 1: `ui/select.tsx` 补 `SelectLabel`**
+- [x] **Step 1: `ui/select.tsx` 补 `SelectLabel`**
 
 在 `const SelectGroup = SelectPrimitive.Group;` 之后加 `const SelectLabel = SelectPrimitive.Label;`，并把导出行改为：
 
@@ -589,7 +589,7 @@ git commit -m "feat(frontend): 设置页显示别名与分组并支持编辑，�
 export { Select, SelectGroup, SelectLabel, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };
 ```
 
-- [ ] **Step 2: `endpoints.ts` 的 `SourceOption` / `toSourceOptions` / `searchDownload`**
+- [x] **Step 2: `endpoints.ts` 的 `SourceOption` / `toSourceOptions` / `searchDownload`**
 
 ```ts
 /** 选源 UI 用的书源项：name = source_name（技术键，提交用），alias/group 供显示与分组。 */
@@ -619,7 +619,7 @@ export function searchDownload(params: { query: string; source?: string; sources
 }
 ```
 
-- [ ] **Step 3: `hooks/index.ts` 的 `useSearch` 参数**
+- [x] **Step 3: `hooks/index.ts` 的 `useSearch` 参数**
 
 ```ts
 export function useSearch(params: { query: string; source?: string; sources?: string[] } | null) {
@@ -627,7 +627,7 @@ export function useSearch(params: { query: string; source?: string; sources?: st
 
 （查询键仍是整个 `params` 对象，`sources` 数组参与 key → 勾选变化会重新搜索，符合预期。）
 
-- [ ] **Step 4: `SearchBar.tsx` —— props 与双框状态**
+- [x] **Step 4: `SearchBar.tsx` —— props 与双框状态**
 
 props 类型改为：
 
@@ -681,7 +681,7 @@ interface SearchBarProps {
 
 URL 分支改为 `onSearch(q, { source })`。
 
-- [ ] **Step 5: `SearchBar.tsx` —— 标题 tab 的双框 UI**
+- [x] **Step 5: `SearchBar.tsx` —— 标题 tab 的双框 UI**
 
 把标题模式的末尾提示 `<p className="px-1 text-[11px] text-slate-400">并发搜索全部已启用书源</p>` 替换为：
 
@@ -729,7 +729,7 @@ URL 分支改为 `onSearch(q, { source })`。
           </div>
 ```
 
-- [ ] **Step 6: `SearchBar.tsx` —— URL tab 按分组分节**
+- [x] **Step 6: `SearchBar.tsx` —— URL tab 按分组分节**
 
 把 URL 模式的 `<SelectContent>{sources.map(...)}</SelectContent>` 替换为：
 
@@ -748,7 +748,7 @@ URL 分支改为 `onSearch(q, { source })`。
 
 并把 import 行扩为 `import {Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue} from "@/components/ui/select";`。
 
-- [ ] **Step 7: `BookshelfPage.tsx` 适配**
+- [x] **Step 7: `BookshelfPage.tsx` 适配**
 
 搜索参数类型与调用：
 
@@ -781,16 +781,16 @@ URL 分支改为 `onSearch(q, { source })`。
             ];
 ```
 
-- [ ] **Step 8: 类型检查 + lint**
+- [x] **Step 8: 类型检查 + lint**
 
 Run: `cd frontend && npx tsc -b && npm run lint`
 Expected: 0 错、0 告警
 
-- [ ] **Step 9: 手工验收**
+- [x] **Step 9: 手工验收**
 
 Run: `python app.py` → 搜索页（标题 tab）：默认全部勾选；点「番茄」只勾番茄三个源且该按钮高亮；点「全不选」→ 全部取消且搜索按钮禁用；重新勾选两个源 → 结果只来自这两个源；URL tab 下拉按分组分节显示别名；搜索结果的来源 tab 显示别名。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add frontend/src/components/ui/select.tsx frontend/src/api/endpoints.ts frontend/src/hooks/index.ts frontend/src/features/bookshelf/SearchBar.tsx frontend/src/features/bookshelf/BookshelfPage.tsx
@@ -811,7 +811,7 @@ git commit -m "feat(frontend): 搜索页按分组与别名勾选书源"
 - Consumes: Task 1 的 `default_source_names()` / `display_name()` / `source_group()`
 - Produces: `python cli.py sources list` 的显示形状（别名 · 分组 · source_name）、`--json` 的键集合
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/test_interactive_cli.py` 里，把 3 处 `monkeypatch.setattr(mod, "enabled_source_names", lambda: [...])` 改为 `monkeypatch.setattr(mod, "default_source_names", lambda: [...])`（`:264`、`:282`、`:297`、`:307`）。若断言依赖「未启用源不参与」，改为依赖 `default_source_names` 的返回值。
 
@@ -839,12 +839,12 @@ def test_cmd_source_list_shows_group_and_alias(monkeypatch, capsys):
     assert '"enabled"' not in out
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_cli_effective_mode.py tests/test_interactive_cli.py -q`
 Expected: FAIL（`default_source_names` 未被 monkeypatch 到 / `cmd_source` 仍输出 `enabled`）
 
-- [ ] **Step 3: 实现 `cli/main.py`**
+- [x] **Step 3: 实现 `cli/main.py`**
 
 `:124-126` 改为：
 
@@ -889,7 +889,7 @@ def cmd_source(args):
 
 `cmd_dev` 的 `new-source` 分支：删除 `enabled = mode != "api"` 行、`manifest` 里的 `"enabled": enabled,` 行、`save_site_config(name, {"enabled": enabled, ...})` 里的 `"enabled": enabled,`；并把该分支 docstring 里「出厂 `enabled`（D4）：api 类默认 `false`，requests/browser 类默认 `true`」整句删掉（`enabled` 已废弃）。
 
-- [ ] **Step 4: 实现 `cli/menus.py`**
+- [x] **Step 4: 实现 `cli/menus.py`**
 
 import 行去掉 `is_source_enabled`：
 
@@ -923,7 +923,7 @@ def _settings_source_detail(cfg: dict, source_name: str) -> None:
 
 删除 `_toggle_source_enabled` 函数（整块）。
 
-- [ ] **Step 5: 实现 `cli/interactive.py`**
+- [x] **Step 5: 实现 `cli/interactive.py`**
 
 - import 行：`enabled_source_names` → `default_source_names`，并加 `display_name`。
 - `:84` `sources = enabled_source_names()` → `sources = default_source_names()`。
@@ -934,12 +934,12 @@ Run: `grep -n "source_name" cli/interactive.py`
 
 把**用户可见的**结果行（形如 `print(f"  ... {r.source_name} ...")`）里的 `r.source_name` 改为 `display_name(r.source_name)`；写入配置/落库的地方**不动**（必须存 `source_name`）。
 
-- [ ] **Step 6: 跑测试确认通过**
+- [x] **Step 6: 跑测试确认通过**
 
 Run: `python -m pytest tests/test_interactive_cli.py tests/test_cli_effective_mode.py -q`
 Expected: 通过
 
-- [ ] **Step 7: 手工冒烟**
+- [x] **Step 7: 手工冒烟**
 
 ```bash
 python cli.py sources list
@@ -947,12 +947,12 @@ python cli.py sources list --json
 ```
 Expected: 列表显示「别名 [分组] (source_name) capabilities: …」；JSON 键为 `source_name` / `source_alias` / `source_group` / `capabilities`（不含 `enabled`）。
 
-- [ ] **Step 8: 跑全量**
+- [x] **Step 8: 跑全量**
 
 Run: `python -m pytest tests -q`
 Expected: 全绿（`499 passed` 附近）
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add cli/main.py cli/menus.py cli/interactive.py tests/test_interactive_cli.py tests/test_cli_effective_mode.py
@@ -975,7 +975,7 @@ git commit -m "feat(cli): 书源显示别名与分组，默认源集改为全部
 **Interfaces:**
 - Produces: `source.json` 无 `enabled`（其余键不变）；`SourceInfo` 无 `enabled`；`SourceOption` 无 `enabled`
 
-- [ ] **Step 1: `manifest.py` 去掉 `enabled`，加可选字段校验**
+- [x] **Step 1: `manifest.py` 去掉 `enabled`，加可选字段校验**
 
 ```python
 IDENTITY_FIELDS = ("source_name",)
@@ -989,7 +989,7 @@ IDENTITY_FIELDS = ("source_name",)
             raise ManifestError(f"{path} 的 {optional} 必须是非空字符串")
 ```
 
-- [ ] **Step 2: 改 10 个 `source.json`**
+- [x] **Step 2: 改 10 个 `source.json`**
 
 每个文件删 `"enabled": ...,` 一行，并加 `source_group` / `source_alias` 两行（值按下表，`source_alias` 在前、`source_group` 在后，紧跟 `source_name`）：
 
@@ -1014,7 +1014,7 @@ IDENTITY_FIELDS = ("source_name",)
 | `qimao_api_rain` | 七猫·Rain API | 七猫 |
 | `92xs_requests_default` | 92xs | 92xs |
 
-- [ ] **Step 3: 模板删 `enabled`**
+- [x] **Step 3: 模板删 `enabled`**
 
 `template/config/sites/*.yaml`（10 个）：删除第 1 行 `enabled: true` / `enabled: false`。若删后文件为空，写入一行注释避免空文件：
 
@@ -1022,7 +1022,7 @@ IDENTITY_FIELDS = ("source_name",)
 # 该书的用户层配置（可选字段：source_group / source_alias / concurrency 与逐能力段）
 ```
 
-- [ ] **Step 4: 写失败测试（契约与元信息）**
+- [x] **Step 4: 写失败测试（契约与元信息）**
 
 `tests/test_source_metadata.py` 追加：
 
@@ -1083,16 +1083,16 @@ def test_merged_source_config_three_layers(tmp_path, monkeypatch):
 git rm tests/test_source_enabled.py
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 Run: `python -m pytest tests/test_source_metadata.py -q`
 Expected: FAIL（`source_group` 非空校验尚未实现）
 
-- [ ] **Step 6: `shared/config.py` 删除旧函数**
+- [x] **Step 6: `shared/config.py` 删除旧函数**
 
 删除 `is_source_enabled()` 与 `enabled_source_names()` 两个函数整体。
 
-- [ ] **Step 7: 后端去掉 `enabled`**
+- [x] **Step 7: 后端去掉 `enabled`**
 
 `backend/routers/download.py`：
 - import 行去掉 `is_source_enabled`
@@ -1108,7 +1108,7 @@ Expected: FAIL（`source_group` 非空校验尚未实现）
 
 `backend/services/source_guard.py`：docstring 里 `（\`is_source_enabled()\` 会 \`KeyError\` → 500）` 改为 `（读未知书源的配置会 \`KeyError\` → 500）`。
 
-- [ ] **Step 8: 前端去掉 `enabled`**
+- [x] **Step 8: 前端去掉 `enabled`**
 
 `frontend/src/api/endpoints.ts`：`SourceInfo` 删 `enabled: boolean;`、`SourceOption` 删 `enabled: boolean;`、`toSourceOptions` 的 map 去掉 `enabled: info.enabled,`。
 
@@ -1136,13 +1136,13 @@ Expected: FAIL（`source_group` 非空校验尚未实现）
 
 并把该文件 props 注释里的「含 enabled，未启用的源仅标注、仍可选」改为「全量书源列表（来自 `/sources`）」。
 
-- [ ] **Step 9: 改剩余测试断言**
+- [x] **Step 9: 改剩余测试断言**
 
 - `tests/test_source_availability.py`：**该文件已随 v4.5.1 删除**（环境能力表移除），本任务无需处理。
 - `tests/test_backend_download_routes.py`：`test_sources_shape_is_flat` 的期望去掉 `"enabled": True`（并去掉 `monkeypatch.setattr(dl, "is_source_enabled", ...)`）；`test_sources_include_disabled` 整例删除（`enabled` 已废弃）。
 - `tests/test_backend_config_routes.py`：若断言 `GET /config/sources/{name}` 含 `enabled`，去掉该断言。
 
-- [ ] **Step 10: 跑测试 + grep 验收**
+- [x] **Step 10: 跑测试 + grep 验收**
 
 ```bash
 python -m pytest tests -q
@@ -1153,7 +1153,7 @@ cd frontend && npx tsc -b && npm run lint
 ```
 Expected: pytest 全绿；三条 grep 均打印 OK；tsc 0 错、lint 0 告警
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add novelbase/sources/manifest.py novelbase/sources/*/source.json template/config/sites/*.yaml shared/config.py backend/routers/download.py backend/routers/config.py backend/services/source_guard.py frontend/src/api/endpoints.ts frontend/src/features/detail/SourcePickerDialog.tsx tests/test_source_metadata.py tests/test_backend_download_routes.py tests/test_backend_config_routes.py
@@ -1169,13 +1169,13 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 **Files:**
 - Modify: `docs/session-prompt.md`、`docs/project/sources.md`、`docs/project/config.md`、`docs/project/cli.md`、`docs/project/updates.md`、`CHANGELOG.md`
 
-- [ ] **Step 1: `docs/project/sources.md`**
+- [x] **Step 1: `docs/project/sources.md`**
 
 - `source.json` 规范段：从字段表删除 `enabled` 行；新增 `source_alias` / `source_group`（**可选**顶层，字符串；出厂默认值，用户层可覆盖）；示例 JSON 同步。
 - 「内置书源」表：加两列 `source_alias` / `source_group`（值取 Task 6 Step 2 的表），并删掉「enabled（出厂）」列。
 - 若文档里仍有「环境能力表 / Android 不可用 / `available`」的段落（v4.5.1 后应已删），一并核对；`enabled_source_names()` 的相关描述统一改为 `default_source_names()`（= 全部书源）。
 
-- [ ] **Step 2: `docs/project/config.md`**
+- [x] **Step 2: `docs/project/config.md`**
 
 - `sites/{source_name}.yaml` 示例：删 `enabled: true` 行，加 `source_group` / `source_alias` 两行与说明（空 = 未分组 / 未设显示名）。
 - 「顶层 `enabled`」条目整体替换为：
@@ -1187,7 +1187,7 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
   搜索时由用户勾选参与的书源（默认全选），默认参与集 = `shared.config.default_source_names()`。
 ```
 
-- [ ] **Step 3: `docs/session-prompt.md`**
+- [x] **Step 3: `docs/session-prompt.md`**
 
 在「关键约定」里更新/新增：
 
@@ -1197,13 +1197,13 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 
 并把任何提到 `enabled_source_names()` 的地方改为 `default_source_names()`；若文档里仍有「环境能力表 / Android 不可用 / `available`」的段落，一并删除或标注「已随 v4.5.1 移除」。
 
-- [ ] **Step 4: `docs/project/cli.md`**
+- [x] **Step 4: `docs/project/cli.md`**
 
 - `sources list` 的输出说明：改为「显示 `别名 [分组] (source_name) capabilities`」；`--json` 的键说明同步（`source_name` / `source_alias` / `source_group` / `capabilities`）。
 - 「书源与模式」段里 `enabled_source_names()` 的表述改为 `default_source_names()`（并注明缺省 = 全部书源）。
 - 交互式入口：删除「启用/停用书源」菜单项的说明（若存在）。
 
-- [ ] **Step 5: `docs/project/updates.md` + `CHANGELOG.md`**
+- [x] **Step 5: `docs/project/updates.md` + `CHANGELOG.md`**
 
 - `updates.md`：在 2026-09-27 节（`source_name` 全局唯一那节）之后追加子节：
 
@@ -1230,7 +1230,7 @@ git commit -m "refactor: 彻底移除 enabled，书源元信息改由分组与�
 
 - `CHANGELOG.md`：在 `## Unreleased` 段补两条（「新增」里加元信息与搜索选择，「变更（破坏性）」里加 `enabled` 废弃）。测试数按实际填写。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add docs/session-prompt.md docs/project/sources.md docs/project/config.md docs/project/cli.md docs/project/updates.md CHANGELOG.md
@@ -1253,3 +1253,17 @@ git commit -m "docs: 追平书源元信息与按选择搜索（enabled 废弃）
 1. **Subagent-Driven（推荐）** —— 每个 Task 派一个新 subagent，任务之间做 review；对应 skill `superpowers:subagent-driven-development`。
 2. **Inline Execution** —— 在当前会话按批次执行并设检查点；对应 skill `superpowers:executing-plans`。
 
+---
+
+## 完成记录（2026-09-30）
+
+- **状态**：7 个 Task（56 个 Step）全部完成。实现类 Step 此前已随各 `feat` / `fix` 提交落地，本次补齐**验证**并勾选 checkbox。
+- **提交范围**（dev，均已推送）：`8e8d257`（T1 `shared`）· `71f6c8a`（T2 后端）· `9670e03`（T3 设置页）· `8dfa136`（T4 搜索页）· `a29163f` + `f55ee36`（T5 CLI）· `6e27d46`（T6 全链删 `enabled`）· `9c8f911`（T7 文档）· `4b77efd`（清理残留 + `--json` 别名语义）· `e7f769b`（修 CI 红灯）
+- **验证（2026-09-30 本机）**：
+  - 全量 `python -m pytest tests -q` → **513 passed, 0 failed**（22.7s）。此前记录的「全量未跑通（每个 `tmp_path` 用例约 62s）」拖慢已不复现，全量现状可跑通。
+  - CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387)（`e7f769b`）Python 3.10 / 3.11 / 3.12 **全绿**。
+  - 前端 `npx tsc -b` → 0 错；`npx oxlint` → 0 warnings / 0 errors（37 files）。
+  - CLI 冒烟（T5 Step 7）：`python cli.py sources list` → 10 源，行形如 `- <别名>  [<分组>]  (<source_name>)  capabilities: …`。
+- **手工验收的自动化替代（T3 Step 5 / T4 Step 9）**：本机起 `uvicorn backend.main:app`（服务已构建的 `frontend/dist`）+ headless Chromium 冒烟。设置页：折叠条显示「别名 + `source_name` + 分组 badge + 能力 badge」，全文无任何「启用」字样；展开区有「分组 / 别名」输入（值 `番茄` / `番茄·浏览器`）与 browser 源的「用户数据目录」。搜索页：「标题搜索」tab 有分组分段按钮 + 「全不选」（默认全选）+ 「已选 10/10」+ 逐源复选（显示别名），「URL 直达」tab 存在。截图见 `%TEMP%/nld-ui/`。**注意**：`frontend/dist` 此前是旧构建（旧 `toSourceOptions`），本次已 `npm run build` 重建（该目录未入库）。
+- **顺带修复**：`tests/test_cli_effective_mode.py::test_cmd_source_list_shows_effective_mode` 的行首断言在 T5 改了输出格式后失效（CI #73~#76 三个 Python 版本红灯），改为按 `(source_name)` 定位（`e7f769b`）。
+- **已知残留（按设计容忍，非缺陷）**：`app_data/config/sites/*.yaml` 10 个用户层文件仍带旧 `enabled:` 键——spec §6.8 明确「不读、PUT 时清理」，且该目录不入库；`tests/test_cli_dev_new_source.py` 里一处「并发全部启用书源」注释已同步改为「全部书源」。
