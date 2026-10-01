@@ -75,3 +75,4 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 | 构建发布 | [build/pitfalls.md](build/pitfalls.md) | CI 构建经验（踩坑记录） |
 | 设计文档 | [superpowers/specs/](superpowers/specs/) | 功能设计文档（`-design.md`） |
 | 实施计划 | [superpowers/plans/](superpowers/plans/) | 实施计划 |
+| 规划 | [planning/roadmap.md](planning/roadmap.md) | 发展方向分析（实勘现状 + 十维度方向表 + 路线图 + MVP；**红名单，不迁 public**） |

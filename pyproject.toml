@@ -48,6 +48,7 @@ exclude = [
     "docs/superpowers/**",
     "docs/session-prompt.md",
     "docs/learning/**",
+    "docs/planning/**",
     # 依赖未公开书源的测试（public 无 qidian/qimao/92xs/fanqie-rain）
     "tests/test_source_async.py",
     "tests/test_source_contracts.py",

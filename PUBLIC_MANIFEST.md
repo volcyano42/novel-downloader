@@ -53,6 +53,7 @@
 - `docs/superpowers/**`
 - `docs/session-prompt.md`
 - `docs/learning/**`
+- `docs/planning/**`（发展方向分析：含对仓库可见性、书源合规风险、红名单书源的自我披露）
 - `*.log`（构建日志）
 - `.reasonix/**`、`.codegraph/**`、`.superpowers/**`、`.refer/**`
 - 任何含 `api` 书源（rain）、密钥字样、逆向/破解实现的内容

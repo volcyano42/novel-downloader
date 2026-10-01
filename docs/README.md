@@ -34,6 +34,12 @@
 | [build/termux.md](build/termux.md) | Termux 构建方案(termux-docker,pyroot 内置 Python) |
 | [build/pitfalls.md](build/pitfalls.md) | CI 构建经验(踩坑记录,改参数前先看) |
 
+## 规划(planning/)
+
+| 文档 | 内容 |
+|------|------|
+| [planning/roadmap.md](planning/roadmap.md) | 发展方向分析:实勘现状(仓库可见性/规模/合规风险)+ 十个维度的方向表 + Top 5 + 3/6/12 个月路线图 + MVP + 不建议做 |
+
 ## 设计文档与实施计划(superpowers/)
 
 | 目录 | 内容 |
