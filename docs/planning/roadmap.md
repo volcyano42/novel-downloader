@@ -11,7 +11,7 @@
 
 1. **核心架构已经收敛，内部债基本清完**——最近三批大动作全是「向内整理」（v4.5.0 书源扁平化 + 并发重做、v4.5.1 移除 Android 套壳、2026-09-27 `source_name` 全局唯一）。继续做内部重构的边际收益已经很低。
 2. **这个项目的真实瓶颈不在代码，在「外部」**：仓库已 public 但 0 star / 无 README / 无仓库描述 / 无 topics / 无 Docker —— 别人打不开、看不懂、装不上。
-3. **可见性已决：主仓库转 private**（2026-09-30）—— 公开面只剩一个仓库，方向是对的。但**顺序不能反**：必须**先修迁移闸门**（§1.2 C：排除清单仍是扁平化前的旧路径，现在命中不到红名单；转 private 后它就是唯一出口），再执行转移，然后才谈公开面。转 private 本身解决了暴露面（实测 `fork: 0` ⇒ 无第三方副本），公开面怎么选是**新出现的问题**（§1.4）。
+3. **可见性已决：主仓库转 private**（2026-09-30）—— 公开面只剩一个仓库，方向是对的。但**顺序不能反**：必须**先修迁移闸门**，再执行转移，然后才谈公开面。闸门现状比「不拦截」更糟：旧路径让 4 个红名单书源被判成白名单**必需内容**，闸门会**报「缺失」并指挥你把它们补进 public**（实测 139 个问题、其中 61 个在 `novelbase/sources/` 下，见 §1.2 C）。转 private 本身很轻（实测 `fork: 0` ⇒ 无第三方副本），公开面怎么选是新出现的问题（§1.4）。
 4. **合规上唯一可行的公开形态**：core（引擎/存储/导出/阅读/CLI/WebUI）合法开源，**书源一律外置**，官方只随附公共领域 / 官方开放 API / 用户自有内容三类示范源。项目已有的 `NLD_PRIVATE_SOURCES` 与 `docs/source-plugin.md` 已把这条路铺了 80%。
 5. **最高性价比的动作**是「修迁移闸门（10 分钟）→ 转 private（5 分钟）→ 公开面 README + 边界声明 → 一个合规示范源跑通闭环」——半天到两天，比任何新功能都重要。
 
@@ -65,7 +65,7 @@
 | 第三方副本 | **无风险**：实测 `fork: 0` / `star: 0`，没有 fork 副本需要处理 |
 | 历史提交 | **仍存在但不可见**；`git filter-repo` 重写历史**不必要**（0 fork + 无描述 + 无宣传 ⇒ 几乎无人 clone） |
 | 外部归档 | GitHub Archive 一类存档只记录 PushEvent 的 commit 元数据（sha / message），**不含文件内容**；实际危害可忽略 |
-| ⚠️ 关键前置 | **迁移闸门必须先修** —— 转 private 后 `novel-crawler` 成为**唯一公开出口**，而 `check_public.py` 现在因旧路径命中不到红名单（不一致 C），等于每次迁移都在赌 |
+| ⚠️ 关键前置 | **迁移闸门必须先修** —— 转 private 后公开面成为唯一出口，而闸门现在会把红名单书源判成白名单必需内容、**报「缺失」指挥你补进 public**（实测见不一致 C）；等于每次迁移都在赌 |
 
 **时机建议**：先修闸门（10 分钟）→ 再转 private（5 分钟）→ 然后才做公开面。顺序反了会出现「闸门未修 + 出口唯一」的窗口期。
 
@@ -87,7 +87,13 @@
 
 `PUBLIC_MANIFEST.md` 与 `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude`（文件自称「`check_public.py` 的唯一数据源」）里的排除路径仍是**扁平化之前**的形式：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/rain/**`。
 
-实际目录早已是一层结构（`qidian_requests_default/` 等）。`scripts/check_public.py` 按清单做路径匹配 → **路径不存在 = 命中不到 = 不报错也不拦截**。因此现在执行迁移，会把红名单书源整批复制进 public。
+实际目录早已是一层结构（`qidian_requests_default/` 等），而 `scripts/check_public.py` 的 `is_whitelisted()` 对**防线 1（缺失）和防线 2（多余）用同一套模式**。2026-09-30 实测（直接调用 `check_public.check()` + `fnmatch` 验证）：
+
+- `fnmatch('novelbase/sources/qidian_requests_default/search.py', 'novelbase/sources/qidian/**')` → **False**（旧模式要求 `qidian/` 后紧跟路径，实际是 `qidian_`），于是该文件落到 `INCLUDE_PATTERNS` 的 `novelbase/**` → **被判为「白名单内」**
+- 后果**不是**「静默放行」，而是**反向要求**：闸门把 4 个红名单书源当成白名单**必需内容**，于是报「public 缺失这些文件」。当前实跑 `python scripts/check_public.py` → **139 个问题**，其中 **61 个**在 `novelbase/sources/` 下，覆盖全部 10 个书源目录（含 `fanqie_api_rain` / `fanqie_api_oiapi` / `qidian_*` / `qimao_*` / `92xs_requests_default`）
+- 而迁移的常规动作就是**补齐「缺失」** → 照这个提示做，就会把红名单实现**主动复制进 public**
+- 两道兜底也拦不住：防线 2（多余）认为它们在白名单内；防线 3（敏感扫描）只认 `client_secret` / `-----BEGIN` / `ghp_` / `AKIA` 这类**密钥模式**，抓取实现里未必有
+- 且 139 条里绝大多数是「缺失」（`novel-crawler` 落后数十个提交所致）→ 没人会逐条读 → 照着做的人更多
 
 （这条已同步进跨会话 background memory：`project/public-migration-exclude-stale.md`。）
 
