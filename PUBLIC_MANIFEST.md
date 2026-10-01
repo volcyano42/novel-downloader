@@ -9,8 +9,9 @@
 ### 源码
 
 - `novelbase/**`
-  - **排除**：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/rain/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
-  - 保留：`novelbase/sources/fanqie/api/oiapi/**`、`novelbase/sources/fanqie/browser/**`、`novelbase/sources/fanqie/requests/**`
+  - **排除**（2026-09-30 按扁平化后的一层目录名修正）：`novelbase/sources/qidian_requests_default/**`、`novelbase/sources/qidian_browser_default/**`、`novelbase/sources/qimao_requests_default/**`、`novelbase/sources/qimao_browser_default/**`、`novelbase/sources/qimao_api_rain/**`、`novelbase/sources/92xs_requests_default/**`、`novelbase/sources/fanqie_api_rain/**`、`novelbase/sources/fanqie_api_oiapi/**`（`api` 书源一律不进 public，与 `AGENTS.md` 一致）、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
+  - 保留：`novelbase/sources/fanqie_browser_default/**`、`novelbase/sources/fanqie_requests_default/**`
+  - ⚠️ 排除项**必须**用扁平化后的实际目录名：旧的四层路径（如 `novelbase/sources/qidian/**`）在 `check_public.py` 的 `fnmatch` 下匹配不到任何文件，会让这些源被判成白名单**必需内容**，闸门反过来报「缺失」——照提示补齐即泄漏
 
 > **机器可读清单**：全部排除项（白名单内排除 + 红名单工具项）以 `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude` 为唯一数据源，`check_public.py` 从此读取，本文件的排除列表需与其保持一致。
 - `backend/**`

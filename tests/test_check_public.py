@@ -8,16 +8,21 @@ import check_public
 
 # 与真实 pyproject.toml [tool.novel-downloader.migration] exclude 一致的非迁移清单
 EXCLUDE = [
-    "novelbase/sources/qidian/**",
-    "novelbase/sources/qimao/**",
-    "novelbase/sources/92xs/**",
-    "novelbase/sources/fanqie/api/rain/**",
+    "novelbase/sources/qidian_requests_default/**",
+    "novelbase/sources/qidian_browser_default/**",
+    "novelbase/sources/qimao_requests_default/**",
+    "novelbase/sources/qimao_browser_default/**",
+    "novelbase/sources/qimao_api_rain/**",
+    "novelbase/sources/92xs_requests_default/**",
+    "novelbase/sources/fanqie_api_rain/**",
+    "novelbase/sources/fanqie_api_oiapi/**",
     "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
     "docs/superpowers/**",
     "docs/session-prompt.md",
     "docs/learning/**",
+    "docs/planning/**",
     "tests/test_source_async.py",
     "tests/test_source_contracts.py",
     "tests/test_browser_sources.py",
@@ -57,13 +62,27 @@ def _full_public(private: Path, public: Path):
 
 class TestWhitelist:
     def test_fanqie_requests_included(self):
-        assert check_public.is_whitelisted("novelbase/sources/fanqie/requests/search.py", EXCLUDE) is True
+        assert check_public.is_whitelisted("novelbase/sources/fanqie_requests_default/search.py", EXCLUDE) is True
 
     def test_fanqie_api_excluded(self):
-        assert check_public.is_whitelisted("novelbase/sources/fanqie/api/rain/novel_info.py", EXCLUDE) is False
+        assert check_public.is_whitelisted("novelbase/sources/fanqie_api_rain/novel_info.py", EXCLUDE) is False
+
+    def test_fanqie_oiapi_excluded(self):
+        """oiapi 与 rain 同为 api 书源，一律不进 public（2026-09-30 决定）。"""
+        assert check_public.is_whitelisted("novelbase/sources/fanqie_api_oiapi/novel_info.py", EXCLUDE) is False
 
     def test_qidian_excluded(self):
-        assert check_public.is_whitelisted("novelbase/sources/qidian/requests/search.py", EXCLUDE) is False
+        assert check_public.is_whitelisted("novelbase/sources/qidian_requests_default/search.py", EXCLUDE) is False
+
+    def test_qidian_browser_excluded(self):
+        assert check_public.is_whitelisted("novelbase/sources/qidian_browser_default/search.py", EXCLUDE) is False
+
+    def test_qimao_and_92xs_excluded(self):
+        for rel in ("novelbase/sources/qimao_requests_default/search.py",
+                    "novelbase/sources/qimao_browser_default/search.py",
+                    "novelbase/sources/qimao_api_rain/search.py",
+                    "novelbase/sources/92xs_requests_default/search.py"):
+            assert check_public.is_whitelisted(rel, EXCLUDE) is False, rel
 
     def test_superpowers_docs_excluded(self):
         assert check_public.is_whitelisted("docs/superpowers/specs/x-design.md", EXCLUDE) is False
@@ -81,7 +100,7 @@ class TestCheck:
         public = tmp_path / "public"
         _make_files(private, {
             "novelbase/__init__.py": "x",
-            "novelbase/sources/fanqie/requests/search.py": "y",
+            "novelbase/sources/fanqie_requests_default/search.py": "y",
             "README.md": "readme",
             "app_data/config/config.yaml": "secret",
         })
