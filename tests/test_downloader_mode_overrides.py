@@ -67,7 +67,7 @@ def test_search_uses_override_mode(monkeypatch):
         seen.append(mode)
         return object()
 
-    asyncio.run(downloader.search(["src"], "q", engines,
+    asyncio.run(downloader.search("src", "q", engines,
                                   mode_overrides={"search": "api"}))
 
     assert seen == ["api"]

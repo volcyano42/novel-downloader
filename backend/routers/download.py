@@ -85,13 +85,14 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
     if source:
         source_name = require_known_source(source)
         try:
-            results = await search([source_name], query, _engines_for(source_name), page=page,
-                                   mode_overrides=_mode_overrides(source_name))
+            hit = await search(source_name, query, _engines_for(source_name), page=page,
+                               mode_overrides=_mode_overrides(source_name))
         except FeatureNotSupportedError as e:
             # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
             raise HTTPException(400, str(e))
         except Exception as e:
             raise HTTPException(500, str(e))
+        results = [hit] if hit is not None else []
     else:
         names = _selected_sources(sources)
         if not names:
@@ -101,13 +102,13 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
         async def _search_one(name: str):
             # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。
             try:
-                return await search([name], query, _engines_for(name), page=page,
+                return await search(name, query, _engines_for(name), page=page,
                                     mode_overrides=_mode_overrides(name))
             except Exception:
-                # 复刻 core.search 的「单源失败静默跳过」：某源出错不影响其它源。
-                return ()
+                # 单源失败不影响其它源（core 不再吞异常，由调用方逐源兜底）。
+                return None
         groups = await asyncio.gather(*(_search_one(n) for n in names))
-        results = [r for group in groups for r in group]
+        results = [r for r in groups if r is not None]
     return [SearchResultData(title=r.title, author=r.author, url=r.url,
                              description=r.description,
                              source_name=getattr(r, 'source_name', ''),

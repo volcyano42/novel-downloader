@@ -49,31 +49,31 @@ def test_sources_shape_is_flat(monkeypatch):
 
 
 def test_search_empty_source_uses_default_sources(monkeypatch):
-    """空 source → 对每个书源各发一次 search(...)，每次只带该源。"""
+    """空 source → 对每个书源各发一次单源 search(...)。"""
     monkeypatch.setattr(dl, "default_source_names", lambda: ["a-x-default", "b-y-default"])
     called = []
 
-    async def fake_search(sources, query, engines, **kw):
-        called.append(list(sources))
-        return ()
+    async def fake_search(source_name, query, engines, **kw):
+        called.append(source_name)
+        return None
 
     monkeypatch.setattr(dl, "search", fake_search)
     asyncio.run(dl.search_novels(query="关键词", source=""))
-    assert sorted(called) == [["a-x-default"], ["b-y-default"]]
+    assert sorted(called) == ["a-x-default", "b-y-default"]
 
 
 def test_search_single_source_binds_engine(monkeypatch):
     seen = _patch_engine_factory(monkeypatch)
     captured = {}
 
-    async def fake_search(sources, query, engines, **kw):
-        captured["sources"] = list(sources)
+    async def fake_search(source_name, query, engines, **kw):
+        captured["source_name"] = source_name
         captured["engine"] = engines("requests")
-        return ()
+        return None
 
     monkeypatch.setattr(dl, "search", fake_search)
     asyncio.run(dl.search_novels(query="关键词", source="92xs-requests-default"))
-    assert captured["sources"] == ["92xs-requests-default"]
+    assert captured["source_name"] == "92xs-requests-default"
     assert seen == [("92xs-requests-default", "requests")]
 
 
@@ -87,12 +87,10 @@ def test_parallel_same_mode_uses_per_source_engine(monkeypatch):
 
     per_source_engine = {}
 
-    async def fake_search(sources, query, engines, **kw):
-        assert len(sources) == 1, f"每源应各发一次单源 search，实际 {sources}"
-        name = sources[0]
-        per_source_engine[name] = engines("requests")
-        return (SearchResult(title=name, author="x", url=f"https://x/{name}",
-                             source_name=name),)
+    async def fake_search(source_name, query, engines, **kw):
+        per_source_engine[source_name] = engines("requests")
+        return SearchResult(title=source_name, author="x", url=f"https://x/{source_name}",
+                            source_name=source_name)
 
     monkeypatch.setattr(dl, "search", fake_search)
     out = asyncio.run(dl.search_novels(query="关键词", source=""))
@@ -106,16 +104,15 @@ def test_parallel_same_mode_uses_per_source_engine(monkeypatch):
 
 
 def test_parallel_one_source_fails_others_survive(monkeypatch):
-    """单个源抛错时不影响其它源（复刻 core 的单源静默跳过）。"""
+    """单个源抛错时不影响其它源（core 不再吞异常，由调用方逐源兜底）。"""
     monkeypatch.setattr(dl, "default_source_names",
                         lambda: ["bad-requests-default", "good-requests-default"])
     monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
 
-    async def fake_search(sources, query, engines, **kw):
-        if sources[0] == "bad-requests-default":
+    async def fake_search(source_name, query, engines, **kw):
+        if source_name == "bad-requests-default":
             raise RuntimeError("boom")
-        return (SearchResult(title="ok", author="a", url="https://x/1",
-                             source_name=sources[0]),)
+        return SearchResult(title="ok", author="a", url="https://x/1", source_name=source_name)
 
     monkeypatch.setattr(dl, "search", fake_search)
     out = asyncio.run(dl.search_novels(query="关键词", source=""))
@@ -179,11 +176,11 @@ def test_search_passes_mode_overrides_by_keyword(monkeypatch):
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "browser"})
     captured = {}
 
-    async def fake_search(sources, query, engines, skip_delay=False,
+    async def fake_search(source_name, query, engines, skip_delay=False,
                           mode_overrides=None, **kw):
         captured["mode_overrides"] = mode_overrides
         captured["skip_delay"] = skip_delay
-        return ()
+        return None
 
     monkeypatch.setattr(dl, "search", fake_search)
     asyncio.run(dl.search_novels(query="关键词", source="92xs-requests-default"))
@@ -398,19 +395,19 @@ def test_sources_include_group_and_alias(monkeypatch):
 
 
 def test_search_uses_selected_sources(monkeypatch):
-    """`sources=a,b` → 只对 a、b 各发一次 search。"""
+    """`sources=a,b` → 只对 a、b 各发一次单源 search。"""
     monkeypatch.setattr(dl, "list_sources", lambda: ["a-r-default", "b-r-default", "c-r-default"])
     called = []
 
-    async def fake_search(sources, query, engines, **kw):
-        called.append(list(sources))
-        return ()
+    async def fake_search(source_name, query, engines, **kw):
+        called.append(source_name)
+        return None
 
     monkeypatch.setattr(dl, "search", fake_search)
     monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
     asyncio.run(dl.search_novels(query="关键词", source="", sources="a-r-default,b-r-default"))
-    assert sorted(called) == [["a-r-default"], ["b-r-default"]]
+    assert sorted(called) == ["a-r-default", "b-r-default"]
 
 
 def test_search_skips_unknown_sources(monkeypatch):
@@ -426,13 +423,13 @@ def test_search_default_sources_when_param_absent(monkeypatch):
     monkeypatch.setattr(dl, "default_source_names", lambda: ["a-r-default", "b-r-default"])
     called = []
 
-    async def fake_search(sources, query, engines, **kw):
-        called.append(list(sources))
-        return ()
+    async def fake_search(source_name, query, engines, **kw):
+        called.append(source_name)
+        return None
 
     monkeypatch.setattr(dl, "search", fake_search)
     monkeypatch.setattr(dl, "get_cached_engine", lambda name, mode: object())
     monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
     asyncio.run(dl.search_novels(query="关键词", source=""))
-    assert sorted(called) == [["a-r-default"], ["b-r-default"]]
+    assert sorted(called) == ["a-r-default", "b-r-default"]
 

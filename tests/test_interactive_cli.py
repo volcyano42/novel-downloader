@@ -249,13 +249,13 @@ class TestInteractive:
         monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default"])
         seen = []
 
-        async def fake_search(sources, query, engines, **kw):
-            seen.append(list(sources))
-            return ()
+        async def fake_search(source_name, query, engines, **kw):
+            seen.append(source_name)
+            return None
 
         monkeypatch.setattr(mod, "search", fake_search)
         url, name = mod.do_search("测试")
-        assert seen == [["a-x-default"]] and url is None
+        assert seen == ["a-x-default"] and url is None
         assert "未找到结果" in capsys.readouterr().out
 
     def test_do_search_keyword_backend_error(self, monkeypatch, capsys):
@@ -274,16 +274,16 @@ class TestInteractive:
         from cli import interactive as mod
         calls = []
 
-        async def fake_search(sources, query, engines, **kw):
-            calls.append(list(sources))
-            src = sources[0]
-            return (_FakeResult(f"书-{src}", "作者", f"https://x/{src}", src),)
+        async def fake_search(source_name, query, engines, **kw):
+            calls.append(source_name)
+            return _FakeResult(f"书-{source_name}", "作者", f"https://x/{source_name}",
+                               source_name)
 
         monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default", "b-y-default"])
         monkeypatch.setattr(mod, "search", fake_search)
         monkeypatch.setattr(mod, "_select", lambda *a, **k: 0)
         url, name = mod.do_search("测试")
-        assert calls == [["a-x-default"], ["b-y-default"]]
+        assert calls == ["a-x-default", "b-y-default"]
         assert name == "a-x-default"
         assert url == "https://x/a-x-default"
 

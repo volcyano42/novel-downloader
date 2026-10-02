@@ -75,27 +75,42 @@ def test_hash_uses_preprocessed_novel_url_not_input(monkeypatch):
     assert result.id != make_novel_id(shortlink)
 
 
-def test_search_tags_each_result_with_source(monkeypatch):
+def test_search_tags_result_with_source(monkeypatch):
     async def _fake(query, engine, **kw):
         return (SearchResult(title="a", author="b", url="https://x/1"),)
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    res = asyncio.run(search(["s1", "s2"], "关键词", _engines(_Engine())))
-    assert {r.source_name for r in res} == {"s1", "s2"}
+    res = asyncio.run(search("s1", "关键词", _engines(_Engine())))
+    assert res is not None and res.source_name == "s1"
 
 
-def test_search_skips_failing_source(monkeypatch):
-    async def _ok(query, engine, **kw):
-        return (SearchResult(title="a", author="b", url="https://x/1"),)
+def test_search_returns_first_result_only(monkeypatch):
+    """单源单结果：源内多条命中只返回第一条。"""
+    async def _fake(query, engine, **kw):
+        return (SearchResult(title="first", author="a", url="https://x/1"),
+                SearchResult(title="second", author="b", url="https://x/2"))
 
+    monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
+    res = asyncio.run(search("s1", "关键词", _engines(_Engine())))
+    assert res is not None and res.title == "first"
+
+
+def test_search_returns_none_when_source_has_no_result(monkeypatch):
+    async def _fake(query, engine, **kw):
+        return ()
+
+    monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
+    assert asyncio.run(search("s1", "关键词", _engines(_Engine()))) is None
+
+
+def test_search_propagates_source_error(monkeypatch):
+    """源不可用不再被静默跳过：异常上抛，由调用方决定提示还是跳过。"""
     def _resolve(name, cap):
-        if name == "bad":
-            raise ImportError("boom")
-        return _ok, "requests"
+        raise ImportError("boom")
 
     monkeypatch.setattr("novelbase.source.resolve", _resolve)
-    res = asyncio.run(search(["bad", "good"], "关键词", _engines(_Engine())))
-    assert len(res) == 1 and res[0].source_name == "good"
+    with pytest.raises(ImportError):
+        asyncio.run(search("bad", "关键词", _engines(_Engine())))
 
 
 def test_resolve_chapter_returns_chapter_when_content_available(monkeypatch):

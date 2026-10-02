@@ -149,11 +149,11 @@ def cmd_search(args):
         # 每个源各用自己的引擎（杜绝「同 mode 源共用首个源引擎」）。
         engines = _make_engines(name)
         try:
-            return await search([name], args.query, engines, page=args.page,
+            return await search(name, args.query, engines, page=args.page,
                                 mode_overrides=effective_capabilities(name))
-        except Exception as e:      # 某源失败静默跳过：不影响其它源
+        except Exception as e:      # 某源失败不影响其它源
             print(f"  [{name}] 搜索失败: {e}")
-            return ()
+            return None
         finally:
             for eng in engines.cache.values():
                 try:
@@ -163,7 +163,7 @@ def cmd_search(args):
 
     async def _run():
         groups = await asyncio.gather(*(_search_one(n) for n in sources))
-        return [r for group in groups for r in group]
+        return [r for r in groups if r is not None]
 
     results = asyncio.run(_run())
     if not results:

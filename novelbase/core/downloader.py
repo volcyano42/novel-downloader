@@ -1,13 +1,9 @@
-import asyncio
-from typing import Sequence, Callable
+from typing import Callable
 
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
-from ..utils.logger import get_logger
 from ..utils.urls import make_novel_id
-
-_log = get_logger("novelbase.core.downloader")
 
 
 def get_exporters() -> dict[str, Callable]:
@@ -21,32 +17,24 @@ def get_exporter_options() -> dict[str, type[ExportOptions]]:
     return register_export_options()
 
 
-async def search(sources: Sequence[str], query: str, engines,
+async def search(source_name: str, query: str, engines,
                  skip_delay: bool = False, mode_overrides: dict[str, str] | None = None,
-                 **kwargs) -> tuple[SearchResult, ...]:
-    """并发搜索给定书源；单个书源失败静默跳过。
+                 **kwargs) -> SearchResult | None:
+    """搜索**单个**书源，返回第一条命中；该源无结果 → None。
 
+    源报错 / 不支持搜索（`FeatureNotSupportedError`）**向上抛异常**，由调用方决定
+    提示还是跳过——多源并发由调用方各自 gather（core 不再吞异常）。
     `mode_overrides`（能力名 → mode）覆盖书源声明的 mode，用于用户层配置。
     """
     from ..source import resolve as _resolve
 
-    async def _one(name: str) -> list[SearchResult]:
-        fn, mode = _resolve(name, "search")
-        mode = (mode_overrides or {}).get("search") or mode
-        kwargs["skip_delay"] = skip_delay
-        results = await fn(query=query, engine=engines(mode), **kwargs)
-        for r in results:
-            r.source_name = name
-        return list(results)
-
-    gathered = await asyncio.gather(*(_one(n) for n in sources), return_exceptions=True)
-    out: list[SearchResult] = []
-    for item in gathered:
-        if isinstance(item, Exception):
-            _log.warning("search failed for one source: %s", item)
-            continue
-        out.extend(item)
-    return tuple(out)
+    fn, mode = _resolve(source_name, "search")
+    mode = (mode_overrides or {}).get("search") or mode
+    kwargs["skip_delay"] = skip_delay
+    results = await fn(query=query, engine=engines(mode), **kwargs)
+    for r in results:                        # 统一打标（书源侧不写死 source_name）
+        r.source_name = source_name
+    return results[0] if results else None
 
 
 async def resolve_meta(url: str, source_name: str, engines, skip_delay: bool = False,
