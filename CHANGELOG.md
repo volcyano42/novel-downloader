@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-> 2026-09-27。`source_name` 全局唯一（实现层检测）、Termux 构建链路修复，以及书源元信息（分组/别名）与按选择搜索（`enabled` 废弃）。
+> 2026-09-27 起累积：`source_name` 全局唯一（实现层检测）、Termux 构建链路修复、书源元信息（分组/别名）与按选择搜索（`enabled` 废弃）、browser 登录态与下载顺序 FIFO 修复；**2026-10-01 追加 core `search` 改「单源单结果」**。
 
 ### 新增
 
@@ -13,12 +13,14 @@
 
 1. **私有源同名叠加机制取消** — `resolve()` 原「同名能力内置优先、内置缺失再用私有补齐」不再存在：私有源必须自带独立 `source_name`，**不能复用内置 id**（不留 `overrides` 之类的逃生舱）。`NLD_PRIVATE_SOURCES` 下若已有复用内置 id 的目录，升级后加载即报错，需改其 `source.json` 的 `source_name`（目录名可不变，二者本就解耦）并同步 `app_data/config/sites/{新名}.yaml`
 2. **`enabled` 彻底废弃** — 书源不再有「启用」概念：`source.json` 与用户层都不再有该字段，`is_source_enabled()` / `enabled_source_names()` 删除，默认参与集改为 `shared.config.default_source_names()`（= 全部书源，无任何过滤）。旧用户层残留键不读、`PUT /config/sources/{name}` 保存时清理。搜索改为按用户勾选参与的书源（前端默认全选、不持久化），并支持 `GET /download/search?sources=a,b,c`（缺省 = 全部书源；未知源静默跳过，筛完为空 400）
+3. **core `search` 改「单源单结果」**（2026-10-01）— `novelbase.search` 的 `sources: Sequence[str]` 改为 `source_name: str`，返回值 `tuple[SearchResult, ...]` 改为 `SearchResult | None`（该源**第一条**命中；无结果 → `None`）。core 不再并发多源、不再吞异常：源报错 / `FeatureNotSupportedError` 一律**上抛**，多源并发与逐源兜底上移到调用方（backend / CLI 本就这么调，逐源并发逻辑不变）。**可感知影响**：搜索页与 CLI 中每个书源最多贡献 1 条结果（此前一个源可返回多条）；直接 `import novelbase.search` 的外部调用方需同步改签名
 
 ### 修复
 
 1. **Termux 构建链路** — 预装 `sed` 写法（外层 `bash -c` 的单引号嵌套会吃掉反斜杠）、`uvicorn[standard]` 的 `uvloop` extras 在 bionic 编不了、验证步骤 app 路径写错（`services.backend.main` → `backend.main`）
 2. **browser 书源出厂默认不再是空 profile** — `user_data_dir` 的出厂默认从 `""` 改为 `app_data/browser/Chromium/User Data`（持久化 profile，相对路径按**仓库根**解析）。此前出厂默认为空 → `shared.config.build_options()` 得到 `None` → `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录**不落盘**、进程一退就失效，表现为「每次启动登录态重置」；`sites/*.yaml` 迁移把旧的持久化路径写丢后暴露。三个内置 browser 源（`fanqie` / `qidian` / `qimao`）同步修改；回归用例 `tests/test_source_contracts.py::test_builtin_browser_sources_default_to_persistent_profile`（**已实测修复前必然失败**）
 3. **章节下载顺序改严格 FIFO** — 书源额度的等待队列此前不是 FIFO：`_SOURCE_WAIT_TIMEOUT`(0.2s) 超时兜底对「单章耗时长于 0.2s」（真实网络必然）的等待者，会让它们集体超时 → 出队 → 重查 → 重新 append 到队尾，加上 `_release_source_slot` 当时是「唤醒全部等待者 + 清队列、各自重查额度竞争接手」，接手顺序被随机化。表现为**并发 1（严格串行）时下载顺序仍乱**，界面上「待下载 / 下载中 / 已下载」交错，且乱序范围恰是 `_BATCH_SIZE`(32) 章 —— 像在限定区间里随机挑章节下载（实测 8 章 / 额度 1 / 单章 0.3s：修复前开始顺序 = `章1,章7,章2,章6,章4,章5,章8,章3`）。现改为**交接式 FIFO**：释放时把额度直接交接给队首（占用数不变、所有权转移），队首 Future 置 `True` 且不移出队列，由接手协程自行出队；等待改用 `asyncio.shield`，超时不再丢队列位置；取消 / 暂停路径补归还以防额度泄漏。见 `backend/services/task_manager.py`；回归用例 2 个（**已实测修复前必然失败**）
+4. **「源不支持搜索」的 400 提示失效**（2026-10-01）— core `search` 原先用 `asyncio.gather(..., return_exceptions=True)` 吞掉一切异常，`backend/routers/download.py` 里的 `except FeatureNotSupportedError → 400` 因此是**死代码**：`GET /download/search?source=qidian-requests-default`（requests 模式无搜索能力）返回空数组，用户只看到「无结果」。现异常上抛，400 友好提示生效。同批清理 `novelbase/core/downloader.py` 中 5d695d8 声明移除却遗留的 `split_into_groups` 及其死导入
 
 > 测试（2026-09-30 复核）：本机全量 `python -m pytest tests -q` → **515 passed, 0 failed**（15.8s；此前记录「全量未跑通」的 `tmp_path` 拖慢已不复现）；CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387) 三个 Python 版本全绿；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。
 

@@ -22,7 +22,8 @@
   唯一入口 `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎并透传 `mode_overrides`）——旧的 `--platform/-p`、
   `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。非法的覆盖值被忽略并回退声明。
 - `search` 省略 `--source` 时**并发全部书源**（`shared.config.default_source_names()` = 全部书源，
-  `enabled` 已废弃，**无任何过滤**）；单个源失败静默跳过，并在结果里标注来源 `source_name`。
+  `enabled` 已废弃，**无任何过滤**）；**每个源最多贡献 1 条结果**（core `search` 是单源单结果），
+  单个源失败不影响其它源，并在结果里标注来源 `source_name`。
 - `download` / `info` 的 `--source` 必填：core 已删 URL→书源推断，无法自动识别 URL 归属。
 - `dev new-source` 生成**一层结构**（`__init__.py` + `source.json` + 4 能力文件），默认同时写
   `app_data/config/sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 已删除。

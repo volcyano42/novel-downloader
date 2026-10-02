@@ -593,3 +593,30 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - 7 个 Task 的实现此前均已落地（对应各 `feat` / `fix` 提交），本次补齐**验证**并勾选计划里的
   checkbox；完成记录见该 plan 末节。全量 `python -m pytest tests -q` **513 passed**、
   `npx tsc -b` 0 错、`npx oxlint` 0 告警、`python cli.py sources list` 冒烟通过。
+
+## 2026-10-01 变更（core `search` 改「单源单结果」）
+
+### `search(sources, …)` → `search(source_name, …)`：单源、单结果、异常上抛
+
+- **动机**：core 的「多源并发 + 失败静默跳过」已无消费者——2026-09-25 起多源并发就上移到
+  backend / CLI（两者都逐源 `search([name], …)` 再各自 `asyncio.gather`），core 里那层
+  `asyncio.gather(..., return_exceptions=True)` 只剩余副作用：吞掉异常，使
+  `backend/routers/download.py` 的 `except FeatureNotSupportedError → 400` 成为**死代码**
+  （`?source=qidian-requests-default` 返回空数组，而非「该源不支持搜索」）。
+- **新契约**（`novelbase/core/downloader.py`）：
+  `async search(source_name: str, query, engines, skip_delay=False, mode_overrides=None, **kwargs) -> SearchResult | None`
+  —— 一次只搜一个源，返回该源**第一条**命中；无结果 → `None`；源报错 / 不支持搜索 → **异常上抛**。
+  `SearchResult.source_name` 仍由分发层统一打标。
+- **调用方**：四个点（`backend/routers/download.py` 单源分支与多源分支、`cli/main.py::cmd_search`、
+  `cli/interactive.py::do_search`）去掉 `[name]` 包装；多源并发与逐源失败兜底保留在调用方，
+  gather 后过滤 `None` 而非展开元组。
+- **可感知变化**：每个书源最多贡献 1 条结果（搜索页与 CLI 的结果条数随之变少）；
+  `GET /download/search` 的**响应形状不变**（仍是数组），前端零改动。
+- **回归用例**：`tests/test_downloader.py` 由「多源合并 / 坏源跳过」改写为「打标 / 只取第一条 /
+  无结果 → `None` / 源报错上抛」4 条；`tests/test_backend_download_routes.py`、
+  `tests/test_interactive_cli.py`、`tests/test_downloader_mode_overrides.py` 的 mock 同步单源签名。
+- **顺带清理**：`split_into_groups`（5d695d8 声明移除，但函数体与 `TypeVar/_T` 一直留在
+  `downloader.py`）以及因本次改动失效的 `asyncio` / `Sequence` / `_log` 死引用。
+- **验证**：全量 `python -m pytest tests -q` → **520 passed, 0 failed**；`npx tsc -b` 0 错。
+- **未改**：书源侧 `search()` 接口（仍是 `async fn(query, engine, **kwargs) -> list[SearchResult]`）；
+  前端与 `GET /download/search` 的 query 参数（`source` / `sources` 双入口）都不变。
