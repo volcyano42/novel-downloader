@@ -1,13 +1,11 @@
 import asyncio
-from typing import Sequence, TypeVar, Callable
+from typing import Sequence, Callable
 
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
 from ..models.novel import Novel, Chapter, Chapters, SearchResult
 from ..utils.logger import get_logger
 from ..utils.urls import make_novel_id
-
-_T = TypeVar('_T')
 
 _log = get_logger("novelbase.core.downloader")
 
@@ -21,11 +19,6 @@ def get_exporters() -> dict[str, Callable]:
 def get_exporter_options() -> dict[str, type[ExportOptions]]:
     from ..exporter import register_export_options
     return register_export_options()
-
-
-def split_into_groups(target: Sequence[_T], group: int) -> tuple[Sequence[_T], ...]:
-    """将章节列表按批次大小分组。"""
-    return tuple(target[i:i + group] for i in range(0, len(target), group))
 
 
 async def search(sources: Sequence[str], query: str, engines,
