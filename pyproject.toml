@@ -29,6 +29,12 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["novelbase*"]
 
+[tool.setuptools.package-data]
+# 书源清单是包内唯一的非 .py 数据文件，不声明就不会进 wheel/sdist：
+# 实测 `pip install .` 装出来的包缺它 → scan_source_names() 静默返回 {} → list_sources() 为空。
+# 键只能是包名（pyproject 的 schema 不接受 `novelbase.sources.*` 这类 glob 键）。
+"novelbase.sources" = ["*/source.json"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9",
