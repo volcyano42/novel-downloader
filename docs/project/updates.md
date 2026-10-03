@@ -620,3 +620,47 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **验证**：全量 `python -m pytest tests -q` → **520 passed, 0 failed**；`npx tsc -b` 0 错。
 - **未改**：书源侧 `search()` 接口（仍是 `async fn(query, engine, **kwargs) -> list[SearchResult]`）；
   前端与 `GET /download/search` 的 query 参数（`source` / `sources` 双入口）都不变。
+
+## 2026-10-03 变更（打包 data 文件 + 删除 Engine 注册表 + 接入 ruff）
+
+对应提交：`13f010a`（package-data）、`98b8082`（删注册表）、`35d6ada`（ruff）、`a4f8b8d`（CI）。
+
+### wheel/sdist 补 `package-data`：书源清单不再丢
+
+- **症状**：`pip install .`（或 `python -m build --wheel`）装出来的包里 `novelbase/sources/*/source.json`
+  **一个都没有**（实测 wheel 内 83 个文件、`source.json` 计数 0）→ `source.py::_source_dirs()` 走
+  `scan_source_names()`，对缺清单的目录**静默返回 `{}`** → `list_sources()` 为空、所有 `resolve()` 失败，
+  且没有任何报错线索。
+- **根因**：`pyproject.toml` 未声明 `[tool.setuptools.package-data]`（仓库内也无 `MANIFEST.in`）。
+- **修复**：`[tool.setuptools.package-data]` 加 `"novelbase.sources" = ["*/source.json"]`。
+  键只能是包名——pyproject 的 schema 不接受 `"novelbase.sources.*"` 这类 glob 键（会报
+  `ValueError: invalid pyproject.toml config: tool.setuptools.package-data`）。
+- **验证**：wheel 与 sdist **各含 10 个 `source.json`**；新建 venv 安装 wheel 后从**仓库外**运行
+  `list_sources()` → 10 个书源齐全（此前为空）。CI 新增 `wheel-smoke` job 固化这条。
+
+### 删除 `Engine` 全局实例注册表（bug + 死代码）
+
+- **症状（实测）**：`Engine._instances` / `_registry_keys` 的计数式 key 生成会撞名——建
+  `APIEngine_1`、`APIEngine_2`，`close(#1)` 后再建 #3 拿到 `APIEngine_2`，**覆盖** #2 的登记项，
+  `_registry_keys` 出现重复，注册表从此丢失 #2。
+- **另一事实**：该注册表全仓**没有读者**（只有 `__init__` 写、`close` 删），属遗留死代码。
+- **修复**（`novelbase/core/engine.py`）：删掉两个类属性与 `Engine.__init__`，`close` 回归空实现
+  （保留 `# noqa: B027`：有意不标 `@abstractmethod`，避免破坏第三方子类）；生命周期由调用方
+  `close()` / `await aclose()` 负责，跨请求缓存见 `backend/services/engine_manager.py`。
+- **顺带**：消掉 2 处 `RUF012`（类级可变默认值）。
+
+### 接入 ruff（`pyproject.toml`）+ CI `lint` / `wheel-smoke`
+
+- **配置**：`[tool.ruff]` target py310、line-length 100、`extend-exclude` 掉自动生成的
+  `novelbase/utils/_manifest.py`；`select = ["E4","E7","E9","F","W","I","B","UP"]`。
+  **不启用** E501（行长，存量 264 处）与 RUF001/002/003（中文全角标点会被判成 ambiguous-unicode）。
+- **存量修复**：`novelbase` 63 条 → 0（49 条自动修 + 14 条手工）：import 排序 37 处、
+  `typing.Callable/Sequence` → `collections.abc` 6 处、`zip(..., strict=True)` 4 处、
+  `except` 内 `raise ... from` 3 处、未用循环变量 2 处、`if x: y` 拆行 2 处、docstring 尾随空白、
+  `exporters/epub.py` 的 `from PIL import Image` 归位（原在模块级 import 之后）。
+- **CI**：`lint` job 跑 `ruff check novelbase`；`wheel-smoke` job 构建 wheel → 从仓库外安装 →
+  断言 10 个书源可见（此前 pip 安装路径**无任何 CI 覆盖**）。
+- **验证**：全量 `python -m pytest tests -q` → **520 passed, 0 failed**；`ruff check novelbase` → all checks passed。
+- **未纳入**：ruff 只查 `novelbase`（tests/cli/backend/shared 的存量问题未清）；依赖双份漂移
+  （`pyproject.toml` 缺 `python-dotenv`，`fastapi`/`uvicorn` 的版本约束只在 `requirements.txt`）；
+  `create_storage`/`SQLiteStorage` 未进 `__all__`；`source.py::_source_dirs()` 每次调用重扫盘（≈5 ms/次）。
