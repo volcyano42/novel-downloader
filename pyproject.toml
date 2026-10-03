@@ -69,3 +69,17 @@ exclude = [
     "**/__pycache__/**",
     "**/*.pyc",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    # 编译模式书源清单：由 scripts/build_manifest.py 生成，含超长单行
+    "novelbase/utils/_manifest.py",
+]
+
+[tool.ruff.lint]
+# 只启用「真实问题」级别：pycodestyle 错误/语句/语法（E4/E7/E9）、pyflakes（F）、
+# 警告（W）、import 排序（I）、bugbear（B）、pyupgrade（UP）。
+# 不启用 E501（行长）与 RUF001/002/003（中文全角标点会被判成 ambiguous-unicode）。
+select = ["E4", "E7", "E9", "F", "W", "I", "B", "UP"]

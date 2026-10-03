@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 
 from novelbase.models.novel import SearchResult
 
-
 _log = logging.getLogger("novelbase.sources.qimao")
 
 def parse_search_result(html: str):

@@ -1,7 +1,7 @@
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence, Literal
-
+from typing import Literal
 
 
 @dataclass

@@ -5,7 +5,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from novelbase.core.exceptions import NovelNotFoundError
-from novelbase.models.novel import Novel, Illustration, Chapter
+from novelbase.models.novel import Chapter, Illustration, Novel
 
 
 def standardize_id(ref: str | Novel | Chapter) -> str:

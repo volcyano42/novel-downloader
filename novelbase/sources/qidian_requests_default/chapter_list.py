@@ -3,7 +3,7 @@ import re
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
-from novelbase.models.novel import Novel, Chapter, Chapters
+from novelbase.models.novel import Chapter, Chapters, Novel
 
 
 def standardize_id(url: str) -> str:
@@ -50,7 +50,7 @@ def parse_chapter_list(html: str, *, url: str = "") -> Chapters:
 
         title_list = [item.text for item in chapters_item.select("a.chapter-name")]
         url_list = ["https:" + item.get("href") for item in chapters_item.select("a.chapter-name")]
-        for title, chapter_url in zip(title_list, url_list):
+        for title, chapter_url in zip(title_list, url_list, strict=True):
             chapter_id = standardize_id(chapter_url)
             results.append(Chapter(
                 title=title,

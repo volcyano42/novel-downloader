@@ -5,7 +5,7 @@ import re
 from bs4 import BeautifulSoup
 
 from novelbase.core.exceptions import NovelNotFoundError
-from novelbase.models.novel import Novel, Illustration
+from novelbase.models.novel import Illustration, Novel
 
 
 def standardize_id(ref):

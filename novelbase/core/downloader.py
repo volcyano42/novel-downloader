@@ -1,9 +1,9 @@
-from typing import Callable
+from collections.abc import Callable
 
+from ..models.novel import Chapter, Chapters, Novel, SearchResult
+from ..utils.urls import make_novel_id
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
-from ..models.novel import Novel, Chapter, Chapters, SearchResult
-from ..utils.urls import make_novel_id
 
 
 def get_exporters() -> dict[str, Callable]:

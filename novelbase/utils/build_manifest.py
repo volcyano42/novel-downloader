@@ -32,7 +32,7 @@ def build() -> None:
         # 自然冒泡，traceback 直接给出真因，避免误报「重复」。
         by_name = scan_source_names([SRC], strict=True)
     except DuplicateSourceNameError as e:
-        raise SystemExit(f"ERROR: source_name 重复，构建中止：{e}")
+        raise SystemExit(f"ERROR: source_name 重复，构建中止：{e}") from e
 
     sources: dict[str, dict] = {}
     source_dirs: dict[str, str] = {}

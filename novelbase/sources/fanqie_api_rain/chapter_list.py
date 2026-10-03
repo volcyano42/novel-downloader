@@ -1,7 +1,7 @@
 import re
 
 from novelbase.core.exceptions import ChapterNotFoundError
-from novelbase.models.novel import Novel, Chapter, Chapters
+from novelbase.models.novel import Chapter, Chapters, Novel
 
 
 def _api_url(engine, **params) -> str:

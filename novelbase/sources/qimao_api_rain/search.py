@@ -6,7 +6,6 @@ from box import Box
 
 from novelbase.models.novel import SearchResult
 
-
 _log = logging.getLogger("novelbase.sources.qimao")
 
 def _api_url(engine, **params) -> str:

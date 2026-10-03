@@ -14,8 +14,8 @@ Source 相关的注册/发现（register_source / list_sources 等）在 novelba
 import importlib.util as importlib_util
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .core.options import ExportOptions
 
@@ -77,6 +77,7 @@ def _scan_one_module(module_path: Path, module_name: str) -> tuple[str, Callable
 
     # 运行时签名校验：export 必须接受 chapters/novel 参数
     from inspect import signature as _signature
+
     from .exporters.contracts import EXPORT_REQUIRED_PARAMS
 
     try:

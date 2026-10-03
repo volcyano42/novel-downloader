@@ -14,6 +14,7 @@ class TXTExportOptions(ExportOptions):
 
 def _build_file_path(novel: Novel, options: TXTExportOptions) -> Path:
     from datetime import datetime
+
     from ..utils.template_utils import SafeDict
 
     file_name_template = getattr(options, "file_name_template", "{title}")

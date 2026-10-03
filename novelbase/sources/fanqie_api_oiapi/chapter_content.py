@@ -1,7 +1,7 @@
 import re
 
 from novelbase.core.exceptions import AntiCrawlError, ChapterNotFoundError
-from novelbase.models.novel import Novel, Chapter
+from novelbase.models.novel import Chapter, Novel
 
 
 def standardize_id(ref: str | Novel | Chapter) -> str:

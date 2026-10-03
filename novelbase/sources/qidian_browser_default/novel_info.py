@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 
 from novelbase.core.exceptions import AntiCrawlError, NovelNotFoundError, ParseError
-from novelbase.models.novel import Novel, Illustration
+from novelbase.models.novel import Illustration, Novel
 
 
 def content_is_exist(html: str) -> bool:
@@ -50,7 +50,7 @@ def parse_novel_info(html: str, url) -> Novel:
 
         book_cover_url = 'https:' + soup.select_one('a#bookImg img').get('src')
     except AttributeError as exc:
-        raise ParseError("Qidian novel info page missing expected element", detail=str(exc))
+        raise ParseError("Qidian novel info page missing expected element", detail=str(exc)) from exc
     # 封面字节由能力函数经 engine.async_fetch_images 下载
     novel_image = Illustration(raw_data=b"", alt=name, url=book_cover_url)
 

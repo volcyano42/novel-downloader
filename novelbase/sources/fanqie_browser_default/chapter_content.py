@@ -5,8 +5,7 @@ from typing import Any
 from bs4 import BeautifulSoup, Tag
 
 from novelbase.core.exceptions import ChapterNotFoundError, ParseError
-from novelbase.models.novel import Novel, Chapter, Illustration
-
+from novelbase.models.novel import Chapter, Illustration, Novel
 
 content_transcoding = {"58670": "0", "58413": "1", "58678": "2", "58371": "3", "58353": "4", "58480": "5", "58359": "6",
                        "58449": "7", "58540": "8", "58692": "9", "58712": "a", "58542": "b", "58575": "c", "58626": "d",
@@ -69,7 +68,8 @@ content_transcoding = {"58670": "0", "58413": "1", "58678": "2", "58371": "3", "
                        "58434": "士", "58679": "音", "58432": "轻", "58689": "目", "58591": "条", "58682": "呢"}
 
 def translate(en_text: str | None) -> str:
-    if not en_text: return ''
+    if not en_text:
+        return ''
     de_text = ''
     transcoding = content_transcoding
     for index in en_text:
@@ -252,6 +252,6 @@ async def chapter_content(chapter, engine, **kwargs):
         data = await engine.async_fetch_images([i["url"] for i in img_urls])
         ch.images = tuple(
             Illustration(raw_data=d, url=i["url"], alt=i["alt"], insert=i["insert"])
-            for i, d in zip(img_urls, data)
+            for i, d in zip(img_urls, data, strict=True)
         )
     return ch

@@ -5,7 +5,7 @@ import re
 from box import Box
 
 from novelbase.core.exceptions import NovelNotFoundError
-from novelbase.models.novel import Novel, Illustration
+from novelbase.models.novel import Illustration, Novel
 
 
 def _api_url(engine, **params) -> str:

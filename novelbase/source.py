@@ -21,13 +21,18 @@
 """
 
 import os
-from importlib import import_module, util as importlib_util
+from importlib import import_module
+from importlib import util as importlib_util
 from inspect import signature
 from pathlib import Path
+
 from .sources.contracts import CAPABILITY_META
 from .sources.manifest import (
-    DuplicateSourceNameError, ManifestError, check_capability_files,
-    load_manifest, scan_source_names,
+    DuplicateSourceNameError,
+    ManifestError,
+    check_capability_files,
+    load_manifest,
+    scan_source_names,
 )
 
 __all__ = ["list_sources", "get_manifest", "capabilities", "resolve",

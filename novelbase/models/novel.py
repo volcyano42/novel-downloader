@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from base64 import b64encode, b64decode
-from collections.abc import Iterable
+from base64 import b64decode, b64encode
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Sequence, Iterator
+from typing import Any
 
 from box import Box
 
@@ -60,8 +60,8 @@ class Illustration:
 
         try:
             from io import BytesIO
-            from PIL import Image
 
+            from PIL import Image
             from pillow_heif import register_heif_opener
             register_heif_opener()
 
@@ -98,8 +98,8 @@ class Illustration:
             return self
         try:
             from io import BytesIO
-            from PIL import Image
 
+            from PIL import Image
             from pillow_heif import register_heif_opener
             register_heif_opener()
 

@@ -42,6 +42,7 @@ class IMGExportOptions(ExportOptions):
 
 def _build_output_base(novel: Novel, options: IMGExportOptions) -> Path:
     from datetime import datetime
+
     from ..utils.template_utils import SafeDict
 
     variables = SafeDict({
@@ -74,6 +75,7 @@ def _write_image(base_dir: Path, raw_data: bytes, counter: int, options: IMGExpo
 def _convert_format(raw_data: bytes, target_fmt: str) -> bytes:
     try:
         from io import BytesIO
+
         from PIL import Image
         from pillow_heif import register_heif_opener
         register_heif_opener()

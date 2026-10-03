@@ -1,7 +1,7 @@
 """用户扩展 Hook — 下载流程切入点和章节过滤器。"""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from novelbase.models.novel import Chapter, Novel
 

@@ -8,13 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from PIL import Image
+
 from ..core.options import ExportOptions
-from ..models.novel import Chapter, Novel, Illustration
+from ..models.novel import Chapter, Illustration, Novel
 from ..utils.logger import get_logger
 
 _log = get_logger("novelbase.exporters.epub")
-
-from PIL import Image
 
 # ═══════════════════════════════════════════════════════════════════
 # 常量
@@ -410,7 +410,7 @@ def _render_opf(
         spine.append(f'    <itemref idref="{cid}"/>')
 
     img_seq = 0
-    for img, fname in reg["img_list"]:
+    for _img, fname in reg["img_list"]:
         if cover_img_name and fname == cover_img_name:
             continue
         img_seq += 1

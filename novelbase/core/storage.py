@@ -17,12 +17,12 @@ import os
 import shutil
 import sqlite3
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Iterator, Sequence
 
-from .options import StorageOptions
-from ..models.novel import Novel, Chapter, Chapters, Illustration
+from ..models.novel import Chapter, Chapters, Illustration, Novel
 from ..utils.logger import get_logger
+from .options import StorageOptions
 
 _log = get_logger("novelbase.core.storage")
 
@@ -88,7 +88,7 @@ class BaseStorage(ABC):
     @abstractmethod
     def load_chapter(self, novel_id: str, chapter_id: str) -> Chapter | None:
         """读取单个章节。
-        
+
         novel_id 用于定位小说并推导 novel_url。
         """
         ...
@@ -554,7 +554,7 @@ class SQLiteStorage(BaseStorage):
         import gc
         gc.collect()
         for suffix in ("", "-wal", "-shm"):
-            for attempt in range(3):
+            for _ in range(3):
                 try:
                     os.remove(novel_path + suffix)
                     break
