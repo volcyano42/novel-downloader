@@ -664,3 +664,36 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **未纳入**：ruff 只查 `novelbase`（tests/cli/backend/shared 的存量问题未清）；依赖双份漂移
   （`pyproject.toml` 缺 `python-dotenv`，`fastapi`/`uvicorn` 的版本约束只在 `requirements.txt`）；
   `create_storage`/`SQLiteStorage` 未进 `__all__`；`source.py::_source_dirs()` 每次调用重扫盘（≈5 ms/次）。
+
+### 依赖版本约束与清理（`requirements.txt` / `pyproject.toml`）
+
+- **背景**：requirements 里多数库无版本约束，且 `pyproject.toml` 与它双份漂移（缺 `python-dotenv`、
+  `fastapi`/`uvicorn` 的约束只写在 requirements 侧）。
+- **新策略**：下界 = 本机 `pytest`（520 passed）已验证可用的版本；上界只加在已知会破坏的库上。
+- **关键约束**：
+  - `httpx>=0.28.1,<1` —— 1.0 是 ground-up 重写（移除 `AsyncClient`/`Auth`/`Timeout`、整个
+    `HTTPError` 异常层级、`proxies=`→`proxy=`/`mounts=`、`app=`→`transport=`），PyPI 上目前只有
+    `1.0.devN` / `1.0.0b0` 预发布；一旦 GA，无上界的 requirements 会静默拉入并全线崩（`core/engine.py`
+    的三个引擎都依赖这些 API）。
+  - `starlette>=1.0.1,<2` —— CVE-2026-48710（"BadHost"：Host 头绕过认证）影响 <1.0.1。此前它只是
+    fastapi 的传递依赖，而 `fastapi<0.133` 会锁 `starlette<1.0.0`。
+  - `chardet>=7.1,<8` —— 6.0/7.0 两轮大改（py3.10+、移除 `Latin1Prober`/`MacRomanProber`/EUC-TW、
+    7.0 为地面重写并改许可 LGPL→MIT→0BSD）；7.1.0 起 `compat_names=True`（默认）返回 5.x 风格编码名，
+    `utils/encoding.py` 的 `gb2312/gbk → GB18030` 映射因此保持有效。
+  - `pillow-heif>=1.3,<2` —— 1.3.0 修 CVE-2026-28231（整数溢出）；1.0 起不再提供 AVIF（本项目只用
+    HEIC/HEIF 解码）。
+  - `lxml>=6.0.2,<7` —— 6.0.0 有 XMLSchema bug；6.x 的 wheel 基于 libxml2 2.14+ 且**禁用内置 HTTP
+    抓取**（本项目只解析内存 HTML，不受影响）。
+  - 其余：`beautifulsoup4>=4.15,<5`、`fastapi>=0.142,<1`、`Pillow>=12.3,<13`、`rich>=15,<16`、
+    `uvicorn[standard]>=0.54,<1`、`PyYAML>=6.0.3,<7`、`python-box>=7.4,<8`、`playwright>=1.63,<2`。
+- **依赖清理**：移除 `yarl`（核心仓库零引用；`novel-downloader-tools/email_downloader.py` 的
+  `validate_fanqie_url` 改用 `urllib.parse.urlsplit`）与 `python-dotenv` 的显式声明（它是
+  `uvicorn[standard]` 的传递依赖 `>=0.13`，仍会装最新，含 CVE-2026-28684 修复）。
+- **格式约束**（已写进文件注释）：每行必须以包名开头 —— `scripts/build-portable.sh` 用
+  `^uvicorn\[standard\]` 做 sed，Termux 构建用 `^playwright` 做 grep 过滤。
+- **验证**：升级到 fastapi 0.142.2 / starlette 1.7.0 / lxml 6.1.3 / pillow-heif 1.8.0 /
+  playwright 1.63.0 / uvicorn 0.54.0 / python-dotenv 1.2.4 后：`pytest tests -q` → **520 passed**、
+  `tests/check_imports.py`、`cli.py sources list`、`pip-audit -r requirements.txt` → no known vulnerabilities。
+- **注意**：playwright 升级后必须重跑 `playwright install chromium`（浏览器 build revision 随版本变化：
+  1.62→`chromium-1234`，1.63→**`chromium-1243`**）；本机默认源 `cdn.playwright.dev` 不可达，改用
+  `PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright` 镜像完成。
