@@ -9,10 +9,10 @@ from typing import Any
 
 import httpx
 
-from .exceptions import NetworkError
-from .options import Options, BrowserOptions, APIOptions, RequestsOptions
 from ..utils.encoding import detect_encoding
 from ..utils.logger import get_logger, mask_key
+from .exceptions import NetworkError
+from .options import APIOptions, BrowserOptions, Options, RequestsOptions
 
 _log = get_logger("novelbase.core.engine")
 
@@ -35,18 +35,11 @@ def _resolve_proxy(proxies: dict | None) -> httpx.Proxy | None:
 
 
 class Engine(ABC):
-    """网络层基类 — 三种实现共享的接口。"""
+    """网络层基类 — 三种实现共享的接口。
 
-    _instances: dict[str, Engine] = {}
-    _registry_keys: list[str] = []
-
-    def __init__(self) -> None:
-        mode = getattr(self, "name", type(self).__name__)
-        idx = sum(1 for k in Engine._registry_keys if k.startswith(f"{mode}_")) + 1
-        key = f"{mode}_{idx}"
-        Engine._instances[key] = self
-        Engine._registry_keys.append(key)
-        self._registry_key = key
+    不维护全局实例注册表：引擎生命周期由调用方负责（`close` / `aclose`），
+    跨请求复用的缓存见 `backend.services.engine_manager`。
+    """
 
     @abstractmethod
     def fetch_text(self, url: str, skip_delay: bool = False, encoding: str | None = None, **kwargs) -> str:
@@ -73,13 +66,9 @@ class Engine(ABC):
         """批量下载图片字节，返回与 urls 等长的 bytes 列表（失败项为 b""）。"""
         ...
 
-    def close(self) -> None:
+    # 基类默认无资源可释放；有意不标 abstractmethod，子类按需覆盖
+    def close(self) -> None:  # noqa: B027
         """释放所有资源（进程退出前调用）。"""
-        Engine._instances.pop(self._registry_key, None)
-        try:
-            Engine._registry_keys.remove(self._registry_key)
-        except ValueError:
-            pass
 
     async def aclose(self) -> None:
         """异步关闭（供 async 上下文 await，确保资源完全释放后再退出）。
