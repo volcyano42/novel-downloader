@@ -32,7 +32,7 @@ from .core.storage import LocalStorage
 from .models.novel import Chapter, Chapters, Illustration, Novel, SearchResult
 from .utils.hooks import SourceHooks
 
-__version__ = "4.5.1"
+__version__ = "4.5.2"
 
 def list_sources():
     """列出所有可用 source 名称。"""

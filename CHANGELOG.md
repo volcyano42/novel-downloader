@@ -1,13 +1,14 @@
 # 更新日志
 
-## Unreleased
+## v4.5.2
 
-> 2026-09-27 起累积：`source_name` 全局唯一（实现层检测）、Termux 构建链路修复、书源元信息（分组/别名）与按选择搜索（`enabled` 废弃）、browser 登录态与下载顺序 FIFO 修复；**2026-10-01 追加 core `search` 改「单源单结果」**。
+> 2026-10-14。`source_name` 全局唯一（实现层检测）、Termux 构建链路修复、书源元信息（分组/别名）与按选择搜索（`enabled` 废弃）、browser 登录态与下载顺序 FIFO 修复、core `search` 改「单源单结果」，以及导出文件名模板与 Nuitka exe 的 `app_data` 定位两处修复；发行产物新增 Windows Nuitka exe。
 
 ### 新增
 
 1. **`source_name` 全局唯一（实现层检测）** — `source_name` 是全书源体系的唯一键（公共 API / 后端 / 前端 / CLI / `sites/{name}.yaml`），此前只有测试层兜底，实现层撞名时静默错（`list_sources()` 用 `set` 静默去重、`get_manifest()` / `resolve()` 静默取字典序第一个目录、`build_manifest` 静默覆盖 `SOURCE_DIRS`）。现新增唯一检测点 `novelbase/sources/manifest.py::scan_source_names()`：内置根与私有根视为**同一命名空间**，任何两个目录声明同一 `source_name` 一律抛 `DuplicateSourceNameError`（`ManifestError` 子类）。四条公开入口与 `build_manifest`（撞名即 `SystemExit`，不写出半成品 `_manifest.py`）全部接入；`capabilities()` 对撞名 `raise` 而非 `return {}`，避免后端 `GET /config/sources/{name}` 静默显示「无能力」
 2. **书源元信息（分组 / 别名）** — 用户层顶层 `source_group`（分组，一个源一个组，空 = 未分组）/ `source_alias`（显示别名，未设回落 `source_name`），读取入口 `shared.config.source_group()` / `source_alias()` / `display_name()`；10 个内置源出厂预置分组与别名（`source.json` 可选字段，用户层可覆盖）
+3. **发行产物新增 Windows Nuitka exe**（2026-10-14）— `build-windows-nuitka.yml` 加 `workflow_call` 并并入 `build-dist.yml`（与 portable 各 job 并行），于是 `release.yml` 一次触发即产出 Windows portable、**Windows Nuitka onefile exe**、Linux x64/arm64 portable、Termux portable；release 的等待上限从 120 分钟提到 240 分钟（Nuitka 编译 30-60 分钟）。该 workflow 内新增冒烟步骤：启动 exe 并断言它在**自身目录**初始化出 `app_data/config/`
 
 ### 变更（破坏性）
 
@@ -21,8 +22,10 @@
 2. **browser 书源出厂默认不再是空 profile** — `user_data_dir` 的出厂默认从 `""` 改为 `app_data/browser/Chromium/User Data`（持久化 profile，相对路径按**仓库根**解析）。此前出厂默认为空 → `shared.config.build_options()` 得到 `None` → `BrowserEngine` 走 `launch()` + `new_context()` 的**匿名** context，窗口里登录**不落盘**、进程一退就失效，表现为「每次启动登录态重置」；`sites/*.yaml` 迁移把旧的持久化路径写丢后暴露。三个内置 browser 源（`fanqie` / `qidian` / `qimao`）同步修改；回归用例 `tests/test_source_contracts.py::test_builtin_browser_sources_default_to_persistent_profile`（**已实测修复前必然失败**）
 3. **章节下载顺序改严格 FIFO** — 书源额度的等待队列此前不是 FIFO：`_SOURCE_WAIT_TIMEOUT`(0.2s) 超时兜底对「单章耗时长于 0.2s」（真实网络必然）的等待者，会让它们集体超时 → 出队 → 重查 → 重新 append 到队尾，加上 `_release_source_slot` 当时是「唤醒全部等待者 + 清队列、各自重查额度竞争接手」，接手顺序被随机化。表现为**并发 1（严格串行）时下载顺序仍乱**，界面上「待下载 / 下载中 / 已下载」交错，且乱序范围恰是 `_BATCH_SIZE`(32) 章 —— 像在限定区间里随机挑章节下载（实测 8 章 / 额度 1 / 单章 0.3s：修复前开始顺序 = `章1,章7,章2,章6,章4,章5,章8,章3`）。现改为**交接式 FIFO**：释放时把额度直接交接给队首（占用数不变、所有权转移），队首 Future 置 `True` 且不移出队列，由接手协程自行出队；等待改用 `asyncio.shield`，超时不再丢队列位置；取消 / 暂停路径补归还以防额度泄漏。见 `backend/services/task_manager.py`；回归用例 2 个（**已实测修复前必然失败**）
 4. **「源不支持搜索」的 400 提示失效**（2026-10-01）— core `search` 原先用 `asyncio.gather(..., return_exceptions=True)` 吞掉一切异常，`backend/routers/download.py` 里的 `except FeatureNotSupportedError → 400` 因此是**死代码**：`GET /download/search?source=qidian-requests-default`（requests 模式无搜索能力）返回空数组，用户只看到「无结果」。现异常上抛，400 友好提示生效。同批清理 `novelbase/core/downloader.py` 中 5d695d8 声明移除却遗留的 `split_into_groups` 及其死导入
+5. **WebUI 导出 txt 失败（toast 显示 `'name'`）**（2026-10-14）— 前端只发 `{enabled: true}`，于是后端 schema 默认值生效，而 `backend/schemas/export.py` 的默认是遗留占位符 `"{name}"`（`formats/txt.yaml` 声明的合法占位符只有 `{title}/{author}/…`）；txt 导出器用 `file_name_template.format(**variables)`，`**` 解包让 `SafeDict` 的缺键保护失效（EPUB/IMG 同位置用的是 `format_map`，故只有 txt 炸），抛 `KeyError('name')` → 路由把 `str(e)`（即 `"'name'"`）写进 `task["error"]` → 前端原样 toast。现删除全部 `{name}` 写法统一 `{title}`（schemas / router / `ExportOptions` / `EPUBExportOptions`，并删掉 epub 变量表里的 `name` 别名）；回归用例 `tests/test_export_filename_template.py`（**已实测修复前必然失败**）
+6. **Nuitka exe 读不到同目录的 `app_data`**（2026-10-14）— 三处 app_data 定位（`shared/config.py`、`cli/config.py`、`init_config.py`）都只认 PyInstaller 的 `sys.frozen`，而 Nuitka 产物**不设**该属性（Nuitka 4.1.3 onefile 实测：`sys.frozen=False`、`__compiled__=True`、`sys.executable` 指向临时解包目录里的 `python.exe`、`NUITKA_ONEFILE_DIRECTORY` 才是 exe 所在目录），于是三处全部走「源码运行」分支：exe 旁的 `app_data` 永远读不到，首次运行的配置初始化还写到临时解包目录里。现抽 `shared/paths.py`（`is_compiled()` / `exe_dir()`，onefile 优先读 `NUITKA_ONEFILE_DIRECTORY`）并让三处统一调用；回归用例 `tests/test_paths.py`（**已实测修复前必然失败**），真实 exe 端到端验证放进 `build-windows-nuitka.yml` 的冒烟步骤
 
-> 测试（2026-09-30 复核）：本机全量 `python -m pytest tests -q` → **515 passed, 0 failed**（15.8s；此前记录「全量未跑通」的 `tmp_path` 拖慢已不复现）；CI run [77](https://github.com/volcyano42/novel-downloader/actions/runs/36699778387) 三个 Python 版本全绿；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警。
+> 测试（2026-10-14 复核）：本机全量 `python -m pytest tests -q` → **533 passed, 0 failed**（23.2s）；前端 `npx tsc -b` 0 错、`npm run lint`（oxlint）0 告警；`ruff check novelbase`（CI 口径）全绿。CI run 见 [actions](https://github.com/volcyano42/novel-downloader/actions)。
 
 ## v4.5.1
 
