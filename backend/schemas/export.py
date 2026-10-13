@@ -4,15 +4,15 @@ from pydantic import BaseModel
 
 class TXTExportOptions(BaseModel):
     enabled: bool = True
-    output_path: str = "app_data/exports/{name}"
-    file_name_template: str = "{name}"
+    output_path: str = "app_data/exports/{title}"
+    file_name_template: str = "{title}"
     encoding: str = "utf-8"
 
 
 class EPUBExportOptions(BaseModel):
     enabled: bool = True
-    output_path: str = "app_data/exports/{name}"
-    file_name_template: str = "{name}"
+    output_path: str = "app_data/exports/{title}"
+    file_name_template: str = "{title}"
     encoding: str = "utf-8"
     css_style: str = "default"
     include_toc: bool = True
@@ -25,7 +25,7 @@ class EPUBExportOptions(BaseModel):
 
 class IMGExportOptions(BaseModel):
     enabled: bool = True
-    output_path: str = "app_data/exports/{name}"
+    output_path: str = "app_data/exports/{title}"
     file_name_template: str = "{n}"
     output_format: str = "original"
 

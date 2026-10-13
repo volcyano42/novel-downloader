@@ -47,7 +47,7 @@ class ExportOptions:
     format: str = ""
     output_path: Path | str = ""
     enabled: bool = True
-    file_name_template: str = "{name}"
+    file_name_template: str = "{title}"
 
 @dataclass
 class Options:

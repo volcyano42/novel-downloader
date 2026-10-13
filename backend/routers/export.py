@@ -58,7 +58,7 @@ async def trigger_export(body: ExportRequest):
             sub = export_dir / "txt"; sub.mkdir()
             opt = TXTExportOptions(
                 format="txt", output_path=str(sub), enabled=True,
-                file_name_template=body.txt.file_name_template or "{name}",
+                file_name_template=body.txt.file_name_template or "{title}",
                 encoding=body.txt.encoding)
             do_export(novel, options=opt)
         if body.epub and body.epub.enabled:
@@ -66,7 +66,7 @@ async def trigger_export(body: ExportRequest):
             sub = export_dir / "epub"; sub.mkdir()
             opt = EPUBExportOptions(
                 format="epub", output_path=str(sub), enabled=True,
-                file_name_template=body.epub.file_name_template or "{name}",
+                file_name_template=body.epub.file_name_template or "{title}",
                 compression=body.epub.compression, compresslevel=body.epub.compresslevel,
                 include_toc=body.epub.include_toc, optimize_images=body.epub.optimize_images,
                 jpeg_quality=body.epub.jpeg_quality, max_image_width=body.epub.max_image_width)

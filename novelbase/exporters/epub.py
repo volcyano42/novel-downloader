@@ -101,7 +101,7 @@ img {
 class EPUBExportOptions(ExportOptions):
     format: str = "epub"
     css_style: str = "default"
-    file_name_template: str = "{name}"
+    file_name_template: str = "{title}"
     include_toc: bool = True
     encoding: str = "utf-8"
     compression: Literal["deflate", "bzip2", "stored"] = "deflate"
@@ -351,7 +351,6 @@ def _build_file_path(novel: Novel, options: EPUBExportOptions) -> Path:
 
     file_name_template = getattr(options, "file_name_template", "{title}")
     variables = SafeDict({
-        "name": novel.title if novel else "",
         "title": novel.title if novel else "",
         "author": novel.author if novel else "",
         "novel_id": novel.id if novel else "",

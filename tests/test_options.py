@@ -78,7 +78,7 @@ class TestExportOptions:
         o = ExportOptions(output_path="/tmp/out")
         assert str(o.output_path) == "/tmp/out"
         assert o.enabled is True
-        assert o.file_name_template == "{name}"
+        assert o.file_name_template == "{title}"
 
     def test_custom(self):
         o = ExportOptions(
