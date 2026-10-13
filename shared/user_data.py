@@ -6,15 +6,18 @@
 import logging
 import sqlite3
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Optional
+
+from shared.config import APP_DATA
 
 _log = logging.getLogger("user_db")
 
-# 数据库路径（与 config 的存储目录一致）
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "app_data" / "storage" / "users" / "default" / "user_data.db"
-GROUPS_YAML = ROOT / "app_data" / "config" / "groups.yaml"
+# 数据库路径：与 shared.config.APP_DATA 同源（优先级 NLD_APP_DATA > 编译产物 exe 同目录 > 仓库根）
+# ⚠️ 这里曾经用 `Path(__file__).resolve().parent.parent`：Nuitka onefile 下 `__file__` 在**临时解包
+# 目录**，于是 groups / favorites / search_history 的读写全落在解包目录（每次运行新建空库）
+# —— 表现为「书架里的书全部归到未分类」，而小说库（走 APP_DATA）却正常。
+DB_PATH = APP_DATA / "storage" / "users" / "default" / "user_data.db"
+GROUPS_YAML = APP_DATA / "config" / "groups.yaml"
 
 
 def _connection() -> sqlite3.Connection:

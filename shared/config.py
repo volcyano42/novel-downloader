@@ -377,7 +377,15 @@ def build_options(source_name: str, mode: str) -> Options:
         if user_data_dir:
             ud_path = Path(user_data_dir)
             if not ud_path.is_absolute():
-                ud_path = Path(__file__).parent.parent / ud_path
+                # 相对路径：`app_data/...` 前缀映射到真实 APP_DATA（对齐 cli/config.py::_resolve_paths），
+                # 其余相对路径按 app_data 的父目录（源码运行=仓库根，编译产物=exe 同目录）解析。
+                # ⚠️ 不要用 `Path(__file__).parent.parent`：Nuitka onefile 下 `__file__` 在临时解包目录，
+                # 会让浏览器 profile 落到临时目录 —— 登录态每次启动重置（该 bug 曾在 dev 下修过一次）。
+                raw = ud_path.as_posix()
+                if raw.startswith("app_data/"):
+                    ud_path = APP_DATA / raw[len("app_data/"):]
+                else:
+                    ud_path = APP_DATA.parent / ud_path
         else:
             ud_path = None
         options.set_browser_options(

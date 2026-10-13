@@ -67,3 +67,27 @@ def test_init_config_targets_exe_dir_when_compiled(monkeypatch, tmp_path):
 def test_init_config_source_run_targets_project_root():
     project_root = Path(init_config.__file__).resolve().parent
     assert init_config._target_dir() == project_root / "app_data" / "config"
+
+
+# ── 运行时用户数据（user_data.db / groups.yaml）────────────────
+
+def test_user_data_paths_track_app_data(monkeypatch, tmp_path):
+    """`user_data.db`（groups/favorites/历史）必须派生自 `shared.config.APP_DATA`。
+
+    回归背景：它曾用 `Path(__file__).resolve().parent.parent` 推导 —— Nuitka onefile 下
+    `__file__` 在**临时解包目录**，于是这些读写全落在解包目录（每次运行新建空库），
+    表现为「书架里的书全部归到未分类」，而走 APP_DATA 的小说库却正常加载。
+    """
+    import importlib
+
+    from shared import user_data
+
+    try:
+        monkeypatch.setattr(shared_config, "APP_DATA", tmp_path / "exe_app_data")
+        importlib.reload(user_data)
+        assert user_data.DB_PATH == (
+            tmp_path / "exe_app_data" / "storage" / "users" / "default" / "user_data.db"
+        )
+        assert user_data.GROUPS_YAML == tmp_path / "exe_app_data" / "config" / "groups.yaml"
+    finally:
+        importlib.reload(user_data)  # 还原真实路径，避免污染其它用例
