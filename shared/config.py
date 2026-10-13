@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from novelbase.core.options import BrowserOptions, RequestsOptions
+from shared.paths import exe_dir
 
 
 # ── 路径 ──
@@ -18,13 +19,14 @@ def _get_app_data_dir() -> Path:
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve()
-    if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).parent
-        app_data = exe_dir / "app_data"
+    compiled_dir = exe_dir()          # Nuitka（__compiled__）/ PyInstaller（sys.frozen）
+    if compiled_dir is not None:
+        app_data = compiled_dir / "app_data"
         if not app_data.exists():
-            meipass = Path(sys._MEIPASS)
-            src = meipass / "app_data"
-            if src.exists():
+            # PyInstaller 一次性包内默认配置（Nuitka 产物不带 app_data，直接建目录）
+            meipass = getattr(sys, "_MEIPASS", None)
+            src = Path(meipass) / "app_data" if meipass else None
+            if src is not None and src.exists():
                 try:
                     _copy_dir(src, app_data)
                 except (OSError, PermissionError):

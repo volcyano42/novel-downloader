@@ -13,6 +13,7 @@ import yaml
 
 from novelbase.core.options import Options
 from novelbase.utils.logger import get_logger
+from shared.paths import exe_dir
 
 _log = get_logger("cli.config")
 
@@ -23,19 +24,19 @@ CONFIG_DIR: Path | None = None
 def _get_app_data_dir() -> Path:
     """Get app_data directory.
 
-    Priority: NLD_APP_DATA env > executable dir (frozen) > script dir.
+    Priority: NLD_APP_DATA env > executable dir (compiled) > script dir.
     """
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve()
-    if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).parent
-        app_data = exe_dir / "app_data"
+    compiled_dir = exe_dir()
+    if compiled_dir is not None:
+        app_data = compiled_dir / "app_data"
         if not app_data.exists():
-            # 首次运行，从 _MEIPASS 复制默认配置
-            _meipass = Path(sys._MEIPASS)
-            if (_meipass / "app_data").exists():
-                _copy_dir(_meipass / "app_data", app_data)
+            # 首次运行，从 _MEIPASS 复制默认配置（Nuitka 产物没有 _MEIPASS）
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass and (Path(meipass) / "app_data").exists():
+                _copy_dir(Path(meipass) / "app_data", app_data)
             else:
                 app_data.mkdir(parents=True, exist_ok=True)
         return app_data

@@ -9,9 +9,11 @@ import shutil
 import sys
 from pathlib import Path
 
+from shared.paths import exe_dir
+
 
 def _get_root() -> Path:
-    """应用根目录，兼容 PyInstaller / Nuitka / 源码运行。"""
+    """包内资源根目录（template/ 等），兼容 PyInstaller / Nuitka / 源码运行。"""
     if getattr(sys, "frozen", False):                     # PyInstaller
         return Path(sys._MEIPASS)
     if "__compiled__" in globals():                       # Nuitka
@@ -25,12 +27,13 @@ def _template_dir() -> Path:
 
 
 def _target_dir() -> Path:
-    """运行时目标目录。优先 NLD_APP_DATA env；frozen/compiled → exe 同目录；dev → 项目根。"""
+    """运行时目标目录。优先 NLD_APP_DATA env；编译产物 → exe 同目录；dev → 项目根。"""
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve() / "config"
-    if getattr(sys, "frozen", False) or "__compiled__" in globals():
-        return Path(sys.executable).parent / "app_data" / "config"
+    compiled_dir = exe_dir()
+    if compiled_dir is not None:
+        return compiled_dir / "app_data" / "config"
     return Path(__file__).resolve().parent / "app_data" / "config"
 
 
@@ -39,8 +42,9 @@ def _user_db_target_dir() -> Path:
     env = os.environ.get("NLD_APP_DATA")
     if env:
         return Path(env).resolve() / "storage" / "users" / "default"
-    if getattr(sys, "frozen", False) or "__compiled__" in globals():
-        return Path(sys.executable).parent / "app_data" / "storage" / "users" / "default"
+    compiled_dir = exe_dir()
+    if compiled_dir is not None:
+        return compiled_dir / "app_data" / "storage" / "users" / "default"
     return Path(__file__).resolve().parent / "app_data" / "storage" / "users" / "default"
 
 
