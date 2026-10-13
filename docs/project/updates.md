@@ -719,3 +719,43 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
   真实库（2.9GB `.db`）走 `backend/routers/export.py` 端到端导出 8.4MB txt，`status=completed`、文件名 = 书名；
   `ruff check novelbase` 全绿。
 - **未改**：txt 导出器仍用 `format(**variables)`（本次只去 `{name}`，未改其容错行为）；img 的 `{n}` 序号占位符不变。
+
+## 2026-10-14 变更（v4.5.2 发版：Nuitka exe 的 app_data 定位 + 发行产物纳入 exe）
+
+对应提交：`0026631`（paths）、`3f552ea`（workflow）、`ed1545c`（版本号）。
+
+### `shared/paths.py`：编译产物路径解析唯一实现（修「Nuitka exe 读不到同目录 app_data」）
+
+- **症状**：把 `app_data/` 放在 exe 旁边，exe 读不到；首次运行也不在 exe 目录生成配置。
+- **实测（Nuitka 4.1.3 onefile，本机编译 probe exe 运行）**：
+
+  | 变量 | 值 |
+  |------|-----|
+  | `sys.frozen` | `False` —— Nuitka **不设**它（PyInstaller 专有标记） |
+  | `__compiled__` | `True` —— Nuitka 的真实标记 |
+  | `sys.executable` | `<Temp>/onefile_*/python.exe`（临时解包目录，**不可用**） |
+  | `sys.argv[0]` | 用户看到的 exe 路径 |
+  | `NUITKA_ONEFILE_DIRECTORY` | exe 所在目录（onefile 专用） |
+
+- **根因**：`shared/config.py`、`cli/config.py`、`init_config.py` 三处 app_data 定位都只认 `sys.frozen`，
+  Nuitka 产物一律走「源码运行」分支；`init_config` 另用 `sys.executable` 定位写入目标，onefile 下等于写进临时解包目录。
+- **修复**：新增 `shared/paths.py`（`is_compiled()` / `exe_dir()`），三处统一调用；
+  `init_config._get_root()`（包内 `template/` 资源定位）保持原样，因为它要的是**解包目录**而非 exe 目录。
+- **验证**：`tests/test_paths.py` 9 例（**实测修复前 5 例失败**）；全量 `python -m pytest tests -q` → 533 passed。
+  ⚠️ 本机无法执行自编译 exe（疑似 Windows Defender 实时隔离：第一次 9MB 的 `probe.exe` 运行后即消失，
+  之后新编译的 exe 一律 `Permission denied`），故 **exe 级验证放 CI**（见下）。
+
+### 发行产物纳入 Nuitka exe（`build-dist` 一个入口）
+
+- `build-windows-nuitka.yml` 加 `workflow_call`（保留 `workflow_dispatch`），并新增冒烟步骤：启动 exe →
+  断言 `dist\app_data\config\config.yaml` 出现 → 结束进程（onefile bootstrap 另起子进程，按镜像名一并 kill）。
+- `build-dist.yml` 新增 `windows-nuitka` job，与 4 个 portable job **并行**：总时长取最慢者（Nuitka 30-60 分钟）。
+- `release.yml` 轮询上限 120 → 240 分钟；release 下载 build-dist 的全部 artifact，exe 自动进 Release 资产。
+- **权衡**：原注释写明「Nuitka 不并入 build-dist（避免全平台构建超时）」，本次按用户要求改为一个入口。
+  代价：`build-dist` 单次耗时由 ~90 分钟变为「取最慢 job」（Nuitka 30-60 分钟，通常仍由 Termux ~90 分钟决定），
+  且只想快速出 portable 时需单独 dispatch 对应单平台 workflow。
+
+### 版本与发布
+
+- `CHANGELOG.md`：`Unreleased` → `## v4.5.2`；`pyproject.toml` / `novelbase/__init__.py` → `4.5.2`。
+- 流程：dev 提交 → CI 绿 → `git merge --ff-only` 到 main → push main → dispatch `release.yml`（`version=4.5.2`）。
