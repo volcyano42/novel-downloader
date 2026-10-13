@@ -15,7 +15,6 @@ EXCLUDE = [
     "novelbase/sources/qimao_api_rain/**",
     "novelbase/sources/92xs_requests_default/**",
     "novelbase/sources/fanqie_api_rain/**",
-    "novelbase/sources/fanqie_api_oiapi/**",
     "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
@@ -67,9 +66,12 @@ class TestWhitelist:
     def test_fanqie_api_excluded(self):
         assert check_public.is_whitelisted("novelbase/sources/fanqie_api_rain/novel_info.py", EXCLUDE) is False
 
-    def test_fanqie_oiapi_excluded(self):
-        """oiapi 与 rain 同为 api 书源，一律不进 public（2026-09-30 决定）。"""
-        assert check_public.is_whitelisted("novelbase/sources/fanqie_api_oiapi/novel_info.py", EXCLUDE) is False
+    def test_fanqie_oiapi_included(self):
+        """oiapi 2026-10-14 移出排除：公开第三方服务封装（key 由用户自备），用户决定公开。
+
+        对照 `test_fanqie_api_excluded`：同为 api 模式的 rain 仍不进 public。
+        """
+        assert check_public.is_whitelisted("novelbase/sources/fanqie_api_oiapi/novel_info.py", EXCLUDE) is True
 
     def test_qidian_excluded(self):
         assert check_public.is_whitelisted("novelbase/sources/qidian_requests_default/search.py", EXCLUDE) is False

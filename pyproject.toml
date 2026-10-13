@@ -56,7 +56,8 @@ exclude = [
     "novelbase/sources/qimao_api_rain/**",
     "novelbase/sources/92xs_requests_default/**",
     "novelbase/sources/fanqie_api_rain/**",
-    "novelbase/sources/fanqie_api_oiapi/**",
+    # fanqie_api_oiapi 2026-10-14 移出排除：它是公开第三方服务（https://oiapi.net/api/FqRead）的
+    # 封装，key 由用户在 sites/*.yaml 自备（仓库内为空占位），非逆向/破解实现 —— 用户决定公开
     "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
@@ -66,13 +67,16 @@ exclude = [
     "docs/session-prompt.md",
     "docs/learning/**",
     "docs/planning/**",
+    # Docker 支持文档（2026-10-14）：配套的 Dockerfile/.dockerignore 不在白名单，
+    # 且该工作是工作区里尚未提交的进行中改动 —— 待完成并审阅后再放开
+    "docs/build/docker.md",
     # 依赖未公开书源的测试（public 无 qidian/qimao/92xs/fanqie-api-*）
     "tests/test_source_async.py",
     "tests/test_source_contracts.py",
     "tests/test_browser_sources.py",
     # 2026-10-14 按 public 侧实跑补齐：public 只保留 fanqie 两个源，以下文件整体失败（59 用例）
     "tests/test_source_layout.py",
-    "tests/test_source_oiapi_contract.py",
+    # test_source_oiapi_contract.py 2026-10-14 随 oiapi 源一起进入白名单（该源已公开）
     "tests/test_backend_download_routes.py",
     "tests/test_backend_config_routes.py",
     "tests/test_config_effective_mode.py",
@@ -84,7 +88,7 @@ exclude = [
     "tests/test_delay_default.py",
     # template/** 已纳入白名单：排除含未公开源名的站点配置模板（保留 fanqie 两个）
     "template/config/sites/92xs-requests-default.yaml",
-    "template/config/sites/fanqie-api-oiapi.yaml",
+    # fanqie-api-oiapi.yaml 2026-10-14 随 oiapi 源一起进入白名单（其 key 为空占位）
     "template/config/sites/fanqie-api-rain.yaml",
     "template/config/sites/qidian-browser-default.yaml",
     "template/config/sites/qidian-requests-default.yaml",
