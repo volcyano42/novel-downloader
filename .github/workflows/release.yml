@@ -3,7 +3,7 @@ name: Release
 # 手动触发：发布新版本
 #   1. 校验版本号 + 从 CHANGELOG.md 提取对应版本段落
 #   2. 创建 tag（v{version}）
-#   3. 触发 build-dist.yml 构建发行产物（Windows x64 / Linux x64 / Linux arm64 / Termux portable）
+#   3. 触发 build-dist.yml 构建发行产物（Windows portable / Windows Nuitka exe / Linux x64 / Linux arm64 / Termux portable）
 #   4. 等待构建完成并下载产物
 #   5. 创建 GitHub Release（标题=版本号，内容=CHANGELOG 段落，附件=构建产物）
 on:
@@ -75,9 +75,10 @@ jobs:
               owner, repo, workflow_id: 'build-dist.yml', ref: 'main'
             })
             core.info(`已触发 build-dist.yml（触发前最新 run: ${before}）`)
-            // 轮询直到出现本次触发产生的新 completed run（id > before；每 15s 一次，最多 120 分钟）
+            // 轮询直到出现本次触发产生的新 completed run（id > before；每 15s 一次，最多 240 分钟）
+            // 上限按「Nuitka onefile 30-60 分钟（可能重试）」留足余量
             let runId = null, conclusion = null
-            for (let i = 0; i < 480; i++) {
+            for (let i = 0; i < 960; i++) {
               await new Promise(r => setTimeout(r, 15000))
               const runs = (await github.rest.actions.listWorkflowRuns({
                 owner, repo, workflow_id: 'build-dist.yml', per_page: 5
@@ -86,7 +87,7 @@ jobs:
               const run = runs.find(r => r.id > before && r.status === 'completed')
               if (run) { runId = run.id; conclusion = run.conclusion; break }
             }
-            if (!runId) throw new Error('等待 build-dist 完成超时（120 分钟）')
+            if (!runId) throw new Error('等待 build-dist 完成超时（240 分钟）')
             if (conclusion !== 'success') throw new Error(`build-dist 构建失败（conclusion=${conclusion}）`)
             core.setOutput('run_id', String(runId))
 

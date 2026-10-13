@@ -1,9 +1,11 @@
 name: Build Windows x64 Nuitka onefile
 
-# 手动触发（不并入 build-dist.yml：Nuitka 编译 30-60 分钟，会让全平台构建超时）
+# 手动触发或作为可复用 workflow 被 build-dist.yml 调用
 # 方案：build-nuitka.ps1（Nuitka 4.1.3 onefile 编译）
+# 注意：编译 30-60 分钟，会显著拉长 build-dist 的总时长（release.yml 的等待上限按 240 分钟设）
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build-nuitka:
@@ -45,6 +47,26 @@ jobs:
           Get-ChildItem dist | Format-Table Name, Length -AutoSize
           if (-not (Test-Path $exe)) { Write-Error "未找到产物: $exe"; exit 1 }
           Write-Host "OK: $exe"
+
+      - name: 冒烟验证：exe 首次运行在自身目录初始化 app_data
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist\novel-downloader-web-${{ steps.ver.outputs.version }}.exe").Path
+          $target = "dist\app_data\config\config.yaml"
+          if (Test-Path "dist\app_data") { Remove-Item "dist\app_data" -Recurse -Force }
+          $p = Start-Process -FilePath $exe -PassThru -WorkingDirectory "dist"
+          $deadline = (Get-Date).AddSeconds(180)
+          while ((Get-Date) -lt $deadline -and -not (Test-Path $target)) { Start-Sleep -Seconds 3 }
+          $ok = Test-Path $target
+          # onefile 的 bootstrap 会另起子进程，按镜像名一并结束
+          Get-Process -Name "novel-downloader-web-*" -ErrorAction SilentlyContinue | Stop-Process -Force
+          if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          if (-not $ok) {
+            Write-Host "dist 内容:"; Get-ChildItem dist | Format-Table Name -AutoSize
+            Write-Error "exe 未在自身目录初始化 app_data（期望 $target）"
+            exit 1
+          }
+          Write-Host "OK: exe 同目录已生成 $target"
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
