@@ -36,7 +36,7 @@
 - ~~`pyproject.toml`~~（不迁移：版本元数据由 public 自行维护，不在迁移清单内）
 - `requirements.txt`
 - `init_config.py`（运行必需，见上）
-- ~~`CHANGELOG.md`~~（不迁移：公开仓库 changelog 从 1.0.0 空开始）
+- ~~`CHANGELOG.md`~~（不迁移：public 自维护。**每次同步后须在 public 侧补对应版本段** —— 版本号与 `novelbase/__init__.py` 的 `__version__` 一致（2026-10-14 起对齐，此前是独立的 `1.0.x` 版本线），内容只写可公开的变化）
 - ~~`README.md`~~（2026-10-14 改判：private 根**没有** README.md，它是 public 自维护文件，已移入下方「public 自维护文件」）
 
 ## public 自维护文件（白名单外允许存在）
