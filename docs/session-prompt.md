@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.1**；2026-09-27 起 dev 领先 main 一批提交尚未合并，main 停在 `fd12a2c`；v4.2.3 的 Windows portable 漏打包 init_config.py 问题早已修复）。
+多平台小说下载器。Python 后端（FastAPI + novelbase 核心库）+ React 前端（TypeScript + Tailwind + shadcn/ui），SQLite 做本地存储，SSE 推送章节。版本号见 `novelbase/__init__.py`（**main = dev = v4.5.2**；2026-10-14 已 ff 合并 main 并推送，tag/Release `v4.5.2` 由 release 工作流创建；v4.2.3 的 Windows portable 漏打包 init_config.py 问题早已修复）。⚠️ **本仓库（`volcyano42/novel-downloader`）2026-10-14 被发现处于 public 状态**（意外，含 api 书源等敏感源码），已改回 **private** —— 「公开迁移」只走公开仓库 `novel-crawler`（见 `PUBLIC_MANIFEST.md`）。
 
 ## 目录结构（2026-08-13 重组后）
 
@@ -57,7 +57,8 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 - **Novel.serial 兜底**（2026-08-20）：serial=0 的书源（如 92xs）进入 `_serial_auto` 自动模式，`update_chapter` 持续同步 `serial=len(chapters)`；显式非零 serial 不被覆盖
 - **搜索历史 API**（2026-08-20）：`/api/v2/history/search` GET（按天分组：今天/昨天/M月D日/跨年加年份）POST（添加）DELETE（单条）；前端未搜索时替代 tips 显示、垃圾桶删除模式、点击回填不自动搜
 - **中间态收口状态**（2026-09-25 扁平化 followup + 收尾完成）：core 层遗留中间态**已全部收口**——`/api/v2/download/platform`、`/api/v2/download/detect`、`/api/v2/engine` 路由**已删除**；书源元信息（`source_alias`/`source_group`）经 `shared.config.display_name()` / `source_group()` 读取，**默认参与集** = `shared.config.default_source_names()`（`enabled` 已彻底废弃）；前端 mode/variant 两级选择器**已删除**（搜索改「按选择书源并发（默认全选）」，URL 解析改「手选书源」，书源管理**并入设置页**折叠条）。收尾阶段补齐：① 未知 `source_name` 在 **HTTP 边界统一 404**（`backend/services/source_guard.py` 唯一校验点，覆盖 `download` 与 `config/sources` 全部入口）；② 书源配置表单抽为 `frontend/src/features/sources/sourceConfigForm.tsx` 共享实现（设置页每源一个折叠条 `SourceAccordion` 复用；原独立 `SourcesPage` 已删除，`/sources` 仅重定向 `/settings`、侧边栏无「书源」入口），`useSaveSourceConfig` 同时失效 `["source-config", src]` 与 `["sources"]`；③ CLI `cmd_info` / `cmd_download` 引擎按 mode 懒建（不再共用单引擎）；④ `dev new-source` 脚手架 `source.json.common` 与出厂默认同源（`shared.config.mode_defaults()`）。**仍缺**（后续增强，非缺陷）：前端 URL **自动**匹配书源（core 无 `platform_from_url`，`source` 由用户手选）
-- **分支状态**（2026-09-27）：**main = dev = v4.5.1**（版本号一致，但 **dev 尚未合并 main**：main 停在 `fd12a2c`，dev 领先一批提交，内容 = `source_name` 全局唯一检测（实现层；私有源同名叠加机制取消）+ 文档口径收口 + review 修复）。v4.5.1 内容：书源扁平化（core + backend/CLI/前端收口）、下载并发模型重做、详情页换源、**Android 套壳与环境能力表移除（移动端改走 Termux）**、同步 `fetch_text` 登录态修复、CI 触发分支加 `dev`、文档与版本号收尾。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`（查「dev 领先 main 多少」用 `git rev-list --count main..dev`）；权威口径用 `git ls-remote origin dev` 对比
+- **公开迁移（public 同步）**：公开仓库是 **`novel-crawler`**（本地 `../novel-crawler`，SSH remote），依据 `PUBLIC_MANIFEST.md` + `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude`（排除清单唯一数据源）；复制后**必跑** `python scripts/check_public.py`（缺失 / 多余 / 敏感三道防线）。**迁移是「同步」而非「只增」**：public 中既不在白名单、也不在 `check_public.PUBLIC_ONLY_FILES`（`README.md` / `CHANGELOG.md` / `CONTRIBUTING.md` / `.gitignore`）的文件一律删除。2026-10-14 实测：public 只保留 fanqie 两个源 ⇒ 依赖未公开源的测试必须排除；`hashFiles` 不可用于 job 级 `if`（会让 workflow 静默失效）
+- **分支状态**（2026-10-14）：**main = dev = v4.5.2**（2026-10-14 以 `git merge --ff-only` 合并 dev 并推送 main；tag `v4.5.2` 与 GitHub Release 由 `release.yml` 创建，附件 = Windows portable + **Windows Nuitka exe** + Linux x64/arm64 + Termux portable）。v4.5.2 内容：`source_name` 全局唯一检测、书源元信息（分组/别名）与按选择搜索、browser 登录态与下载顺序 FIFO 修复、core `search` 改「单源单结果」、WebUI 导出 txt 的文件名占位符修复、**Nuitka exe 读不到同目录 `app_data` 修复**（新增 `shared/paths.py`，统一三处定位）、发行产物纳入 exe。**此处刻意不写死「领先几个提交」**（每次提交都会变）：要看当前值请跑 `git rev-list --count origin/dev..dev`（查「dev 领先 main 多少」用 `git rev-list --count main..dev`）；权威口径用 `git ls-remote origin dev` 对比
 
 ## 文档索引
 

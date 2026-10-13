@@ -759,3 +759,35 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 
 - `CHANGELOG.md`：`Unreleased` → `## v4.5.2`；`pyproject.toml` / `novelbase/__init__.py` → `4.5.2`。
 - 流程：dev 提交 → CI 绿 → `git merge --ff-only` 到 main → push main → dispatch `release.yml`（`version=4.5.2`）。
+
+## 2026-10-14 变更（public 仓库同步：`novel-crawler`）
+
+对应提交：`6b9d5fb`（清单与 CI 适配）、`85bfecb`（hashFiles 修复）；public 侧 `729e2a8`、`2bea7f6`。
+
+### 背景：本仓库被意外公开
+
+- 核实（**未认证** GitHub API 即可访问）：`volcyano42/novel-downloader` 当时处于 **public** 状态，24MB 内容含
+  api 书源等敏感源码 → 已用 API 改回 **private**（改后未认证访问 404）。公开期间的历史与他人 fork 无法回收。
+
+### public 同步（保留 `novel-crawler` 历史，一次同步提交）
+
+- **迁移是「同步」而非「只增」**：新增 72 / 更新 126 / **删除 51 项历史残留** —— 旧四层书源目录
+  `novelbase/sources/fanqie/**`（含未公开的 `api/oiapi` 实现）、`android/**`、`app.py` / `main.py` / `cli.py`、
+  旧 backend `engine` 路由与 schema、`docs/add_source.md`、旧 `template/config/sites/fanqie.yaml`，
+  以及未跟踪的 `AGENTS.md`（红名单）/ `app_data/`
+- **清单补漏**（`PUBLIC_MANIFEST.md` + `pyproject.toml` 的 exclude + `check_public.py` 保持一致）：
+  - 白名单补 `init_config.py`（运行必需）与 `template/**`（再排除 8 个含未公开源名的 sites 配置）
+  - 排除清单补 11 个「public 只保留 fanqie 两个源时整体失败」的测试（实跑 59 用例失败后确定）
+  - `README.md` 改判为 public 自维护 —— 它原在白名单，但 private 根**没有**该文件，
+    「同步」语义下会被当成残留删掉（public 主页 README 丢失）
+  - 新增「public 自维护文件」概念（`check_public.py::PUBLIC_ONLY_FILES`）：`README.md` /
+    `CHANGELOG.md` / `CONTRIBUTING.md` / `.gitignore`，迁移时既不复制也不删除
+- **两仓共用脚本的适配**：`tests/check_imports.py` 不再硬编码 10 个源名，改为「按内置源目录断言
+  全部被发现」；`ci.yml` 在无 `pyproject.toml` 时走显式 ruff 规则口径、wheel-smoke 两步用**step 级**
+  `hashFiles` 跳过
+- **踩坑（已写进 `build/pitfalls.md`）**：`hashFiles` 放进 **job 级 `if`** 会让整个 workflow 解析失败，
+  症状是静默失效（Actions 列表里 name 显示为文件路径、push 触发的 run 无任何 job 直接 failure）——
+  public 的 CI 第一次就这么红（run `38434636563`），改 step 级后 run `38434787592` 全绿
+- **验证**：`scripts/check_public.py` 三道防线通过（无缺失 / 多余 / 敏感）；public 侧 `pytest tests -q` →
+  **380 passed**、`check_imports.py` 通过、`ruff check novelbase`（同口径）All checks passed；
+  public CI 三个 job 全绿（`wheel-smoke` 两步按设计 skipped）
