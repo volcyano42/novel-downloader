@@ -26,21 +26,20 @@ import novelbase
 
 print("✓ novelbase v" + novelbase.__version__ + " 导入成功")
 
-# 书源扁平化后，source_name 与目录名解耦；此处断言 10 个内置书源都已被发现。
-_EXPECTED_SOURCES = {
-    "92xs-requests-default",
-    "fanqie-api-oiapi",
-    "fanqie-api-rain",
-    "fanqie-browser-default",
-    "fanqie-requests-default",
-    "qidian-browser-default",
-    "qidian-requests-default",
-    "qimao-api-rain",
-    "qimao-browser-default",
-    "qimao-requests-default",
-}
-_missing = _EXPECTED_SOURCES - set(list_sources())
-assert not _missing, f"缺少书源: {sorted(_missing)}"
+# 书源扁平化后，source_name 与目录名解耦。此处断言「内置根下每个书源目录都被发现」——
+# 不硬编码源名，公开子集（public 只保留 fanqie 两个源）同样成立。
+from pathlib import Path
+
+import novelbase.sources as _sources_pkg
+
+from novelbase.sources.manifest import scan_source_names
+
+_builtin_root = Path(_sources_pkg.__file__).resolve().parent
+_declared = set(scan_source_names([_builtin_root]))
+_discovered = set(list_sources())
+_missing = _declared - _discovered
+assert _discovered, "未发现任何书源"
+assert not _missing, f"内置书源目录未被发现: {sorted(_missing)}"
 
 print("  注册的 Source: " + str(list_sources()))
 print("  注册的导出器: " + str(list(get_exporters().keys())))

@@ -21,6 +21,10 @@
 - `shared/**`
 - `scripts/**`
 - `tests/**`
+  - **排除**（2026-10-14 按 public 侧实跑补齐；public 只保留 fanqie 两个源，下列文件整体失败）：`tests/test_source_async.py`、`tests/test_source_contracts.py`、`tests/test_browser_sources.py`、`tests/test_source_layout.py`、`tests/test_source_oiapi_contract.py`、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_config_effective_mode.py`、`tests/test_cli_effective_mode.py`、`tests/test_source_api.py`、`tests/test_novel_id_stability.py`、`tests/test_task_manager_async.py`、`tests/test_source_names_unique.py`、`tests/test_delay_default.py`
+- `init_config.py`（2026-10-14 补：运行必需 —— `backend/main.py` 的 lifespan 用它做首次配置初始化，`tests/test_paths.py` 也依赖它）
+- `template/**`（2026-10-14 补：配置模板，public 靠它初始化 `app_data/config`）
+  - **排除**（含未公开源名的站点配置）：`template/config/sites/92xs-requests-default.yaml`、`template/config/sites/fanqie-api-oiapi.yaml`、`template/config/sites/fanqie-api-rain.yaml`、`template/config/sites/qidian-browser-default.yaml`、`template/config/sites/qidian-requests-default.yaml`、`template/config/sites/qimao-api-rain.yaml`、`template/config/sites/qimao-browser-default.yaml`、`template/config/sites/qimao-requests-default.yaml`
 
 ### workflow
 
@@ -28,14 +32,22 @@
 
 ### 根文件
 
-- `README.md`
 - `LICENSE`
 - ~~`pyproject.toml`~~（不迁移：版本元数据由 public 自行维护，不在迁移清单内）
 - `requirements.txt`
+- `init_config.py`（运行必需，见上）
 - ~~`CHANGELOG.md`~~（不迁移：公开仓库 changelog 从 1.0.0 空开始）
+- ~~`README.md`~~（2026-10-14 改判：private 根**没有** README.md，它是 public 自维护文件，已移入下方「public 自维护文件」）
+
+## public 自维护文件（白名单外允许存在）
+
+`check_public.py::PUBLIC_ONLY_FILES` 登记；迁移时既不复制也不删除：
+
+- `README.md`（private 不提供）、`.gitignore`、`CHANGELOG.md`、`CONTRIBUTING.md`
 
 ## 迁移规则
 
+- **迁移是「同步」而非「只增」**（2026-10-14 明确）：public 中既不在白名单、也不在「public 自维护」清单里的文件一律**删除**（清掉历史残留 —— 旧四层书源目录 `novelbase/sources/fanqie/**` 含未公开的 `api/oiapi` 实现、`android/**`、`app.py`、`main.py`、`cli.py`、`backend/routers/engine.py`、`docs/add_source.md`、旧 `template/config/sites/fanqie.yaml` 等）
 - **版本号**：`pyproject.toml` 不迁移，public 的版本由 `novelbase/__init__.py` 的 `__version__` 与 public 自行维护的 `pyproject.toml` 决定；迁移时无需改写版本号
 
 ### 文档

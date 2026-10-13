@@ -35,9 +35,10 @@ INCLUDE_PATTERNS = [
     "scripts/**",
     "tests/**",
     ".github/workflows/**",
-    "README.md",
     "LICENSE",
     "requirements.txt",
+    "init_config.py",     # 运行必需：backend/main.py 的 lifespan 用它做首次配置初始化
+    "template/**",        # 配置模板（含未公开源名的 sites 配置由 pyproject exclude 排除）
     "docs/README.md",
     "docs/project/**",
     "docs/build/**",
@@ -55,6 +56,9 @@ SENSITIVE_PATTERNS = [
 # public 仓库专属文件（白名单外但允许存在，不被"多余"检查拦截）
 PUBLIC_ONLY_FILES = {
     ".gitignore",
+    "README.md",         # private 无此文件（public 自维护），白名单不再列它
+    "CHANGELOG.md",      # public 自维护（清单规定不从 private 迁移 changelog）
+    "CONTRIBUTING.md",   # public 自维护
 }
 
 # 豁免敏感扫描的文件（如本脚本自身及测试敏感扫描的测试，均含敏感词定义）

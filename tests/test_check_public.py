@@ -90,8 +90,10 @@ class TestWhitelist:
     def test_app_data_excluded(self):
         assert check_public.is_whitelisted("app_data/config/config.yaml", EXCLUDE) is False
 
-    def test_readme_included(self):
-        assert check_public.is_whitelisted("README.md", EXCLUDE) is True
+    def test_readme_is_public_only(self):
+        """README.md 由 public 自维护（private 根无此文件），不再算白名单内容。"""
+        assert check_public.is_whitelisted("README.md", EXCLUDE) is False
+        assert "README.md" in check_public.PUBLIC_ONLY_FILES
 
 
 class TestCheck:
@@ -101,7 +103,6 @@ class TestCheck:
         _make_files(private, {
             "novelbase/__init__.py": "x",
             "novelbase/sources/fanqie_requests_default/search.py": "y",
-            "README.md": "readme",
             "app_data/config/config.yaml": "secret",
         })
         _make_pyproject(private)

@@ -63,10 +63,19 @@ jobs:
         run: pip install ruff
 
       - name: ruff check
-        run: ruff check novelbase
+        # private 读 pyproject.toml 的 [tool.ruff]；public 无该文件（清单规定不迁移），
+        # 此处显式给出同一套规则口径，保证两仓 lint 结果一致
+        run: |
+          if [ -f pyproject.toml ]; then
+            ruff check novelbase
+          else
+            ruff check --select E4,E7,E9,F,W,I,B,UP --line-length 100 novelbase
+          fi
 
   wheel-smoke:
     name: wheel 安装验证（书源清单）
+    # 构建 wheel 需要 pyproject.toml：public 无该文件（清单规定不迁移），该 job 自动跳过
+    if: ${{ hashFiles('pyproject.toml') != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -87,10 +96,14 @@ jobs:
           pip install dist/*.whl
           cd "$RUNNER_TEMP"
           python -c "
-          import sys, novelbase
+          import sys
+          from pathlib import Path
+          import novelbase, novelbase.sources as _pkg
+          from novelbase.sources.manifest import scan_source_names
           assert not novelbase.__file__.startswith(sys.argv[1]), novelbase.__file__
           from novelbase import list_sources
+          expected = len(scan_source_names([Path(_pkg.__file__).resolve().parent]))
           sources = list_sources()
-          assert len(sources) == 10, f'wheel 缺书源清单（source.json 未打包）: {sources}'
-          print('wheel 内书源:', sources)
+          assert len(sources) == expected, f'wheel 缺书源清单（source.json 未打包）: {sources}'
+          print(f'wheel 内书源 {len(sources)}/{expected}:', sources)
           " "$GITHUB_WORKSPACE"
