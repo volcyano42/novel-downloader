@@ -697,3 +697,25 @@ variant 选择规则（所有模式一致）：某模式只有一个 variant 时
 - **注意**：playwright 升级后必须重跑 `playwright install chromium`（浏览器 build revision 随版本变化：
   1.62→`chromium-1234`，1.63→**`chromium-1243`**）；本机默认源 `cdn.playwright.dev` 不可达，改用
   `PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright` 镜像完成。
+
+## 2026-10-14 变更（WebUI 导出 txt 失败修复）
+
+对应提交：`9fb1ded`。
+
+### 导出文件名模板占位符统一为 `{title}`（修「WebUI 导出 txt 报错、toast 显示 'name'」）
+
+- **症状**：WebUI 书架页导出选 TXT → toast 显示「导出失败：'name'」，无文件产出；EPUB 走同一代码路径却侥幸正常。
+- **根因**：前端只发 `{novel_id, chapter_id, txt: {enabled: true}}`（不带 `file_name_template`），于是后端 schema
+  默认值生效 —— 而 `backend/schemas/export.py` 的默认是**遗留占位符** `"{name}"`（`app_data/config/formats/txt.yaml`
+  注释声明的合法占位符只有 `{title}/{author}/{novel_id}/{total_chapters}/{date}`）。txt 导出器用
+  `file_name_template.format(**variables)`，`**` 解包让 `SafeDict.__missing__` 的缺键保护失效（EPUB/IMG 同位置
+  用的是 `format_map`，故未暴露），于是抛 `KeyError('name')`；路由的 `except Exception` 把 `str(e)`（即 `"'name'"`）
+  写进 `task["error"]`，前端原样 toast。
+- **修复**：删除全部 `{name}` 占位符写法、统一 `{title}` —— `backend/schemas/export.py`（txt/epub/img 的 `output_path`
+  与 `file_name_template`）、`backend/routers/export.py`（两处兜底值）、`novelbase/core/options.py` 与
+  `novelbase/exporters/epub.py` 的 dataclass 默认值，并删掉 epub 变量表里的 `name` 别名。
+- **验证**：新增 `tests/test_export_filename_template.py`（默认模板契约 + 前端请求体端到端导出 + txt/epub 文件名断言），
+  修复前 4 例全失败（`AssertionError: 'name'`）、修复后全通过；全量 `python -m pytest tests -q` → **524 passed, 0 failed**；
+  真实库（2.9GB `.db`）走 `backend/routers/export.py` 端到端导出 8.4MB txt，`status=completed`、文件名 = 书名；
+  `ruff check novelbase` 全绿。
+- **未改**：txt 导出器仍用 `format(**variables)`（本次只去 `{name}`，未改其容错行为）；img 的 `{n}` 序号占位符不变。
