@@ -1,0 +1,45 @@
+# 构建上下文排除项（docker build 用）。
+# 目标：只留下运行所需的源码 + template/ + requirements.txt。
+
+# ── 版本控制 / IDE / 工具元数据 ──
+.git
+.gitignore
+.github
+.idea
+.vscode
+.codegraph
+.reasonix
+.refer
+.superpowers
+.pre-commit-config.yaml
+reasonix.toml
+
+# ── Python 环境与缓存 ──
+.venv
+venv
+env
+__pycache__
+*.py[codz]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# ── 前端依赖与产物（dist 由构建阶段产出，禁用本地旧产物） ──
+frontend/node_modules
+frontend/dist
+
+# ── 运行时数据 / 构建产物 / 归档（本地 app_data 约 8G、dist 约 2.4G，必须排除） ──
+app_data
+dist
+会话归档
+*.zip
+*.tar.gz
+*.exe
+
+# ── 密钥与日志（.env 用 docker run --env-file 传入，不进镜像） ──
+.env
+*.log
+
+# ── 文档与测试（镜像不需要） ──
+docs
+tests

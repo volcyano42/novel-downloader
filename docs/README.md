@@ -32,6 +32,7 @@
 |------|------|
 | [build/packaging.md](build/packaging.md) | 打包方案:pip 安装、portable 便携版、CI 构建产物矩阵 |
 | [build/termux.md](build/termux.md) | Termux 构建方案(termux-docker,pyroot 内置 Python) |
+| [build/docker.md](build/docker.md) | Docker 构建与运行(单容器 8000 端口自托管,数据卷 /data) |
 | [build/pitfalls.md](build/pitfalls.md) | CI 构建经验(踩坑记录,改参数前先看) |
 
 ## 规划(planning/)
