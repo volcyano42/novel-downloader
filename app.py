@@ -54,29 +54,33 @@ def main():
             if c.is_file():
                 npm = str(c)
                 break
-    if not npm:
-        print("错误: 找不到 npm，请确认 Node.js 已安装且位于 PATH 中", flush=True)
-        sys.exit(1)
-
-    # 启动前端 (Vite dev server)
-    frontend = subprocess.Popen(
-        [npm, "run", "dev"],
-        cwd=str(ROOT / "frontend"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    # 启动前端 (Vite dev server)。无 npm 时（如 Docker 运行时镜像）跳过，
+    # 前端改由后端托管 frontend/dist 静态产物（backend.main 的 SPA fallback）。
+    frontend = None
+    if npm:
+        frontend = subprocess.Popen(
+            [npm, "run", "dev"],
+            cwd=str(ROOT / "frontend"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    else:
+        print("未找到 npm，跳过前端开发服务器（前端由后端托管 frontend/dist）", flush=True)
 
     # 后台线程读取并打印输出
     threading.Thread(target=stream_output, args=(backend, "backend"), daemon=True).start()
-    threading.Thread(target=stream_output, args=(frontend, "frontend"), daemon=True).start()
+    if frontend is not None:
+        threading.Thread(target=stream_output, args=(frontend, "frontend"), daemon=True).start()
 
     # 注册优雅关闭
     def cleanup(sig, frame):
         print("\n正在关闭...", flush=True)
         for proc, name in [(backend, "backend"), (frontend, "frontend")]:
+            if proc is None:
+                continue
             try:
                 if sys.platform == "win32":
                     # Windows: kill 整个进程树（npm→vite, python→uvicorn）
@@ -97,7 +101,7 @@ def main():
     signal.signal(signal.SIGTERM, cleanup)
 
     # 等待任一进程退出
-    procs = [backend, frontend]
+    procs = [p for p in (backend, frontend) if p is not None]
     while all(p.poll() is None for p in procs):
         try:
             signal.pause()
