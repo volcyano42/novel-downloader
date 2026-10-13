@@ -60,6 +60,8 @@ exclude = [
     "novelbase/utils/_manifest.py",
     "frontend/node_modules/**",
     "frontend/dist/**",
+    # 内部迁移工具（与 check_public.py 配合；public 不需要它）
+    "scripts/migrate_public.py",
     "docs/superpowers/**",
     "docs/session-prompt.md",
     "docs/learning/**",

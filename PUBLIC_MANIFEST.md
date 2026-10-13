@@ -20,6 +20,7 @@
 - `cli/**`
 - `shared/**`
 - `scripts/**`
+  - **排除**：`scripts/migrate_public.py`（2026-10-14：内部迁移工具，与 `check_public.py` 配合使用；不进 public）
 - `tests/**`
   - **排除**（2026-10-14 按 public 侧实跑补齐；public 只保留 fanqie 两个源，下列文件整体失败）：`tests/test_source_async.py`、`tests/test_source_contracts.py`、`tests/test_browser_sources.py`、`tests/test_source_layout.py`、`tests/test_source_oiapi_contract.py`、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_config_effective_mode.py`、`tests/test_cli_effective_mode.py`、`tests/test_source_api.py`、`tests/test_novel_id_stability.py`、`tests/test_task_manager_async.py`、`tests/test_source_names_unique.py`、`tests/test_delay_default.py`
 - `init_config.py`（2026-10-14 补：运行必需 —— `backend/main.py` 的 lifespan 用它做首次配置初始化，`tests/test_paths.py` 也依赖它）
