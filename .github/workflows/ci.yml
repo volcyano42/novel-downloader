@@ -74,8 +74,6 @@ jobs:
 
   wheel-smoke:
     name: wheel 安装验证（书源清单）
-    # 构建 wheel 需要 pyproject.toml：public 无该文件（清单规定不迁移），该 job 自动跳过
-    if: ${{ hashFiles('pyproject.toml') != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -87,11 +85,16 @@ jobs:
           python-version: "3.12"
 
       - name: 构建 wheel
+        # 需要 pyproject.toml：public 无该文件（清单规定不迁移），这两步自动跳过。
+        # ⚠️ hashFiles 只能用在 step 级 if —— 放在 job 级会让整个 workflow 解析失败
+        # （表现为 Actions 列表里该 workflow 的 name 显示成文件路径，run 无 job 直接失败）。
+        if: ${{ hashFiles('pyproject.toml') != '' }}
         run: |
           python -m pip install --upgrade pip build
           python -m build --wheel
 
       - name: 安装 wheel 并从仓库外校验书源清单
+        if: ${{ hashFiles('pyproject.toml') != '' }}
         run: |
           pip install dist/*.whl
           cd "$RUNNER_TEMP"
