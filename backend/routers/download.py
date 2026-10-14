@@ -32,11 +32,13 @@ def _require_source(source: str | None, url: str) -> str:
 def _engine_for(source_name: str, capability: str):
     """按书源 + 能力取引擎：mode = 用户层覆盖后的**有效** mode。
 
-    能力不在该源的有效映射里时，回落该源首个有效 mode —— 只为避免在错误路径上
-    启一个「异 mode」引擎；core 随后会以 `ValueError` 拒绝这次调用（书源未声明该能力）。
+    该源未声明此能力（含未知源）时返回 `None` —— **不建引擎**，交由 core 以
+    「未声明能力 / 源不存在」拒绝这次调用。改造前 core 是 `_resolve()` 成功后才取引擎，
+    这里保住「错误路径不建任何引擎」的行为（否则可能白启一个 browser 引擎）。
     """
-    caps = effective_capabilities(source_name)
-    mode = caps.get(capability) or next(iter(caps.values()), "browser")
+    mode = effective_capabilities(source_name).get(capability)
+    if mode is None:
+        return None
     return get_cached_engine(source_name, mode)
 
 

@@ -49,3 +49,17 @@ def test_get_engine_defaults_to_first_capability_mode(monkeypatch):
 
     cli.core._get_engine("x-browser-default", None)
     assert seen == ["browser"]
+
+
+def test_engine_getter_missing_capability_builds_no_engine(monkeypatch):
+    """该源未声明的能力不建引擎（返回 None），与 backend `_engine_for` 语义一致。"""
+    built: list[str] = []
+    monkeypatch.setattr(cli.core, "effective_capabilities", lambda n: {"search": "requests"})
+    monkeypatch.setattr(cli.core, "build_options", lambda name, mode: _FakeOptions(mode))
+    monkeypatch.setattr(cli.core, "create_engine",
+                        lambda options: built.append(options.mode) or "engine")
+
+    get = cli.core._make_engine_getter("x-requests-default")
+
+    assert get("chapter_content") is None
+    assert built == []

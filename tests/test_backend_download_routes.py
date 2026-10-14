@@ -443,3 +443,25 @@ def test_search_default_sources_when_param_absent(monkeypatch):
     asyncio.run(dl.search_novels(query="关键词", source=""))
     assert sorted(called) == ["a-r-default", "b-r-default"]
 
+
+def test_engine_for_missing_capability_builds_no_engine(monkeypatch):
+    """该源未声明的能力不建引擎（返回 None）：交由 core 以「未声明能力」拒绝。
+
+    改造前 core 是 `_resolve()` 成功后才取引擎，所以「未声明的能力」从不建引擎；
+    这里保住该行为，避免在错误路径上启一个异 mode（可能是 browser）的引擎。
+    """
+    seen = _patch_engine_factory(monkeypatch)
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {"search": "requests"})
+
+    assert dl._engine_for("92xs-requests-default", "chapter_content") is None
+    assert seen == []
+
+
+def test_engine_for_unknown_source_builds_no_engine(monkeypatch):
+    """未知源（无任何有效能力）同样不建引擎。"""
+    seen = _patch_engine_factory(monkeypatch)
+    monkeypatch.setattr(dl, "effective_capabilities", lambda n: {})
+
+    assert dl._engine_for("nope-requests-default", "search") is None
+    assert seen == []
+

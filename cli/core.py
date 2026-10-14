@@ -67,9 +67,9 @@ def _make_engine_getter(source_name: str, options_hook=None):
 
     def get(capability: str):
         if capability not in cache:
-            caps = effective_capabilities(source_name)
-            mode = caps.get(capability) or next(iter(caps.values()), "browser")
-            cache[capability] = _get_engine(source_name, mode, options_hook)
+            mode = effective_capabilities(source_name).get(capability)
+            # 未声明的能力（含未知源）不建引擎：返回 None，交由 core 拒绝这次调用
+            cache[capability] = _get_engine(source_name, mode, options_hook) if mode else None
         return cache[capability]
 
     get.cache = cache  # type: ignore[attr-defined]
