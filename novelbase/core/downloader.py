@@ -8,11 +8,19 @@ from .options import ExportOptions
 
 
 def _reject_legacy_engines(engine) -> None:
-    """防呆：`engines(mode) -> engine` 解析器已移除，这里必须是 Engine 实例。"""
+    """防呆：`engines(mode) -> engine` 解析器已移除，这里必须是 Engine 实例。
+
+    判据是「非 Engine 且可调用」而非单纯 `callable()`：测试替身
+    （`MagicMock(spec=Engine)`、`__call__` 代理）本身可调用，不该被误判成旧解析器
+    —— 替身请继承 `Engine`，或用 `MagicMock(spec=Engine)`。
+    """
+    if isinstance(engine, Engine):
+        return
     if callable(engine):
         raise TypeError(
             "engine 现在必须传入 Engine 实例（原 engines(mode) 解析器已移除）；"
-            "请用 shared.config.effective_capabilities(source_name) 选 mode 后自行 create_engine"
+            "请用 shared.config.effective_capabilities(source_name) 选 mode 后自行 create_engine；"
+            "测试替身请继承 Engine 或使用 MagicMock(spec=Engine)"
         )
 
 

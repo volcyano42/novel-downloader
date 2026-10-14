@@ -1,8 +1,10 @@
 """分发层注入单个 Engine 实例：core 原样交给书源能力函数，不再解析 mode。"""
 import asyncio
+from unittest.mock import MagicMock
 
 import pytest
 
+from novelbase import Engine
 from novelbase.core import downloader
 from novelbase.models.novel import Chapter, Novel, SearchResult
 from novelbase.utils.urls import make_novel_id
@@ -68,12 +70,33 @@ def test_resolve_chapter_passes_injected_engine(monkeypatch):
     assert seen["chapter"] is chapter
 
 
-def test_rejects_legacy_engines_resolver(monkeypatch):
-    """旧的 `engines(mode) -> engine` 解析器必须响亮报错（第三方迁移指引）。
+@pytest.mark.parametrize("entry", ["search", "resolve_meta", "resolve_chapter_list",
+                                   "resolve_chapter"])
+def test_rejects_legacy_engines_resolver_on_every_entry(monkeypatch, entry):
+    """旧的 `engines(mode) -> engine` 解析器在 4 个入口都必须响亮报错（第三方迁移指引）。
 
     防呆优先于书源解析：连假的 resolve 都不该被用到（否则错误源会先抛无关异常）。
     """
     _patch_resolve(monkeypatch, [], {})
+    chapter = Chapter(id="c1", url="https://x/1", novel_id="n1", title="t", order=1)
+    legacy = lambda mode: object()               # noqa: E731
+    args = {
+        "search": ("src", "q", legacy),
+        "resolve_meta": ("https://x/n1", "src", legacy),
+        "resolve_chapter_list": ("https://x/n1", "src", legacy),
+        "resolve_chapter": (chapter, "src", legacy),
+    }[entry]
+
     with pytest.raises(TypeError) as ei:
-        asyncio.run(downloader.search("src", "q", lambda mode: object()))
+        asyncio.run(getattr(downloader, entry)(*args))
     assert "Engine 实例" in str(ei.value)
+
+
+def test_accepts_callable_engine_stand_in(monkeypatch):
+    """可调用的测试替身（`MagicMock(spec=Engine)`）不得被防呆误判为旧解析器。"""
+    engine = MagicMock(spec=Engine)
+    seen: dict = {}
+    _patch_resolve(monkeypatch, [], seen)
+
+    asyncio.run(downloader.search("src", "q", engine))
+    assert seen["engine"] is engine
