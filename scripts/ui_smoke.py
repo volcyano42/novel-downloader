@@ -108,6 +108,38 @@ def main() -> int:
             failures.append("失败 书源空数据态未显示「暂无书源」")
         empty.screenshot(path=str(out / "settings-sources-empty.png"), full_page=True)
         empty.close()
+
+        # 附加 5（书源「常规」段 + 能力段默认收起）—— 只用 data-testid 锚定，不取页面通用文案
+        cfg = browser.new_page(viewport={"width": 1280, "height": 900})
+        cfg.goto(args.base_url + "/settings/sources", wait_until="domcontentloaded")
+        src_buttons = cfg.locator('[data-testid^="source-"]')
+        try:  # 书源列表是异步加载的：先等第一项挂上，否则 count() 会撞上加载竞态误报为空
+            src_buttons.first.wait_for(state="attached", timeout=8000)
+        except Exception:
+            pass
+        if src_buttons.count() == 0:
+            failures.append("失败 书源列表未渲染（[data-testid^=source-] 为空）")
+        else:
+            src_buttons.first.click()
+            common = cfg.locator('[data-testid="source-common"]')
+            try:
+                common.wait_for(state="visible", timeout=8000)
+                print("完成 书源展开后「常规」段可见")
+            except Exception:
+                failures.append("失败 书源展开后未出现 [data-testid=source-common]")
+            cap_body = cfg.locator('[data-testid="cap-search-body"]')
+            if cap_body.count() > 0 and cap_body.first.is_visible():
+                failures.append("失败 能力段「搜索」默认应为收起，实际可见")
+            else:
+                print("完成 能力段默认收起")
+            cfg.locator('[data-testid="cap-search"]').first.click()
+            try:
+                cap_body.first.wait_for(state="visible", timeout=8000)
+                print("完成 点击后能力段可展开")
+            except Exception:
+                failures.append("失败 点击能力段标题后其内容区仍未可见")
+        cfg.screenshot(path=str(out / "settings-source-common.png"), full_page=True)
+        cfg.close()
         browser.close()
     for f in failures:
         print(f, file=sys.stderr)

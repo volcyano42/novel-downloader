@@ -234,6 +234,7 @@ export function useSaveSourceConfig(source: string) {
     mutationFn: (data: {
       concurrency?: number; config?: Record<string, Record<string, unknown>>;
       source_group?: string; source_alias?: string;
+      common?: Record<string, unknown>;
     }) =>
       saveSourceConfig(source, data),
     onSuccess: () => {

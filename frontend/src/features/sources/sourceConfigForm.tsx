@@ -5,9 +5,13 @@
  */
 import {useEffect, useState} from "react";
 import type {LucideIcon} from "lucide-react";
+import {ChevronDown} from "lucide-react";
+import {useQueryClient} from "@tanstack/react-query";
+import {apiPost} from "@/api/client";
 import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
+import {useToast} from "@/components/toast-context";
 import {cn} from "@/lib/utils";
-import {CAP_LABELS, ENGINE_FIELDS, MODE_META} from "./sourceConfigFields";
+import {CAP_LABELS, ENGINE_FIELDS, MODE_META, commonFieldsFor} from "./sourceConfigFields";
 import type {EngineField} from "./sourceConfigFields";
 
 export function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -131,10 +135,19 @@ export function Section({ icon: Icon, title, children }: { icon: LucideIcon; tit
 export function SourceConfigEditor({ name }: { name: string }) {
   const { data: cfg } = useSourceConfig(name);
   const saveSource = useSaveSourceConfig(name);
+  const qc = useQueryClient();
+  const toast = useToast();
 
   const caps = cfg?.capabilities ?? {};
   const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
+  const userOverrides = cfg?.user_overrides ?? {};
+  const capNames = Object.keys(caps);
+  // 常规段 = 各能力段 mode 的共有字段（不含 mode）；展示值取第一个能力段的合并值
+  const commonFields = commonFieldsFor(Object.values(caps));
+  const commonSource = capNames[0];
+  const [commonOpen, setCommonOpen] = useState(true);
+  const [openCaps, setOpenCaps] = useState<Record<string, boolean>>({});
   // 并发数：与折叠条旧实现同样的「字符串 + 失焦校验提交」策略（非法不写）
   const [concurrency, setConcurrency] = useState("1");
   useEffect(() => { setConcurrency(String(cfg?.concurrency ?? 1)); }, [cfg?.concurrency]);
@@ -153,9 +166,16 @@ export function SourceConfigEditor({ name }: { name: string }) {
     saveSource.mutate({ config: { [cap]: { [key]: value } } });
   };
 
-  const renderField = (cap: string, f: EngineField) => {
-    const val = (merged[cap] as unknown as Record<string, unknown> | undefined)?.[f.key];
-    const set = (value: unknown) => updateField(cap, f.key, value);
+  const converge = () => {
+    apiPost(`/config/sources/${name}/converge`, {})
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["source-config", name] });
+        toast("已收敛到常规", "success");
+      })
+      .catch(() => toast("收敛失败", "error"));
+  };
+
+  const renderField = (f: EngineField, val: unknown, set: (value: unknown) => void) => {
     switch (f.type) {
       case "toggle":
         return <Toggle checked={!!val} onChange={v => set(v)} />;
@@ -204,13 +224,50 @@ export function SourceConfigEditor({ name }: { name: string }) {
           className="w-16 rounded-lg border border-white/20 bg-white/50 px-2 py-1.5 text-right text-xs text-slate-700 outline-none dark:border-slate-600/30 dark:bg-slate-800/50 dark:text-slate-300"
         />
       </Row>
+
+      {commonFields.length > 0 && (
+        <div data-testid="source-common" className="border-t border-slate-100 pt-2 dark:border-slate-800/50">
+          <div className="flex flex-wrap items-center gap-2 py-1">
+            <button onClick={() => setCommonOpen(o => !o)} className="flex items-center gap-1.5">
+              <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", commonOpen && "rotate-180")} strokeWidth={1.5} />
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">常规</span>
+            </button>
+            <span className="text-[10px] text-slate-400">各能力共用，只填一次</span>
+            {(cfg.converge_candidates?.length ?? 0) > 0 && (
+              <button onClick={converge} className="ml-auto text-[10px] font-medium text-indigo-500 hover:underline">
+                这 {cfg.converge_candidates!.length} 项在多个能力段重复，点此收敛
+              </button>
+            )}
+          </div>
+          {commonOpen && commonFields.map(f => {
+            const val = (merged[commonSource] as Record<string, unknown> | undefined)?.[f.key];
+            const overriddenIn = capNames.filter(c => (userOverrides[c] ?? []).includes(f.key));
+            const note = overriddenIn.length
+              ? `该字段在「${overriddenIn.map(c => CAP_LABELS[c] ?? c).join("、")}」里被单独设置过，修改将统一为常规值`
+              : "";
+            return (
+              <Row key={f.key} label={f.label} desc={[f.desc, note].filter(Boolean).join("；") || undefined}>
+                {renderField(f, val, v => saveSource.mutate({ common: { [f.key]: v } }))}
+              </Row>
+            );
+          })}
+        </div>
+      )}
+
       {Object.entries(caps).length === 0 && <p className="py-1 text-[11px] text-slate-400">该书源未声明能力</p>}
       {Object.entries(caps).map(([cap, mode]) => {
         const fields = ENGINE_FIELDS[mode] ?? [];
+        const open = !!openCaps[cap];
+        const sharedKeys = new Set(commonFields.map(f => f.key));
+        const overrides = userOverrides[cap] ?? [];
         return (
           <div key={cap} className="border-t border-slate-100 first:border-t-0 dark:border-slate-800/50">
             <div className="flex flex-wrap items-center gap-2 py-1">
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
+              <button onClick={() => setOpenCaps(s => ({ ...s, [cap]: !s[cap] }))} data-testid={`cap-${cap}`}
+                className="flex items-center gap-1.5">
+                <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", open && "rotate-180")} strokeWidth={1.5} />
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{CAP_LABELS[cap] ?? cap}</span>
+              </button>
               <Select value={mode}
                 onChange={v => saveSource.mutate({ config: { [cap]: { mode: v } } })}
                 // 当前 mode 若不在受支持列表（env 未就绪或历史覆盖），仍补进选项，避免下拉空白
@@ -224,9 +281,23 @@ export function SourceConfigEditor({ name }: { name: string }) {
                 </button>
               )}
             </div>
-            {fields.length === 0
-              ? <p className="py-1 text-[11px] text-slate-400">该能力无可配置项</p>
-              : fields.map(f => <Row key={f.key} label={f.label} desc={f.desc}>{renderField(cap, f)}</Row>)}
+            {open && (
+              <div data-testid={`cap-${cap}-body`}>
+                {fields.length === 0
+                  ? <p className="py-1 text-[11px] text-slate-400">该能力无可配置项</p>
+                  : fields.map(f => {
+                      const tag = sharedKeys.has(f.key)
+                        ? (overrides.includes(f.key) ? "已覆盖" : "继承常规")
+                        : "";
+                      return (
+                        <Row key={f.key} label={f.label} desc={[f.desc, tag].filter(Boolean).join("；") || undefined}>
+                          {renderField(f, (merged[cap] as Record<string, unknown> | undefined)?.[f.key],
+                            v => updateField(cap, f.key, v))}
+                        </Row>
+                      );
+                    })}
+              </div>
+            )}
           </div>
         );
       })}

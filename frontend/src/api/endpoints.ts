@@ -90,6 +90,10 @@ export interface SourceConfig {
   source_group: string;
   /** 显示别名（"" = 未设，显示 source_name）。 */
   source_alias: string;
+  /** 各能力段在用户层实际出现的键（含 mode）—— 用于区分「继承常规」与「已覆盖」 */
+  user_overrides?: Record<string, string[]>;
+  /** 可一键收敛到 common 的键（各能力段都有且取值相同） */
+  converge_candidates?: { key: string; value: unknown }[];
 }
 
 export type GroupsConfig = Record<string, Record<string, object>>;
@@ -318,6 +322,7 @@ export function saveSourceConfig(
   data: {
     concurrency?: number; config?: Record<string, Record<string, unknown>>;
     source_group?: string; source_alias?: string;
+    common?: Record<string, unknown>;
   },
 ) {
   return apiPut<void>(`/config/sources/${source}`, data);

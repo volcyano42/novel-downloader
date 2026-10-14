@@ -16,7 +16,7 @@ export function SourceAccordion({ name, info }: { name: string; info: SourceInfo
   return (
     <div className="border-b border-slate-100 last:border-b-0 dark:border-slate-800/50">
       <div className="flex items-center justify-between gap-4 py-2.5">
-        <button onClick={() => setOpen(o => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <button onClick={() => setOpen(o => !o)} data-testid={`source-${name}`} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200", open && "rotate-180")} strokeWidth={1.5} />
           <span className="shrink-0 text-sm font-medium text-slate-700 dark:text-slate-200">{display}</span>
           {info.source_alias && <span className="shrink-0 font-mono text-[10px] text-slate-400">{name}</span>}

@@ -52,3 +52,17 @@ export const ENGINE_FIELDS: Record<string, EngineField[]> = {
     { key: "backoff_factor", label: "退避因子", desc: "重试间隔倍增系数", type: "num", min: 1, max: 10 },
   ],
 };
+
+/** 「常规」段字段：各能力段 mode 的**共有字段**（不含 `mode` 自身）。
+ *
+ * 4 段都是 api → 含 key/params/delay/timeout/retry_times/backoff_factor；
+ * 某段改成 requests → 交集自动收窄（`key` 从常规段消失，只留在 api 那个能力段）。
+ * 字段顺序与元数据取自首个 mode，保证展示稳定。 */
+export function commonFieldsFor(modes: string[]): EngineField[] {
+  if (modes.length === 0) return [];
+  const lists = modes.map(m => ENGINE_FIELDS[m] ?? []);
+  const [first, ...rest] = lists;
+  return first.filter(
+    f => f.key !== "mode" && rest.every(list => list.some(g => g.key === f.key)),
+  );
+}
