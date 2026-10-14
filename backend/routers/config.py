@@ -83,6 +83,12 @@ async def remove_favorite(novel_id: str):
 
 # ── sources/{source_name}.yaml（按书源）──────────────
 
+def _user_sections(source_name: str) -> dict[str, dict]:
+    """用户层 yaml 里的各能力段（排除 `common` 与顶层元信息键）。"""
+    user = config_service.load_yaml(config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml")
+    return {k: v for k, v in user.items() if isinstance(v, dict) and k != "common"}
+
+
 @router.get("/sources/{source_name}")
 async def get_source_config(source_name: str):
     """三层合并后的书源配置 + 能力映射。
@@ -101,6 +107,8 @@ async def get_source_config(source_name: str):
         "source_group": config_service.source_group(source_name),
         "source_alias": config_service.source_alias(source_name),
         "config": config_service.merged_source_config(source_name),
+        # 各能力段在用户层里**实际出现**的键（含 mode），供前端区分「继承常规」/「已覆盖」
+        "user_overrides": {cap: sorted(section) for cap, section in _user_sections(source_name).items()},
     }
 
 
@@ -127,6 +135,26 @@ async def save_source_config(source_name: str, body: dict):
                 existing[key] = text
             else:
                 existing.pop(key, None)
+    # 顶层 common：跨能力共享字段。写入某键时**同时从各能力段删除同名键** ——
+    # 否则用户层能力段的旧值优先级更高，用户会看到「改了常规但不生效」。
+    common_body = body.get("common")
+    if isinstance(common_body, dict):
+        common = existing.get("common")
+        common = dict(common) if isinstance(common, dict) else {}
+        for key, value in common_body.items():
+            if value is None:
+                common.pop(key, None)              # 删除该共享键
+                continue
+            common[key] = value
+            for section_name, section in existing.items():
+                if section_name in ("common", "concurrency", "source_group", "source_alias", "enabled"):
+                    continue
+                if isinstance(section, dict):
+                    section.pop(key, None)
+        if common:
+            existing["common"] = common
+        else:
+            existing.pop("common", None)
     cfg_body = body.get("config")
     if isinstance(cfg_body, dict):
         for cap, partial in cfg_body.items():
