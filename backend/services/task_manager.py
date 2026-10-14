@@ -295,25 +295,21 @@ async def _run_download_impl(task: dict, source_name: str):
     # 所有请求（meta + 每章）共用这一额度。
     src_conc = max(1, source_concurrency(source_name))
 
-    # engines(mode)->engine 解析器：按书源能力声明的 mode 惰性取引擎。
-    # get_cached_engine(source_name, mode) 带缓存，命中即复用同一实例。
-    engines_cache: dict[str, object] = {}
-
-    def engines(m: str):
-        if m not in engines_cache:
-            engines_cache[m] = get_cached_engine(source_name, m)
-        return engines_cache[m]
-
-    # 主 mode 预热：get_cached_engine 是同步调用，browser 模式首次创建会启动
-    # Chromium，若首次创建落在事件循环线程会阻塞整个 FastAPI（含其它任务、
-    # 暂停/取消接口）数秒。resolve_meta/resolve_chapter 在事件循环里同步求值
-    # engines(mode)，故先用 to_thread 把「该源 novel_info 能力声明的 mode」
-    # （即解析将首先用到的 mode）建到缓存，移出事件循环线程。
     _caps = effective_capabilities(source_name)
-    primary_mode = _caps.get("novel_info") or next(iter(_caps.values()), None)
-    if primary_mode:
-        engines_cache[primary_mode] = await asyncio.to_thread(
-            get_cached_engine, source_name, primary_mode)
+
+    def _mode_for(capability: str) -> str:
+        """该能力的有效 mode；能力缺失时回落该源首个有效 mode（core 随后会报错）。"""
+        return _caps.get(capability) or next(iter(_caps.values()), "browser")
+
+    # 预热：get_cached_engine 是同步调用，browser 模式首次创建会启动 Chromium，
+    # 若首次创建落在事件循环线程会阻塞整个 FastAPI（含其它任务、暂停/取消接口）数秒。
+    # 引擎现在由本函数直接取（不再由 core 经解析器回调），故两个用到的能力
+    # （novel_info / chapter_content）都先经 to_thread 建好；同 mode 只建一次。
+    for _m in dict.fromkeys((_mode_for("novel_info"), _mode_for("chapter_content"))):
+        await asyncio.to_thread(get_cached_engine, source_name, _m)
+
+    meta_engine = get_cached_engine(source_name, _mode_for("novel_info"))
+    chapter_engine = get_cached_engine(source_name, _mode_for("chapter_content"))
 
     try:
         store = create_storage(StorageOptions(
@@ -327,8 +323,7 @@ async def _run_download_impl(task: dict, source_name: str):
             if not await _acquire_source_slot(source_name, task, src_conc):
                 return
             try:
-                meta = await resolve_meta(novel_url, source_name, engines,
-                                          mode_overrides=_caps)
+                meta = await resolve_meta(novel_url, source_name, meta_engine)
                 store.save_meta(meta)
             except Exception:
                 _log.warning("fetch_meta failed for %s", novel_url, exc_info=True)
@@ -401,8 +396,7 @@ async def _run_download_impl(task: dict, source_name: str):
                 with _tasks_lock:
                     ch_data["status"] = "downloading"
                 try:
-                    downloaded = await resolve_chapter(ch, source_name, engines,
-                                                       mode_overrides=_caps)
+                    downloaded = await resolve_chapter(ch, source_name, chapter_engine)
                 except ChapterNotFoundError:
                     if attempt < max_retries:
                         continue

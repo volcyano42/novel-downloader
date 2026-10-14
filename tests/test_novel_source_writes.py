@@ -252,11 +252,11 @@ def test_cli_menu_delete_cleans_novel_sources(monkeypatch, isolated_user_db):
     assert isolated_user_db.get_novel_source("n1") is None
 
 
-def test_task_manager_passes_mode_overrides_to_core(monkeypatch, isolated_user_db):
-    """task_manager 分发时必须把有效 mode（`mode_overrides`）以**关键字**透传给 core。
+def test_task_manager_passes_engine_instance_to_core(monkeypatch, isolated_user_db):
+    """task_manager 必须把按**有效 mode**取到的引擎实例传给 core。
 
-    若漏传、或改回位置传参（会被 `skip_delay` 静默吸收），`mode_overrides` 会为
-    None，下面断言即红。覆盖 `resolve_meta` 与 `resolve_chapter` 两个消费点。
+    覆盖 `resolve_meta` 与 `resolve_chapter` 两个消费点；并钉住预热去重
+    （两个能力的有效 mode 相同时只建一次）。
     """
     import threading
 
@@ -270,14 +270,18 @@ def test_task_manager_passes_mode_overrides_to_core(monkeypatch, isolated_user_d
     overrides = {"novel_info": "browser", "chapter_content": "browser"}
     seen = {}
 
-    async def fake_resolve_meta(url, source_name, engines, skip_delay=False,
-                                mode_overrides=None, **kw):
-        seen["meta"] = mode_overrides
+    engines_seen: list[tuple[str, str]] = []
+
+    def fake_get_cached_engine(name, mode):
+        engines_seen.append((name, mode))
+        return f"engine:{name}:{mode}"
+
+    async def fake_resolve_meta(url, source_name, engine, skip_delay=False, **kw):
+        seen["meta"] = engine
         return novel
 
-    async def fake_resolve_chapter(ch, source_name, engines, skip_delay=False,
-                                   mode_overrides=None, **kw):
-        seen["chapter"] = mode_overrides
+    async def fake_resolve_chapter(ch, source_name, engine, skip_delay=False, **kw):
+        seen["chapter"] = engine
         return Chapter(id=ch.id, url=ch.url, novel_id=ch.novel_id,
                        title=ch.title, order=ch.order)
 
@@ -292,7 +296,7 @@ def test_task_manager_passes_mode_overrides_to_core(monkeypatch, isolated_user_d
     monkeypatch.setattr(novelbase, "resolve_chapter", fake_resolve_chapter)
     monkeypatch.setattr(nb_storage, "create_storage", lambda opts: FakeStore())
     monkeypatch.setattr(config_service, "effective_capabilities", lambda s: overrides)
-    monkeypatch.setattr(task_manager, "get_cached_engine", lambda s, m: object())
+    monkeypatch.setattr(task_manager, "get_cached_engine", fake_get_cached_engine)
     monkeypatch.setattr(task_manager, "set_novel_source", lambda nid, src: None)
 
     task = {"task_id": "t1", "novel_id": "n1", "title": "t",
@@ -304,5 +308,7 @@ def test_task_manager_passes_mode_overrides_to_core(monkeypatch, isolated_user_d
             "_cancel": threading.Event(), "_pause": threading.Event()}
     asyncio.run(task_manager._run_download(task, "fanqie-requests-default"))
 
-    assert seen["meta"] == overrides
-    assert seen["chapter"] == overrides
+    assert seen["meta"] == "engine:fanqie-requests-default:browser"
+    assert seen["chapter"] == "engine:fanqie-requests-default:browser"
+    # 所有引擎都按**有效 mode**（browser）取；不得出现书源声明值 requests 或其它 mode
+    assert set(engines_seen) == {("fanqie-requests-default", "browser")}
