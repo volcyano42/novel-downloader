@@ -7,8 +7,12 @@ CHECKS = [
     # (路径, 期望落地的 pathname, 必须可见的文本)
     ("/bookshelf", "/bookshelf", "书架"),
     ("/downloads", "/downloads", "下载"),
-    ("/settings", "/settings", "书源"),
-    ("/sources", "/settings", "书源"),
+    ("/settings/sources", "/settings/sources", "书源"),
+    ("/settings/download", "/settings/download", "并发与性能"),
+    ("/settings/export", "/settings/export", "导出格式"),
+    ("/settings/notify", "/settings/notify", "通知"),
+    ("/settings", "/settings/sources", "书源"),
+    ("/sources", "/settings/sources", "书源"),
     ("/search-tab", "/search-tab", "搜索"),
 ]
 
@@ -48,6 +52,39 @@ def main() -> int:
                 failures.append(f"失败 {path}: 页面运行时报错 {console_errors[:2]}")
             else:
                 print(f"完成 {path} -> {out / name}")
+
+        # 附加 1（Review Focus #1）：深层链接刷新后仍可达
+        page.goto(args.base_url + "/settings/export", wait_until="domcontentloaded")
+        page.reload(wait_until="domcontentloaded")
+        try:
+            page.get_by_text("导出格式", exact=False).first.wait_for(state="visible", timeout=20000)
+            print("完成 /settings/export（刷新后仍可达）")
+        except Exception:
+            failures.append("失败 /settings/export: 刷新后未渲染「导出格式」")
+
+        # 附加 2（Review Focus #2）：停在子路由时全局侧边栏仍高亮「设置」
+        page.goto(args.base_url + "/settings/download", wait_until="domcontentloaded")
+        try:
+            page.get_by_text("并发与性能", exact=False).first.wait_for(state="visible", timeout=20000)
+        except Exception:
+            failures.append("失败 /settings/download: 未渲染「并发与性能」")
+        cls = page.locator("aside a").filter(has_text="设置").first.get_attribute("class") or ""
+        if "bg-indigo-50" in cls:
+            print("完成 全局导航在 /settings/download 下高亮「设置」")
+        else:
+            failures.append(f"失败 全局导航未高亮「设置」（class={cls!r}）")
+
+        # 附加 3（Review Focus #3）：窄屏（< md）下二级导航四项可见
+        mobile = browser.new_page(viewport={"width": 390, "height": 844})
+        mobile.goto(args.base_url + "/settings/sources", wait_until="domcontentloaded")
+        for lbl in ("书源", "下载与性能", "导出格式", "通知"):
+            try:
+                mobile.get_by_role("link", name=lbl).first.wait_for(state="visible", timeout=20000)
+                print(f"完成 窄屏二级导航可见: {lbl}")
+            except Exception:
+                failures.append(f"失败 窄屏二级导航不可见: {lbl}")
+        mobile.screenshot(path=str(out / "settings-mobile.png"), full_page=True)
+        mobile.close()
         browser.close()
     for f in failures:
         print(f, file=sys.stderr)

@@ -7,6 +7,11 @@ import {ToastProvider} from "@/components/Toast";
 import BookshelfPage from "@/features/bookshelf/BookshelfPage";
 import DetailPage from "@/features/detail/DetailPage";
 import ReaderPage from "@/features/reader/ReaderPage";
+import SettingsLayout from "@/features/settings/SettingsLayout";
+import SourcesPage from "@/features/settings/pages/SourcesPage";
+import DownloadPage from "@/features/settings/pages/DownloadPage";
+import ExportPage from "@/features/settings/pages/ExportPage";
+import NotifyPage from "@/features/settings/pages/NotifyPage";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -37,7 +42,7 @@ function AppShell() {
 
   const activeNav: NavItem = useMemo(() => {
     if (pathname === "/downloads") return "downloads";
-    if (pathname === "/settings") return "settings";
+    if (pathname.startsWith("/settings")) return "settings";
     if (pathname === "/search-tab") return "search";
     return "bookshelf";
   }, [pathname]);
@@ -87,8 +92,14 @@ function AppShell() {
             <Route path="/" element={<Navigate to="/bookshelf" replace />} />
             <Route path="/bookshelf" element={<BookshelfPage />} />
             <Route path="/downloads" element={<BookshelfPage />} />
-            <Route path="/settings" element={<BookshelfPage />} />
-            <Route path="/sources" element={<Navigate to="/settings" replace />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="/settings/sources" replace />} />
+              <Route path="sources" element={<SourcesPage />} />
+              <Route path="download" element={<DownloadPage />} />
+              <Route path="export" element={<ExportPage />} />
+              <Route path="notify" element={<NotifyPage />} />
+            </Route>
+            <Route path="/sources" element={<Navigate to="/settings/sources" replace />} />
             <Route path="/search-tab" element={<BookshelfPage />} />
             <Route path="/novel/:novelId" element={<DetailPage />} />
             <Route path="/novel/:novelId/:chapterId" element={<ReaderPage />} />

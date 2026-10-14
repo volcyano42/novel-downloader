@@ -7,7 +7,6 @@ import {SearchBar} from "./SearchBar";
 import {SearchHistoryPanel} from "./SearchHistoryPanel";
 import {SearchResultCard} from "./SearchResultCard";
 import {DownloadTask, DownloadTaskSkeleton} from "@/features/download/DownloadTask";
-import {SettingsView} from "@/features/settings/SettingsPage";
 import {useToast} from "@/components/toast-context";
 import {
   useAddSearchHistory,
@@ -31,7 +30,7 @@ export default function BookshelfPage() {
   const pathname = window.location.pathname;
   const activeNav: NavItem = useMemo(() => {
     if (pathname === "/downloads") return "downloads";
-    if (pathname === "/settings") return "settings";
+    if (pathname.startsWith("/settings")) return "settings";
     if (pathname === "/search-tab") return "search";
     return "bookshelf";
   }, [pathname]);
@@ -135,10 +134,6 @@ export default function BookshelfPage() {
       navigate(`/search/${meta.id}`, { state: { remoteUrl: result.url, source, meta } });
     } catch (e: unknown) { toast((e as Error).message || "获取小说信息失败"); setNavigatingId(null); navigatingRef.current = false; }
   }, [navigate, novels, fetchMetaMut, toast]);
-
-  const handleSettingsUpdate = useCallback((_path: string, _value: unknown) => {
-    // 配置已在 SettingsView 内部通过 React Query 自动保存
-  }, []);
 
   // groups
   const groupNames = useMemo(() => Object.keys(groups), [groups]);
@@ -308,12 +303,6 @@ export default function BookshelfPage() {
               </>
             );
           })()}
-        </div>
-      )}
-
-      {activeNav === "settings" && globalConfig && (
-        <div className="px-6 pt-12 pb-8 md:px-12">
-          <SettingsView globalConfig={globalConfig} onUpdate={handleSettingsUpdate} />
         </div>
       )}
     </>
