@@ -24,13 +24,13 @@ import {coverToUrl, deleteTask, type NovelMeta, pauseTask, resumeTask, type Sear
 import {SessionCache} from "@/utils/sessionCache";
 import {notifyUser} from "@/utils/notify";
 
-type NavItem = "bookshelf" | "downloads" | "settings" | "search";
+// /settings/* 现由 SettingsLayout 渲染，本组件不再承载设置视图 —— activeNav 无需 settings 值
+type NavItem = "bookshelf" | "downloads" | "search";
 
 export default function BookshelfPage() {
   const pathname = window.location.pathname;
   const activeNav: NavItem = useMemo(() => {
     if (pathname === "/downloads") return "downloads";
-    if (pathname.startsWith("/settings")) return "settings";
     if (pathname === "/search-tab") return "search";
     return "bookshelf";
   }, [pathname]);
