@@ -95,8 +95,9 @@ novelbase/sources/{dir}/
   优先于 `source.json` 声明；非法值忽略并回退声明
 - 唯一入口：`shared.config.effective_capabilities(source_name)`；`merged_source_config()` 按有效 mode 取
   `ENGINE_DEFAULTS[mode]` 作基底并保留 `mode` 键（表单回显）
-- core 分发层 `novelbase/core/downloader.py` 的 4 个函数接受可选 `mode_overrides`（能力名 → mode），
-  由调用方（backend `task_manager` / 各路由、CLI）透传；`novelbase.source.capabilities()` 语义不变
+- core 分发层 `novelbase/core/downloader.py` 的 4 个函数接受**单个 `Engine` 实例**（调用方按
+  `effective_capabilities()` 选有效 mode 后自行 `create_engine`）；core **不解析 mode**（原
+  `mode_overrides` 参数已删除，`novelbase.source.capabilities()` / `resolve()` 语义不变）
 - API：`GET /api/v2/config/sources/{name}` 返回 `capabilities`（有效）与 `declared_capabilities`（声明）；
   `PUT` 传 `config[cap].mode = null` 即删除覆盖
 - 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用
