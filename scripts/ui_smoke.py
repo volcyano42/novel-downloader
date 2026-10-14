@@ -15,7 +15,9 @@ CHECKS = [
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default="http://127.0.0.1:4173")
-    ap.add_argument("--out", default="tmp/nld-ui-smoke")
+    ap.add_argument("--out", default="../tmp/nld-ui-smoke",
+                    help="截图输出目录；默认落到仓库外的 ../tmp/（仓库 .gitignore 不忽略 tmp/，"
+                         "默认值必须避免在仓库内落盘）")
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     failures = []
