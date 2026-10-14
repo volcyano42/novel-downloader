@@ -18,6 +18,20 @@ def isolated_user_db(tmp_path, monkeypatch):
     return user_data
 
 
+def _stub_engine_getter(source_name: str, **kw):
+    """测试用引擎 getter：不真建引擎（`get` 一律返回 None），但保留 `.cache` 供收尾遍历。
+
+    改造后引擎在调用处求值，凡走到 `_make_engine_getter` 的用例都必须隔离它，
+    否则会真建引擎（并受本机 `app_data/config/sites/*.yaml` 覆盖影响）。
+    """
+
+    def get(capability):
+        return None
+
+    get.cache = {}
+    return get
+
+
 def test_delete_novel_cleans_novel_sources(monkeypatch, isolated_user_db):
     isolated_user_db.set_novel_source("n1", "fanqie-api-rain")
 
@@ -55,10 +69,10 @@ def test_cli_download_writes_novel_source(monkeypatch, isolated_user_db):
     ch = Chapter(id="c1", url="https://x/n1/c1", novel_id="n1",
                  title="第一章", order=1)
 
-    async def fake_resolve_meta(url, source_name, engines, **kw):
+    async def fake_resolve_meta(url, source_name, engine, **kw):
         return novel
 
-    async def fake_resolve_chapter_list(url, source_name, engines, **kw):
+    async def fake_resolve_chapter_list(url, source_name, engine, **kw):
         return Chapters([ch])
 
     class FakeStorage:
@@ -70,6 +84,7 @@ def test_cli_download_writes_novel_source(monkeypatch, isolated_user_db):
 
     monkeypatch.setattr(cli_core, "resolve_meta", fake_resolve_meta)
     monkeypatch.setattr(cli_core, "resolve_chapter_list", fake_resolve_chapter_list)
+    monkeypatch.setattr(cli_core, "_make_engine_getter", _stub_engine_getter)
     monkeypatch.setattr(cli_core, "_get_storage", lambda: FakeStorage())
     monkeypatch.setattr(cli_core, "add_novel_to_group", lambda nid, grp: None)
 
@@ -96,17 +111,13 @@ def test_cli_update_reads_source_from_user_data(monkeypatch, isolated_user_db):
     async def fake_resolve_chapter_list(url, source_name, engine, **kw):
         return Chapters([])              # 空列表 → 走「无法获取远程章节」分支即可
 
-    def fake_make_engine_getter(source_name, **kw):
+    def _record_getter(source_name, **kw):
         seen["source"] = source_name
-
-        def get(capability):
-            return None                  # 本用例不需要真引擎
-        get.cache = {}
-        return get
+        return _stub_engine_getter(source_name)
 
     monkeypatch.setattr(cli_core, "_get_storage", lambda: FakeStorage())
     monkeypatch.setattr(cli_core, "load_groups", lambda: {})
-    monkeypatch.setattr(cli_core, "_make_engine_getter", fake_make_engine_getter)
+    monkeypatch.setattr(cli_core, "_make_engine_getter", _record_getter)
     monkeypatch.setattr(cli_core, "resolve_chapter_list", fake_resolve_chapter_list)
 
     asyncio.run(cli_core.do_update({}, max_workers=1))

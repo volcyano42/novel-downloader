@@ -243,9 +243,27 @@ class _FakeResult:
         self.source_name = source_name
 
 
+def _isolate_engine_factory(monkeypatch, mod):
+    """隔离引擎工厂：测试不真建引擎（`get` 一律返回 None），但保留 `.cache` 供收尾遍历。
+
+    改造后引擎在调用处求值，凡走到 `_make_engine_getter` 的用例都必须隔离它，
+    否则会真建引擎（并受本机 `app_data/config/sites/*.yaml` 覆盖影响）。
+    """
+
+    def _make(*a, **kw):
+        def get(capability):
+            return None
+
+        get.cache = {}
+        return get
+
+    monkeypatch.setattr(mod, "_make_engine_getter", _make)
+
+
 class TestInteractive:
     def test_do_search_keyword_uses_all_sources(self, monkeypatch, capsys):
         from cli import interactive as mod
+        _isolate_engine_factory(monkeypatch, mod)
         monkeypatch.setattr(mod, "default_source_names", lambda: ["a-x-default"])
         seen = []
 
@@ -260,6 +278,7 @@ class TestInteractive:
 
     def test_do_search_keyword_backend_error(self, monkeypatch, capsys):
         from cli import interactive as mod
+        _isolate_engine_factory(monkeypatch, mod)
 
         async def boom(*a, **k):
             raise RuntimeError("网络错误")
@@ -272,6 +291,7 @@ class TestInteractive:
 
     def test_do_search_keyword_aggregates_all_sources(self, monkeypatch, capsys):
         from cli import interactive as mod
+        _isolate_engine_factory(monkeypatch, mod)
         calls = []
 
         async def fake_search(source_name, query, engines, **kw):
@@ -296,6 +316,7 @@ class TestInteractive:
 
     def test_do_search_url_manual_source(self, monkeypatch, capsys):
         from cli import interactive as mod
+        _isolate_engine_factory(monkeypatch, mod)
 
         class _Novel:
             url = "https://x/1"
