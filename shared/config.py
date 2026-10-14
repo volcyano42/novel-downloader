@@ -240,10 +240,15 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
         return {}
     manifest = get_manifest(source_name)
     user = _user_site_cfg(source_name)
+    # 用户层 common：跨能力共享字段（delay / timeout / key / …）。优先级低于用户层各能力段、
+    # 高于出厂与书源默认。`mode` 不参与（它必须逐能力解析，见 effective_capabilities）。
+    user_common = user.get("common") if isinstance(user.get("common"), dict) else {}
+    user_common = {k: v for k, v in user_common.items() if k != "mode"}
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
         base["mode"] = mode  # 不变量：base 已写入有效 mode
+        base = deep_merge(base, user_common)   # 用户层 common 层
         user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
         # 用户层 mode 键不再参与覆盖（否则非法值 / None 会污染有效 mode 与字段集的
         # 一致性：该段字段集按有效 mode 构建，mode 也必须等于有效 mode）。
