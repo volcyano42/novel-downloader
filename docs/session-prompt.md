@@ -28,6 +28,7 @@ D:\Linux\novel-downloader\            ← 外层容器（非 git 仓库）
 ## 关键约定
 
 - **API v2** 响应格式 `{ok, message, data}`，无分页
+- **novelbase 公共 API 稳定性**（2026-10-14）：`novelbase` 面向**所有开发者**（含第三方），**公共函数的参数与语义不轻易更改**——改 `novelbase/` 的公开签名（`core/downloader.py` 的 `search` / `resolve_meta` / `resolve_chapter_list` / `resolve_chapter`，`core/engine.py` 的 `create_engine`，`Options` 等）前必须先与用户确认，并同步**全部**调用方（backend / cli / task_manager）与文档。纯增益改动（补类型标注 / docstring / 文档）不受此限，但仍需如实描述实际契约
 - **Git 提交** 消息用中文；一个方面一条 commit；禁止 `git add -A`（显式指定文件）；提交前自查这四个规则。**dev 分支的提交与推送可自动执行**（无需逐次请示，2026-08-02 用户授权），main 分支例外
 - **分支管理** **dev 分支可自动提交/推送**（2026-08-02 用户授权）；**main 分支的合并与推送必须用户临时同意**：不自动 `git merge` 到 main、不自动 `git push origin main`（含 fast-forward 同步）——必须由用户明确指示后才执行。已授权的合并/推送：2026-07-31（v4.2.1）、2026-08-01（v4.2.3-dev 多次）、2026-08-02（v4.2.3 发布 + 目录重组后推送 dev/main）、2026-08-02（Android APK 功能完成，用户选择推送 dev，commit 6023f3a）
 - **远程凭证** origin 使用 Git Credential Manager（Windows 凭据库存 token），URL 不含 token；中文 commit 消息用 `-F <file>` 传入（cmd 引号会吞中文）
