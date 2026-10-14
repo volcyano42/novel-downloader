@@ -1,7 +1,7 @@
 """Download 路由 — 对接 search + resolve_meta/resolve_chapter_list + 后台下载任务管理。
 
 契约（spec §3.1）：`source` Query 即 `source_name`；`/search` 的 `source` 为空时按
-`sources`（逗号分隔，缺省/空 → `shared.config.default_source_names()`）并发所选书源；MODE 默认由书源在 `source.json` 声明，用户可逐能力覆盖（`shared.config.effective_capabilities()`），由路由以关键字 `mode_overrides=` 透传给 core 分发层。
+`sources`（逗号分隔，缺省/空 → `shared.config.default_source_names()`）并发所选书源；MODE 默认由书源在 `source.json` 声明，用户可逐能力覆盖（`shared.config.effective_capabilities()`），由路由按能力取好引擎实例后传给 core 分发层。
 """
 
 import asyncio
@@ -29,14 +29,15 @@ def _require_source(source: str | None, url: str) -> str:
     return require_known_source(source)
 
 
-def _engines_for(source_name: str):
-    """构造 engines(mode)->engine：按书源名 + 调用方请求的 mode（经 `mode_overrides` 取得有效 mode）懒建并缓存。"""
-    return lambda mode: get_cached_engine(source_name, mode)
+def _engine_for(source_name: str, capability: str):
+    """按书源 + 能力取引擎：mode = 用户层覆盖后的**有效** mode。
 
-
-def _mode_overrides(source_name: str) -> dict[str, str]:
-    """用户层覆盖后的「能力 → mode」映射，透传给 core 分发层。"""
-    return effective_capabilities(source_name)
+    能力不在该源的有效映射里时，回落该源首个有效 mode —— 只为避免在错误路径上
+    启一个「异 mode」引擎；core 随后会以 `ValueError` 拒绝这次调用（书源未声明该能力）。
+    """
+    caps = effective_capabilities(source_name)
+    mode = caps.get(capability) or next(iter(caps.values()), "browser")
+    return get_cached_engine(source_name, mode)
 
 
 def _resolve_url(raw: str) -> str:
@@ -72,8 +73,7 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
         source_name = _require_source(source, query)
         url = _resolve_url(query)
         try:
-            novel = await resolve_meta(url, source_name, _engines_for(source_name),
-                                       mode_overrides=_mode_overrides(source_name))
+            novel = await resolve_meta(url, source_name, _engine_for(source_name, "novel_info"))
         except Exception as e:
             raise HTTPException(500, str(e))
         return [SearchResultData(title=novel.title, author=novel.author,
@@ -85,8 +85,8 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
     if source:
         source_name = require_known_source(source)
         try:
-            hit = await search(source_name, query, _engines_for(source_name), page=page,
-                               mode_overrides=_mode_overrides(source_name))
+            hit = await search(source_name, query, _engine_for(source_name, "search"),
+                               page=page)
         except FeatureNotSupportedError as e:
             # 该书源/MODE 组合不支持搜索（如 qidian requests）→ 400 友好提示，而非 500
             raise HTTPException(400, str(e))
@@ -100,10 +100,9 @@ async def search_novels(query: str = Query(...), source: str = Query(""),
             raise HTTPException(400, "未指定任何有效书源" if specified else "没有可用的书源")
 
         async def _search_one(name: str):
-            # 每个源用自己的 _engines_for(name)，杜绝「同 mode 源共用首个源引擎」。
+            # 每个源用自己的 _engine_for(name, ...)，杜绝「同 mode 源共用首个源引擎」。
             try:
-                return await search(name, query, _engines_for(name), page=page,
-                                    mode_overrides=_mode_overrides(name))
+                return await search(name, query, _engine_for(name, "search"), page=page)
             except Exception:
                 # 单源失败不影响其它源（core 不再吞异常，由调用方逐源兜底）。
                 return None
@@ -122,8 +121,7 @@ async def resolve_meta_route(body: FetchMetaRequest, source: str = Query("")):
     url = _resolve_url(body.url)
     source_name = _require_source(source, url)
     try:
-        novel = await resolve_meta(url, source_name, _engines_for(source_name),
-                                   mode_overrides=_mode_overrides(source_name))
+        novel = await resolve_meta(url, source_name, _engine_for(source_name, "novel_info"))
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -138,8 +136,7 @@ async def get_remote_novel(novel_id: str, url: str = Query(...), source: str = Q
     url = _resolve_url(url)
     source_name = _require_source(source, url)
     try:
-        novel = await resolve_meta(url, source_name, _engines_for(source_name),
-                                   mode_overrides=_mode_overrides(source_name))
+        novel = await resolve_meta(url, source_name, _engine_for(source_name, "novel_info"))
     except Exception as e:
         raise HTTPException(500, str(e))
     return {"title": novel.title, "url": novel.url, "id": novel.id, "serial": novel.serial,
@@ -154,8 +151,8 @@ async def resolve_chapter_list_route(novel_id: str, url: str = Query(...),
     url = _resolve_url(url)
     source_name = _require_source(source, url)
     try:
-        chapters = await resolve_chapter_list(url, source_name, _engines_for(source_name),
-                                              mode_overrides=_mode_overrides(source_name))
+        chapters = await resolve_chapter_list(url, source_name,
+                                              _engine_for(source_name, "chapter_list"))
     except Exception as e:
         raise HTTPException(500, str(e))
     return [ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
