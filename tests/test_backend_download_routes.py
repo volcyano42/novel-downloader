@@ -283,8 +283,9 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
 
 def test_get_source_config_shape(monkeypatch):
     """GET /config/sources/{name} 契约形状：{source_name, concurrency,
-    capabilities, declared_capabilities, source_group, source_alias, config}
-    （capabilities 为有效 mode）。"""
+    capabilities, declared_capabilities, source_group, source_alias, config,
+    user_overrides, converge_candidates}
+    （capabilities 为有效 mode；后两项供 UI 区分「继承常规/已覆盖」与一键收敛提示）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
@@ -295,7 +296,8 @@ def test_get_source_config_shape(monkeypatch):
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
     assert set(out.keys()) == {"source_name", "concurrency",
                                "capabilities", "declared_capabilities", "config",
-                               "source_group", "source_alias"}
+                               "source_group", "source_alias",
+                               "user_overrides", "converge_candidates"}
     assert out["source_name"] == "demo-requests-default"
     assert out["concurrency"] == 1
     assert out["capabilities"] == {"search": "browser"}
