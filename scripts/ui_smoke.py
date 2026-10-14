@@ -24,14 +24,28 @@ def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900})
+        console_errors: list[str] = []
+        page.on("pageerror", lambda e: console_errors.append(f"pageerror: {e}"))
+        page.on("console",
+                lambda m: console_errors.append(f"console.error: {m.text}") if m.type == "error" else None)
         for path, expect_path, expect_text in CHECKS:
-            page.goto(args.base_url + path, wait_until="networkidle")
+            console_errors.clear()
+            # 不用 networkidle：本应用有 React Query 轮询与 SSE，网络可能长期不空闲
+            page.goto(args.base_url + path, wait_until="domcontentloaded")
             name = (path.strip("/") or "root").replace("/", "-") + ".png"
+            try:
+                page.get_by_text(expect_text, exact=False).first.wait_for(state="visible", timeout=20000)
+                text_seen = True
+            except Exception:
+                text_seen = False
             page.screenshot(path=str(out / name), full_page=True)
             if page.url.split(args.base_url)[-1] != expect_path:
                 failures.append(f"失败 {path}: 落地路径 {page.url} != {expect_path}")
-            elif page.get_by_text(expect_text, exact=False).first.is_visible() is not True:
-                failures.append(f"失败 {path}: 未找到文本 {expect_text!r}")
+            elif not text_seen:
+                failures.append(f"失败 {path}: 未找到文本 {expect_text!r}"
+                                + (f"（页面报错：{console_errors[:2]}）" if console_errors else ""))
+            elif console_errors:
+                failures.append(f"失败 {path}: 页面运行时报错 {console_errors[:2]}")
             else:
                 print(f"完成 {path} -> {out / name}")
         browser.close()
