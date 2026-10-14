@@ -58,3 +58,37 @@ def test_get_reports_user_overrides(tmp_path, monkeypatch):
     out = asyncio.run(cfg_router.get_source_config("demo-api-default"))
     assert out["user_overrides"]["search"] == ["delay", "mode"]
     assert out["user_overrides"].get("novel_info") in (None, [])
+
+
+def _patch_caps(monkeypatch):
+    """「全部能力段」按**书源声明的能力**判定，所以 converge 相关测试必须提供它。"""
+    monkeypatch.setattr(cfg_router, "capabilities",
+                        lambda n: {c: "api" for c in
+                                   ("search", "novel_info", "chapter_list", "chapter_content")})
+
+
+def test_converge_moves_identical_keys_to_common(tmp_path, monkeypatch):
+    """全部能力段都有且取值相同的键 → 搬到 common 并从各段删除。"""
+    path = _setup(tmp_path, monkeypatch, {
+        "search": {"timeout": 30}, "novel_info": {"timeout": 30},
+        "chapter_list": {"timeout": 30}, "chapter_content": {"timeout": 30, "delay": [9, 9]},
+    })
+    _patch_caps(monkeypatch)
+    out = asyncio.run(cfg_router.converge_source_config("demo-api-default"))
+    data = _load(path)
+    assert data["common"]["timeout"] == 30
+    assert all("timeout" not in data.get(c, {}) for c in
+               ("search", "novel_info", "chapter_list", "chapter_content"))
+    assert data["chapter_content"]["delay"] == [9, 9]     # 不一致的键原地保留
+    assert "timeout" in [c["key"] for c in out["converged"]]
+    assert "delay" in [c["key"] for c in out["kept"]]
+
+
+def test_converge_keeps_partial_coverage_keys(tmp_path, monkeypatch):
+    """只出现在部分能力段的键不收敛（否则其余段会从继承出厂变成继承 common）。"""
+    path = _setup(tmp_path, monkeypatch, {"search": {"key": "x"}, "novel_info": {"key": "x"}})
+    _patch_caps(monkeypatch)
+    asyncio.run(cfg_router.converge_source_config("demo-api-default"))
+    data = _load(path)
+    assert "common" not in data or "key" not in data.get("common", {})
+    assert data["search"]["key"] == "x"

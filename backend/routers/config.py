@@ -89,6 +89,31 @@ def _user_sections(source_name: str) -> dict[str, dict]:
     return {k: v for k, v in user.items() if isinstance(v, dict) and k != "common"}
 
 
+def _converge_candidates(source_name: str) -> tuple[list[dict], list[dict]]:
+    """可收敛到 `common` 的键与需保留的键。
+
+    条件（spec §4）：该键出现在**书源声明的全部能力**段里，且各段取值完全相同 ——
+    只有这样才能保证搬到 common 后**不改变任何能力的生效值**（若只出现在部分段，
+    其余段会从「继承出厂」变成「继承 common」，等于悄悄改了它们）。
+    """
+    sections = _user_sections(source_name)
+    caps = list(capabilities(source_name))
+    candidates: list[dict] = []
+    kept: list[dict] = []
+    if not caps:
+        return candidates, kept
+    for key in sorted({k for section in sections.values() for k in section}):
+        if any(key not in sections.get(cap, {}) for cap in caps):
+            kept.append({"key": key})
+            continue
+        first = sections[caps[0]][key]
+        if all(sections[cap][key] == first for cap in caps):
+            candidates.append({"key": key, "value": first})
+        else:
+            kept.append({"key": key})
+    return candidates, kept
+
+
 @router.get("/sources/{source_name}")
 async def get_source_config(source_name: str):
     """三层合并后的书源配置 + 能力映射。
@@ -109,6 +134,8 @@ async def get_source_config(source_name: str):
         "config": config_service.merged_source_config(source_name),
         # 各能力段在用户层里**实际出现**的键（含 mode），供前端区分「继承常规」/「已覆盖」
         "user_overrides": {cap: sorted(section) for cap, section in _user_sections(source_name).items()},
+        # 可一键收敛到 common 的键（各能力段都有且取值相同）
+        "converge_candidates": _converge_candidates(source_name)[0],
     }
 
 
@@ -175,6 +202,37 @@ async def save_source_config(source_name: str, body: dict):
                 existing.pop(cap, None)
     config_service.save_yaml(path, existing)
     return {"status": "ok"}
+
+
+@router.post("/sources/{source_name}/converge")
+async def converge_source_config(source_name: str):
+    """把各能力段取值相同、且覆盖全部声明能力的共享键收敛到 `common`。
+
+    收敛不改变任何能力的生效值（这正是 `_converge_candidates` 的入选条件）；
+    各段不一致或只出现在部分能力段的键原样保留并在 `kept` 里回报。
+    """
+    require_known_source(source_name)
+    path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
+    existing = config_service.load_yaml(path)
+    candidates, kept = _converge_candidates(source_name)
+    if candidates:
+        common = existing.get("common")
+        common = dict(common) if isinstance(common, dict) else {}
+        for item in candidates:
+            common[item["key"]] = item["value"]
+        for item in candidates:
+            for cap in list(_user_sections(source_name)):
+                section = existing.get(cap)
+                if not isinstance(section, dict):
+                    continue
+                section.pop(item["key"], None)
+                if section:
+                    existing[cap] = section
+                else:
+                    existing.pop(cap, None)
+        existing["common"] = common
+        config_service.save_yaml(path, existing)
+    return {"status": "ok", "converged": candidates, "kept": kept}
 
 
 # ── formats/{format}.yaml ───────────────────────────
