@@ -297,19 +297,24 @@ async def _run_download_impl(task: dict, source_name: str):
 
     _caps = effective_capabilities(source_name)
 
-    def _mode_for(capability: str) -> str:
-        """该能力的有效 mode；能力缺失时回落该源首个有效 mode（core 随后会报错）。"""
-        return _caps.get(capability) or next(iter(_caps.values()), "browser")
+    def _mode_for(capability: str) -> str | None:
+        """该能力的有效 mode；该源无任何有效能力（未知源）→ None。"""
+        return _caps.get(capability) or next(iter(_caps.values()), None)
 
     # 预热：get_cached_engine 是同步调用，browser 模式首次创建会启动 Chromium，
     # 若首次创建落在事件循环线程会阻塞整个 FastAPI（含其它任务、暂停/取消接口）数秒。
     # 引擎现在由本函数直接取（不再由 core 经解析器回调），故两个用到的能力
-    # （novel_info / chapter_content）都先经 to_thread 建好；同 mode 只建一次。
-    for _m in dict.fromkeys((_mode_for("novel_info"), _mode_for("chapter_content"))):
-        await asyncio.to_thread(get_cached_engine, source_name, _m)
+    # （novel_info / chapter_content）的引擎都先经 to_thread 建好；同 mode 只建一次。
+    # 之后从预热结果取值，主线程不再触碰引擎工厂。未知源不建任何引擎
+    # （core 会以 SourceNotFoundError 拒绝）。
+    _meta_mode = _mode_for("novel_info")
+    _chapter_mode = _mode_for("chapter_content")
+    _prewarmed: dict[str, object] = {}
+    for _m in dict.fromkeys(m for m in (_meta_mode, _chapter_mode) if m):
+        _prewarmed[_m] = await asyncio.to_thread(get_cached_engine, source_name, _m)
 
-    meta_engine = get_cached_engine(source_name, _mode_for("novel_info"))
-    chapter_engine = get_cached_engine(source_name, _mode_for("chapter_content"))
+    meta_engine = _prewarmed.get(_meta_mode)
+    chapter_engine = _prewarmed.get(_chapter_mode)
 
     try:
         store = create_storage(StorageOptions(
