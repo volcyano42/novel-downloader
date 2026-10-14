@@ -90,7 +90,9 @@ export interface SourceConfig {
   source_group: string;
   /** 显示别名（"" = 未设，显示 source_name）。 */
   source_alias: string;
-  /** 各能力段在用户层实际出现的键（含 mode）—— 用于区分「继承常规」与「已覆盖」 */
+  /** 用户层 common 段的原始值（常规段的展示来源） */
+  common?: Record<string, unknown>;
+  /** 各能力段里与 common 取值不同的键 —— 用于区分「继承常规」与「已覆盖」 */
   user_overrides?: Record<string, string[]>;
   /** 可一键收敛到 common 的键（各能力段都有且取值相同） */
   converge_candidates?: { key: string; value: unknown }[];

@@ -145,7 +145,8 @@ export function SourceConfigEditor({ name }: { name: string }) {
   const capNames = Object.keys(caps);
   // 常规段 = 各能力段 mode 的共有字段（不含 mode）；展示值取第一个能力段的合并值
   const commonFields = commonFieldsFor(Object.values(caps));
-  const commonSource = capNames[0];
+  // 常规段展示值取自用户层 common 本身（而不是某个能力段的合并值 —— 否则用户单独设过某段时会显示错值）
+  const commonValues = (cfg?.common ?? {}) as Record<string, unknown>;
   const [commonOpen, setCommonOpen] = useState(true);
   const [openCaps, setOpenCaps] = useState<Record<string, boolean>>({});
   // 并发数：与折叠条旧实现同样的「字符串 + 失焦校验提交」策略（非法不写）
@@ -240,7 +241,7 @@ export function SourceConfigEditor({ name }: { name: string }) {
             )}
           </div>
           {commonOpen && commonFields.map(f => {
-            const val = (merged[commonSource] as Record<string, unknown> | undefined)?.[f.key];
+            const val = commonValues[f.key];
             const overriddenIn = capNames.filter(c => (userOverrides[c] ?? []).includes(f.key));
             const note = overriddenIn.length
               ? `该字段在「${overriddenIn.map(c => CAP_LABELS[c] ?? c).join("、")}」里被单独设置过，修改将统一为常规值`

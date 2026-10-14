@@ -84,9 +84,36 @@ async def remove_favorite(novel_id: str):
 # ── sources/{source_name}.yaml（按书源）──────────────
 
 def _user_sections(source_name: str) -> dict[str, dict]:
-    """用户层 yaml 里的各能力段（排除 `common` 与顶层元信息键）。"""
+    """用户层 yaml 里的**能力段**（按书源声明的能力取，排除 `common` 与顶层元信息键）。
+
+    显式与 `capabilities()` 求交：否则将来顶层一旦出现 dict 型元信息键，会被误当成能力段
+    （进而进入 `user_overrides`、被 converge 搬运）。
+    """
     user = config_service.load_yaml(config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml")
-    return {k: v for k, v in user.items() if isinstance(v, dict) and k != "common"}
+    declared = set(capabilities(source_name))
+    return {k: v for k, v in user.items() if k in declared and isinstance(v, dict)}
+
+
+def _user_common(source_name: str) -> dict:
+    """用户层 `common` 段的原始内容（`mode` 不算 common，过滤掉；缺失或非法 → {}）。"""
+    raw = config_service.load_yaml(
+        config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml").get("common")
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if k != "mode"}
+
+
+def _user_overrides(source_name: str) -> dict[str, list[str]]:
+    """各能力段里**与 common 取值不同**的键（供 UI 标「已覆盖」/「继承常规」）。
+
+    判定用「取值不同」而非「键存在」：出厂 `sites/*.yaml` 本来就是四份重复，
+    按「键存在」判定会让每个共享字段都显示「被单独设置过」，语义失真。
+    """
+    common = _user_common(source_name)
+    return {
+        cap: sorted(k for k, v in section.items() if k != "mode" and common.get(k) != v)
+        for cap, section in _user_sections(source_name).items()
+    }
 
 
 def _converge_candidates(source_name: str) -> tuple[list[dict], list[dict]]:
@@ -103,6 +130,11 @@ def _converge_candidates(source_name: str) -> tuple[list[dict], list[dict]]:
     if not caps:
         return candidates, kept
     for key in sorted({k for section in sections.values() for k in section}):
+        # `mode` 永不收敛：它必须逐能力解析（`effective_capabilities`），而写进 common 的 mode
+        # 会被 `merged_source_config` 过滤掉 —— 搬过去等于静默删掉用户的 mode 覆盖。
+        if key == "mode":
+            kept.append({"key": key})
+            continue
         if any(key not in sections.get(cap, {}) for cap in caps):
             kept.append({"key": key})
             continue
@@ -132,8 +164,10 @@ async def get_source_config(source_name: str):
         "source_group": config_service.source_group(source_name),
         "source_alias": config_service.source_alias(source_name),
         "config": config_service.merged_source_config(source_name),
-        # 各能力段在用户层里**实际出现**的键（含 mode），供前端区分「继承常规」/「已覆盖」
-        "user_overrides": {cap: sorted(section) for cap, section in _user_sections(source_name).items()},
+        # 用户层 common 段的原始值（供常规段显示实际存了什么，而不是第一个能力段的合并值）
+        "common": _user_common(source_name),
+        # 各能力段里与 common 取值不同的键（供 UI 标「已覆盖」/「继承常规」）
+        "user_overrides": _user_overrides(source_name),
         # 可一键收敛到 common 的键（各能力段都有且取值相同）
         "converge_candidates": _converge_candidates(source_name)[0],
     }
@@ -169,13 +203,16 @@ async def save_source_config(source_name: str, body: dict):
         common = existing.get("common")
         common = dict(common) if isinstance(common, dict) else {}
         for key, value in common_body.items():
+            if key == "mode":
+                continue          # mode 不属于 common（见 _converge_candidates 的说明）
             if value is None:
                 common.pop(key, None)              # 删除该共享键
                 continue
-            common[key] = value
-            for section_name, section in existing.items():
-                if section_name in ("common", "concurrency", "source_group", "source_alias", "enabled"):
-                    continue
+            # 与能力段一致地 deep_merge（嵌套值如 params/headers 不会被整体替换掉）
+            common = config_service.deep_merge(common, {key: value})
+            # 写入的键要同时从各能力段删除：否则用户层能力段的旧值优先级更高、改了不生效
+            for cap in _user_sections(source_name):
+                section = existing.get(cap)
                 if isinstance(section, dict):
                     section.pop(key, None)
         if common:
