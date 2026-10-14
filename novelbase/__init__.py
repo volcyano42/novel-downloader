@@ -7,7 +7,7 @@ from .core.downloader import (
     resolve_meta,
     search,
 )
-from .core.engine import create_engine
+from .core.engine import Engine, create_engine
 from .core.exceptions import (
     AntiCrawlError,
     AuthenticationError,
@@ -46,6 +46,7 @@ __all__ = [
     "resolve_chapter",
     "export",
     "create_engine",
+    "Engine",
     "get_exporters",
     "get_exporter_options",
     "search",

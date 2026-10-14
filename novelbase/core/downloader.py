@@ -2,8 +2,18 @@ from collections.abc import Callable
 
 from ..models.novel import Chapter, Chapters, Novel, SearchResult
 from ..utils.urls import make_novel_id
+from .engine import Engine
 from .exceptions import SourceNotFoundError
 from .options import ExportOptions
+
+
+def _reject_legacy_engines(engine) -> None:
+    """防呆：`engines(mode) -> engine` 解析器已移除，这里必须是 Engine 实例。"""
+    if callable(engine):
+        raise TypeError(
+            "engine 现在必须传入 Engine 实例（原 engines(mode) 解析器已移除）；"
+            "请用 shared.config.effective_capabilities(source_name) 选 mode 后自行 create_engine"
+        )
 
 
 def get_exporters() -> dict[str, Callable]:
@@ -17,59 +27,58 @@ def get_exporter_options() -> dict[str, type[ExportOptions]]:
     return register_export_options()
 
 
-async def search(source_name: str, query: str, engines,
-                 skip_delay: bool = False, mode_overrides: dict[str, str] | None = None,
-                 **kwargs) -> SearchResult | None:
+async def search(source_name: str, query: str, engine: Engine,
+                 skip_delay: bool = False, **kwargs) -> SearchResult | None:
     """搜索**单个**书源，返回第一条命中；该源无结果 → None。
 
     源报错 / 不支持搜索（`FeatureNotSupportedError`）**向上抛异常**，由调用方决定
     提示还是跳过——多源并发由调用方各自 gather（core 不再吞异常）。
-    `mode_overrides`（能力名 → mode）覆盖书源声明的 mode，用于用户层配置。
+    `engine` 由调用方按该能力的**有效 mode** 建好后传入（core 不关心 mode）。
     """
     from ..source import resolve as _resolve
 
-    fn, mode = _resolve(source_name, "search")
-    mode = (mode_overrides or {}).get("search") or mode
+    _reject_legacy_engines(engine)
+    fn, _ = _resolve(source_name, "search")
     kwargs["skip_delay"] = skip_delay
-    results = await fn(query=query, engine=engines(mode), **kwargs)
+    results = await fn(query=query, engine=engine, **kwargs)
     for r in results:                        # 统一打标（书源侧不写死 source_name）
         r.source_name = source_name
     return results[0] if results else None
 
 
-async def resolve_meta(url: str, source_name: str, engines, skip_delay: bool = False,
-                       mode_overrides: dict[str, str] | None = None, **kwargs) -> Novel:
+async def resolve_meta(url: str, source_name: str, engine: Engine, skip_delay: bool = False,
+                       **kwargs) -> Novel:
     from ..source import resolve as _resolve
 
+    _reject_legacy_engines(engine)
     try:
-        fn, mode = _resolve(source_name, "novel_info")
+        fn, _ = _resolve(source_name, "novel_info")
     except (ValueError, ImportError) as e:
         raise SourceNotFoundError(f"source not found: {source_name}") from e
-    mode = (mode_overrides or {}).get("novel_info") or mode
     kwargs["skip_delay"] = skip_delay
-    novel = await fn(url=url, engine=engines(mode), **kwargs)
+    novel = await fn(url=url, engine=engine, **kwargs)
     novel.id = make_novel_id(novel.url)
     return novel
 
 
-async def resolve_chapter_list(url: str, source_name: str, engines, skip_delay: bool = False,
-                               mode_overrides: dict[str, str] | None = None, **kwargs) -> Chapters:
+async def resolve_chapter_list(url: str, source_name: str, engine: Engine,
+                               skip_delay: bool = False, **kwargs) -> Chapters:
     from ..source import resolve as _resolve
 
-    fn, mode = _resolve(source_name, "chapter_list")
-    mode = (mode_overrides or {}).get("chapter_list") or mode
+    _reject_legacy_engines(engine)
+    fn, _ = _resolve(source_name, "chapter_list")
     kwargs["skip_delay"] = skip_delay
-    return await fn(url=url, engine=engines(mode), **kwargs)
+    return await fn(url=url, engine=engine, **kwargs)
 
 
-async def resolve_chapter(chapter: Chapter, source_name: str, engines, skip_delay: bool = False,
-                          mode_overrides: dict[str, str] | None = None, **kwargs) -> Chapter | None:
+async def resolve_chapter(chapter: Chapter, source_name: str, engine: Engine,
+                          skip_delay: bool = False, **kwargs) -> Chapter | None:
     from ..source import resolve as _resolve
 
-    fn, mode = _resolve(source_name, "chapter_content")
-    mode = (mode_overrides or {}).get("chapter_content") or mode
+    _reject_legacy_engines(engine)
+    fn, _ = _resolve(source_name, "chapter_content")
     kwargs["skip_delay"] = skip_delay
-    return await fn(chapter=chapter, engine=engines(mode), **kwargs)
+    return await fn(chapter=chapter, engine=engine, **kwargs)
 
 
 def export(novel: Novel, options: ExportOptions | None = None, format: str | None = None, **kwargs):
