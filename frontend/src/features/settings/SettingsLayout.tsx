@@ -28,7 +28,7 @@ export default function SettingsLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="min-w-0 flex-1 space-y-4 md:max-w-[640px]">
+        <div className="min-w-0 flex-1 space-y-4 md:max-w-[640px]" data-testid="settings-outlet">
           <Outlet />
         </div>
       </div>
