@@ -31,20 +31,22 @@ def _get_engine(source_name: str = "fanqie", mode: str | None = None):
     return create_engine(options)
 
 
-def _make_engines(source_name: str):
-    """构造 engines 解析器：`engines(mode) -> engine`（按 mode 懒建并缓存）。
+def _make_engine_getter(source_name: str):
+    """构造 `get(capability) -> engine`：按能力的**有效 mode**（`effective_capabilities`）懒建并缓存。
 
-    缓存暴露为 `_engines.cache`，便于调用方结束时 close 所有引擎。
+    缓存暴露为 `get.cache`（键 = 能力名），便于调用方结束时 close 所有引擎。
     """
     cache: dict[str, object] = {}
 
-    def _engines(mode: str):
-        if mode not in cache:
-            cache[mode] = _get_engine(source_name, mode)
-        return cache[mode]
+    def get(capability: str):
+        if capability not in cache:
+            caps = effective_capabilities(source_name)
+            mode = caps.get(capability) or next(iter(caps.values()), "browser")
+            cache[capability] = _get_engine(source_name, mode)
+        return cache[capability]
 
-    _engines.cache = cache  # type: ignore[attr-defined]
-    return _engines
+    get.cache = cache  # type: ignore[attr-defined]
+    return get
 
 
 # -- Search ---------------------------------------------------
@@ -64,17 +66,17 @@ def do_search(query: str) -> tuple[str | None, str | None]:
         source_name = _select("选择书源", [(n, n) for n in source_names])
         if not source_name:
             return None, None
-        engines = _make_engines(source_name)
+        get = _make_engine_getter(source_name)
         try:
-            novel = asyncio.run(resolve_meta(query, source_name, engines, skip_delay=True,
-                                             mode_overrides=effective_capabilities(source_name)))
+            novel = asyncio.run(resolve_meta(query, source_name, get("novel_info"),
+                                             skip_delay=True))
             print(f"\n📖 {novel.title} — {novel.author}")
             return novel.url, source_name
         except Exception as e:
             print(f"获取小说信息失败: {e}")
             return None, None
         finally:
-            for eng in getattr(engines, "cache", {}).values():
+            for eng in get.cache.values():
                 try:
                     eng.close()
                 except Exception:
@@ -89,15 +91,14 @@ def do_search(query: str) -> tuple[str | None, str | None]:
     async def _run():
         async def _one(name: str):
             # 每个源各用自己的引擎（杜绝「同 mode 源共用首个源引擎」）
-            engines = _make_engines(name)
+            get = _make_engine_getter(name)
             try:
-                return await search(name, query, engines, skip_delay=True,
-                                    mode_overrides=effective_capabilities(name))
+                return await search(name, query, get("search"), skip_delay=True)
             except Exception as e:      # 单个源失败不影响其它源
                 print(f"  [{name}] 搜索失败: {e}")
                 return None
             finally:
-                for eng in getattr(engines, "cache", {}).values():
+                for eng in get.cache.values():
                     try:
                         eng.close()
                     except Exception:
@@ -142,17 +143,17 @@ def do_download(
     if not source_name:
         print("已取消选择书源")
         return
-    engines = _make_engines(source_name)
+    get = _make_engine_getter(source_name)
     try:
         g = _text_input(f"归入分组 [{group}]")
         if g:
             group = g
         asyncio.run(_do_download_inner(
             source_name, url, group, format_configs,
-            max_workers=max_workers, skip_delay=True, engines=engines,
+            max_workers=max_workers, skip_delay=True, engine_getter=get,
         ))
     finally:
-        for eng in getattr(engines, "cache", {}).values():
+        for eng in get.cache.values():
             try:
                 eng.close()
             except Exception:
@@ -171,11 +172,9 @@ async def _update_one_async(novel, max_workers: int) -> int:
     if not source_name:
         print("  无法确定书源")
         return 0
-    engines = _make_engines(source_name)
-    _overrides = effective_capabilities(source_name)
+    get = _make_engine_getter(source_name)
     try:
-        remote_chapters = await resolve_chapter_list(novel.url, source_name, engines,
-                                                     mode_overrides=_overrides)
+        remote_chapters = await resolve_chapter_list(novel.url, source_name, get("chapter_list"))
         if not remote_chapters:
             print("  无法获取远程章节")
             return 0
@@ -197,8 +196,7 @@ async def _update_one_async(novel, max_workers: int) -> int:
         async def _dl(ch):
             async with sem:
                 try:
-                    resolved = await resolve_chapter(ch, source_name, engines,
-                                                     mode_overrides=_overrides)
+                    resolved = await resolve_chapter(ch, source_name, get("chapter_content"))
                     if resolved:
                         storage.save_chapter(novel, resolved)
                         return True

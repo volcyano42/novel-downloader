@@ -93,16 +93,20 @@ def test_cli_update_reads_source_from_user_data(monkeypatch, isolated_user_db):
         def iter_metas(self):
             return iter([novel])
 
-    async def fake_resolve_chapter_list(url, source_name, engines, **kw):
+    async def fake_resolve_chapter_list(url, source_name, engine, **kw):
         return Chapters([])              # 空列表 → 走「无法获取远程章节」分支即可
 
-    def fake_make_engines(source_name, **kw):
+    def fake_make_engine_getter(source_name, **kw):
         seen["source"] = source_name
-        return {}
+
+        def get(capability):
+            return None                  # 本用例不需要真引擎
+        get.cache = {}
+        return get
 
     monkeypatch.setattr(cli_core, "_get_storage", lambda: FakeStorage())
     monkeypatch.setattr(cli_core, "load_groups", lambda: {})
-    monkeypatch.setattr(cli_core, "_make_engines", fake_make_engines)
+    monkeypatch.setattr(cli_core, "_make_engine_getter", fake_make_engine_getter)
     monkeypatch.setattr(cli_core, "resolve_chapter_list", fake_resolve_chapter_list)
 
     asyncio.run(cli_core.do_update({}, max_workers=1))

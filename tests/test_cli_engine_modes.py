@@ -11,26 +11,30 @@ class _FakeOptions:
         self.mode = mode
 
 
-def test_make_engines_builds_per_mode_and_applies_hook(monkeypatch):
+def test_engine_getter_builds_per_capability_and_applies_hook(monkeypatch):
     built: list[str] = []
     hooked: list[str] = []
 
     monkeypatch.setattr(cli.core, "build_options", lambda name, mode: _FakeOptions(mode))
+    monkeypatch.setattr(cli.core, "effective_capabilities",
+                        lambda n: {"search": "requests", "chapter_content": "browser"})
 
     def fake_create(options):
         built.append(options.mode)
-        return {"engine_for": options.mode}
+        return f"engine:{options.mode}"
 
     monkeypatch.setattr(cli.core, "create_engine", fake_create)
 
-    engines = cli.core._make_engines("x-requests-default", options_hook=lambda o: hooked.append(o.mode))
+    get = cli.core._make_engine_getter("x-requests-default",
+                                       options_hook=lambda o: hooked.append(o.mode))
 
-    assert engines("requests") is engines("requests")   # 同 mode 复用缓存
-    engines("browser")
+    assert get("search") == "engine:requests"
+    assert get("search") is get("search")          # 同能力复用缓存
+    assert get("chapter_content") == "engine:browser"
 
     assert built == ["requests", "browser"]
     assert hooked == ["requests", "browser"]
-    assert set(engines.cache) == {"requests", "browser"}
+    assert set(get.cache) == {"search", "chapter_content"}
 
 
 def test_get_engine_defaults_to_first_capability_mode(monkeypatch):

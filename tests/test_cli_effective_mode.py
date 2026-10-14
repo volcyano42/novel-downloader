@@ -48,35 +48,35 @@ def test_cmd_source_json_shows_effective_mode(monkeypatch, tmp_path, capsys):
     assert caps["search"] == "browser"                   # JSON 分支输出覆盖后的有效值
 
 
-def test_download_inner_passes_mode_overrides_by_keyword(monkeypatch):
-    """下载路径分发必须以**关键字**传 mode_overrides：位置误传会被 skip_delay 静默吸收。"""
+def test_download_inner_passes_engine_per_capability(monkeypatch):
+    """下载路径必须按能力取引擎：novel_info / chapter_list 各传对应实例。
+
+    （chapter_content 的映射由 test_cli_engine_modes.py 的 getter 用例覆盖：
+    本用例让章节列表为空以终止流程，避免触发存储与导出。）
+    """
     monkeypatch.setattr(cli_core, "effective_capabilities",
-                        lambda n: {"novel_info": "requests"})
+                        lambda n: {"novel_info": "requests", "chapter_list": "requests",
+                                   "chapter_content": "browser"})
+    monkeypatch.setattr(cli_core, "build_options",
+                        lambda name, mode: types.SimpleNamespace(mode=mode))
+    monkeypatch.setattr(cli_core, "create_engine", lambda options: f"engine:{options.mode}")
     captured = {}
 
-    async def fake_resolve_meta(url, source_name, engines, skip_delay=False,
-                                mode_overrides=None, **kw):
-        captured["meta_overrides"] = mode_overrides
-        captured["meta_skip_delay"] = skip_delay
+    async def fake_resolve_meta(url, source_name, engine, skip_delay=False, **kw):
+        captured["meta"] = (engine, skip_delay)
         return types.SimpleNamespace(url=url, title="T", author="A")
 
-    async def fake_resolve_chapter_list(url, source_name, engines, skip_delay=False,
-                                        mode_overrides=None, **kw):
-        captured["cl_overrides"] = mode_overrides
-        captured["cl_skip_delay"] = skip_delay
+    async def fake_resolve_chapter_list(url, source_name, engine, skip_delay=False, **kw):
+        captured["cl"] = (engine, skip_delay)
         return []
 
     monkeypatch.setattr(cli_core, "resolve_meta", fake_resolve_meta)
     monkeypatch.setattr(cli_core, "resolve_chapter_list", fake_resolve_chapter_list)
 
-    asyncio.run(cli_core._do_download_inner(
-        KNOWN, "https://x/page/1", "default", {}, engines=lambda mode: object(),
-    ))
+    asyncio.run(cli_core._do_download_inner(KNOWN, "https://x/page/1", "default", {}))
 
-    assert captured["meta_overrides"] == {"novel_info": "requests"}
-    assert captured["meta_skip_delay"] is False
-    assert captured["cl_overrides"] == {"novel_info": "requests"}
-    assert captured["cl_skip_delay"] is False
+    assert captured["meta"] == ("engine:requests", False)
+    assert captured["cl"] == ("engine:requests", False)
 
 
 def test_cmd_source_list_shows_group_and_alias(monkeypatch, capsys):

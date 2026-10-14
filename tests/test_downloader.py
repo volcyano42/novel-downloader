@@ -18,10 +18,6 @@ class _Engine:
         self.mode = mode
 
 
-def _engines(engine):
-    return lambda mode: engine
-
-
 def _make_chapter(chapter_id: str = "ch1", order: int = 1,
                   content: str | None = None) -> Chapter:
     return Chapter(
@@ -41,7 +37,7 @@ def test_resolve_meta_returns_novel_with_id(monkeypatch):
         return novel
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    result = asyncio.run(resolve_meta(novel.url, "fanqie-requests-default", _engines(_Engine())))
+    result = asyncio.run(resolve_meta(novel.url, "fanqie-requests-default", _Engine()))
     assert result.id == make_novel_id(novel.url)
     # 来源元数据不再写入 Novel：resolve_meta 不再打 extra["platform"] 标签（Task 2）
     assert "platform" not in result.extra
@@ -53,7 +49,7 @@ def test_resolve_meta_unknown_source(monkeypatch):
 
     monkeypatch.setattr("novelbase.source.resolve", _boom)
     with pytest.raises(SourceNotFoundError):
-        asyncio.run(resolve_meta("https://x/y", "nope", _engines(_Engine())))
+        asyncio.run(resolve_meta("https://x/y", "nope", _Engine()))
 
 
 def test_hash_uses_preprocessed_novel_url_not_input(monkeypatch):
@@ -67,7 +63,7 @@ def test_hash_uses_preprocessed_novel_url_not_input(monkeypatch):
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
     # 输入是 changdunovel 短链，书源返回标准化 fanqienovel url
     shortlink = "https://changdunovel.com/t/shortlink"
-    result = asyncio.run(resolve_meta(shortlink, "fanqie-requests-default", _engines(_Engine())))
+    result = asyncio.run(resolve_meta(shortlink, "fanqie-requests-default", _Engine()))
 
     expected = make_novel_id("https://fanqienovel.com/page/7123456789012345678")
     assert result.id == expected
@@ -80,7 +76,7 @@ def test_search_tags_result_with_source(monkeypatch):
         return (SearchResult(title="a", author="b", url="https://x/1"),)
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    res = asyncio.run(search("s1", "关键词", _engines(_Engine())))
+    res = asyncio.run(search("s1", "关键词", _Engine()))
     assert res is not None and res.source_name == "s1"
 
 
@@ -91,7 +87,7 @@ def test_search_returns_first_result_only(monkeypatch):
                 SearchResult(title="second", author="b", url="https://x/2"))
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    res = asyncio.run(search("s1", "关键词", _engines(_Engine())))
+    res = asyncio.run(search("s1", "关键词", _Engine()))
     assert res is not None and res.title == "first"
 
 
@@ -100,7 +96,7 @@ def test_search_returns_none_when_source_has_no_result(monkeypatch):
         return ()
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    assert asyncio.run(search("s1", "关键词", _engines(_Engine()))) is None
+    assert asyncio.run(search("s1", "关键词", _Engine())) is None
 
 
 def test_search_propagates_source_error(monkeypatch):
@@ -110,7 +106,7 @@ def test_search_propagates_source_error(monkeypatch):
 
     monkeypatch.setattr("novelbase.source.resolve", _resolve)
     with pytest.raises(ImportError):
-        asyncio.run(search("bad", "关键词", _engines(_Engine())))
+        asyncio.run(search("bad", "关键词", _Engine()))
 
 
 def test_resolve_chapter_returns_chapter_when_content_available(monkeypatch):
@@ -121,7 +117,7 @@ def test_resolve_chapter_returns_chapter_when_content_available(monkeypatch):
         return ch
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    result = asyncio.run(resolve_chapter(ch, "fanqie-requests-default", _engines(_Engine())))
+    result = asyncio.run(resolve_chapter(ch, "fanqie-requests-default", _Engine()))
     assert result is ch
 
 
@@ -133,15 +129,14 @@ def test_resolve_chapter_returns_none_when_chapter_unavailable(monkeypatch):
         return None
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
-    result = asyncio.run(resolve_chapter(ch, "fanqie-requests-default", _engines(_Engine())))
+    result = asyncio.run(resolve_chapter(ch, "fanqie-requests-default", _Engine()))
     assert result is None
 
 
-def test_resolve_chapter_list_uses_engine_for_resolved_mode(monkeypatch):
-    """resolve_chapter_list 按 source_name 分发，用 resolve 返回的 mode 去 engines(mode) 取引擎。"""
+def test_resolve_chapter_list_passes_injected_engine(monkeypatch):
+    """resolve_chapter_list 把注入的引擎实例原样传给书源能力函数（core 不再按 mode 取引擎）。"""
     chapters = Chapters([_make_chapter("c1", 1), _make_chapter("c2", 2)])
-    requests_engine = _Engine("requests")
-    browser_engine = _Engine("browser")
+    engine = _Engine("requests")
     seen = {}
 
     async def _fake(url, engine, **kw):
@@ -151,9 +146,8 @@ def test_resolve_chapter_list_uses_engine_for_resolved_mode(monkeypatch):
 
     monkeypatch.setattr("novelbase.source.resolve", lambda name, cap: (_fake, "requests"))
     result = asyncio.run(
-        resolve_chapter_list("https://example.com/book", "fanqie-requests-default",
-                             lambda mode: {"requests": requests_engine, "browser": browser_engine}[mode])
+        resolve_chapter_list("https://example.com/book", "fanqie-requests-default", engine)
     )
     assert result is chapters
     assert seen["url"] == "https://example.com/book"
-    assert seen["engine"] is requests_engine
+    assert seen["engine"] is engine

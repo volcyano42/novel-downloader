@@ -137,7 +137,7 @@ def _apply_export_options(options) -> dict:
 
 def cmd_search(args):
     from novelbase.core.downloader import search
-    from cli.core import _make_engines
+    from cli.core import _make_engine_getter
     from shared.config import default_source_names, display_name
 
     sources = [args.source] if args.source else default_source_names()
@@ -147,15 +147,14 @@ def cmd_search(args):
 
     async def _search_one(name: str):
         # 每个源各用自己的引擎（杜绝「同 mode 源共用首个源引擎」）。
-        engines = _make_engines(name)
+        get = _make_engine_getter(name)
         try:
-            return await search(name, args.query, engines, page=args.page,
-                                mode_overrides=effective_capabilities(name))
+            return await search(name, args.query, get("search"), page=args.page)
         except Exception as e:      # 某源失败不影响其它源
             print(f"  [{name}] 搜索失败: {e}")
             return None
         finally:
-            for eng in engines.cache.values():
+            for eng in get.cache.values():
                 try:
                     eng.close()
                 except Exception:
@@ -183,15 +182,15 @@ def cmd_search(args):
 
 def cmd_download(args):
     source_name = args.source
-    from cli.core import _do_download_inner, _make_engines
+    from cli.core import _do_download_inner, _make_engine_getter
 
     format_configs = load_format_configs()
-    engines = _make_engines(source_name, options_hook=_apply_export_options)
+    get = _make_engine_getter(source_name, options_hook=_apply_export_options)
     try:
         asyncio.run(_do_download_inner(source_name, args.url, args.group, format_configs,
-                                       max_workers=args.workers, engines=engines))
+                                       max_workers=args.workers, engine_getter=get))
     finally:
-        for eng in engines.cache.values():
+        for eng in get.cache.values():
             try:
                 eng.close()
             except Exception:
@@ -245,13 +244,12 @@ def cmd_export(args):
 
 def cmd_info(args):
     source_name = args.source
-    from cli.core import _make_engines
+    from cli.core import _make_engine_getter
 
-    engines = _make_engines(source_name, options_hook=_apply_export_options)
+    get = _make_engine_getter(source_name, options_hook=_apply_export_options)
     try:
         print(f"正在获取: {args.url}")
-        novel = asyncio.run(resolve_meta(args.url, source_name, engines,
-                                         mode_overrides=effective_capabilities(source_name)))
+        novel = asyncio.run(resolve_meta(args.url, source_name, get("novel_info")))
         print(f"\n  书名：{novel.title}")
         print(f"  作者：{novel.author}")
         print(f"  URL： {novel.url}")
@@ -264,7 +262,7 @@ def cmd_info(args):
         if novel.cover and novel.cover.image_format:
             print(f"  封面：{novel.cover.image_format} ({len(novel.cover.raw_data)} bytes)")
     finally:
-        for eng in engines.cache.values():
+        for eng in get.cache.values():
             try:
                 eng.close()
             except Exception:
