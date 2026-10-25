@@ -59,5 +59,6 @@ class ChapterBrief(BaseModel):
     order: int
     volume: str | None = None
     count: int | None = None
+    time: float | None = None
     downloaded: bool = False
     image_count: int = 0

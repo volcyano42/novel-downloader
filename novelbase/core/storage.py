@@ -109,8 +109,13 @@ class BaseStorage(ABC):
         ...
 
     @abstractmethod
-    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
-        """逐条遍历章节。include_images=False 时 chapters.images 为空元组。"""
+    def iter_chapters(self, novel_id: str, include_images: bool = True,
+                      include_content: bool = True) -> Iterator[Chapter]:
+        """逐条遍历章节。
+
+        include_images=False 时 chapters.images 为空元组；
+        include_content=False 时 chapters.content 恒为 None（不读正文，省内存与 IO）。
+        """
         ...
 
     @abstractmethod
@@ -227,10 +232,12 @@ class LocalStorage(BaseStorage):
         json_data.setdefault("novel_id", novel_id)
         return Chapter.loads(**json_data)
 
-    def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
-        return Chapters(self.iter_chapters(novel_id, include_images))
+    def load_chapters(self, novel_id: str, include_images: bool = True,
+                      include_content: bool = True) -> Chapters:
+        return Chapters(self.iter_chapters(novel_id, include_images, include_content))
 
-    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+    def iter_chapters(self, novel_id: str, include_images: bool = True,
+                      include_content: bool = True) -> Iterator[Chapter]:
         chapters_dir = self._chapters_dir(novel_id)
         if not chapters_dir.exists():
             return
@@ -238,12 +245,13 @@ class LocalStorage(BaseStorage):
             try:
                 ch = self.load_chapter(novel_id, file.stem)
                 if ch is not None:
-                    if not include_images and ch.images:
+                    if (not include_images and ch.images) or (not include_content and ch.content is not None):
                         ch = Chapter(
                             id=ch.id, url=ch.url, novel_id=ch.novel_id,
                             title=ch.title, order=ch.order, volume=ch.volume,
-                            content=ch.content, time=ch.time, count=ch.count,
-                            images=(),
+                            content=ch.content if include_content else None,
+                            time=ch.time, count=ch.count,
+                            images=() if not include_images else ch.images,
                         )
                     yield ch
             except (json.JSONDecodeError, KeyError, TypeError):
@@ -511,15 +519,20 @@ class SQLiteStorage(BaseStorage):
         images = self._load_illustrations(novel_id, 'chapter', chapter_id)
         return self._row_to_chapter(row, novel_id, images)
 
-    def load_chapters(self, novel_id: str, include_images: bool = True) -> Chapters:
-        return Chapters(self.iter_chapters(novel_id, include_images))
+    def load_chapters(self, novel_id: str, include_images: bool = True,
+                      include_content: bool = True) -> Chapters:
+        return Chapters(self.iter_chapters(novel_id, include_images, include_content))
 
-    def iter_chapters(self, novel_id: str, include_images: bool = True) -> Iterator[Chapter]:
+    def iter_chapters(self, novel_id: str, include_images: bool = True,
+                      include_content: bool = True) -> Iterator[Chapter]:
         if not os.path.exists(self._novel_path(novel_id)):
             return
+        # include_content=False 时不取 content 列（换成 NULL）：避免把整本正文读进内存。
+        # 保持 8 列位置不变，_row_to_chapter 无需分情况处理。
+        content_col = "content" if include_content else "NULL"
         with self._connect_novel(novel_id) as conn:
             rows = conn.execute(
-                "SELECT id, url, title, \"order\", volume, content, time, count "
+                f"SELECT id, url, title, \"order\", volume, {content_col}, time, count "
                 "FROM chapters ORDER BY \"order\""
             ).fetchall()
         for row in rows:

@@ -54,8 +54,8 @@ def _cover_to_response(cover, thumbnail: bool = False) -> dict | None:
         "format": fmt,
     }
 
-def _novel_to_meta(novel) -> NovelMeta:
-    cover_data = _cover_to_response(novel.cover)
+def _novel_to_meta(novel, *, include_images: bool = True) -> NovelMeta:
+    cover_data = _cover_to_response(novel.cover) if include_images else None
     serial = novel.serial
     if not isinstance(serial, int):
         serial = int(serial) if serial else 0
@@ -67,18 +67,23 @@ def _novel_to_meta(novel) -> NovelMeta:
         source_name=get_novel_source(novel.id),
     )
 
-def _chapter_to_brief(ch) -> ChapterBrief:
+def _chapter_to_brief(ch, *, downloaded: bool) -> ChapterBrief:
+    """章节摘要。downloaded 必须由调用方给出：
+
+    include_content=False 时 ch.content 恒为 None，不能再用 `ch.content is not None` 判定。
+    """
     return ChapterBrief(id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title,
                         order=ch.order, volume=ch.volume, count=ch.count,
-                        downloaded=ch.content is not None,
+                        time=ch.time, downloaded=downloaded,
                         image_count=len(ch.images))
 
-def _chapter_to_data(ch) -> ChapterData:
+def _chapter_to_data(ch, *, include_images: bool = True) -> ChapterData:
     return ChapterData(
         id=ch.id, url=ch.url, novel_id=ch.novel_id, title=ch.title, order=ch.order,
         volume=ch.volume, content=ch.content, time=ch.time, count=ch.count,
         images=[{"raw_data": b64encode(img.raw_data).decode() if img.raw_data else None,
-                  "alt": img.alt, "insert": img.insert, "url": img.url} for img in ch.images],
+                  "alt": img.alt, "insert": img.insert, "url": img.url} for img in ch.images]
+               if include_images else [],
     )
 
 @router.get("/backend")
@@ -88,9 +93,9 @@ async def list_backends(): return {"backends": ["local", "sqlite"], "current": "
 async def switch_backend(body: BackendSwitch): return {"backend": body.backend, "status": "switched"}
 
 @router.get("/novel")
-async def list_novels():
+async def list_novels(include_images: bool = Query(True)):
     store = _get_storage()
-    novels = list(store.iter_metas(include_images=True))
+    novels = list(store.iter_metas(include_images=include_images))
     # 一次批量查来源（避免逐本 N+1）
     sources = get_novel_sources([n.id for n in novels])
     result: list[dict] = []
@@ -101,7 +106,7 @@ async def list_novels():
             "description": novel.description,
             "tags": list(novel.tags) if novel.tags else None,
             "count": novel.count,
-            "cover": _cover_to_response(novel.cover, thumbnail=True),
+            "cover": _cover_to_response(novel.cover, thumbnail=True) if include_images else None,
             "source_name": sources.get(novel.id),
         })
     return result
@@ -115,10 +120,10 @@ async def get_cover(novel_id: str):
     return _cover_to_response(novel.cover)
 
 @router.get("/novel/{novel_id}/meta")
-async def get_meta(novel_id: str):
+async def get_meta(novel_id: str, include_images: bool = Query(True)):
     store = _get_storage(); novel = store.load_meta(novel_id)
     if not novel: raise HTTPException(404, "小说不存在")
-    return _novel_to_meta(novel)
+    return _novel_to_meta(novel, include_images=include_images)
 
 @router.put("/novel/{novel_id}/meta")
 async def save_meta(novel_id: str, body: NovelMeta):
@@ -159,9 +164,15 @@ async def delete_novel(novel_id: str):
 
 @router.get("/novel/{novel_id}/chapters")
 async def list_chapters(novel_id: str, order: str | None = Query(None), volume: str | None = Query(None),
-                        page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000)):
-    store = _get_storage(); chapters = store.load_chapters(novel_id, include_images=True)
-    result = [_chapter_to_brief(ch) for ch in chapters]
+                        page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=20000),
+                        include_images: bool = Query(True), include_content: bool = Query(True)):
+    store = _get_storage()
+    chapters = store.load_chapters(novel_id, include_images=include_images,
+                                  include_content=include_content)
+    # downloaded 必须独立查：include_content=False 时 ch.content 恒为 None，
+    # 用它判定会把所有章节都当成未下载（同步的差集会因此全错）。
+    downloaded_ids = store.list_downloaded_ids(novel_id)
+    result = [_chapter_to_brief(ch, downloaded=ch.id in downloaded_ids) for ch in chapters]
     if order:
         parts = order.split("-"); lo = int(parts[0]) if parts[0] else 1
         hi = int(parts[1]) if len(parts) > 1 and parts[1] else len(result)
@@ -178,7 +189,7 @@ async def stream_chapters(novel_id: str):
 
     def generate():
         for ch in store.iter_chapters(novel_id, include_images=True):
-            brief = _chapter_to_brief(ch)
+            brief = _chapter_to_brief(ch, downloaded=ch.content is not None)
             if hasattr(brief, "model_dump_json"):
                 data = brief.model_dump_json()
             else:
@@ -192,10 +203,10 @@ async def stream_chapters(novel_id: str):
 async def save_chapters(novel_id: str, body: list[ChapterData]): return {"status": "ok", "count": len(body)}
 
 @router.get("/novel/{novel_id}/chapter/{chapter_id}")
-async def get_chapter(novel_id: str, chapter_id: str):
+async def get_chapter(novel_id: str, chapter_id: str, include_images: bool = Query(True)):
     store = _get_storage(); ch = store.load_chapter(novel_id, chapter_id)
     if not ch: raise HTTPException(404, "章节不存在")
-    return _chapter_to_data(ch)
+    return _chapter_to_data(ch, include_images=include_images)
 
 @router.delete("/novel/{novel_id}/chapter/{chapter_id}")
 async def delete_chapter(novel_id: str, chapter_id: str):
