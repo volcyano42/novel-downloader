@@ -292,8 +292,7 @@ def test_get_source_config_merged(monkeypatch, tmp_path):
 def test_get_source_config_shape(monkeypatch):
     """GET /config/sources/{name} 契约形状：{source_name, concurrency,
     capabilities, declared_capabilities, source_group, source_alias, config,
-    common, user_overrides, converge_candidates}
-    （capabilities 为有效 mode；common 为用户层常规段原始值；后两项供 UI 标注与收敛提示）。"""
+    （capabilities 为有效 mode；一个书源只有一个 mode，所有能力共享）。"""
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "merged_source_config", lambda n: {"search": {"mode": "requests"}})
     monkeypatch.setattr(cfg, "capabilities", lambda n: {"search": "requests"})
@@ -304,8 +303,7 @@ def test_get_source_config_shape(monkeypatch):
     out = asyncio.run(cfg.get_source_config("demo-requests-default"))
     assert set(out.keys()) == {"source_name", "concurrency",
                                "capabilities", "declared_capabilities", "config",
-                               "source_group", "source_alias",
-                               "common", "user_overrides", "converge_candidates"}
+                               "source_group", "source_alias"}
     assert out["source_name"] == "demo-requests-default"
     assert out["concurrency"] == 1
     assert out["capabilities"] == {"search": "browser"}
@@ -325,20 +323,20 @@ def test_get_config_has_no_mode(monkeypatch):
 
 
 def test_save_source_config_writes_user_layer_only(monkeypatch, tmp_path):
-    """PUT /config/sources/{name} 只写用户层：逐能力段 deep_merge，不写三层全量。"""
+    """PUT /config/sources/{name} 只写用户层顶层字段（deep_merge），不写三层全量。"""
     import yaml
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
     _allow_sources(monkeypatch, "demo-requests-default")
     asyncio.run(cfg.save_source_config(
         "demo-requests-default",
-        {"config": {"search": {"timeout": 99}}},
+        {"timeout": 99},
     ))
     path = tmp_path / "sites" / "demo-requests-default.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert data["search"]["timeout"] == 99
-    # 未提供的出厂字段 / 其它能力段不应被灌入用户层
-    assert set(data.keys()) == {"search"}
+    assert data["timeout"] == 99
+    # 未提供的出厂字段不应被灌入用户层
+    assert set(data.keys()) == {"timeout"}
 
 
 def test_save_source_config_strips_legacy_enabled(monkeypatch, tmp_path):
@@ -348,13 +346,13 @@ def test_save_source_config_strips_legacy_enabled(monkeypatch, tmp_path):
     _allow_sources(monkeypatch, "demo-requests-default")
     cfg.config_service.save_yaml(
         tmp_path / "sites" / "demo-requests-default.yaml",
-        {"enabled": True, "search": {"timeout": 5}},
+        {"enabled": True, "timeout": 5},
     )
     asyncio.run(cfg.save_source_config(
-        "demo-requests-default", {"config": {"search": {"timeout": 9}}}))
+        "demo-requests-default", {"timeout": 9}))
     data = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
     assert "enabled" not in data
-    assert data["search"]["timeout"] == 9
+    assert data["timeout"] == 9
 
 
 def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
@@ -362,10 +360,10 @@ def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
     from backend.routers import config as cfg
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
     _allow_sources(monkeypatch, "demo-requests-default")
-    asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"timeout": 99}}}))
-    asyncio.run(cfg.save_source_config("demo-requests-default", {"config": {"search": {"retry_times": 7}}}))
+    asyncio.run(cfg.save_source_config("demo-requests-default", {"timeout": 99}))
+    asyncio.run(cfg.save_source_config("demo-requests-default", {"retry_times": 7}))
     merged = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
-    assert merged["search"] == {"timeout": 99, "retry_times": 7}
+    assert merged == {"timeout": 99, "retry_times": 7}
 
 
 def test_old_sites_routes_gone():

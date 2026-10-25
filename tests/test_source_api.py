@@ -66,8 +66,7 @@ def test_get_manifest_checks_capability_files(tmp_path, monkeypatch):
     d = tmp_path / "demo_requests_default"
     d.mkdir()
     (d / "source.json").write_text(
-        '{"source_name": "demo-requests-default", '
-        '"default_config": {"search": {"mode": "requests"}}}', encoding="utf-8")
+        '{"source_name": "demo-requests-default", "mode": "requests"}', encoding="utf-8")
     # 缺 search.py → check_capability_files 抛 ManifestError
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", str(tmp_path))
     with pytest.raises(ManifestError):
@@ -80,6 +79,8 @@ def test_compiled_mode_reads_manifest(monkeypatch):
 
     fake_sources = {"demo_requests_default": {
         "source_name": "demo-requests-default",
+        "mode": "requests",
+        # 归一化形状：build_manifest 用 load_manifest() 生成，产物本就带 default_config
         "default_config": {"search": {"mode": "requests"}},
     }}
     monkeypatch.setattr(s, "_is_compiled", lambda: True)

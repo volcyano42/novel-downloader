@@ -14,7 +14,7 @@ def _override_search_browser(tmp_path):
     """在用户层把 KNOWN 源的 search.mode 覆盖为 browser。"""
     sites = tmp_path / "sites"
     sites.mkdir(parents=True, exist_ok=True)
-    (sites / f"{KNOWN}.yaml").write_text("search:\n  mode: browser\n", encoding="utf-8")
+    (sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
 
 def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
@@ -29,7 +29,7 @@ def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
     # 输出行形如「- <别名>  [<分组>]  (<source_name>)  capabilities: ...」——按括号里的
     # source_name 定位，不依赖行首（别名可被用户覆盖、分组可为空）。
     line = next(ln for ln in out.splitlines() if f"({KNOWN})" in ln)
-    assert "search:browser" in line          # 有效 mode
+    assert "search:browser" in line          # 有效 mode（顶层 mode 对所有能力生效）
     assert "search:requests" not in line     # 该源声明值不再直出
 
 

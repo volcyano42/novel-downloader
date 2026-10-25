@@ -465,11 +465,8 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
     (source_dir / "__init__.py").write_text("", encoding="utf-8")
 
     from shared.config import mode_defaults
-    manifest = {
-        "source_name": name,
-        "common": {"mode": mode, **mode_defaults(mode)},
-        "default_config": {fn: {} for fn in _SCAFFOLD_FUNCTIONS},
-    }
+    # 2026-10-25 起书源只有一个 mode 和一套字段（不再分 common / default_config）
+    manifest = {"source_name": name, "mode": mode, **mode_defaults(mode)}
     (source_dir / "source.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -479,7 +476,7 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
 
     if write_config:
         from shared.config import save_site_config
-        save_site_config(name, {fn: {} for fn in _SCAFFOLD_FUNCTIONS})
+        save_site_config(name, {"mode": mode})
 
     print(f"书源脚手架已创建: novelbase/sources/{source_dir.name}/")
     print("  __init__.py, source.json, "

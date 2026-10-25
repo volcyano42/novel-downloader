@@ -34,7 +34,19 @@ class DuplicateSourceNameError(ManifestError):
 
 
 def load_manifest(source_dir: Path) -> dict[str, Any]:
-    """读取并校验 `source_dir/source.json`。"""
+    """读取并校验 `source_dir/source.json`。
+
+    格式（2026-10-25 起，**唯一格式**）：一个书源只有**一个 mode 和一套字段**，
+    不再按能力分化::
+
+        {"source_name": "x", "mode": "requests", "timeout": 30, "headers": {...}, ...}
+
+    旧的分段写法（`common` + `default_config.{能力}`）**已废弃，不做兼容**——
+    novelbase 为预览版，允许破坏性变更；遇到旧写法会报错而不是静默猜。
+
+    解析后归一化成 `manifest["default_config"] = {能力: 同一套完整字段(含 mode)}`，
+    下游 `capabilities()` / `merged_source_config()` 无需感知具体格式。
+    """
     path = Path(source_dir) / MANIFEST_NAME
     if not path.is_file():
         raise ManifestError(f"缺少 {MANIFEST_NAME}: {path}")
@@ -54,68 +66,55 @@ def load_manifest(source_dir: Path) -> dict[str, Any]:
         if optional in manifest and not (isinstance(manifest[optional], str) and manifest[optional].strip()):
             raise ManifestError(f"{path} 的 {optional} 必须是非空字符串")
 
-    config = manifest.get("default_config", {})
-    if not isinstance(config, dict):
-        raise ManifestError(f"{path} 的 default_config 必须是对象")
-    common = manifest.get("common", {})
-    if not isinstance(common, dict):
-        raise ManifestError(f"{path} 的 common 必须是对象")
+    return _normalize_flat(manifest, path)
 
-    # 1) 定每个能力段的有效 mode（自身 mode 优先，否则继承 common.mode）
-    effective: dict[str, str] = {}
-    for capability, section in config.items():
-        if capability not in _capability_names():
-            raise ManifestError(f"{path} 的 default_config 含未知能力 {capability!r}")
-        if not isinstance(section, dict):
-            raise ManifestError(f"{path} 的能力段 {capability} 必须是对象")
-        mode = section.get("mode", common.get("mode"))
-        if mode not in MODE_FIELDS:
+
+def _normalize_flat(manifest: dict[str, Any], path: Path) -> dict[str, Any]:
+    """平铺格式：顶层 `mode` + 该 mode 允许的全部字段。"""
+    mode = manifest.get("mode")
+    if mode not in MODE_FIELDS:
+        raise ManifestError(
+            f"{path} 的 mode 非法或缺失: {mode!r}（可选 {list(MODE_FIELDS)}）"
+        )
+    allowed = set(MODE_FIELDS[mode])
+    fields: dict[str, Any] = {}
+    for key, value in manifest.items():
+        if key in IDENTITY_FIELDS or key in ("source_alias", "source_group") or key == "mode":
+            continue
+        if key not in allowed:
             raise ManifestError(
-                f"{path} 的 {capability}.mode 非法或缺失: {mode!r}（可选 {list(MODE_FIELDS)}）"
+                f"{path} 的字段 {key!r} 不属于 mode={mode}（可选 {sorted(allowed)}）"
             )
-        effective[capability] = mode
+        fields[key] = value
 
-    # 2) common 的字段必须对所有出现的能力 mode 都合法（各 mode 字段集的交集）
-    if common:
-        modes = set(effective.values())
-        if not modes:
-            # common 非空但 default_config 未声明任何能力段 → 无 mode 可校验
-            raise ManifestError(
-                f"{path} 的 common 非空但 default_config 未声明任何能力段"
-            )
-        allowed_common = set.intersection(*(set(MODE_FIELDS[m]) for m in modes))
-        for key in common:
-            if key not in allowed_common:
-                raise ManifestError(
-                    f"{path} 的 common 字段 {key!r} 对出现的 mode {sorted(modes)} 不都合法"
-                    f"（公共字段只能是 {sorted(allowed_common)}）"
-                )
-
-    # 3) 合并 common（能力段覆盖），并逐段校验字段合法性
-    merged: dict[str, dict] = {}
-    for capability, section in config.items():
-        mode = effective[capability]
-        fields = {**common, **section}
-        allowed = set(MODE_FIELDS[mode])
-        for key in fields:
-            if key not in allowed:
-                raise ManifestError(
-                    f"{path} 的 {capability} 段字段 {key!r} 不属于 mode={mode}（可选 {sorted(allowed)}）"
-                )
-        merged[capability] = fields
-
-    manifest["default_config"] = merged
+    # 归一化：**按目录里实际存在的能力文件**生成能力段（能力由文件系统发现，
+    # 不在 manifest 里声明）。只实现了部分能力的书源（如只有 search.py）就只暴露那一项。
+    #
+    # 注意：目录里一个能力文件都没有时**不在此报错** —— 那会让 `scan_source_names()`
+    # 在扫描阶段就静默跳过该目录（strict=False），下游只能看到 KeyError。
+    # “没任何能力”由 `check_capability_files()` 在 `get_manifest()` 时报。
+    caps = tuple(c for c in _capability_names() if (path.parent / f"{c}.py").is_file())
+    section = {"mode": mode, **fields}
+    manifest["default_config"] = {cap: dict(section) for cap in caps}
     return manifest
 
 
 def check_capability_files(source_dir: Path, manifest: dict[str, Any]) -> None:
-    """能力段存在 ⇔ 对应 `.py` 文件存在（双向）。"""
+    """书源目录必须至少实现一个能力，且归一化后的能力段与文件严格对应。
+
+    能力由文件系统发现（`_normalize_flat` 按 `.py` 存在性生成能力段），所以
+    `declared` 天然 ⊆ `present`；这里主要拦“一个能力文件都没有”的目录。
+    """
     source_dir = Path(source_dir)
     declared = set(manifest.get("default_config", {}))
     present = {
         name for name in _capability_names()
         if (source_dir / f"{name}.py").is_file()
     }
+    if not declared:
+        raise ManifestError(
+            f"{source_dir} 没有任何能力文件（至少需要 {list(_capability_names())} 之一）"
+        )
     missing = declared - present
     if missing:
         raise ManifestError(

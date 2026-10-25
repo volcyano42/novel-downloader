@@ -203,9 +203,17 @@ def _user_site_cfg(source_name: str) -> dict:
 
 VALID_MODES = ("browser", "requests", "api")
 
+# 用户层 yaml 的顶层「元数据」键：不是引擎参数，不参与引擎字段合并。
+# 2026-10-25 起一个书源只有一个 mode 和一套参数（不再按能力分化），
+# 所以引擎参数的来源就是 yaml 顶层（除去这几个键）。
+_SITE_META_KEYS = frozenset({"source_group", "source_alias", "concurrency", "enabled", "mode"})
+
 
 def effective_capabilities(source_name: str) -> dict[str, str]:
-    """有效 mode 映射：用户层 `sites/{source_name}.yaml` 的 `{cap}.mode` 覆盖 `source.json` 声明。
+    """有效 mode 映射：用户层 `sites/{source_name}.yaml` 顶层 `mode` 覆盖 `source.json` 声明。
+
+    **一个书源只有一个 mode，所有能力共享**（不再按能力分化）。返回形状仍是
+    `{capability: mode}`（所有值相同），以保持公共 API 稳定。
 
     - 未覆盖 / 覆盖值非法（不在 `VALID_MODES`）→ 取书源声明
     - 未知书源 → `{}`（与 `capabilities()` 的宽容语义一致）
@@ -214,25 +222,25 @@ def effective_capabilities(source_name: str) -> dict[str, str]:
     declared = capabilities(source_name)
     if not declared:
         return {}
-    user = _user_site_cfg(source_name)
-    out: dict[str, str] = {}
-    for cap, mode in declared.items():
-        section = user.get(cap) if isinstance(user.get(cap), dict) else {}
-        override = section.get("mode")
-        out[cap] = override if override in VALID_MODES else mode
-    return out
+    override = _user_site_cfg(source_name).get("mode")
+    mode = override if override in VALID_MODES else next(iter(declared.values()))
+    return {cap: mode for cap in declared}
 
 
 def merged_source_config(source_name: str) -> dict[str, dict]:
-    """三层合并某书源的逐能力配置。
+    """三层合并某书源的配置。
 
-    返回 `{capability: 该能力段三层合并后的完整字段}`；未知书源返回 `{}`。
-    三层：ENGINE_DEFAULTS[mode]（系统默认）→ `source.json.default_config[cap]`（书源出厂，
-    已含 `common` 合并）→ `sites/{source_name}.yaml[cap]`（用户层）。
-    **mode 取有效值**（`effective_capabilities()`：用户层 `{cap}.mode` 覆盖声明），
-    且用户层的 `mode` 键**保留**在输出中（前端表单需回显）。
-    不变量：输出的 `mode` **恒等于有效 mode**（`effective_capabilities()[cap]`），
-    用户层的 `mode` 键（含非法值 / YAML `null`）不参与覆盖。
+    返回 `{capability: 完整字段}`；未知书源返回 `{}`。
+
+    **2026-10-25 起书源只有一个 mode 和一套参数，不再按能力分化**，所以每个能力
+    拿到的字段完全相同；保留 `{capability: …}` 形状只是为了让下游按能力取用的
+    写法不必改动。
+
+    三层（优先级从低到高）：
+    `ENGINE_DEFAULTS[mode]` → `source.json` 顶层字段 → `sites/{source_name}.yaml` 顶层字段。
+
+    不变量：输出的 `mode` 恒等于 `effective_capabilities()[cap]`，用户层的 `mode`
+    （含非法值 / YAML `null`）不参与字段覆盖。
     """
     from novelbase.source import get_manifest
     caps = effective_capabilities(source_name)
@@ -240,20 +248,12 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
         return {}
     manifest = get_manifest(source_name)
     user = _user_site_cfg(source_name)
-    # 用户层 common：跨能力共享字段（delay / timeout / key / …）。优先级低于用户层各能力段、
-    # 高于出厂与书源默认。`mode` 不参与（它必须逐能力解析，见 effective_capabilities）。
-    user_common = user.get("common") if isinstance(user.get("common"), dict) else {}
-    user_common = {k: v for k, v in user_common.items() if k != "mode"}
+    user_fields = {k: v for k, v in user.items() if k not in _SITE_META_KEYS}
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
         base["mode"] = mode  # 不变量：base 已写入有效 mode
-        base = deep_merge(base, user_common)   # 用户层 common 层
-        user_cap = user.get(cap) if isinstance(user.get(cap), dict) else {}
-        # 用户层 mode 键不再参与覆盖（否则非法值 / None 会污染有效 mode 与字段集的
-        # 一致性：该段字段集按有效 mode 构建，mode 也必须等于有效 mode）。
-        user_cap = {k: v for k, v in user_cap.items() if k != "mode"}
-        out[cap] = deep_merge(base, user_cap)
+        out[cap] = deep_merge(base, user_fields)
     return out
 
 

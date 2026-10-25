@@ -14,9 +14,9 @@ def _write(tmp_path, manifest: dict, files: tuple[str, ...] = ()):  # 帮助函�
 
 BASE = {
     "source_name": "demo-requests-default",
-    "default_config": {
-        "search": {"mode": "requests", "timeout": 30, "retry_times": 3},
-    },
+    "mode": "requests",
+    "timeout": 30,
+    "retry_times": 3,
 }
 
 
@@ -41,7 +41,7 @@ def test_load_manifest_missing_identity_field(tmp_path):
 
 def test_load_manifest_unknown_mode(tmp_path):
     bad = json.loads(json.dumps(BASE))
-    bad["default_config"]["search"]["mode"] = "openapi"
+    bad["mode"] = "openapi"
     d = _write(tmp_path, bad)
     with pytest.raises(ManifestError, match="mode"):
         load_manifest(d)
@@ -49,7 +49,7 @@ def test_load_manifest_unknown_mode(tmp_path):
 
 def test_load_manifest_field_not_allowed_for_mode(tmp_path):
     bad = json.loads(json.dumps(BASE))
-    bad["default_config"]["search"]["key"] = "xxx"        # key 只属于 api mode
+    bad["key"] = "xxx"        # key 只属于 api mode
     d = _write(tmp_path, bad)
     with pytest.raises(ManifestError, match="key"):
         load_manifest(d)
@@ -58,66 +58,45 @@ def test_load_manifest_field_not_allowed_for_mode(tmp_path):
 def test_variant_is_not_a_valid_field(tmp_path):
     """variant 字段已取消（2026-09-24）：同一 mode 下的不同实现各自是一个书源。"""
     bad = json.loads(json.dumps(BASE))
-    bad["default_config"]["search"]["variant"] = "rain"
+    bad["variant"] = "rain"
     d = _write(tmp_path, bad)
     with pytest.raises(ManifestError, match="variant"):
         load_manifest(d)
 
 
-def test_common_is_merged_into_every_capability(tmp_path):
-    """顶层 common 段自动并入每个能力段。"""
-    m = dict(BASE)
-    m["common"] = {"timeout": 30, "retry_times": 3}
-    d = _write(tmp_path, m, ("search.py",))
+def test_allowed_fields_are_kept_and_normalized(tmp_path):
+    """允许的字段原样保留，并归一化成 {能力: 完整字段}（下游形状不变）。"""
+    d = _write(tmp_path, BASE, ("search.py",))
     got = load_manifest(d)
     assert got["default_config"]["search"]["timeout"] == 30
-    assert got["default_config"]["search"]["mode"] == "requests"      # 能力段自己的字段保留
+    assert got["default_config"]["search"]["mode"] == "requests"
 
 
-def test_capability_overrides_common(tmp_path):
-    m = dict(BASE)
-    m["common"] = {"timeout": 30}
-    m["default_config"] = {"search": {"mode": "requests", "timeout": 99}}
+def test_mode_override_replaces_declared(tmp_path):
+    """顶层 mode 是唯一 mode 来源（不再有能力级 mode）。"""
+    m = dict(BASE); m["mode"] = "api"; m["key"] = "k"
     d = _write(tmp_path, m, ("search.py",))
     got = load_manifest(d)
-    assert got["default_config"]["search"]["timeout"] == 99
+    assert got["default_config"]["search"]["mode"] == "api"
 
 
-def test_common_field_illegal_for_one_mode(tmp_path):
-    """同时存在 api / browser 能力时，common 不能放 api 专属字段。"""
-    m = {
-        "source_name": "demo-two-modes",
-        "common": {"key": "xxx"},                       # key 只属于 api
-        "default_config": {
-            "search": {"mode": "api"},
-            "chapter_content": {"mode": "browser"},
-        },
-    }
-    d = _write(tmp_path, m)
-    with pytest.raises(ManifestError, match="common"):
-        load_manifest(d)
+def test_no_capability_files_is_rejected_at_check(tmp_path):
+    """能力由文件系统发现：一个能力文件都没有时，check_capability_files 报错。
 
-
-def test_capability_files_both_ways(tmp_path):
-    d = _write(tmp_path, BASE, ())                        # 有 search 段但没 search.py
+    不在 load_manifest 里报 —— 否则 scan_source_names() 会在扫描期静默跳过该目录。
+    """
+    d = _write(tmp_path, BASE, ())
     m = load_manifest(d)
-    with pytest.raises(ManifestError, match="search.py"):
+    assert m["default_config"] == {}
+    with pytest.raises(ManifestError, match="没有任何能力文件"):
         check_capability_files(d, m)
 
-    d2 = _write(tmp_path, BASE, ("search.py", "novel_info.py"))   # 有 novel_info.py 但没段
-    m2 = load_manifest(d2)
-    with pytest.raises(ManifestError, match="novel_info"):
-        check_capability_files(d2, m2)
 
+def test_capabilities_follow_files(tmp_path):
+    """只实现部分能力时，归一化结果只含那一项（不再由 manifest 声明能力）。"""
+    d = _write(tmp_path, BASE, ("search.py", "novel_info.py"))
+    m = load_manifest(d)
+    assert set(m["default_config"]) == {"search", "novel_info"}
+    check_capability_files(d, m)   # 不抛
 
-def test_common_nonempty_without_capability_sections(tmp_path):
-    """common 非空但 default_config 零能力段 → ManifestError（而非 TypeError）。"""
-    m = {
-        "source_name": "demo-empty",
-        "common": {"timeout": 30},
-        "default_config": {},
-    }
-    d = _write(tmp_path, m)
-    with pytest.raises(ManifestError, match="common"):
-        load_manifest(d)
 

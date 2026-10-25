@@ -2,23 +2,18 @@
   "source_name": "qimao-browser-default",
   "source_alias": "七猫·浏览器",
   "source_group": "七猫",
-  "common": {
-    "mode": "browser",
-    "timeout": 30,
-    "retry_times": 3,
-    "delay": [0, 0],
-    "backoff_factor": 2,
-    "browser_type": "chromium",
-    "headless": false,
-    "user_data_dir": "app_data/browser/Chromium/User Data",
-    "viewport": {},
-    "extra_args": [],
-    "auto_reconnect": false
-  },
-  "default_config": {
-    "search": {},
-    "novel_info": {},
-    "chapter_list": {},
-    "chapter_content": {}
-  }
+  "mode": "browser",
+  "timeout": 30,
+  "retry_times": 3,
+  "delay": [
+    0,
+    0
+  ],
+  "backoff_factor": 2,
+  "browser_type": "chromium",
+  "headless": false,
+  "user_data_dir": "app_data/browser/Chromium/User Data",
+  "viewport": {},
+  "extra_args": [],
+  "auto_reconnect": false
 }

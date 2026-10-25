@@ -21,7 +21,7 @@ def isolated_sites(monkeypatch, tmp_path):
 
 
 def test_get_source_config_returns_effective_and_declared(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("search:\n  mode: browser\n", encoding="utf-8")
+    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
     data = asyncio.run(cfg.get_source_config(KNOWN))
 
@@ -31,18 +31,18 @@ def test_get_source_config_returns_effective_and_declared(isolated_sites):
 
 
 def test_put_source_config_writes_mode_override(isolated_sites):
-    asyncio.run(cfg.save_source_config(KNOWN, {"config": {"search": {"mode": "browser"}}}))
+    asyncio.run(cfg.save_source_config(KNOWN, {"mode": "browser"}))
 
     saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
 
-    assert saved["search"]["mode"] == "browser"
+    assert saved["mode"] == "browser"
     assert config_service.effective_capabilities(KNOWN)["search"] == "browser"
 
 
 def test_put_source_config_mode_null_removes_override(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("search:\n  mode: browser\n", encoding="utf-8")
+    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
-    asyncio.run(cfg.save_source_config(KNOWN, {"config": {"search": {"mode": None}}}))
+    asyncio.run(cfg.save_source_config(KNOWN, {"mode": None}))
 
     saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
     assert "mode" not in (saved.get("search") or {})
@@ -50,7 +50,7 @@ def test_put_source_config_mode_null_removes_override(isolated_sites):
 
 
 def test_download_sources_returns_effective_mode(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("search:\n  mode: browser\n", encoding="utf-8")
+    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
     data = asyncio.run(dl.list_all_sources())
 

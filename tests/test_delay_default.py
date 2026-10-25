@@ -26,5 +26,5 @@ def test_unconfigured_delay_defaults_to_zero(isolated_sites):
 def test_user_layer_delay_override(isolated_sites):
     """用户层显式 delay 优先于出厂默认。"""
     (isolated_sites / f"{REQUESTS_SRC}.yaml").write_text(
-        "search:\n  delay: [2, 3]\n", encoding="utf-8")
+        "delay: [2, 3]\n", encoding="utf-8")
     assert config_service.build_options(REQUESTS_SRC, "requests").requests.delay == (2, 3)

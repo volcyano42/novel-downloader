@@ -2,20 +2,17 @@
   "source_name": "92xs-requests-default",
   "source_alias": "92xs",
   "source_group": "92xs",
-  "common": {
-    "mode": "requests",
-    "timeout": 30,
-    "retry_times": 3,
-    "delay": [0, 0],
-    "backoff_factor": 2,
-    "headers": {"User-Agent": "Mozilla/5.0 ..."},
-    "cookies": {},
-    "proxies": {}
+  "mode": "requests",
+  "timeout": 30,
+  "retry_times": 3,
+  "delay": [
+    0,
+    0
+  ],
+  "backoff_factor": 2,
+  "headers": {
+    "User-Agent": "Mozilla/5.0 ..."
   },
-  "default_config": {
-    "search": {},
-    "novel_info": {},
-    "chapter_list": {},
-    "chapter_content": {}
-  }
+  "cookies": {},
+  "proxies": {}
 }

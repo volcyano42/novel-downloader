@@ -92,8 +92,9 @@ def test_manifest_without_enabled_is_valid(tmp_path):
     (src / "source.json").write_text(json.dumps({
         "source_name": "demo2-requests-default",
         "source_group": "演示",
-        "default_config": {},
+        "mode": "requests",
     }), encoding="utf-8")
+    (src / "search.py").write_text("", encoding="utf-8")
     assert mf.load_manifest(src)["source_name"] == "demo2-requests-default"
 
 
@@ -108,5 +109,5 @@ def test_merged_source_config_three_layers(tmp_path, monkeypatch):
     merged = sc.merged_source_config("demo-requests-default")
     assert merged["search"]["mode"] == "requests"
     assert merged["search"]["timeout"] == 30          # 第 2 层
-    sc.save_site_config("demo-requests-default", {"search": {"timeout": 99}})
+    sc.save_site_config("demo-requests-default", {"timeout": 99})
     assert sc.merged_source_config("demo-requests-default")["search"]["timeout"] == 99

@@ -1,7 +1,8 @@
 """site 配置三层合并（merged_source_config）测试。
 
-三层：ENGINE_DEFAULTS[mode]（系统默认）→ source.json.default_config[cap]（书源出厂）
-→ sites/{source_name}.yaml[cap]（用户层）。未知书源返回 {}。
+三层：ENGINE_DEFAULTS[mode]（系统默认）→ source.json 顶层字段（书源出厂）
+→ sites/{source_name}.yaml 顶层字段（用户层）。未知书源返回 {}。
+2026-10-25 起一个书源只有一个 mode，所有能力共享同一套参数。
 """
 from shared import config as sc
 
@@ -33,7 +34,7 @@ def test_merged_source_config_user_layer_overrides(monkeypatch, tmp_path):
     monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
         "default_config": {"search": {"mode": "requests", "timeout": 30, "retry_times": 3}},
     })
-    sc.save_site_config("demo-requests-default", {"search": {"timeout": 99}})
+    sc.save_site_config("demo-requests-default", {"timeout": 99})
     merged = sc.merged_source_config("demo-requests-default")
     assert merged["search"]["timeout"] == 99
     # 用户层未覆盖的字段保留第 2 层值
@@ -45,9 +46,10 @@ def test_merged_source_config_user_mode_overrides_declared(monkeypatch, tmp_path
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr("novelbase.source.capabilities", lambda n: {"search": "requests"})
     monkeypatch.setattr("novelbase.source.get_manifest", lambda n: {
+        "mode": "requests",
         "default_config": {"search": {"mode": "requests"}},
     })
-    sc.save_site_config("demo-requests-default", {"search": {"mode": "browser", "timeout": 5}})
+    sc.save_site_config("demo-requests-default", {"mode": "browser", "timeout": 5})
     merged = sc.merged_source_config("demo-requests-default")
     assert merged["search"]["mode"] == "browser"
     assert merged["search"]["timeout"] == 5

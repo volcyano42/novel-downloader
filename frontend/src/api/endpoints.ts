@@ -80,22 +80,16 @@ export interface SourceConfig {
   source_name: string;
   /** 书源级并发额度（顶层；跨任务共享，默认 1） */
   concurrency: number;
-  /** 能力段 → 有效 mode（如 {search: "api"}） */
+  /** 能力 → 有效 mode。2026-10-25 起一个书源只有一个 mode，各能力值全相同。 */
   capabilities: Record<string, string>;
-  /** 能力段 → 书源声明的 mode（「恢复默认」用） */
+  /** 能力 → 书源声明的 mode（「恢复默认」用） */
   declared_capabilities: Record<string, string>;
-  /** 能力段 → 三层合并后的完整配置 */
+  /** 能力 → 三层合并后的完整配置。四份内容相同，取任一份即可。 */
   config: Record<string, Record<string, unknown>>;
   /** 分组名（"" = 未分组；出厂预置 + 用户层覆盖）。 */
   source_group: string;
   /** 显示别名（"" = 未设，显示 source_name）。 */
   source_alias: string;
-  /** 用户层 common 段的原始值（常规段的展示来源） */
-  common?: Record<string, unknown>;
-  /** 各能力段里与 common 取值不同的键 —— 用于区分「继承常规」与「已覆盖」 */
-  user_overrides?: Record<string, string[]>;
-  /** 可一键收敛到 common 的键（各能力段都有且取值相同） */
-  converge_candidates?: { key: string; value: unknown }[];
 }
 
 export type GroupsConfig = Record<string, Record<string, object>>;
@@ -322,10 +316,10 @@ export function getSourceConfig(source: string) {
 export function saveSourceConfig(
   source: string,
   data: {
-    concurrency?: number; config?: Record<string, Record<string, unknown>>;
-    source_group?: string; source_alias?: string;
-    common?: Record<string, unknown>;
-  },
+    concurrency?: number; source_group?: string; source_alias?: string;
+    /** 顶层 mode：字符串 = 覆盖；null = 删除覆盖、恢复书源声明 */
+    mode?: string | null;
+  } & Record<string, unknown>,
 ) {
   return apiPut<void>(`/config/sources/${source}`, data);
 }
@@ -346,6 +340,48 @@ export function triggerExport(body: unknown) {
 
 export function exportTaskStatus(taskId: string) {
   return apiGet<ExportTaskResult>(`/export/task/${taskId}`);
+}
+
+// ── Sync ───────────────────────────────────────────
+
+export type SyncPhase = "scanning" | "pulling" | "done" | "error" | "cancelled";
+
+export interface SyncStatus {
+  running: boolean;
+  phase: SyncPhase;
+  peer: string;
+  include_images: boolean;
+  requested_novels: string[];
+  books_total: number;
+  books_done: number;
+  chapters_total: number;
+  chapters_done: number;
+  current_book: string;
+  current_chapter: string;
+  summary: string;
+  error: string | null;
+  order_mismatch?: string[];
+  started_at: number;
+  finished_at: number | null;
+}
+
+export interface StartSyncBody {
+  peer: string;
+  novel_ids?: string[];
+  include_images?: boolean;
+}
+
+export function startSync(body: StartSyncBody) {
+  return apiPost<SyncStatus>("/sync/start", body);
+}
+
+/** 从未同步过时返回 null。 */
+export function getSyncStatus() {
+  return apiGet<SyncStatus | null>("/sync/status");
+}
+
+export function cancelSync() {
+  return apiPost<void>("/sync/cancel", {});
 }
 
 // ── Helpers ────────────────────────────────────────

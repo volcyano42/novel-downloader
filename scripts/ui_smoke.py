@@ -121,29 +121,14 @@ def main() -> int:
             failures.append("失败 书源列表未渲染（[data-testid^=source-] 为空）")
         else:
             src_buttons.first.click()
-            common = cfg.locator('[data-testid="source-common"]')
+            # 2026-10-25 起一个书源只有一个 mode + 一套参数，不再按能力分面板
+            engine = cfg.locator('[data-testid="source-engine"]')
             try:
-                common.wait_for(state="visible", timeout=8000)
-                print("完成 书源展开后「常规」段可见")
+                engine.wait_for(state="visible", timeout=8000)
+                print("完成 书源展开后「引擎模式」段可见")
             except Exception:
-                failures.append("失败 书源展开后未出现 [data-testid=source-common]")
-            cap_btn = cfg.locator('[data-testid^="cap-"]:not([data-testid$="-body"])').first
-            # 不假定第一个书源一定有 search 能力：按实际出现的第一个能力段来测
-            cap_id = cap_btn.get_attribute("data-testid") or ""
-            cap_body = cfg.locator(f'[data-testid="{cap_id}-body"]')
-            if not cap_id:
-                failures.append("失败 未找到任何能力段标题（[data-testid^=cap-]）")
-            elif cap_body.count() > 0 and cap_body.first.is_visible():
-                failures.append(f"失败 能力段 {cap_id} 默认应为收起，实际可见")
-            else:
-                print("完成 能力段默认收起")
-                cap_btn.click()
-                try:
-                    cap_body.first.wait_for(state="visible", timeout=8000)
-                    print("完成 点击后能力段可展开")
-                except Exception:
-                    failures.append(f"失败 点击 {cap_id} 后其内容区仍未可见")
-        cfg.screenshot(path=str(out / "settings-source-common.png"), full_page=True)
+                failures.append("失败 书源展开后未出现 [data-testid=source-engine]")
+        cfg.screenshot(path=str(out / "settings-source-engine.png"), full_page=True)
         cfg.close()
         browser.close()
     for f in failures:

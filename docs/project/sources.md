@@ -37,7 +37,7 @@ novelbase/sources/{dir}/
 | 函数 | 返回 |
 |------|------|
 | `list_sources()` | 全部书源 `source_name`（内置 + 私有，排序；重名抛 `DuplicateSourceNameError`） |
-| `get_manifest(source_name)` | 该书的 `source.json` 内容（`default_config` 已合并 `common`；非编译模式校验能力段 ⇔ `.py` 文件） |
+| `get_manifest(source_name)` | 该书的 `source.json` 内容，归一化后带 `default_config = {能力: 同一套完整字段}`（能力按目录里的 `.py` 发现）；非编译模式同时校验能力文件存在性 |
 | `capabilities(source_name)` | `{capability: mode}`，如 `{"search": "requests", "novel_info": "requests", ...}`；未知书源或声明非法返回 `{}`（**撞名例外**：直接抛 `DuplicateSourceNameError`，不吞成空能力） |
 | `resolve(source_name, capability)` | `(函数, 该能力的 mode)`；动态 import 并校验必需参数名 |
 | `resolve_book_url(raw)` | 把输入规范成完整 URL（仅接受 http(s)，否则 `ValueError`） |
@@ -49,34 +49,42 @@ novelbase/sources/{dir}/
 
 ## `source.json` 规范
 
+> **预览版声明**：`novelbase` 面向开发者且对外公开，但仍是**预览版**——配置格式与公共 API
+> 允许破坏性变更，**不承诺向后兼容**。改动会带日期写在本节，升级前请先对照。
+
 ```json
 {
   "source_name": "fanqie-requests-default",
   "source_alias": "番茄·直连",
   "source_group": "番茄",
-  "concurrency": 1,
-  "common": {
-    "mode": "requests", "timeout": 30, "retry_times": 3,
-    "delay": [0, 0], "backoff_factor": 2,
-    "headers": {"User-Agent": "..."}, "cookies": {}, "proxies": {}
-  },
-  "default_config": {
-    "search": {}, "novel_info": {}, "chapter_list": {}, "chapter_content": {}
-  }
+  "mode": "requests",
+  "timeout": 30,
+  "retry_times": 3,
+  "delay": [0, 0],
+  "backoff_factor": 2,
+  "headers": {"User-Agent": "..."},
+  "cookies": {},
+  "proxies": {}
 }
 ```
 
 | 字段 | 含义 |
 |------|------|
 | `source_name` | 唯一 id；也是 `sites/{source_name}.yaml` 的文件名 |
-| `source_alias` | （**可选**，顶层）显示别名；`sites/{source_name}.yaml` 顶层可覆盖。缺省 = 未设，界面回落 `source_name` |
-| `source_group` | （**可选**，顶层）分组名（一个源一个组，`""` = 未分组）；`sites/{source_name}.yaml` 顶层可覆盖 |
-| `concurrency` | （**可选**，顶层）书源级并发额度，缺省 **1**；`sites/{source_name}.yaml` 顶层可覆盖（见下） |
-| `common` | 并入每个能力段（能力段覆盖 `common`）；其字段必须对**所有出现的 mode** 都合法 |
-| `default_config` | 逐能力段；每段 `mode` 缺省继承 `common.mode` |
+| `source_alias` | （**可选**）显示别名；`sites/{source_name}.yaml` 顶层可覆盖。缺省 = 未设，界面回落 `source_name` |
+| `source_group` | （**可选**）分组名（一个源一个组，`""` = 未分组）；`sites/{source_name}.yaml` 顶层可覆盖 |
+| `concurrency` | （**可选**）书源级并发额度，缺省 **1**；`sites/{source_name}.yaml` 顶层可覆盖（见下） |
+| `mode` | **必填**，`requests` / `browser` / `api` 之一 |
+| 其余字段 | 由 `mode` 决定，见下 |
 
-- **能力段存在 ⇔ 同名 `.py` 文件存在**（双向），不一致直接抛 `ManifestError`
-  （加载与校验见 `novelbase/sources/manifest.py`）。
+**一个书源只有一套参数（2026-10-25 起）**：不再有 `common` / `default_config` 能力段——
+四类能力共享同一个 `mode` 和同一套字段。旧写法（`common` + 各能力段）**已废弃且不做兼容**，
+遇到会直接抛 `ManifestError`。
+
+**能力由文件系统发现**：目录里有 `search.py` / `novel_info.py` / `chapter_list.py` /
+`chapter_content.py` 中的哪几个，就对外暴露哪几个能力（不再在 `source.json` 里声明）。
+一个能力文件都没有 → `get_manifest()` 抛 `ManifestError`。
+
 - 字段按 mode 划分（`MODE_FIELDS`，与 `novelbase/core/options.py` 的三个 dataclass 对应）：
   - `requests`：`mode, timeout, retry_times, delay, backoff_factor, headers, cookies, proxies`
   - `browser`：`mode, timeout, retry_times, delay, backoff_factor, browser_type, headless, user_data_dir, viewport, extra_args, auto_reconnect`
@@ -85,22 +93,28 @@ novelbase/sources/{dir}/
 - `browser` 的 `user_data_dir`：**出厂默认** = `app_data/browser/Chromium/User Data`（持久化
   profile，登录态落盘）。相对路径由 `shared/config.py::build_options()` 按**仓库根**解析成绝对
   路径后交给 `launch_persistent_context()`；用户层写成空串 = 匿名 context（窗口里登录不落盘，
-  进程退出即失效，`deep_merge` 的空串会覆盖出厂默认）。2026-09-30 前出厂默认为空串，
-  导致三个内置 browser 源每次启动都丢登录态。
-- **元信息读取入口**（`shared.config`）：`source_group(name)` / `source_alias(name)`（用户层顶层覆盖出厂 `source.json` 顶层，空串 = 未设）/ `display_name(name)`（别名优先、未设回落 `source_name`）。`enabled` 已彻底废弃（2026-09-27，见下）。
+  进程退出即失效，`deep_merge` 的空串会覆盖出厂默认）。
+- **元信息读取入口**（`shared.config`）：`source_group(name)` / `source_alias(name)`（用户层顶层覆盖出厂 `source.json` 顶层，空串 = 未设）/ `display_name(name)`（别名优先、未设回落 `source_name`）。`enabled` 已彻底废弃（2026-09-27）。
 
-### mode 的用户覆盖（2026-09-25）
+### 用户层覆盖（`sites/{source_name}.yaml`）
 
-- 有效 mode = 用户层 `app_data/config/sites/{source_name}.yaml` 的 `{cap}.mode`（合法值 `browser`/`requests`/`api`）
-  优先于 `source.json` 声明；非法值忽略并回退声明
-- 唯一入口：`shared.config.effective_capabilities(source_name)`；`merged_source_config()` 按有效 mode 取
-  `ENGINE_DEFAULTS[mode]` 作基底并保留 `mode` 键（表单回显）
+用户层就是**顶层一套字段**，形状与 `source.json` 一致（不再有 `common` 段或能力段）：
+
+```yaml
+mode: requests
+timeout: 60
+delay: [3, 5]
+```
+
+- 有效 mode = 用户层顶层 `mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
+  非法值忽略并回退声明。**一个 mode 对所有能力生效**（不再逐能力覆盖）。
+- 唯一入口：`shared.config.effective_capabilities(source_name)`；`merged_source_config()`
+  按有效 mode 取 `ENGINE_DEFAULTS[mode]` 作基底并保留 `mode` 键（表单回显）。
 - core 分发层 `novelbase/core/downloader.py` 的 4 个函数接受**单个 `Engine` 实例**（调用方按
-  `effective_capabilities()` 选有效 mode 后自行 `create_engine`）；core **不解析 mode**（原
-  `mode_overrides` 参数已删除，`novelbase.source.capabilities()` / `resolve()` 语义不变）
+  `effective_capabilities()` 选有效 mode 后自行 `create_engine`）；core **不解析 mode**。
 - API：`GET /api/v2/config/sources/{name}` 返回 `capabilities`（有效）与 `declared_capabilities`（声明）；
-  `PUT` 传 `config[cap].mode = null` 即删除覆盖
-- 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用
+  `PUT` 直接传顶层字段（如 `{"timeout": 60}`），`mode: null` 即删除覆盖。
+- 已知限制：不同 mode 的接口/参数互不通用，覆盖后不保证可用。
 
 ### 书源级并发 `concurrency`（2026-09-25）
 
@@ -108,7 +122,7 @@ novelbase/sources/{dir}/
 
 - **存储**：`source.json` **顶层**（与 `source_name` 同级，**可选**，缺省 1）；
   用户层 `app_data/config/sites/{source_name}.yaml` **顶层**可覆盖（与 `source_alias` / `source_group` 同级）。
-  ⚠️ 不能放 `common`：`common` 的字段会被并入各能力段并受 `MODE_FIELDS` 校验，`concurrency` 不在其中。
+  ⚠️ `concurrency` 是**元信息**、不是引擎字段，因此不在 `MODE_FIELDS` 里（引擎字段会按 mode 校验合法性）。
 - **读取**：唯一入口 `shared.config.source_concurrency(source_name)`——用户层顶层 `concurrency` 覆盖出厂顶层，
   缺省 1；非法值（非正整数）忽略回退 1；未知书源返回 1。
 - **覆盖范围**：任务内发出的请求都受该额度约束（`resolve_meta` 与每章 `resolve_chapter`）。

@@ -5,6 +5,7 @@ import type {ChapterBrief} from "@/api/endpoints";
 import {
   addFavorite,
   addSearchHistory,
+  cancelSync,
   deleteNovel,
   deleteSearchHistory,
   deleteTask,
@@ -21,6 +22,7 @@ import {
   getMeta,
   getSearchHistory,
   getSourceConfig,
+  getSyncStatus,
   listChapters,
   listNovels,
   listTasks,
@@ -33,6 +35,7 @@ import {
   saveSourceConfig,
   searchDownload,
   setNovelSource,
+  startSync,
   triggerExport,
 } from "@/api/endpoints";
 
@@ -232,10 +235,9 @@ export function useSaveSourceConfig(source: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: {
-      concurrency?: number; config?: Record<string, Record<string, unknown>>;
-      source_group?: string; source_alias?: string;
-      common?: Record<string, unknown>;
-    }) =>
+      concurrency?: number; source_group?: string; source_alias?: string;
+      mode?: string | null;
+    } & Record<string, unknown>) =>
       saveSourceConfig(source, data),
     onSuccess: () => {
       // 两侧都要失效：设置页读 ["source-config", src]，设置页折叠条（SourceAccordion）读 ["sources"]
@@ -308,6 +310,34 @@ export function useFetchMeta() {
   return useMutation({
     mutationFn: (args: { url: string; source?: string }) =>
       fetchMeta(args.url, args.source),
+  });
+}
+
+// ── Sync ───────────────────────────────────────────
+
+/** 同步状态轮询：仅在任务运行时拉（800ms），停下就停。 */
+export function useSyncStatus() {
+  return useQuery({
+    queryKey: ["sync-status"],
+    queryFn: () => getSyncStatus(),
+    refetchInterval: query => (query.state.data?.running ? 800 : false),
+    staleTime: 0,
+  });
+}
+
+export function useStartSync() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: startSync,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sync-status"] }),
+  });
+}
+
+export function useCancelSync() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: cancelSync,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sync-status"] }),
   });
 }
 
