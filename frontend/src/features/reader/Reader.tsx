@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent} from "react";
 import {ChevronLeft, ChevronRight, ExternalLink, List, Moon, Sun, Type} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger} from "@/components/ui/sheet";
@@ -97,6 +97,22 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
   const currentIdx = chapters.findIndex(c => c.id === currentChapterId);
   const hasPrev = currentIdx > 0, hasNext = currentIdx < chapters.length - 1;
 
+  // 点屏幕左右两侧翻页（移动端主要交互）；中间区域不做事，避免误触。
+  const handleTap = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    // 正在选中文字时不翻页
+    const sel = window.getSelection();
+    if (sel && sel.toString().length > 0) return;
+    // 点在链接/图片/按钮上时不翻页（底部翻页按钮的 click 会冒泡上来，必须挡掉）
+    const target = e.target as HTMLElement;
+    if (target.closest("a, img, button, input")) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    const ratio = (e.clientX - rect.left) / rect.width;
+    if (ratio < 0.3) { if (hasPrev) onNavigate(chapters[currentIdx - 1].id); }
+    else if (ratio > 0.7) { if (hasNext) onNavigate(chapters[currentIdx + 1].id); }
+  }, [hasPrev, hasNext, chapters, currentIdx, onNavigate]);
+
   const htmlContent = insertImages(content, images)
     .split(/\n\n+/)
     .map(p => p.trim())
@@ -105,8 +121,9 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
     .join("");
 
   return (
-    <div className={cn("relative min-h-screen", className)}>
-      <div className="pointer-events-none fixed inset-0 z-0 flex">
+    <div className={cn("relative min-h-[100dvh]", className)}>
+      {/* 两侧模糊带只在宽屏有意义：窄屏下中间栏占满宽度、两侧宽度为 0，模糊层看不见却仍在逐帧渲染 */}
+      <div className="pointer-events-none fixed inset-0 z-0 hidden md:flex">
         <div className="flex-1 backdrop-blur-sm bg-slate-50/50 dark:bg-slate-950/50" />
         <div className="w-full max-w-[720px]" />
         <div className="flex-1 backdrop-blur-sm bg-slate-50/50 dark:bg-slate-950/50" />
@@ -117,19 +134,21 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
           {onBack && <button onClick={onBack} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 shrink-0"><ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.5} /></button>}
           <span className="truncate text-sm font-medium text-slate-600">{title}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-1">
-            <Type className="h-3.5 w-3.5 text-slate-400" strokeWidth={1.5} />
-            <input type="range" min={14} max={24} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="h-1 w-16 appearance-none rounded-lg bg-slate-300 dark:bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-lg [&::-webkit-slider-thumb]:bg-[#5e6ad2]/100" />
-          </div>
+        <div className="flex shrink-0 items-center gap-1">
           <button onClick={toggleDark} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             {isDark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.5} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.5} />}
           </button>
           <Sheet open={sheetOpen} onOpenChange={onSheetChange}>
             <SheetTrigger asChild><button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><List className="h-[18px] w-[18px]" strokeWidth={1.5} /></button></SheetTrigger>
-            <SheetContent side="right" className="w-72">
+            <SheetContent side="right" className="flex flex-col">
               <SheetHeader><SheetTitle>目录</SheetTitle></SheetHeader>
-              <nav ref={navRef} className="mt-4 flex flex-col gap-1 overflow-y-auto max-h-[80vh]">
+              {/* 字号调节从顶栏移到此处：窄屏上顶栏放不下（会把标题挤没） */}
+              <div className="mt-4 flex shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-800">
+                <Type className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.5} />
+                <input type="range" min={14} max={24} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} aria-label="字号" className="h-1 flex-1 appearance-none rounded-lg bg-slate-300 dark:bg-slate-600 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-lg [&::-webkit-slider-thumb]:bg-[#5e6ad2]" />
+                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-slate-500">{fontSize}</span>
+              </div>
+              <nav ref={navRef} className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                 {chapters.map(ch => (
                   <button key={ch.id} onClick={() => onNavigate(ch.id)} data-current={ch.id === currentChapterId ? "true" : undefined} className={cn("rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800", ch.id === currentChapterId ? "bg-[#5e6ad2]/10 text-[#5e6ad2] dark:bg-[#5e6ad2]/100/10" : "text-slate-600 dark:text-slate-400")}>{ch.title}</button>
                 ))}
@@ -139,7 +158,7 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
         </div>
       </div>
 
-      <div className="relative z-10 mx-auto max-w-[720px] px-6 py-12">
+      <div className="relative z-10 mx-auto max-w-[720px] px-4 py-8 md:px-6 md:py-12" onClick={handleTap}>
         {title && (() => { const chUrl = chapters.find(c => c.id === currentChapterId)?.url; return (
           <h1 className="mb-8 flex items-start gap-2 font-serif font-bold text-slate-800 dark:text-slate-200" style={{ fontSize: `${fontSize + 6}px` }}>
             <span>{title}</span>
@@ -147,7 +166,7 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
           </h1>
         ); })()}
         <article
-          className="prose prose-slate max-w-none font-serif dark:prose-invert [&_p]:indent-8"
+          className="prose prose-slate max-w-none font-serif dark:prose-invert [&_p]:indent-[2em]"
           style={{ fontSize: `${fontSize}px`, lineHeight: "1.8" }}
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
@@ -168,7 +187,7 @@ export function Reader({ title, content, images = [], chapters, currentChapterId
 
 export function ReaderSkeleton() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100dvh]">
       <div className="sticky top-0 z-20 border-b border-white/20 bg-white/80 backdrop-blur-xl px-4 py-3">
         <div className="mx-auto max-w-[720px] flex items-center justify-between">
           <div className="h-4 w-32 animate-pulse rounded bg-slate-300/60" />
