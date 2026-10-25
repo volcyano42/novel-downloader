@@ -1,5 +1,5 @@
 import {NavLink, Outlet} from "react-router-dom";
-import {Bell, Gauge, Layers, Package} from "lucide-react";
+import {Bell, Gauge, Layers, Package, RefreshCw} from "lucide-react";
 import {cn} from "@/lib/utils";
 
 const ITEMS = [
@@ -7,6 +7,7 @@ const ITEMS = [
   { to: "/settings/download", label: "下载与性能", icon: Gauge },
   { to: "/settings/export", label: "导出格式", icon: Package },
   { to: "/settings/notify", label: "通知", icon: Bell },
+  { to: "/settings/sync", label: "同步", icon: RefreshCw },
 ] as const;
 
 /** 设置内二级导航：宽屏为左侧栏，窄屏（< md）为顶部横向滚动标签条。 */

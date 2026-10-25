@@ -1,226 +1,243 @@
 # 终端对终端小说数据同步 — 设计文档
 
-> 日期：2026-10-14 ｜ 状态：待 review
-> 依赖：`2026-10-14-settings-sidebar-design.md`（提供 `/settings/sync` 与二级导航）
-> 定位：局域网内两台运行本项目的终端互相同步**书籍数据**，不引入账号、不依赖云端
+> 日期：2026-10-14 ｜ **修订：2026-10-25（第 5 稿，最终）** ｜ 状态：待 review
+> 定位：局域网内两台运行本项目的终端，由 **CLI** 触发，从对端拉取缺失的书籍数据。
+> 原则：**不新增 `/sync` 层**——直接用现有 `/api/v2/storage/*`，只按同步需要给它加参数与字段。不做鉴权（个人项目、仅局域网）。
+
+## 0. 修订记录
+
+2026-10-25 经过六轮讨论定稿。**前几稿的 `/sync/*` 数据面整个删除**——它和 storage 做的是同一件事，属于重复造轮子。
+
+### `/sync` 层为什么被删
+
+每一稿保住它的理由，都依赖一个本可以解除的约束：
+
+| 曾经的理由 | 现在为什么不成立 |
+|---|---|
+| 「storage 的 `ChapterBrief` 没有 `time`，判定冲突需要它」 | **给它加 `time` 字段**即可（1 行 + 1 处赋值） |
+| 「storage 的 GET 总是带封面 base64，太占带宽」 | **加 `include_images=false` 参数**即可 |
+| 「`iter_chapters` 会把整本正文读进内存」 | **加 `include_content` 参数**即可 |
+| 「storage 侧完全不变」 | 该约束已解除（2026-10-25 决定允许改 storage） |
+
+三条都能用"给现有接口加参数/字段"解决，且**天然向后兼容**（默认值保持现有行为）。于是 `/sync` router、`/sync/*` 端点、sync 专用数据结构、`sync` 配置段**全部不需要**。
+
+### 已被推翻的前稿决定（不要按旧稿实现）
+
+| 旧稿说法 | 现状 |
+|---|---|
+| 新增 `backend/routers/sync.py`，`/api/v2/sync/*` 四个端点 | **删除**，直接复用 `/api/v2/storage/*` |
+| sync 侧自定义 `ChapterBrief`（带 `time`、砍掉 `url`/`image_count`） | **删除**，改为给 storage 的 `ChapterBrief` 加 `time` |
+| `sync` 配置段（`include_images` / `page_size`） | **删除**，走 CLI 参数 |
+| 配对握手、`Bearer` token、`AuthMiddleware`、`sync.enabled`、分级只读、cookie 登录 | **全部删除**，不做任何访问控制（§7） |
 
 ## 1. 背景与目标
 
-多设备用户希望把「已下载的书」在几台机器之间搬一次，而不是各自重新下载。本项目数据全在本地 SQLite（`docs/planning/roadmap.md` §F4 明确「云端同步：建议不做」，理由是它与「自包含、数据在本地」的定位冲突并引入账号与隐私面）。
+多设备用户希望把「已下载的书」在几台机器之间搬一次，而不是各自重新下载。项目数据全在本地 SQLite（`docs/planning/roadmap.md` §F4 明确「云端同步：建议不做」）。本设计走**局域网 P2P**：无账号、无云中转、点对点直连，不触碰 F4 的结论。
 
-本设计走**局域网 P2P** 路线：无账号、无云中转、点对点直连，因此不触碰 F4 的结论。**目标**：把 A 端已有、B 端没有的**书籍数据**补齐到另一端。
+**真正驱动这个功能的场景**：某些章节只有某一台能拿到——番茄的登录门槛章（`isChapterLock=true`）需真机扫码登录的登录态，源站下架、限速同理。那台拿到内容的机器，是唯一能补齐另一台的来源。
 
-### 同步对象（范围内的全部内容）
+### 同步对象
 
 | 数据 | 是否同步 | 说明 |
 |---|---|---|
 | `meta`（书名/作者/简介/封面/`serial`） | ✅ | 每本书一个 `.db` |
-| `chapters`（正文） | ✅ | 增量传输主体 |
-| `illustrations`（插图） | ⚙️ 可选，**默认不传** | 体积可达 GB 级，同步页开关控制 |
-| `novel_sources`（该书来源映射） | ✅ | 不同步会导致同步过去的书失去来源、无法换源/更新 |
-| `groups` / `favorites` / `search_history` / `bookmarks` | ❌ | 本次不做（多设备一致性另有冲突语义） |
+| `chapters`（正文） | ✅ | 增量主体 |
+| `novel_sources`（来源映射） | ✅ | 随书单一起给（`source_name` 已在 `GET /storage/novel` 返回里）；不同步会导致换源/更新时报"未知书源" |
+| `illustrations`（插图） | ⚙️ 可选，**默认不传** | 体积可达 GB 级，CLI 开关控制 |
+| `groups` / `favorites` / `search_history` / `bookmarks` | ❌ | 跨设备一致性另有冲突语义 |
+| 阅读进度 | ❌ | **项目当前没有这个功能**（`progress` 仅存在于下载任务进度条），要做是独立工作 |
 
 ### 非目标
 
-云端中转 / 公网穿透 / 账号体系 / TLS 传输加密 / 全局 API 认证 / 「以对方为准覆盖」/ 多会话并发。
+云端中转 / 公网穿透 / 账号体系 / **任何形式的鉴权与访问控制** / TLS / push 与 both / 「以对方为准覆盖」/ 自动定时同步 / 删除传播 / 内容自愈。
 
-## 2. 认证与信任模型
+## 2. 对 storage 的改动（本设计的全部后端改动）
 
-### 威胁与缓解
+全部是**加参数 / 加字段**，默认值保持现有行为，前端零改动。
 
-| 威胁 | 现状评估 | 本设计的缓解 |
-|---|---|---|
-| 同网段扫描 → 未授权读写书库 | **已存在**：后端监听 `0.0.0.0:8000` 且【无任何认证】 | 同步**数据面**端点强制 `Authorization: Bearer <peer_token>` |
-| 恶意网页 CSRF | CORS 仅放行 `localhost:5173`，`Content-Type: application/json` 会触发预检 → 简单 CSRF 被挡；但不作为唯一防线 | 数据面要求自定义 `Authorization` 头（同样触发预检） |
-| 误连陌生设备 | — | **配对码**：接收方界面显示 6 位随机码（默认 120s 有效；同一个连接请求内最多尝试 5 次，配对成功后该码立即作废，重新发起会生成新码） |
-| 局域网嗅探 / ARP 欺骗 | 全部 API 明文 HTTP | **不引入 TLS**，列为已知限制 |
-| 他人远程打开我的同步窗口 | 管理端点未鉴权（见下） | 默认关闭 + 需配对码 + 需人工批准 |
+| # | 位置 | 改动 | 向后兼容性 |
+|---|---|---|---|
+| **M1** | `backend/schemas/storage.py:54-63` | `ChapterBrief` 加 `time: float \| None = None` | 新字段，前端忽略即可 |
+| **M2** | `backend/routers/storage.py:70-74` | `_chapter_to_brief(ch, *, downloaded: bool)` 增加 `time=ch.time`，`downloaded` 改由调用方传入 | 见下方「M2 的必要性」 |
+| **M3** | `backend/routers/storage.py:90-107` `GET /novel` | 加 `include_images: bool = Query(True)`；为 `False` 时 `cover` 返回 `None` | 默认 `True`，前端不变 |
+| **M4** | `backend/routers/storage.py:117-121` `GET /novel/{id}/meta` | 同上（`_novel_to_meta` 加 `include_images` 参数） | 默认 `True` |
+| **M5** | `backend/routers/storage.py:160-171` `GET /novel/{id}/chapters` | 加 `include_images`、`include_content`（均默认 `True`）；`downloaded` 改由 `list_downloaded_ids()` 判定 | 默认 `True`，返回值与现在一致 |
+| **M6** | `backend/routers/storage.py:194-198` `GET /novel/{id}/chapter/{cid}` | 加 `include_images: bool = Query(True)`；为 `False` 时 `images=[]` | 默认 `True` |
+| **M7** | `novelbase/core/storage.py:111-114`（`BaseStorage`）、`:233`（`LocalStorage`）、`:517`（`SQLiteStorage`）、`:231,515`（`load_chapters` 转发） | `iter_chapters` / `load_chapters` 加 `include_content: bool = True` | 默认 `True`，6 个现有调用点行为不变 |
 
-### 接收方限时开放窗口（默认关闭）
+**M7 实现要点**：`SQLiteStorage.iter_chapters` 在 `include_content=False` 时把 SELECT 的 content 位置换成 `NULL`，**8 列位置不变** → `_row_to_chapter`（`storage.py:531-540`）无需改动，因为 `Chapter.content` 本就是 `str | None`。`LocalStorage` 读 JSON 后剥掉 `content`（与它现有剥 `images` 的写法一致）。
 
-- 配置持久默认 `sync.allow_default: false`；**运行时开关不写回配置**，进程重启即回到关闭状态（"开放"永远是临时的）
-- 打开 → 进入开放窗口（默认 300s，可配），界面显示倒计时 + 「等待连接…」
-- 窗口内收到连接请求才弹批准框；窗口到期或被手动关闭 → **新请求一律拒绝**（已建立的会话不受影响）
-- 语义：窗口只管「能否发起新请求」，不管已进行的会话
+### M2 的必要性（不是可选项）
 
-### 信任建立与凭证
+现有 `_chapter_to_brief` 用 `downloaded=ch.content is not None`。一旦 `include_content=False`，`content` 恒为 `None` → **`downloaded` 恒为 `False`**，同步的差集会把远端所有章节都当成"未下载"，行为完全错误。
 
-1. A → `POST /api/v2/sync/request`（`client_label`）→ B 返回 `request_id`，B 界面出现待批准项
-2. A → `POST /api/v2/sync/pair`（`request_id` + 配对码）→ B 校验 → 返回 `peer_token`
-3. 双方把凭证落库：`user_data.db` 新表
+因此 `list_chapters` 改为：
 
-```sql
-CREATE TABLE IF NOT EXISTS sync_peers (
-    peer_id    TEXT PRIMARY KEY,   -- 对端标识（首次由对端生成，随请求带来）
-    label      TEXT NOT NULL,      -- 显示名，如「我的笔记本」
-    token_hash TEXT NOT NULL,      -- sha256(peer_token)，明文 token 不落库
-    created_at REAL NOT NULL,
-    last_seen  REAL
-);
+```python
+downloaded_ids = store.list_downloaded_ids(novel_id)   # SELECT id … WHERE content IS NOT NULL AND content != ''
+result = [_chapter_to_brief(ch, downloaded=ch.id in downloaded_ids) for ch in chapters]
 ```
 
-- 该表双向使用：既存「我信任的对端」，也存「我持有的对方凭证」
-- 撤销：同步页列出已信任设备，可解除（各自可撤销自己这一侧）
-- 配对码与 `request_id` / `session_id` 均为**内存态**（重启即失效，符合"临时"语义）
-- 生成：`secrets.randbelow(10**6)` 补零 6 位；`peer_token = secrets.token_urlsafe(32)`
+**一个极窄的行为变化**：内容为空字符串 `""` 的章节，原来算 `downloaded=True`（`"" is not None`），现在算 `False`。新语义与 `list_downloaded_ids`（断点续传用）一致，也更正确。**前端目前没有依赖这个边界**。
 
-## 3. 同步会话与批准流程
+### 带宽效果
 
-### 模式（三值，语义互斥）
-
-| 模式 | 语义 |
+| 调用 | 效果 |
 |---|---|
-| `pull` | 以对方为源：把对方有、我没有的补齐到我这边 |
-| `push` | 以对方为目标：把我有的补到对方 |
-| `both` | 一次会话内两侧都补齐（= 两次单向，不是互相覆盖） |
+| `GET /storage/novel?include_images=false` | 不返回封面 base64（原本几百本书可达几十 MB） |
+| `GET /storage/novel/{id}/chapters?include_images=false&include_content=false&size=20000` | 不读正文、不读插图，只回 brief |
+| `GET /storage/novel/{id}/chapter/{cid}?include_images=false` | 正文不带插图 |
 
-### 生命周期（接收方始终是"被连接方"）
+`size` 上限是 20000（`storage.py:162` 的 `le=20000`），对任何实际的书都够，**同步一次取完，不分页**。原因：单条 brief ≈ 150–180 字节，3000 章 ≈ 500KB，百兆局域网 ≈ 0.04 秒；而同一本书的正文是 15MB 量级。storage 的分页是为**前端渲染**服务的（一次渲染几千个 DOM 会卡），CLI 没有这个约束。
 
-1. `POST /sync/request` → 待批准（接收方界面弹「<label> 请求同步」+ 配对码）
-2. `POST /sync/pair` → 换 `peer_token`（已信任的设备跳过 1-2，直接 3）
-3. `POST /sync/session`（`mode`）→ `session_id`；接收方界面显示「正在与 X 同步」
-4. 数据面交互（见 §4）：拉书单摘要 → 逐本比对 → 逐章拉取 → 落库
-5. `POST /sync/session/{id}/close`；任一侧可 `DELETE` 取消；接收方在会话空闲超时后回收
+## 3. 同步算法
 
-### 并发与超时
+### 3.1 调用链
 
-- **同时只允许 1 个会话**；第二个请求返回明确错误（"已有同步进行中"）
-- 会话空闲超时（默认 300s 无请求）→ 接收方回收该会话
-- **与会话无关的另一条约束**：同步不访问外部站点，因此**不占用书源额度**（`source_concurrency` 无关）
+```
+[本机 CLI]                                          [对端 /api/v2/storage/*]
+  GET /storage/novel?include_images=false           → 书单（含 source_name，无封面）
+  对比本地 iter_metas() → 按 novel_id 分类：远端独有 / 双方都有 / 本地独有(忽略)
+  for 每本要同步的书：
+    GET /storage/novel/{id}/chapters?include_images=false&include_content=false&size=20000
+    ◄──────── [ChapterBrief: id,title,order,volume,count,time,downloaded, …]
+    本地 list_downloaded_ids(novel_id) → 差集 → 待拉章节 id
+    若本地没有这本书：
+      GET /storage/novel/{id}/meta?include_images=…   → save_meta() 建库
+      来源取书单的 source_name                         → set_novel_source()
+    for cid in 差集（串行，分批）：
+      GET /storage/novel/{id}/chapter/{cid}?include_images=…
+      ◄──────── ChapterData ──────────────────────────
+      save_chapter(novel, ch)                        ← 进程内，不走 HTTP
+  打印报告
+```
 
-## 4. 数据范围与增量算法
+本机写入是进程内调用（`save_meta` / `save_chapter` / `set_novel_source`），与下载任务落库同一条代码路径。`save_chapter(novel, chapters)` 只用 `novel.id`（`storage.py:488`），传 `store.load_meta(id)` 即可；CLI 侧已有现成的 `_get_storage()`（`cli/core.py:46-55`）。
 
-### 增量判定（零新增字段，复用现有数据）
+**注意**：`ChapterData.images[].raw_data` 可能为 `None`（`storage.py:80`），而 `Illustration.image_format` 会对 `None` 调 `startswith` 崩溃 → 重建 `Chapter` 时**必须跳过 `raw_data` 为空的插图**。
 
-- **书级**：按 `meta.id`（= `sha256(url)[:32]`）匹配
-  - 对端有、本地无 → 整本拉（建 `meta` + 章节 + `novel_sources` 行）
-  - 两侧都有 → 进章节级
-- **章节级**：拉对端的 `ChapterBrief` 列表（`id` / `title` / `order` / `volume` / `count` / `time`），按 `id` 与本地比对
-  - 本地缺失 → 拉该章正文
-  - 两侧都有且 `(time, count)` 相同 → 跳过
-  - 两侧都有但 `(time, count)` 不同 → **保留本地**，计入"冲突"报告（见 §5）
-- **插图**：仅当开关 `sync.illustrations=true` 时，按 `illustrations` 表逐张拉取（沿用同一套"只补缺"语义）
+### 3.2 增量判定
 
-### 传输形态
+- **书级**：按 `meta.id`（= `sha256(url)[:32]`，`novelbase/utils/urls.py:17`）匹配
+- **章节级**：远端 `downloaded == true` 的 id 集合 − 本地 `list_downloaded_ids(novel_id)`（`storage.py:575`）= 待拉章节
+- **两侧都有正文**：比 `(time, count)`
+  - 相同 → 跳过
+  - 不同 → **保留本地**，计入报告（"N 章两侧不同，已保留本地"）
+- **不做全文比对**：内容不参与判定，只比 id 与 `(time, count)`
 
-- 书单与章节摘要**分页**（`?page=&size=`），默认 `size=200`（上千章的书不会一次返回）
-- 正文逐章拉取走数据面端点 `GET /sync/novel/{novel_id}/chapter/{chapter_id}`，其返回**数据结构与现有 `GET /api/v2/storage/novel/{id}/chapter/{cid}` 一致**（`ChapterData`），但只挂在 `/sync/*` 下以复用同一条 `peer_token` 鉴权链（不改动、也不暴露原 storage 端点）
-- 落库：拉取方**直接调本地 storage 层**（`novelbase.core.storage`），与下载任务落库同一条代码路径，不走自身 HTTP
+### 3.3 `order` 兼容性校验
 
-### 断点续传
+章节 id 是同一空间，按 id 匹配安全。**风险在 `order`**：
 
-天然支持：中断后重跑，比对结果只剩没传完的部分（幂等，见 §5）。
+| 书源 | order 来源 |
+|---|---|
+| `fanqie_api_rain` | `enumerate(item_data_list, start=1)` —— 位置序号 |
+| `fanqie_api_oiapi` | 接口返回的 `index` |
+| `fanqie_requests_default` / `fanqie_browser_default` | 页面 `realChapterOrder` |
 
-## 5. 冲突与覆盖策略
+混合场景（本地已有部分章节、其余从对端补）会导致 `order` 错乱；更严重的是 **`oiapi` 的 `chapter_content` 按 `chapter.order` 拉正文**（`chapter_content.py:28` `"chapter": str(chapter.order)`），order 一旦错位，后续更新会**拉到错误的正文**。
+
+**判据**：
+1. 比对远端书单的 `source_name` 与本地 `get_novel_source(novel_id)`；不同 → **仅告警，不跳过**（本地 requests、远端 rain 同属番茄组，书可正常互补）
+2. **每本书首次同步前抽样**：取对端章节列表的首、中、末各 1 条，比对 `(order, title)` 与本地是否一致；**不一致 → 该本跳过，报告「章节序号不一致」，不写库**
+
+## 4. 冲突与覆盖
 
 **统一原则：只补缺，不覆盖。**
 
-- 两侧都有且内容不同 → 保留本地，计入结果报告（「N 章两侧不同，已保留本地」）
-- `novel_sources`：本地已有该书记录 → 不动；本地没有才写入对端的
-- **幂等**：全部按 `id` 匹配，同一同步可重复执行而不产生重复数据或覆盖
-- 结果报告（同步页展示）：`新增 X 本 · 补 Y 章 · 跳过 Z 章（其中 N 章两侧不同，已保留本地）· 跳过 M 本（正在下载）`
+- 两侧都有正文且 `(time, count)` 不同 → 保留本地，计入报告（不中断）
+- `novel_sources`：本地已有 → 不动；本地没有才写入远端的
+- **幂等**：全部按 id 匹配，重复执行不产生重复数据、不覆盖
+- 报告：`新增 X 本 · 补 Y 章 · 跳过 Z 章（其中 N 章两侧不同，已保留本地）· 跳过 M 本（正在下载）· 跳过 K 本（章节序号不一致）`
 
-## 6. API 面
+## 5. 触发方式与实现分层
 
-新增 `backend/routers/sync.py`，前缀 `/api/v2/sync`（响应由既有 `V2ResponseMiddleware` 包成 `{ok,message,data}`）。
+### 5.1 UI：设置 → 同步（`/settings/sync`）
 
-### 数据面（被对端调用，要求 `Authorization: Bearer <peer_token>`）
+`SettingsLayout` 的 `ITEMS` 第 5 项，页面 `frontend/src/features/settings/pages/SyncPage.tsx`：
 
-| 方法 | 路径 | 作用 | 鉴权 |
-|---|---|---|---|
-| POST | `/sync/request` | 发起连接（`client_label`, `peer_id`, `protocol_version`）→ `request_id` | 不要求 token（要求开放窗口开启） |
-| POST | `/sync/pair` | 提交配对码 → `peer_token` | 用 `request_id` |
-| POST | `/sync/session` | 开始会话（`mode`）→ `session_id` | Bearer |
-| GET | `/sync/session/{id}` | 会话状态 | Bearer |
-| DELETE | `/sync/session/{id}` | 取消会话 | Bearer |
-| GET | `/sync/novels` | 书单摘要（分页） | Bearer |
-| GET | `/sync/novel/{novel_id}/chapters` | 章节摘要（分页，`ChapterBrief`） | Bearer |
-| GET | `/sync/novel/{novel_id}/chapter/{chapter_id}` | 单章正文 | Bearer |
-| GET | `/sync/novel/{novel_id}/illustrations` | 插图（开关开启时） | Bearer |
+- 对端地址输入（`localStorage` 记忆为 `sync-peer-url`）
+- 「连封面和插图一起拉」勾选框
+- 「开始同步」/「取消」按钮
+- 状态卡片：阶段文案、进度条、当前书/章、结果摘要、错误、序号不一致清单
+- 轮询：`useSyncStatus` 仅在 `running` 时每 800ms 拉一次，停下就停（`refetchInterval` 用函数形式）
 
-### 管理面与本端发起（本机或手机浏览器打开的 UI 调用）
+### 5.2 API
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
-| GET | `/sync/status` | 开关状态、窗口剩余秒数、进行中的会话 |
-| PUT | `/sync/allow` | 打开/关闭开放窗口（`{enabled, ttl_seconds}`） |
-| GET | `/sync/requests/pending` | 待批准请求（供 UI 轮询或订阅 SSE） |
-| POST | `/sync/requests/{id}/approve` · `/deny` | 批准 / 拒绝 |
-| GET | `/sync/peers` · DELETE `/sync/peers/{peer_id}` | 已信任设备 / 解除信任 |
-| POST | `/sync/start` | **发起**同步（`{host, port, mode, with_illustrations}`）→ 后台任务 |
-| GET | `/sync/progress` | SSE 进度流（复用 `chapters/stream` 的 `text/event-stream` 先例） |
+| POST | `/api/v2/sync/start` | `{peer, novel_ids?, include_images?}` → 启动后台任务；已有任务在跑返回 409 |
+| GET | `/api/v2/sync/status` | 当前/最近一次状态；从未同步过时 `data` 为 `null` |
+| POST | `/api/v2/sync/cancel` | 置停止标志（已写入的章节保留） |
 
-**管理面不鉴权**（与现有全部 API 一致，保持手机浏览器访问后端的使用方式不破）。缓解：同步窗口默认关闭、配对码限 5 次尝试、信任建立必须由接收方在界面上人工批准。
+### 5.3 分层
 
-### 配置（`app_data/config/config.yaml` 新增 `sync:` 段）
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 核心 | `novelbase/core/sync.py` | `RemoteClient`（只读对端）、`diff_chapters` / `order_consistent`（纯函数，可单测）、`build_plan` / `execute_plan` / `sync_from` |
+| 任务 | `backend/services/sync_task.py` | 单例任务状态机；`start` 用 `loop.create_task` 调度，进度回调写进模块级 dict |
+| 路由 | `backend/routers/sync.py` | 薄封装，挂在 `/api/v2/sync` |
+| 页面 | `frontend/src/features/settings/pages/SyncPage.tsx` | 上述 UI |
 
-```yaml
-sync:
-  allow_default: false        # 持久默认：不同步窗口关闭
-  window_ttl_seconds: 300     # 开放窗口时长
-  code_ttl_seconds: 120       # 配对码有效期
-  max_attempts: 5             # 配对码尝试上限
-  illustrations: false        # 是否同步插图（UI 开关的持久默认）
-```
+**为什么同步在后端跑而不是浏览器**：项目原本就没有「写入任意章节」的 HTTP 接口，前端执行并不能省掉后端改动；反而正文要多走一趟（对端 → 浏览器 → 本机后端），流量翻倍。后端执行时正文只走一趟，且进度能放进后端状态里。
 
-## 7. UI 面
+**CLI 未实现**：本版只有 UI 触发。核心逻辑在 `novelbase/core/sync.py`，后续加 `python -m cli sync` 只需薄封装。
 
-### `/settings/sync` 页面（六块）
-
-1. **本机状态**：「允许同步」开关 + 开放窗口倒计时 + 立即关闭
-2. **发起同步**：`IP:端口` 输入 + 模式选择（pull/push/both）+ 插图开关 → 「连接」
-3. **已信任设备**：列表（label / 最后同步时间）+ 解除信任
-4. **上次结果**：§5 的结果报告
-5. **进行中**：进度（书 i/n、章 j/m、当前书名）+ 取消按钮
-6. **配对弹窗**：需要配对码时输入（6 位数字）
-
-### 全局浮层（跨页面可见）
-
-- **待批准请求**：「<设备名> 请求同步」+ 配对码 + 同意 / 拒绝 —— 必须做成全局浮层：对方发起时用户可能停在书架页，只在设置页显示会导致请求被忽略
-- **同步进度**：轻量进度条（可展开到同步页）
-- 实现参照现有 `components/Toast.tsx` + `toast-context.ts` 的模式（Context + 顶部/右侧浮层）
-
-## 8. 边界与错误处理
+## 6. 边界与错误处理
 
 | 场景 | 处理 |
 |---|---|
-| 对方未开窗口 / 窗口过期 | `request` 返回 403 + 明确 message（"对方未开启同步"/"对方的同步窗口已关闭"）→ 发起端 toast |
-| 配对码错误 | 计入尝试次数；达上限（5）作废该 `request_id`，接收方界面提示"有设备反复尝试配对" |
-| 配对码过期 | 拒绝并要求重新发起 |
-| 协议版本不匹配 | `request` 携带 `protocol_version`，不兼容直接拒绝并提示（避免半途同步） |
-| 网络中断 | 接收方空闲超时回收；发起方报"连接中断"，**直接重跑**即续传 |
-| 半途取消 | 已写入数据**保留**（"只补缺"语义，不滚回） |
-| **碰到正在下载的书** | **跳过并在报告中列出**（"M 本跳过：正在下载"）—— 依据 `task_manager` 的任务状态判定，避免与下载任务写同一本书 |
-| 大书（上千章） | 摘要分页 + 逐章拉取；进度事件节流（每 N 章或每 3 秒推一次） |
-| 磁盘写满 / 写库失败 | 中止会话 + 报告已传数量，可重跑 |
-| 对端书源本机未配置 | 正文照传；`novel_sources` 里的 `source_name` 本地不存在 → 结果报告提示"该书来源未在本机配置"（更新/换源时会报未知书源） |
+| 对端未启动 / 连不上 | 报错退出（`1`），提示检查 IP 与端口 |
+| **`POST /api/v2/sync/start` 返回 405** | **不是路由写错**：该进程没有 sync 路由（旧代码未重启），请求落到了 `main.py:118` 的 SPA fallback（`@app.get("/{full_path:path}")` 只接受 GET）。重启后端即可。排查见 `docs/project/development.md`「常见坑」 |
+| **`order` 不一致** | 该本跳过，报告「章节序号不一致」（§3.3） |
+| **碰到本地正在下载的书** | CLI 经**回环** `GET /api/v2/download/tasks` 查询；后端未运行 → 告警并继续（此时不可能有下载任务在写库） |
+| 网络中断 | 已写入的保留；**直接重跑**即续传（幂等） |
+| 半途取消（Ctrl+C） | 已写入数据**保留**（"只补缺"语义，不滚回） |
+| 大书（上千章） | 摘要一次取完（3000 章 ≈ 500KB）；正文逐章拉取 |
+| 磁盘写满 / 写库失败 | 中止 + 报告已传数量，可重跑 |
+| 对端书源本机未配置 | 正文照传；`source_name` 本地不存在 → 报告「该书来源未在本机配置」 |
+| 插图 `raw_data` 为空 | 跳过该插图（§3.1） |
+| SQLite 锁 | 已有 `timeout=15`；与下载任务并发写同一本书靠上一条检查规避 |
 
-## 9. 测试策略
+## 7. 已知限制
 
-1. **单元层（主力）**：配对码生成/校验/过期/尝试上限；`peer_token` 签发与撤销；**增量比对**（给定两侧 `ChapterBrief` 列表 → 期望的"待拉章列表"，纯函数）；冲突判定与报告计数；幂等（同输入重跑 → 空计划）；开放窗口状态机（默认关 → 打开 → 过期 → 拒新请求）
-2. **接口层**：沿用项目既有做法（**不启 lifespan/TestClient**，`asyncio.run` 直调路由函数，见 `tests/test_backend_download_routes.py`）→ 覆盖鉴权（无/错 token → 401，窗口关 → 403）、分页边界（空书库 / 单章 / 上千章）、会话并发拒绝、`sync_peers` 落库
-3. **双实例端到端（可跳过）**：本机起两个实例（不同端口 + 不同 `NLD_APP_DATA`），`A pull B` → 断言 A 侧书/章节/`novel_sources` 到位且内容一致。标记 `@pytest.mark.e2e` 默认不跑，或作为手工脚本
-4. **不测**：真实 WiFi 波动、ARP 环境、手机浏览器兼容（手工验收）
+1. **完全没有访问控制**：同一局域网内任何设备都能读取全部小说数据，也能调用本产品其他所有 API（含 `DELETE /novel/{id}`）。
+2. **这不是本设计引入的**：后端本来就监听 `0.0.0.0:8000`（`backend/main.py:157`、`app.py:27`）且 `/api/v2/*` 零鉴权。本设计只是**没有改变这个现状**。
+3. **不可上公网**：没有鉴权、没有 TLS、明文 HTTP。若将来要暴露到公网，必须先补访问控制与传输加密。
+4. **同步只在本机发起**：UI 上对外提供服务的那一台，只是一个被读取的 `/api/v2/storage/*`；没有“对方主动推给我”的入口（需要就自己在本机点一次）。
+5. **M2 的极窄行为变化**：空字符串正文的章节不再算 `downloaded`（§2）。
+6. **同一本书 url 形态不同会被视为两本**：项目不做 url 规范化（`Novel.id = sha256(url)[:32]`），沿用。
+7. **`order` 校验靠抽样**（§3.3）：启发式，不能 100% 保证；判为不一致宁可跳过。
+8. **不做**「以对方为准覆盖」：两侧内容不同时永远保留本地。
 
-## 10. 分期
+## 8. 测试策略
 
-| 阶段 | 内容 | 可验收的形态 |
+1. **单元层（主力）**：增量比对（两侧 brief/id 集合 → 待拉章列表，纯函数）；`(time,count)` 冲突判定与计数；幂等（同输入重跑 → 空计划）；`order` 抽样校验（一致 / 不一致）
+2. **存储层（M7）**：`iter_chapters(include_content=False)` 返回的章节 `content` 为 `None`；`include_content=True`（默认）结果与改动前完全一致
+3. **接口层（M1–M6）**：沿用既有做法（不启 lifespan/TestClient，`asyncio.run` 直调路由函数，见 `tests/test_backend_download_routes.py`）→
+   - `include_images=false` 时 `cover` 为 `None`、章节 `images` 为空，`true`/缺省时与改动前一致
+   - **`include_content=false` 时 `downloaded` 仍准确**（回归 M2 的 bug）
+   - `ChapterBrief` 带 `time` 值
+   - 空书库 / 单章 / 上千章一次返回
+4. **双实例端到端（可跳过）**：本机起两个实例（不同端口 + 不同 `NLD_APP_DATA`），`A sync --peer B` → 断言书/章节/来源到位且内容一致。`@pytest.mark.e2e` 默认不跑
+5. **不测**：网络波动、ARP 环境（手工验收）
+
+## 9. 分期（均已实现）
+
+| 阶段 | 内容 | 验收形态 |
 |---|---|---|
-| 2a | 信任与握手：开放窗口、`request`/`pair`/批准、`sync_peers`、`/settings/sync` 页的 1/3/6 块 | 两端能连上、配对成功、信任列表可见 |
-| 2b | 数据传输：书单/章节摘要、增量比对、正文拉取与落库、`novel_sources`、进度与结果报告、插图开关 | 一端能把另一端的书补齐并读出正文 |
+| 1 | 后端改动 M1–M7（`ChapterBrief` 加 `time`、`include_images` / `include_content` 参数、M2 的 `downloaded` 修正） | 本机前端行为零变化；不加参数时响应与改动前一致 |
+| 2 | `novelbase/core/sync.py` + `backend/services/sync_task.py` + `/api/v2/sync/*` | `curl` 能触发同步并看到进度 |
+| 3 | `/settings/sync` 页面 | 设置第 5 栏可见、能触发、能看进度与结果 |
 
-阶段 2 依赖阶段 1（设置侧边栏）提供的 `/settings/sync` 位置；但后端部分（`routers/sync.py`）可并行开发。
+**已做的端到端验证**（两个实例、不同 `NLD_APP_DATA`）：首次 `新增 1 本 · 补 3 章`；重跑 `补 0 章 · 跳过 3 章`（幂等）；人为把本地 `order` +10 后 `跳过 1 本（章节序号不一致）`。
 
-## 11. 已知限制
+## 10. 后续工作（本次不做）
 
-- **明文 HTTP**：局域网内（ARP 欺骗/嗅探）可读取传输内容 —— 本设计不引入 TLS
-- **管理端点未鉴权**：同网段设备可开关同步窗口、查看待批准请求；但建立信任仍需配对码 + 接收方人工批准
-- **同一本书 url 形态不同会被视为两本**：项目不做 url 规范化（`Novel.id = sha256(url)[:32]`），本设计沿用
-- **不做**「以对方为准覆盖」：两侧内容不同时永远保留本地
-
-## 12. 后续工作（本次不做）
-
-- 分组 / 收藏 / 历史 / 书签 的同步与冲突合并规则
-- 传输加密（自签证书或预共享密钥）与全局 API 认证
-- 「以对方为准覆盖」的交互（需破坏性写入的二次确认）
-- 多会话并发、跨公网中转
+- **CLI `sync` 子命令**（核心逻辑已就绪，只需薄封装）
+- 访问控制与传输加密（若要暴露到公网，这是前置条件）
+- 分组 / 收藏 / 历史 / 书签 同步与冲突合并
+- 阅读进度功能本身
+- `push` / `both` 作为独立模式
+- 「以对方为准覆盖」（需破坏性写入二次确认）
+- 删除传播与内容自愈

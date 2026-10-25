@@ -12,6 +12,7 @@ import SourcesPage from "@/features/settings/pages/SourcesPage";
 import DownloadPage from "@/features/settings/pages/DownloadPage";
 import ExportPage from "@/features/settings/pages/ExportPage";
 import NotifyPage from "@/features/settings/pages/NotifyPage";
+import SyncPage from "@/features/settings/pages/SyncPage";
 
 type NavItem = "bookshelf" | "downloads" | "settings" | "search";
 
@@ -98,6 +99,7 @@ function AppShell() {
               <Route path="download" element={<DownloadPage />} />
               <Route path="export" element={<ExportPage />} />
               <Route path="notify" element={<NotifyPage />} />
+              <Route path="sync" element={<SyncPage />} />
             </Route>
             <Route path="/sources" element={<Navigate to="/settings/sources" replace />} />
             <Route path="/search-tab" element={<BookshelfPage />} />

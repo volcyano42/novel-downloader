@@ -2,7 +2,7 @@
 
 > 日期：2026-10-14 ｜ 状态：待 review
 > 前置：无（可在同步功能之前独立交付）
-> 关联：`2026-10-14-terminal-sync-design.md`（同步功能依赖本设计提供的 `/settings/sync` 位置）
+> 关联：`2026-10-14-terminal-sync-design.md`（2026-10-25 修订后同步改为 CLI 触发、不做 WebUI，**本设计不再为其提供 `/settings/sync` 位置**）
 
 ## 背景与目标
 
@@ -36,7 +36,7 @@
 | `/settings/notify` | 通知 | 原「通知」Section |
 | `/sources` | → 重定向 `/settings/sources` | 旧入口指向更具体的位置 |
 
-`/settings/sync` 由同步功能的设计提供，本设计只保证位置存在（`SettingsLayout` 的导航项按「已有子路由」渲染）。
+`/settings/sync` 曾计划由同步功能提供；**2026-10-25 同步方案改为 CLI 触发（见 `2026-10-14-terminal-sync-design.md` §0 R12），该子路由不再需要**。本设计的导航按「已有子路由」渲染，加不加都不影响结构。
 
 ### 导航形态：设置内二级侧边栏
 
