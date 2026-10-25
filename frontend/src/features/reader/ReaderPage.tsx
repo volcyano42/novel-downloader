@@ -15,8 +15,12 @@ export default function ReaderPage() {
   const content = chapter?.content ?? "";
 
   // 进入/换章时置顶（依赖 content：内容加载完成后再次回顶，避免滚动位置被新内容撑开）
+  // 注意：应用不靠 window 滚动——App.tsx 外层是 h-screen overflow-hidden，
+  // 真正的滚动容器是 #scroll-area（App.tsx 的 overflow-y-auto）。只调 window.scrollTo 无任何效果。
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    const el = document.querySelector("#scroll-area") as HTMLElement | null;
+    if (el) el.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    else window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [chapterId, content]);
 
   useEffect(() => {
