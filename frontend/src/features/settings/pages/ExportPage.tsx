@@ -1,7 +1,7 @@
 import {useState} from "react";
 import {Package} from "lucide-react";
 import {useFormatConfig, useSaveFormatConfig} from "@/hooks/index";
-import {Num, Row, Section, Select, Toggle} from "@/features/sources/sourceConfigForm";
+import {ExportOptionsFields, Section} from "@/features/sources/sourceConfigForm";
 
 const FORMAT_TABS = [
   { id: "txt", label: "TXT" },
@@ -25,31 +25,11 @@ export default function ExportPage() {
           </button>
         ))}
       </div>
-      {tab === "txt" && (
-        <Row label="编码">
-          <Select value={String(fmtCfg?.encoding ?? "utf-8")} onChange={v => saveFmt.mutate({ ...fmtCfg, encoding: v })}
-            options={[{ value: "utf-8", label: "UTF-8" }, { value: "gbk", label: "GBK" }]} />
-        </Row>
-      )}
-      {tab === "epub" && (
-        <>
-          <Row label="压缩算法">
-            <Select value={String(fmtCfg?.compression ?? "deflate")} onChange={v => saveFmt.mutate({ ...fmtCfg, compression: v })}
-              options={[{ value: "deflate", label: "Deflate" }, { value: "bzip2", label: "BZip2" }, { value: "stored", label: "Stored" }]} />
-          </Row>
-          <Row label="压缩级别"><Num value={Number(fmtCfg?.compresslevel) || 9} onChange={v => saveFmt.mutate({ ...fmtCfg, compresslevel: v })} min={1} max={9} /></Row>
-          <Row label="优化图片"><Toggle checked={!!fmtCfg?.optimize_images} onChange={v => saveFmt.mutate({ ...fmtCfg, optimize_images: v })} /></Row>
-          <Row label="JPEG 质量"><Num value={Number(fmtCfg?.jpeg_quality) || 85} onChange={v => saveFmt.mutate({ ...fmtCfg, jpeg_quality: v })} min={1} max={100} /></Row>
-          <Row label="最大图宽"><Num value={Number(fmtCfg?.max_image_width) || 0} onChange={v => saveFmt.mutate({ ...fmtCfg, max_image_width: v })} min={0} max={4096} unit="px" /></Row>
-          <Row label="包含目录"><Toggle checked={!!fmtCfg?.include_toc} onChange={v => saveFmt.mutate({ ...fmtCfg, include_toc: v })} /></Row>
-        </>
-      )}
-      {tab === "img" && (
-        <Row label="输出格式">
-          <Select value={String(fmtCfg?.output_format ?? "original")} onChange={v => saveFmt.mutate({ ...fmtCfg, output_format: v })}
-            options={[{ value: "original", label: "原始" }, { value: "jpeg", label: "JPEG" }, { value: "png", label: "PNG" }, { value: "webp", label: "WebP" }]} />
-        </Row>
-      )}
+      <ExportOptionsFields
+        format={tab as "txt" | "epub" | "img"}
+        value={(fmtCfg ?? {}) as Record<string, unknown>}
+        onChange={patch => saveFmt.mutate({ ...fmtCfg, ...patch })}
+      />
     </Section>
   );
 }

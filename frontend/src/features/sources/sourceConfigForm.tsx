@@ -5,7 +5,7 @@
  *
  * 2026-10-25 起一个书源只有**一个 mode 和一套参数**，编辑器不再按能力分面板。
  */
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import type {LucideIcon} from "lucide-react";
 import {useSaveSourceConfig, useSourceConfig} from "@/hooks/index";
 import {cn} from "@/lib/utils";
@@ -137,6 +137,35 @@ export function SourceConfigEditor({ name }: { name: string }) {
   const { data: cfg } = useSourceConfig(name);
   const saveSource = useSaveSourceConfig(name);
 
+  // ── 自动保存：输入类字段防抖合并（避免每个按键一次 PUT + 一条 toast），
+  //    开关/下拉这类离散操作用户期待「点完就算」，直接提交。──
+  const saveTimer = useRef<number | null>(null);
+  const pendingRef = useRef<Record<string, unknown>>({});
+
+  const flushSave = useCallback(() => {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const body = pendingRef.current;
+    pendingRef.current = {};
+    if (Object.keys(body).length) saveSource.mutate(body);
+  }, [saveSource]);
+
+  const queueSave = useCallback((patch: Record<string, unknown>) => {
+    pendingRef.current = { ...pendingRef.current, ...patch };
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(flushSave, 350);
+  }, [flushSave]);
+
+  // 折叠/切页时把未提交的修改落盘，避免“改了但没存”
+  useEffect(() => () => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    const body = pendingRef.current;
+    pendingRef.current = {};
+    if (Object.keys(body).length) saveSource.mutate(body);
+  }, [saveSource]);
+
   const caps = cfg?.capabilities ?? {};
   const declared = cfg?.declared_capabilities ?? {};
   const merged = cfg?.config ?? {};
@@ -188,6 +217,16 @@ export function SourceConfigEditor({ name }: { name: string }) {
     }
   };
 
+  /** 引擎字段写入：开关/下拉立即提交，数字/文本/JSON 防抖合并。 */
+  const saveField = (f: EngineField, v: unknown) => {
+    if (f.type === "toggle" || f.type === "select") {
+      flushSave();
+      saveSource.mutate({ [f.key]: v });
+    } else {
+      queueSave({ [f.key]: v });
+    }
+  };
+
   if (!cfg) return <div className="py-2 text-xs text-slate-400">加载中…</div>;
 
   return (
@@ -233,10 +272,55 @@ export function SourceConfigEditor({ name }: { name: string }) {
           ? <p className="py-1 text-[11px] text-slate-400">该书源未声明能力，或该模式无可配置项</p>
           : fields.map(f => (
               <Row key={f.key} label={f.label} desc={f.desc}>
-                {renderField(f, values[f.key], v => saveSource.mutate({ [f.key]: v }))}
+                {renderField(f, values[f.key], v => saveField(f, v))}
               </Row>
             ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * 导出格式的参数字段（TXT / EPUB / IMG）。
+ *
+ * 只渲染字段行，**不含** `Section` 外壳、不发请求、不写盘 —— 字段定义只有这一份：
+ * 设置页把 `onChange` 接到 `useSaveFormatConfig`（改即存盘），
+ * 导出弹窗把 `onChange` 接到本地 state（仅本次生效，见 designer 文档 §5）。
+ *
+ * `onChange` 收的是**增量补丁**（如 `{encoding: "gbk"}`），由调用方决定怎么合并。
+ */
+export function ExportOptionsFields({ format, value, onChange }: {
+  format: "txt" | "epub" | "img";
+  value: Record<string, unknown>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  if (format === "txt") {
+    return (
+      <Row label="编码">
+        <Select value={String(value.encoding ?? "utf-8")} onChange={v => onChange({ encoding: v })}
+          options={[{ value: "utf-8", label: "UTF-8" }, { value: "gbk", label: "GBK" }]} />
+      </Row>
+    );
+  }
+  if (format === "epub") {
+    return (
+      <>
+        <Row label="压缩算法">
+          <Select value={String(value.compression ?? "deflate")} onChange={v => onChange({ compression: v })}
+            options={[{ value: "deflate", label: "Deflate" }, { value: "bzip2", label: "BZip2" }, { value: "stored", label: "Stored" }]} />
+        </Row>
+        <Row label="压缩级别"><Num value={Number(value.compresslevel) || 9} onChange={v => onChange({ compresslevel: v })} min={1} max={9} /></Row>
+        <Row label="优化图片"><Toggle checked={!!value.optimize_images} onChange={v => onChange({ optimize_images: v })} /></Row>
+        <Row label="JPEG 质量"><Num value={Number(value.jpeg_quality) || 85} onChange={v => onChange({ jpeg_quality: v })} min={1} max={100} /></Row>
+        <Row label="最大图宽"><Num value={Number(value.max_image_width) || 0} onChange={v => onChange({ max_image_width: v })} min={0} max={4096} unit="px" /></Row>
+        <Row label="包含目录"><Toggle checked={!!value.include_toc} onChange={v => onChange({ include_toc: v })} /></Row>
+      </>
+    );
+  }
+  return (
+    <Row label="输出格式">
+      <Select value={String(value.output_format ?? "original")} onChange={v => onChange({ output_format: v })}
+        options={[{ value: "original", label: "原始" }, { value: "jpeg", label: "JPEG" }, { value: "png", label: "PNG" }, { value: "webp", label: "WebP" }]} />
+    </Row>
   );
 }
