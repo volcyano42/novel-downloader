@@ -214,3 +214,46 @@ def test_dump_has_header_and_field_order(lib):
 
     body = text[text.index("n1:"):]
     assert body.index("groups") < body.index("favorite") < body.index("source")
+
+
+# ── review 后的加固：损坏必须显式报错，不能静默吃数据 ──────────────
+
+def test_empty_file_raises_instead_of_treated_as_empty_library(lib):
+    """0 字节的 books.yaml 只可能是写坏了/被清空 —— 不能当成空账本让后续写入盖掉。"""
+    lib.BOOKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lib.BOOKS_PATH.write_text("", encoding="utf-8")
+
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.load_groups()
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.add_favorite("n1")
+    assert lib.BOOKS_PATH.read_text(encoding="utf-8") == ""
+
+
+def test_comment_only_file_is_empty_library(lib):
+    """只有注释头的文件是合法的空账本（重写永远带注释，不会误伤）。"""
+    _write_books(lib, "# 只有注释\n")
+    assert lib.load_groups() == {}
+    assert lib.add_favorite("n1") is True
+
+
+def test_non_dict_entry_raises(lib):
+    """条目值是标量/列表 → 明确报错，而不是归一成 {} 后在重写时被静默删掉。"""
+    _write_books(lib, "n1: 某本手写的书\n")
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.load_groups()
+
+    _write_books(lib, "n1:\n  - a\n  - b\n")
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.load_groups()
+
+
+def test_groups_wrong_shape_raises(lib):
+    """手写 groups 成列表 / 组属性写成标量 → LibraryCorruptError 而不是 AttributeError。"""
+    _write_books(lib, "n1:\n  groups:\n    - A\n    - B\n")
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.load_groups()
+
+    _write_books(lib, "n1:\n  groups:\n    A: 字符串\n")
+    with pytest.raises(lib.LibraryCorruptError):
+        lib.load_groups()

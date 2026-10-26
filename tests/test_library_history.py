@@ -169,3 +169,23 @@ def test_new_id_continues_after_existing(lib, monkeypatch):
 
     ids = {r["keyword"]: r["id"] for r in lib.get_search_history()}
     assert ids["新"] > 7
+
+
+# ── review 后的加固 ────────────────────────────────
+
+def test_id_never_collides_when_file_changed_externally(lib, monkeypatch):
+    """外部（另一个进程 / 手改）把文件改大后，新 id 不能回退到重复值。"""
+    monkeypatch.setattr(lib, "_now", lambda: "2026-01-01 00:00:00")
+    lib.add_search_history("a", "k0")            # cache 指向 2
+
+    _write_lines(lib, [_row(100, "外来的", "2026-01-02 00:00:00")])   # 外部把文件换了
+
+    lib.add_search_history("a", "k1")
+    ids = {r["keyword"]: r["id"] for r in lib.get_search_history()}
+    assert ids["k1"] > 100
+
+
+def test_empty_keyword_is_ignored(lib):
+    """空关键词写进去既读不出也删不掉 —— 直接不记。"""
+    lib.add_search_history("a", "")
+    assert lib.get_search_history() == []

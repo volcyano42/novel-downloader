@@ -63,10 +63,34 @@ def _now() -> str:
     return datetime.now().strftime(_TIME_FMT)
 
 
+def _validate_entry(path: Path, key, entry: dict) -> None:
+    """手写的 groups 结构不对时明确报错，而不是在后面某个 `.get()` 上抛 AttributeError。"""
+    groups = entry.get("groups")
+    if groups is None:
+        return
+    if not isinstance(groups, dict):
+        raise LibraryCorruptError(
+            f"{path}: {key}.groups 必须是映射（{{组名: {{属性}}}}），"
+            f"实际是 {type(groups).__name__}"
+        )
+    for group, attrs in groups.items():
+        if attrs is not None and not isinstance(attrs, dict):
+            raise LibraryCorruptError(
+                f"{path}: {key}.groups.{group} 必须是映射或留空，"
+                f"实际是 {type(attrs).__name__}"
+            )
+
+
 def _load_books() -> dict[str, dict]:
     """读 books.yaml 原始 dict。文件不存在 → {}。
 
-    解析失败或顶层不是 dict → `LibraryCorruptError`；值为 None 的条目归一成 {}。
+    以下情况一律 `LibraryCorruptError`（**绝不降级**）：
+    - YAML 语法错、顶层不是映射
+    - 文件是 0 字节（正常重写永远带注释头，空文件只可能是写到一半）
+    - 条目值是标量/列表（归一成 {} 会害它在下次重写时被静默删掉）
+    - 条目里 `groups` 不是映射，或组属性不是映射
+
+    值为 null 的条目（`n1:` 后面空着）归一成 {}。
     """
     path = BOOKS_PATH
     if not path.exists():
@@ -77,12 +101,26 @@ def _load_books() -> dict[str, dict]:
     except yaml.YAMLError as exc:
         raise LibraryCorruptError(f"{path}: YAML 解析失败：{exc}") from exc
     if data is None:
-        return {}
+        if path.stat().st_size == 0:
+            raise LibraryCorruptError(f"{path}: 文件为空（可能写到一半），请从 .bak 恢复")
+        return {}                       # 只有注释头 —— 合法的空账本
     if not isinstance(data, dict):
         raise LibraryCorruptError(
             f"{path}: 顶层必须是映射（dict），实际是 {type(data).__name__}"
         )
-    return {str(k): (v if isinstance(v, dict) else {}) for k, v in data.items()}
+
+    books: dict[str, dict] = {}
+    for key, value in data.items():
+        if value is None:
+            books[str(key)] = {}
+            continue
+        if not isinstance(value, dict):
+            raise LibraryCorruptError(
+                f"{path}: 条目 {key!r} 必须是映射，实际是 {type(value).__name__}"
+            )
+        _validate_entry(path, key, value)
+        books[str(key)] = value
+    return books
 
 
 def _ordered(book: dict) -> dict:
@@ -382,10 +420,15 @@ def _append_row(row: dict) -> None:
 
 
 def _allocate_id(rows: list[dict]) -> int:
-    """下一个 id：进程内缓存；首次调用时扫文件取 max+1。调用方持锁。"""
+    """下一个 id。调用方持锁。
+
+    每次都与文件里的 max 对齐：另一个进程或手改把文件改大之后，缓存不能给出
+    已经用过的 id（重了会让 `delete_search_history` 连带删掉另一条）。
+    """
     global _next_id_cache
-    if _next_id_cache is None:
-        _next_id_cache = max((r["id"] for r in rows), default=0) + 1
+    file_max = max((r["id"] for r in rows), default=0)
+    if _next_id_cache is None or _next_id_cache <= file_max:
+        _next_id_cache = file_max + 1
     new_id = _next_id_cache
     _next_id_cache = new_id + 1
     return new_id
@@ -400,6 +443,8 @@ def get_search_history(limit: int = 50) -> list[dict]:
 
 def add_search_history(source_name: str, keyword: str) -> None:
     """记一条搜索。同 (书源, 关键词) 不去重，只追加。"""
+    if not keyword:
+        return          # 空关键词写进去既读不出也删不掉
     with _lock:
         rows = _read_history_rows()
         row = {
