@@ -197,11 +197,10 @@ def test_apply_is_idempotent_when_no_source_db(tmp_path):
 
 # ── review 后的加固 ────────────────────────────────
 
-def test_apply_refuses_when_wal_checkpoint_busy(old_app):
+def test_apply_refuses_when_wal_checkpoint_busy(old_app, monkeypatch):
     """另一个连接持有写锁时 checkpoint 会 busy —— 必须报错，而不是写出残缺备份。"""
     from scripts import migrate_user_data as m
 
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(m, "_CHECKPOINT_BUSY_TIMEOUT_MS", 50)   # 别真等 2s
     db = _old_db(old_app)
     blocker = sqlite3.connect(str(db), timeout=1)
@@ -214,13 +213,12 @@ def test_apply_refuses_when_wal_checkpoint_busy(old_app):
     finally:
         blocker.rollback()
         blocker.close()
-        monkeypatch.undo()
 
 
 def test_refuses_before_touching_old_db_when_target_exists(old_app):
     """目标已存在且未 --force 时应该直接跳，连旧库都不去读（不做 checkpoint）。"""
     library = old_app / "config" / "library"
-    library.mkdir(parents=True)
+    library.mkdir(parents=True, exist_ok=True)
     (library / "books.yaml").write_text("", encoding="utf-8")
 
     db = _old_db(old_app)
@@ -230,6 +228,7 @@ def test_refuses_before_touching_old_db_when_target_exists(old_app):
     try:
         result = migrate(old_app, apply=True)
         assert result["skipped"] is not None    # 而不是抛 checkpoint busy
+        assert result["books"] == 0 and result["written"] == []   # 完全没碰旧库
     finally:
         blocker.rollback()
         blocker.close()
