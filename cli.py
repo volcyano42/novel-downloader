@@ -11,7 +11,7 @@
     python cli.py sources list [--json]
     python cli.py info --source fanqie-requests-default --url "https://fanqienovel.com/page/7123456789012345678"
     python cli.py dev new-source --name <name> / dev list-sources
-    python cli.py config init [--all | --main | --sources NAME | --formats FMT | --user-db]
+    python cli.py config init [--all | --main | --sources NAME | --formats FMT]
 
 子命令定义与实现见 cli/main.py，命令一览见 docs/project/cli.md。
 """

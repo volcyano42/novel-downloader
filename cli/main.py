@@ -12,7 +12,7 @@
     python cli.py sources list [--json]
     python cli.py info --source fanqie-requests-default --url "https://..."
     python cli.py dev new-source --name <name> | dev list-sources
-    python cli.py config init [--all | --main | --sources NAME | --formats FMT | --user-db]
+    python cli.py config init [--all | --main | --sources NAME | --formats FMT]
 """
 
 import argparse
@@ -98,7 +98,6 @@ def _parse_args() -> argparse.Namespace:
                          help="只初始化 sources/NAME.yaml；NAME=all 表示全部")
     cf_init.add_argument("--formats", default=None, metavar="FMT",
                          help="只初始化 formats/FMT.yaml；FMT=all 表示全部")
-    cf_init.add_argument("--user-db", action="store_true", help="只初始化 user_data.db")
 
     # ── dev ──
     dv = sub.add_parser("dev", help="开发工具")
@@ -362,18 +361,17 @@ def cmd_config(args):
     `init_export_config(fmt)` 内部是**无条件** `shutil.copy2`（模块注释也写明
     「初始化（不检查，直接复制）」），因此**不能**整体调用 —— 先由
     `check_config()` 取缺失清单，再按项（且只传单个名字）调用，只可能写入确实
-    不存在的文件。`user_data.db` 的 `init_user_db()` 自带「不存在才复制」判断。
+    不存在的文件。
 
-    `--main` / `--sources` / `--formats` / `--user-db` 互斥；无参等价 `--all`。
+    `--main` / `--sources` / `--formats` 互斥；无参等价 `--all`。
     """
     if args.config_command != "init":
         return
     import init_config
 
-    exclusive = [args.main, args.sources is not None,
-                 args.formats is not None, args.user_db]
+    exclusive = [args.main, args.sources is not None, args.formats is not None]
     if sum(exclusive) > 1:
-        print("错误：--main / --sources / --formats / --user-db 只能选一个（不加参数则等价 --all）",
+        print("错误：--main / --sources / --formats 只能选一个（不加参数则等价 --all）",
               file=sys.stderr)
         raise SystemExit(2)
 
@@ -392,8 +390,6 @@ def cmd_config(args):
             continue
         if args.formats is not None and kind != "formats":
             continue
-        if args.user_db:
-            continue  # user_data.db 不在 yaml 缺失清单中，单独处理
         if kind == "sources" and args.sources not in (None, "all") and stem != args.sources:
             continue
         if kind == "formats" and args.formats not in (None, "all") and stem != args.formats:
@@ -404,10 +400,6 @@ def cmd_config(args):
             created += init_config.init_source_config(stem)
         elif kind == "formats":
             created += init_config.init_export_config(stem)
-
-    # user_data.db：单独指定时只做它；未限定类别（无参 / --all）时顺带补齐
-    if args.user_db or (not args.main and args.sources is None and args.formats is None):
-        created += init_config.init_user_db()
 
     if created:
         print(f"已初始化 {len(created)} 个配置项：")

@@ -136,7 +136,6 @@ def test_cmd_config_only_touches_missing(monkeypatch, capsys):
         main = False
         sources = None
         formats = None
-        user_db = False
 
     monkeypatch.setattr(init_config, "check_config",
                         lambda: {"missing": ["config.yaml", "sources/demo-r-default.yaml"],
@@ -145,8 +144,6 @@ def test_cmd_config_only_touches_missing(monkeypatch, capsys):
                         lambda: (calls.append("main"), ["/tmp/config.yaml"])[1])
     monkeypatch.setattr(init_config, "init_source_config",
                         lambda name: (calls.append(f"sources:{name}"), [f"/tmp/sources/{name}.yaml"])[1])
-    monkeypatch.setattr(init_config, "init_user_db",
-                        lambda: (calls.append("user-db"), [])[1])
 
     def _forbidden(*_a, **_k):  # 若命令走了 init_export_config 就说明过滤失效
         raise AssertionError("不该调用 init_export_config（formats 不在缺失清单里）")
@@ -155,6 +152,6 @@ def test_cmd_config_only_touches_missing(monkeypatch, capsys):
 
     cli_main.cmd_config(Args())
 
-    assert calls == ["main", "sources:demo-r-default", "user-db"]
+    assert calls == ["main", "sources:demo-r-default"]
     out = capsys.readouterr().out
     assert "已初始化 2 个配置项" in out

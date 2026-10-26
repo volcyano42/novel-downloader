@@ -56,12 +56,9 @@ def test_nld_app_data_env_wins(monkeypatch, tmp_path, module):
 # ── init_config 目标目录 ──────────────────────────────────────
 
 def test_init_config_targets_exe_dir_when_compiled(monkeypatch, tmp_path):
-    """编译产物：config 与 user_data.db 都初始化到 exe 同目录的 app_data/ 下。"""
+    """编译产物：配置初始化到 exe 同目录的 app_data/config 下。"""
     monkeypatch.setattr(init_config, "exe_dir", lambda: tmp_path / "dist")
     assert init_config._target_dir() == tmp_path / "dist" / "app_data" / "config"
-    assert init_config._user_db_target_dir() == (
-        tmp_path / "dist" / "app_data" / "storage" / "users" / "default"
-    )
 
 
 def test_init_config_source_run_targets_project_root():
