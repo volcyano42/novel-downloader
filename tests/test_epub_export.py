@@ -75,3 +75,73 @@ def test_no_legacy_render_chapter_dead_code():
         assert "body" in sig.parameters, (
             f"_render_chapter 仍不可独立调用：{sig}；应改为接收已渲染的 body"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 插图：src 必须是纯 ASCII，且不能裸嵌在 <p> 里
+# ═══════════════════════════════════════════════════════════════════
+# 2026-10-26 报告：导入番茄小说后插图小得跟一个汉字差不多 —— 那不是缩略图，
+# 是**破图**。图片文件名取自 `img.alt`（中文 + 全角标点），而 XHTML 的 src 是
+# URI，必须 percent-encode 非 ASCII；严格解析器加载失败，只剩破图占位符。
+
+def _png_bytes(w: int = 800, h: int = 600) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (200, 100, 50)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _build_with_image(tmp_path, alt="大概是这么个位置，学到后面就知道这个图怎么看了"):
+    from novelbase.models.novel import Illustration
+
+    img = Illustration(raw_data=_png_bytes(), alt=alt, insert=6)
+    chapters = [
+        Chapter(id="c1", url="http://x/1", novel_id="n1", title="带图章节", order=1,
+                content="前面一段话。\n\n中间这一段里插了图，后面还有字。", images=[img]),
+    ]
+    novel = Novel(title="插图测试", url="http://x/book", serial=1,
+                  author="作者", description="简介", chapters=chapters)
+    opts = EPUBExportOptions(output_path=str(tmp_path), enabled=True)
+    return export(chapters, novel, opts)
+
+
+def test_image_src_is_pure_ascii(tmp_path):
+    """文件名不得含中文/全角标点：src 是 URI，严格阅读器不认未编码的非 ASCII。"""
+    path = _build_with_image(tmp_path)
+    with zipfile.ZipFile(path) as zf:
+        names = [n for n in zf.namelist() if n.startswith("OEBPS/images/")]
+        xhtml = zf.read("OEBPS/chapter_0001.xhtml").decode("utf-8")
+    assert names, "没有写出任何图片"
+    for n in names:
+        assert n.isascii(), f"zip 内图片文件名含非 ASCII: {n!r}"
+    import re
+    srcs = re.findall(r'<img[^>]+src="([^"]+)"', xhtml)
+    assert srcs, "xhtml 里没有 img"
+    for src in srcs:
+        assert src.isascii(), f"img src 含非 ASCII（会让阅读器加载失败）：{src!r}"
+
+
+def test_image_not_nested_inside_paragraph(tmp_path):
+    """<img> 不能裸嵌在 <p> 内 —— 否则与正文混排、受 text-indent 影响。"""
+    path = _build_with_image(tmp_path)
+    with zipfile.ZipFile(path) as zf:
+        xhtml = zf.read("OEBPS/chapter_0001.xhtml").decode("utf-8")
+    import re
+    nested = re.search(r"<p>(?:(?!</p>).)*<img", xhtml, re.S)
+    assert not nested, f"img 仍嵌在段落内：{nested.group(0)[-120:] if nested else ''}"
+    assert 'class="illustration"' in xhtml, "img 缺少块级包裹容器"
+
+
+def test_image_has_inline_block_style(tmp_path):
+    """关键尺寸/块级样式内联，避免阅读器忽略外部 CSS 时图片退化成行内小图。"""
+    path = _build_with_image(tmp_path)
+    with zipfile.ZipFile(path) as zf:
+        xhtml = zf.read("OEBPS/chapter_0001.xhtml").decode("utf-8")
+    import re
+    tag = re.search(r"<img[^>]*>", xhtml)
+    assert tag, "没有 img 标签"
+    style = tag.group(0)
+    assert "max-width" in style and "display" in style, f"img 缺少内联样式：{style}"

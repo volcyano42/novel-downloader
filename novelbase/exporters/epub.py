@@ -138,10 +138,10 @@ def _register_image(reg: dict, img: Illustration) -> str:
         return reg["img_list"][0][1] if reg["img_list"] else "unknown.jpg"
 
     reg["img_counter"] += 1
-    if img.alt and img.alt.strip():
-        base = _sanitize_filename(img.alt.strip())[:30]
-    else:
-        base = f"img_{reg['img_counter']:04d}"
+    # 文件名一律 ASCII 序号：`src` 是 URI，中文 / 全角标点未 percent-encode 时
+    # 严格阅读器加载失败（番茄导入后表现为一个汉字大小的破图）。alt 已写在
+    # xhtml 的 alt 属性与图注里，文件名不需要可读性。
+    base = f"img_{reg['img_counter']:04d}"
 
     fmt = img.image_format or "jpeg"
     ext = _FORMAT_EXT.get(fmt, ".jpg")
@@ -156,6 +156,18 @@ def _register_image(reg: dict, img: Illustration) -> str:
     reg["img_name_seen"].add(filename)
     reg["img_list"].append((img, filename))
     return filename
+
+
+#: 图片关键样式内联写死：番茄等导入器/阅读器可能完全忽略外部 CSS，
+#: 那时行内 <img> 会退化成约一个字符大小的破图或缺尺寸约束的大图。
+_IMG_INLINE_STYLE = "display:block;max-width:100%;height:auto;margin:1em auto;"
+
+
+def _img_tag(reg: dict, img: Illustration) -> str:
+    """生成带内联样式的 `<img>` 标签（文件名 ASCII、自动去重注册）。"""
+    fname = _register_image(reg, img)
+    alt = html_lib.escape(img.alt or "")
+    return f'<img src="images/{fname}" alt="{alt}" style="{_IMG_INLINE_STYLE}"/>'
 
 
 def _img_filename(reg: dict, img: Illustration) -> str | None:
@@ -207,8 +219,9 @@ def _render_cover_xhtml(novel: Novel, cover_img_name: str) -> str:
         '  <link rel="stylesheet" type="text/css" href="css/style.css"/>\n'
         '</head>\n'
         '<body>\n'
-        '  <div class="cover">\n'
-        f'    <img src="images/{cover_img_name}" alt="{title}"/>\n'
+        '  <div class="cover" style="text-align:center;padding:1em 0;">\n'
+        f'    <img src="images/{cover_img_name}" alt="{title}"'
+        ' style="display:block;max-width:100%;max-height:100%;height:auto;margin:0 auto;"/>\n'
         '  </div>\n'
         '</body>\n'
         '</html>'
@@ -290,7 +303,10 @@ def _build_chapter_body(chapter: Chapter, reg: dict) -> str:
         ph = f"{{{{IMG_{idx:04d}}}}}"
         placeholder_map[ph] = img
         pos = max(0, min(pos, len(result)))
-        result = result[:pos] + ph + result[pos:]
+        # 前后加空行：让 _text_to_xhtml 把占位符单独包成一个 <p>，
+        # 之后整段替换为块级图容器。<img> 裸嵌在 <p> 里会与正文混排、
+        # 受 text-indent 影响，在阅读器里排得很怪。
+        result = result[:pos] + f"\n\n{ph}\n\n" + result[pos:]
         idx += 1
 
     for img in unpositioned:
@@ -302,24 +318,21 @@ def _build_chapter_body(chapter: Chapter, reg: dict) -> str:
     xhtml = _text_to_xhtml(result)
 
     for ph, img in placeholder_map.items():
-        fname = _register_image(reg, img)
-        alt = html_lib.escape(img.alt or "")
         if ph in end_placeholders:
             continue
-        tag = f'<img src="images/{fname}" alt="{alt}"/>'
-        xhtml = xhtml.replace(ph, tag)
+        block = f'<div class="illustration">{_img_tag(reg, img)}</div>'
+        # 占位符已被单独成段 → 整段替换；万一没成段（极端文本形态）再兜底替换
+        xhtml = xhtml.replace(f"<p>{ph}</p>", block)
+        xhtml = xhtml.replace(ph, block)
 
     if end_placeholders:
         end_tags: list[str] = []
         for ph in end_placeholders:
             img = placeholder_map[ph]
-            fname = _img_filename(reg, img)
-            if fname is None:
-                fname = _register_image(reg, img)
             alt = html_lib.escape(img.alt or "")
             end_tags.append(
                 f'<div class="illustration">'
-                f'<img src="images/{fname}" alt="{alt}"/>'
+                f'{_img_tag(reg, img)}'
                 f'<p class="illustration-caption">{alt}</p>'
                 f'</div>'
             )
