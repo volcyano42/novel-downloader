@@ -241,7 +241,7 @@ const ChapterRow = memo(function ChapterRow({ chapter, checked, onToggle }: {
         }
       }}
       className={cn(
-        "flex items-center gap-2.5 border-b border-white/10 px-3 py-1.5 outline-none last:border-b-0 dark:border-slate-700/20",
+        "flex items-center gap-2.5 border-b border-white/10 px-3 py-2.5 outline-none last:border-b-0 dark:border-slate-700/20 sm:py-1.5",
         disabled
           ? "cursor-not-allowed opacity-45"
           : "cursor-pointer hover:bg-indigo-50/60 focus-visible:bg-indigo-50/60 dark:hover:bg-indigo-500/10 dark:focus-visible:bg-indigo-500/10",
