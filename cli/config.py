@@ -99,7 +99,7 @@ def save_main_config(cfg: dict) -> None:
 
 
 def load_groups() -> dict:
-    """Load groups from user_data.db (migrated from groups.yaml).
+    """Load groups from config/library/books.yaml.
 
     Returns: {group_name: {novel_id: {"pending_export": bool}, ...}, ...}
     """
@@ -108,7 +108,7 @@ def load_groups() -> dict:
 
 
 def save_groups(groups: dict) -> None:
-    """Save groups to user_data.db."""
+    """Save groups to config/library/books.yaml."""
     from shared.user_data import save_groups as _db_save
     _db_save(groups)
 
@@ -184,7 +184,7 @@ def ensure_novel_in_group(novel_id: str) -> None:
 
 
 def add_novel_to_group(novel_id: str, group: str) -> bool:
-    """Add novel_id to group in user_data.db (auto-dedup).
+    """Add novel_id to group in config/library/books.yaml (auto-dedup).
 
     If the novel is already in another group, remove it first.
     Returns True if newly added, False if already in target group.
