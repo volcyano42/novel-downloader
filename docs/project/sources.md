@@ -3,7 +3,7 @@
 > **2026-09-25 扁平化重构后**：书源为**一层目录** + `source.json` + 4 个能力文件。
 > 旧的 `platform` / `SHOW_NAME` / `HOSTS` / `NAME`、四层目录（`{platform}/{mode}/{variant}/`）、
 > `variant` 概念、`register_source()` / `platform_from_url()` / `canonical_book_url()`
-> **全部移除**——mode **默认**由书源在 `source.json` 里声明（用户可逐能力覆盖，见「mode 的用户覆盖」），`source_name` 是唯一的对外键。
+> **全部移除**——mode **默认**由书源在 `source.json` 里声明（用户可在用户层顶层整体覆盖，见「用户层覆盖」），`source_name` 是唯一的对外键。
 
 ## 书源结构
 

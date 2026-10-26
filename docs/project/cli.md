@@ -18,8 +18,9 @@
 ### 书源与模式
 
 - `--source/-s`：书源名 `source_name`（如 `fanqie-requests-default`）。
-- **mode 默认由书源在 `source.json` 里声明，用户可逐能力覆盖**（`sources/{source_name}.yaml` 的 `{cap}.mode`，
-  唯一入口 `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎（`_make_engine_getter(capability)`）后注入 core）——旧的 `--platform/-p`、
+- **mode 默认由书源在 `source.json` 里声明，用户可在用户层顶层整体覆盖**（`sources/{source_name}.yaml` 的
+  顶层 `mode`；2026-10-25 起不再逐能力覆盖：一个 mode 对四类能力全部生效。唯一入口
+  `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎（`_make_engine_getter(capability)`）后注入 core）——旧的 `--platform/-p`、
   `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。非法的覆盖值被忽略并回退声明。
 - `search` 省略 `--source` 时**并发全部书源**（`shared.config.default_source_names()` = 全部书源，
   `enabled` 已废弃，**无任何过滤**）；**每个源最多贡献 1 条结果**（core `search` 是单源单结果），

@@ -21,8 +21,8 @@ storage:                    # ⚠️ 遗留死配置，见下
   **不再是「任务内章节并发」**。排队中的任务被暂停**不占任务槽**，`resume` 后才重新抢额度；
   下调该值仅影响之后排队/启动的任务（已在跑的不受影响），最多 1 秒后生效（读取带 1s TTL 缓存）。
 - `download.notify`：下载完成/未完成通知。
-- **全局 `mode` 已删除**（2026-09-25）：mode 由书源在 `source.json` 里声明；用户层可**顶层覆盖**（2026-10-25 起不再逐能力）
-  （`sources/{source_name}.yaml` 的 `{cap}.mode`，见下）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
+- **全局 `mode` 已删除**（2026-09-25）：mode 由书源在 `source.json` 里声明；用户层可**顶层覆盖**
+  （`sources/{source_name}.yaml` 的顶层 `mode`，见下；2026-10-25 起不再逐能力覆盖）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
 - ⚠️ **`storage` 段已不可配置（死配置）**：实现恒取 `shared.config.get_database_url()`
   （= `{APP_DATA}/storage/novels/`），backend 与 CLI 统一，与 `config.yaml` 内容无关。
   修改该段的 `backend` / `database_url` **不生效**；保留仅为兼容旧文件，新配置可省略。
@@ -66,7 +66,7 @@ proxies: {}
   **出厂默认改为 `[0, 0]`（不设置 = 不限速；旧出厂值为 `[3,5]`）**。生效优先级：
   `dataclass 默认 → source.json 顶层 → 用户层 sources yaml 顶层`。
   ⚠️ **历史写入过 `delay` 的老用户**（旧版曾在 `sites/*.yaml` 落过 `delay: [3,5]`）会因三层合并语义继续以用户层为准，
-  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 api 源的能力段 `key`），新用户不受影响。
+  如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 api 源的顶层 `key`），新用户不受影响。
 - **用户层覆盖 mode**：顶层 `mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；
   写 `null`（或删除该键）= 恢复声明；非法值忽略回退声明。**一个 mode 对四类能力全部生效**。
   唯一入口 `shared.config.effective_capabilities()`；`shared.config.merged_source_config()` 按有效 mode
