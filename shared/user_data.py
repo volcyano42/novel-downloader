@@ -1,12 +1,13 @@
-"""用户数据层 — books.yaml 书维度账本 + 搜索历史。
+"""用户数据层 — 两个可手改的文本文件，都在 `app_data/config/library/` 下。
 
-- 书维度（分组 / 收藏 / 来源 / 书名）存 `app_data/config/library/books.yaml`，
-  可手改；全量重写走"临时文件 + fsync + os.replace"，写前留一份 `.bak`。
-- 搜索历史暂存 `app_data/storage/users/default/user_data.db`，
-  待迁移到同目录的 `search_history.jsonl`。
+- `books.yaml` 书维度账本（分组 / 收藏 / 来源 / 书名）：全量读写，重写走
+  "临时文件 + fsync + os.replace"，写前留一份 `.bak`。
+- `search_history.jsonl` 搜索历史：只追加；读取时按 (书源, 关键词) 去重，
+  超过 `_HISTORY_MAX_LINES` 行压缩到 `_HISTORY_KEEP` 行。
 
 并发保护：进程内 `threading.Lock`（backend 单进程，`uvicorn.run(app)` 不带 workers）。
 """
+import json
 import logging
 import os
 import shutil
@@ -33,9 +34,6 @@ NOVELS_DIR = APP_DATA / "storage" / "novels"
 
 _lock = threading.Lock()
 
-# 搜索历史（尚未迁移）
-DB_PATH = APP_DATA / "storage" / "users" / "default" / "user_data.db"
-
 
 class LibraryCorruptError(RuntimeError):
     """`books.yaml` 存在但不是合法 YAML dict。
@@ -57,7 +55,12 @@ _BOOKS_HEADER = """\
 # 序列化时的固定字段顺序（手改时肉眼可比对）
 _FIELD_ORDER = ("title", "groups", "favorite", "favorited_at", "source")
 
-_FAVORITED_AT_FMT = "%Y-%m-%d %H:%M:%S"
+_TIME_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+def _now() -> str:
+    """本地时间字符串 `%Y-%m-%d %H:%M:%S`（字符串序 = 时间序）。"""
+    return datetime.now().strftime(_TIME_FMT)
 
 
 def _load_books() -> dict[str, dict]:
@@ -223,7 +226,7 @@ def add_favorite(novel_id: str) -> bool:
         if entry.get("favorite") is True:
             return False
         entry["favorite"] = True
-        entry["favorited_at"] = datetime.now().strftime(_FAVORITED_AT_FMT)
+        entry["favorited_at"] = _now()
         _save_books(books)
         return True
 
@@ -300,143 +303,132 @@ def delete_novel_source(novel_id: str) -> bool:
         return True
 
 
-# ═══════════════════════════════ 搜索历史（暂用 SQLite） ═══════════════════════════════
+# ═══════════════════════════════ 搜索历史（search_history.jsonl） ═══════════════════════════════
+#
+# append-only：写入只追加一行，同一 `(source_name, keyword)` 再次搜索时也追加
+# （新时间戳），去重在读取时做 —— 这样高频写是 O(1)，不需要读-改-写整个文件。
 
-def _connection() -> sqlite3.Connection:
-    """获取连接，自动建表。"""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    _ensure_schema(conn)
-    return conn
+_HISTORY_MAX_LINES = 250     # 超过这个行数触发压缩
+_HISTORY_KEEP = 200          # 压缩后保留的最近条数
+
+_next_id_cache: Optional[int] = None      # 下一个可用 id（进程内缓存，None = 未读过文件）
 
 
-_SCHEMA_SQL = """
-    CREATE TABLE IF NOT EXISTS groups (
-        group_name   TEXT NOT NULL,
-        novel_id     TEXT NOT NULL,
-        pending_export INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (group_name, novel_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS favorites (
-        novel_id     TEXT PRIMARY KEY,
-        favorited_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-        note         TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS search_history (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        source_name  TEXT NOT NULL,
-        keyword      TEXT NOT NULL,
-        searched_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-        UNIQUE(source_name, keyword)
-    );
-    CREATE INDEX IF NOT EXISTS idx_search_history_time
-        ON search_history(searched_at DESC);
-
-    CREATE TABLE IF NOT EXISTS bookmarks (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        platform        TEXT NOT NULL,
-        novel_id        TEXT NOT NULL,
-        chapter_index   INTEGER NOT NULL,
-        chapter_title   TEXT,
-        note            TEXT,
-        created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-        UNIQUE(platform, novel_id, chapter_index)
-    );
-
-    CREATE TABLE IF NOT EXISTS novel_sources (
-        novel_id     TEXT PRIMARY KEY,
-        source_name  TEXT NOT NULL,
-        updated_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-    );
-"""
+def _read_history_rows() -> list[dict]:
+    """逐行解析。坏行 / 缺 id / id 非整数 一律跳过，不 abort 整个读取。"""
+    path = HISTORY_PATH
+    if not path.exists():
+        return []
+    rows: list[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            hid = obj.get("id")
+            if not isinstance(hid, int) or isinstance(hid, bool):
+                continue
+            keyword = obj.get("keyword")
+            if not isinstance(keyword, str) or not keyword:
+                continue
+            rows.append({
+                "id": hid,
+                "source_name": obj.get("source_name") or "",
+                "keyword": keyword,
+                "searched_at": obj.get("searched_at") or "",
+            })
+    return rows
 
 
-def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """建表。旧库（按 platform 存）的 search_history 整表 drop 重建，不迁移旧数据。"""
-    old_cols = {r[1] for r in conn.execute("PRAGMA table_info(search_history)")}
-    if "platform" in old_cols:
-        conn.execute("DROP TABLE search_history")
-        conn.commit()
-    conn.executescript(_SCHEMA_SQL)
-    conn.commit()
+def _dedup(rows: list[dict]) -> list[dict]:
+    """按 (source_name, keyword) 保留 searched_at 最新的一条，再按时间倒序。"""
+    latest: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = (row["source_name"], row["keyword"])
+        prev = latest.get(key)
+        if (
+            prev is None
+            or row["searched_at"] > prev["searched_at"]
+            or (row["searched_at"] == prev["searched_at"] and row["id"] > prev["id"])
+        ):
+            latest[key] = row
+    return sorted(latest.values(), key=lambda r: (r["searched_at"], r["id"]), reverse=True)
 
 
-def add_search_history(source_name: str, keyword: str) -> None:
-    conn = _connection()
-    conn.execute(
-        """INSERT INTO search_history(source_name, keyword, searched_at)
-           VALUES (?, ?, datetime('now','localtime'))
-           ON CONFLICT(source_name, keyword)
-           DO UPDATE SET searched_at = datetime('now','localtime')""",
-        (source_name, keyword),
-    )
-    conn.commit()
+def _dump_history(rows: list[dict]) -> str:
+    """按时间正序落盘（手看时从旧到新）。"""
+    ordered = sorted(rows, key=lambda r: (r["searched_at"], r["id"]))
+    return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in ordered)
+
+
+def _append_row(row: dict) -> None:
+    """追加一行。文件末尾没有换行符时先补一个，否则两行会被拼成一条。"""
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    needs_newline = False
+    if HISTORY_PATH.exists() and HISTORY_PATH.stat().st_size:
+        with HISTORY_PATH.open("rb") as f:
+            f.seek(-1, os.SEEK_END)
+            needs_newline = f.read(1) != b"\n"
+    with HISTORY_PATH.open("a", encoding="utf-8") as f:
+        if needs_newline:
+            f.write("\n")
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _allocate_id(rows: list[dict]) -> int:
+    """下一个 id：进程内缓存；首次调用时扫文件取 max+1。调用方持锁。"""
+    global _next_id_cache
+    if _next_id_cache is None:
+        _next_id_cache = max((r["id"] for r in rows), default=0) + 1
+    new_id = _next_id_cache
+    _next_id_cache = new_id + 1
+    return new_id
 
 
 def get_search_history(limit: int = 50) -> list[dict]:
-    conn = _connection()
-    return [dict(r) for r in conn.execute(
-        "SELECT * FROM search_history ORDER BY searched_at DESC LIMIT ?",
-        (limit,),
-    ).fetchall()]
+    """按时间去重倒序返回，最多 limit 条。"""
+    with _lock:
+        rows = _dedup(_read_history_rows())
+    return rows[:limit]
+
+
+def add_search_history(source_name: str, keyword: str) -> None:
+    """记一条搜索。同 (书源, 关键词) 不去重，只追加。"""
+    with _lock:
+        rows = _read_history_rows()
+        row = {
+            "id": _allocate_id(rows),
+            "source_name": source_name,
+            "keyword": keyword,
+            "searched_at": _now(),
+        }
+        _append_row(row)
+        if len(rows) + 1 > _HISTORY_MAX_LINES:
+            # 注意带上刚追加的 row：rows 是追加前的快照，漏了它会把最新一条压掉
+            _atomic_write(HISTORY_PATH, _dump_history(_dedup(rows + [row])[:_HISTORY_KEEP]))
 
 
 def delete_search_history(history_id: int) -> bool:
-    """删除单条搜索历史，返回是否删除了记录。"""
-    conn = _connection()
-    cur = conn.execute(
-        "DELETE FROM search_history WHERE id = ?", (history_id,)
-    )
-    conn.commit()
-    return cur.rowcount > 0
+    """删一条历史 —— 连同所有同 (书源, 关键词) 的物理行（否则去重后它还在）。"""
+    with _lock:
+        rows = _read_history_rows()
+        target = next((r for r in rows if r["id"] == history_id), None)
+        if target is None:
+            return False
+        key = (target["source_name"], target["keyword"])
+        kept = [r for r in rows if (r["source_name"], r["keyword"]) != key]
+        _atomic_write(HISTORY_PATH, _dump_history(kept))
+        return True
 
 
 def clear_search_history() -> None:
-    conn = _connection()
-    conn.execute("DELETE FROM search_history")
-    conn.commit()
-
-
-# ═══════════════════════════════ Bookmarks（无调用者，待删） ═══════════════════════════════
-
-def add_bookmark(platform: str, novel_id: str, chapter_index: int,
-                 chapter_title: str = None, note: str = None) -> bool:
-    conn = _connection()
-    try:
-        conn.execute(
-            "INSERT INTO bookmarks(platform, novel_id, chapter_index, chapter_title, note) VALUES (?,?,?,?,?)",
-            (platform, novel_id, chapter_index, chapter_title, note),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-
-
-def remove_bookmark(platform: str, novel_id: str, chapter_index: int) -> bool:
-    conn = _connection()
-    cur = conn.execute(
-        "DELETE FROM bookmarks WHERE platform=? AND novel_id=? AND chapter_index=?",
-        (platform, novel_id, chapter_index),
-    )
-    conn.commit()
-    return cur.rowcount > 0
-
-
-def get_bookmarks(novel_id: str = None, platform: str = None) -> list[dict]:
-    conn = _connection()
-    if novel_id:
-        rows = conn.execute(
-            "SELECT * FROM bookmarks WHERE novel_id=? ORDER BY chapter_index",
-            (novel_id,),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM bookmarks ORDER BY created_at DESC"
-        ).fetchall()
-    return [dict(r) for r in rows]
+    global _next_id_cache
+    with _lock:
+        _atomic_write(HISTORY_PATH, "")
+        _next_id_cache = None
