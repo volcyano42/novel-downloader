@@ -21,8 +21,8 @@ _KNOWN2 = "92xs-requests-default"
 
 @pytest.fixture
 def isolated_user_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
     return user_data
 
 

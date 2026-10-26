@@ -20,8 +20,8 @@ DOMAIN_CASES = [
 
 def test_migrate_infers_source_from_url_domain(tmp_path, monkeypatch):
     """游离 source_name 缺失时按 URL 域名回填。"""
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
 
     from scripts import migrate_novel_sources as m
     novels = [_fake_novel(f"d{i}", "", url=url) for i, (url, _) in enumerate(DOMAIN_CASES)]
@@ -33,8 +33,8 @@ def test_migrate_infers_source_from_url_domain(tmp_path, monkeypatch):
 
 def test_migrate_prefers_existing_source_name(tmp_path, monkeypatch):
     """游离属性优先于域名推断。"""
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
 
     from scripts import migrate_novel_sources as m
     n = _fake_novel("x", "fanqie-browser-default",
@@ -46,8 +46,8 @@ def test_migrate_prefers_existing_source_name(tmp_path, monkeypatch):
 
 def test_migrate_skips_unknown_domain(tmp_path, monkeypatch):
     """未知域名不猜，计入 skipped。"""
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
 
     from scripts import migrate_novel_sources as m
     moved, skipped = m.migrate([_fake_novel("u", "", url="https://example.com/b/1")])
@@ -56,8 +56,8 @@ def test_migrate_skips_unknown_domain(tmp_path, monkeypatch):
 
 
 def test_migrate_moves_and_is_idempotent(tmp_path, monkeypatch):
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
 
     from scripts import migrate_novel_sources as m
     novels = [
@@ -88,8 +88,8 @@ class _FakeStorage:
 def _prep_main(tmp_path, monkeypatch):
     """把 user_data 与 ROOT/local 目录都指向 tmp，隔离真实数据。"""
     from scripts import migrate_novel_sources as m
-    monkeypatch.setattr(user_data, "DB_PATH", tmp_path / "user_data.db")
-    monkeypatch.setattr(user_data, "GROUPS_YAML", tmp_path / "groups.yaml")
+    monkeypatch.setattr(user_data, "BOOKS_PATH", tmp_path / "books.yaml")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "novels")
     monkeypatch.setattr(m, "ROOT", tmp_path)
     (tmp_path / "app_data" / "storage").mkdir(parents=True)
     return m

@@ -1,27 +1,309 @@
-"""用户数据层 — SQLite 存储 groups / favorites / search_history / bookmarks。
+"""用户数据层 — books.yaml 书维度账本 + 搜索历史。
 
-所有表存放在 app_data/storage/users/default/user_data.db，首次打开时自动建表
-并从 groups.yaml 迁移旧数据。
+- 书维度（分组 / 收藏 / 来源 / 书名）存 `app_data/config/library/books.yaml`，
+  可手改；全量重写走"临时文件 + fsync + os.replace"，写前留一份 `.bak`。
+- 搜索历史暂存 `app_data/storage/users/default/user_data.db`，
+  待迁移到同目录的 `search_history.jsonl`。
+
+并发保护：进程内 `threading.Lock`（backend 单进程，`uvicorn.run(app)` 不带 workers）。
 """
 import logging
+import os
+import shutil
 import sqlite3
+import threading
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Optional
 
-from shared.config import APP_DATA
+import yaml
+
+from shared.config import APP_DATA, CONFIG_DIR
 
 _log = logging.getLogger("user_db")
 
-# 数据库路径：与 shared.config.APP_DATA 同源（优先级 NLD_APP_DATA > 编译产物 exe 同目录 > 仓库根）
-# ⚠️ 这里曾经用 `Path(__file__).resolve().parent.parent`：Nuitka onefile 下 `__file__` 在**临时解包
-# 目录**，于是 groups / favorites / search_history 的读写全落在解包目录（每次运行新建空库）
-# —— 表现为「书架里的书全部归到未分类」，而小说库（走 APP_DATA）却正常。
-DB_PATH = APP_DATA / "storage" / "users" / "default" / "user_data.db"
-GROUPS_YAML = APP_DATA / "config" / "groups.yaml"
+# ── 路径 ──
+# 全部派生自 shared.config（优先级 NLD_APP_DATA > 编译产物 exe 同目录 > 仓库根）。
+# ⚠️ 不要用 `Path(__file__).resolve().parent.parent`：Nuitka onefile 下 `__file__` 在
+# **临时解包目录**，读写会落在解包目录（每次运行新建空文件）。
+LIBRARY_DIR = CONFIG_DIR / "library"
+BOOKS_PATH = LIBRARY_DIR / "books.yaml"
+HISTORY_PATH = LIBRARY_DIR / "search_history.jsonl"
+NOVELS_DIR = APP_DATA / "storage" / "novels"
 
+_lock = threading.Lock()
+
+# 搜索历史（尚未迁移）
+DB_PATH = APP_DATA / "storage" / "users" / "default" / "user_data.db"
+
+
+class LibraryCorruptError(RuntimeError):
+    """`books.yaml` 存在但不是合法 YAML dict。
+
+    读写都抛，**绝不降级成空 dict** —— 否则下一次写入（下载热路径上的
+    `set_novel_source`）会把整本账本重写成一条。
+    """
+
+
+# ═══════════════════════════════ books.yaml ═══════════════════════════════
+
+_BOOKS_HEADER = """\
+# 书维度账本（程序维护，可手改）。key = novel_id（sha256(url)[:32]）。
+# title 由程序从 novels/<id>.db 的 meta.title 同步，手改会被覆盖。
+# groups 下每本书可属多个组，pending_export 是组级属性。
+# 其余字段省略即默认：favorite=false / source 未知 / 无收藏时间。
+"""
+
+# 序列化时的固定字段顺序（手改时肉眼可比对）
+_FIELD_ORDER = ("title", "groups", "favorite", "favorited_at", "source")
+
+_FAVORITED_AT_FMT = "%Y-%m-%d %H:%M:%S"
+
+
+def _load_books() -> dict[str, dict]:
+    """读 books.yaml 原始 dict。文件不存在 → {}。
+
+    解析失败或顶层不是 dict → `LibraryCorruptError`；值为 None 的条目归一成 {}。
+    """
+    path = BOOKS_PATH
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise LibraryCorruptError(f"{path}: YAML 解析失败：{exc}") from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise LibraryCorruptError(
+            f"{path}: 顶层必须是映射（dict），实际是 {type(data).__name__}"
+        )
+    return {str(k): (v if isinstance(v, dict) else {}) for k, v in data.items()}
+
+
+def _ordered(book: dict) -> dict:
+    """按固定字段顺序输出，未知字段（用户手写的）按原顺序跟在后面。"""
+    out = {k: book[k] for k in _FIELD_ORDER if k in book}
+    out.update({k: v for k, v in book.items() if k not in _FIELD_ORDER})
+    return out
+
+
+def _dump_books(books: dict) -> str:
+    """book dict → yaml 文本（含固定头注释）。纯函数，供迁移脚本复用。"""
+    body = {nid: _ordered(b) for nid, b in books.items()}
+    text = yaml.safe_dump(
+        body, allow_unicode=True, sort_keys=False, default_flow_style=False
+    )
+    return _BOOKS_HEADER + text
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """临时文件 + fsync + os.replace（同目录 rename 在 POSIX 上原子）。
+
+    写前把上一版留成 `.bak`，手改写坏后还能捞回来。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            shutil.copy2(path, path.with_name(path.name + ".bak"))
+        except OSError:          # 备份只是附加价值，失败不阻断正式写入
+            pass
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.unlink(missing_ok=True)  # 上次中断残留
+    with tmp.open("w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _save_books(books: dict) -> None:
+    """修剪空条目后落盘。调用方必须已持有 `_lock`。"""
+    pruned = {nid: b for nid, b in books.items() if b}
+    _atomic_write(BOOKS_PATH, _dump_books(pruned))
+
+
+def _read_title(novel_id: str) -> Optional[str]:
+    """从 `novels/<id>.db` 的 `meta.title` 读书名；任何失败返回 None（不阻断调用方）。"""
+    db = NOVELS_DIR / f"{novel_id}.db"
+    if not db.exists():
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        try:
+            row = conn.execute("SELECT title FROM meta LIMIT 1").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    return row[0] if row and row[0] else None
+
+
+# ═══════════════════════════════ Groups ═══════════════════════════════
+
+def load_groups() -> dict:
+    """返回 {group_name: {novel_id: {组属性}}}。"""
+    with _lock:
+        books = _load_books()
+    result: dict = {}
+    for novel_id, book in books.items():
+        for group, attrs in (book.get("groups") or {}).items():
+            result.setdefault(str(group), {})[novel_id] = dict(attrs or {})
+    return result
+
+
+def save_groups(groups: dict) -> None:
+    """全量重建 `groups` 字段 —— 只动它，`title` / `favorite` / `source` 原样保留。"""
+    with _lock:
+        books = _load_books()
+        for book in books.values():
+            book.pop("groups", None)
+        for group, novels in groups.items():
+            if not isinstance(novels, dict):
+                continue
+            for novel_id, attrs in novels.items():
+                entry = books.setdefault(str(novel_id), {})
+                entry.setdefault("groups", {})[str(group)] = dict(attrs or {})
+        _save_books(books)
+
+
+def get_novel_group(novel_id: str) -> Optional[str]:
+    """该书的第一个组名；不属于任何组返回 None（多组时返回哪个未定义）。"""
+    with _lock:
+        book = _load_books().get(novel_id) or {}
+    groups = book.get("groups") or {}
+    return next(iter(groups), None)
+
+
+def add_novel_to_group(novel_id: str, group: str) -> bool:
+    """加入 `group`，并先把该书移出所有其它组（沿用旧的单组语义）。
+
+    返回 True 表示发生了实际变化（新增 / 换组 / 顺带移出了别的组），
+    已在唯一的目标组里返回 False。
+    """
+    with _lock:
+        books = _load_books()
+        entry = books.setdefault(novel_id, {})
+        current = entry.get("groups") or {}
+        if list(current) == [group]:
+            return False
+        attrs = dict(current.get(group) or {})
+        entry["groups"] = {group: attrs}
+        _save_books(books)
+        return True
+
+
+def ensure_novel_in_group(novel_id: str) -> None:
+    """不属于任何组时加入 `default`。"""
+    if get_novel_group(novel_id) is None:
+        add_novel_to_group(novel_id, "default")
+
+
+# ═══════════════════════════════ Favorites ═══════════════════════════════
+
+def load_favorites() -> list[str]:
+    """已收藏的 novel_id，按收藏时间倒序（无时间戳的排最后）。"""
+    with _lock:
+        books = _load_books()
+    favs = [
+        (book.get("favorited_at") or "", novel_id)
+        for novel_id, book in books.items()
+        if book.get("favorite") is True
+    ]
+    favs.sort(key=lambda pair: (pair[0] != "", pair[0]), reverse=True)
+    return [novel_id for _, novel_id in favs]
+
+
+def add_favorite(novel_id: str) -> bool:
+    """收藏。返回 True 表示新收藏。"""
+    with _lock:
+        books = _load_books()
+        entry = books.setdefault(novel_id, {})
+        if entry.get("favorite") is True:
+            return False
+        entry["favorite"] = True
+        entry["favorited_at"] = datetime.now().strftime(_FAVORITED_AT_FMT)
+        _save_books(books)
+        return True
+
+
+def remove_favorite(novel_id: str) -> bool:
+    """取消收藏。返回 True 表示确实删除了。"""
+    with _lock:
+        books = _load_books()
+        entry = books.get(novel_id) or {}
+        if entry.get("favorite") is not True:
+            return False
+        entry.pop("favorite", None)
+        entry.pop("favorited_at", None)
+        _save_books(books)
+        return True
+
+
+def is_favorite(novel_id: str) -> bool:
+    with _lock:
+        book = _load_books().get(novel_id) or {}
+    return book.get("favorite") is True
+
+
+# ═══════════════════════════════ Novel Sources ═══════════════════════════════
+
+def set_novel_source(novel_id: str, source_name: str) -> None:
+    """记录某本书的来源（空 source_name 跳过，不建孤儿条目）。
+
+    顺带从 `meta.title` 同步书名 —— 这是账本里 `title` 的唯一写入口，
+    所以书名保持与入库数据一致（手改 `title` 会被这里覆盖）。
+    """
+    if not source_name:
+        return
+    title = _read_title(novel_id)          # 锁外做 IO
+    with _lock:
+        books = _load_books()
+        entry = books.setdefault(novel_id, {})
+        entry["source"] = source_name
+        if title:
+            entry["title"] = title
+        _save_books(books)
+
+
+def get_novel_source(novel_id: str) -> Optional[str]:
+    """返回该书来源；无记录返回 None。"""
+    with _lock:
+        book = _load_books().get(novel_id) or {}
+    return book.get("source")
+
+
+def get_novel_sources(novel_ids: Sequence[str]) -> dict[str, str]:
+    """批量查询（供列表 join 用）。只返回命中的 id；空输入返回 {}。"""
+    ids = list(novel_ids)
+    if not ids:
+        return {}
+    with _lock:
+        books = _load_books()
+    return {
+        novel_id: (books.get(novel_id) or {})["source"]
+        for novel_id in ids
+        if (books.get(novel_id) or {}).get("source")
+    }
+
+
+def delete_novel_source(novel_id: str) -> bool:
+    """删书时清理。返回 True 表示确实删除了。"""
+    with _lock:
+        books = _load_books()
+        entry = books.get(novel_id) or {}
+        if "source" not in entry:
+            return False
+        entry.pop("source", None)
+        _save_books(books)
+        return True
+
+
+# ═══════════════════════════════ 搜索历史（暂用 SQLite） ═══════════════════════════════
 
 def _connection() -> sqlite3.Connection:
-    """获取连接，自动建表 + 迁移。"""
+    """获取连接，自动建表。"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), timeout=15)
     conn.row_factory = sqlite3.Row
@@ -75,10 +357,7 @@ _SCHEMA_SQL = """
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    """建表 + 迁移 groups.yaml。"""
-    # ── 建表 ──
-    # 旧库（按 platform/mode/variant 存）不迁移：检出旧列 platform 时整表 drop，
-    # 由 executescript 按新 (source_name, keyword) 结构重建（一次性，见 spec §7）。
+    """建表。旧库（按 platform 存）的 search_history 整表 drop 重建，不迁移旧数据。"""
     old_cols = {r[1] for r in conn.execute("PRAGMA table_info(search_history)")}
     if "platform" in old_cols:
         conn.execute("DROP TABLE search_history")
@@ -86,136 +365,6 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_SQL)
     conn.commit()
 
-    # ── 迁移 groups.yaml → groups 表（仅首次，表为空且 yaml 存在时）──
-    cur = conn.execute("SELECT COUNT(*) FROM groups")
-    if cur.fetchone()[0] == 0 and GROUPS_YAML.exists():
-        _log.info("migrating groups.yaml → user_data.db")
-        _migrate_groups_yaml(conn)
-
-
-def _migrate_groups_yaml(conn: sqlite3.Connection) -> None:
-    """读 groups.yaml 写入 groups 表，完成后重命名为 .migrated。"""
-    import yaml
-
-    with GROUPS_YAML.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-
-    count = 0
-    for group_name, novels in data.items():
-        if not isinstance(novels, dict):
-            continue
-        for novel_id, meta in novels.items():
-            pe = 1 if (isinstance(meta, dict) and meta.get("pending_export")) else 0
-            conn.execute(
-                "INSERT OR IGNORE INTO groups(group_name, novel_id, pending_export) VALUES (?,?,?)",
-                (group_name, novel_id, pe),
-            )
-            count += 1
-    conn.commit()
-
-    # 重命名备份
-    migrated_path = GROUPS_YAML.with_suffix(".yaml.migrated")
-    GROUPS_YAML.rename(migrated_path)
-    _log.info("migrated %d entries, backed up to %s", count, migrated_path)
-
-
-# ═══════════════════════════════ Groups ═══════════════════════════════
-
-def load_groups() -> dict:
-    """返回 {group_name: {novel_id: {"pending_export": bool}}}。"""
-    conn = _connection()
-    rows = conn.execute("SELECT group_name, novel_id, pending_export FROM groups").fetchall()
-    result: dict = {}
-    for r in rows:
-        g = r["group_name"]
-        if g not in result:
-            result[g] = {}
-        result[g][r["novel_id"]] = {"pending_export": bool(r["pending_export"])}
-    return result
-
-
-def save_groups(groups: dict) -> None:
-    """全量覆盖 groups 表。"""
-    conn = _connection()
-    conn.execute("DELETE FROM groups")
-    for group_name, novels in groups.items():
-        if not isinstance(novels, dict):
-            continue
-        for novel_id, meta in novels.items():
-            pe = 1 if (isinstance(meta, dict) and meta.get("pending_export")) else 0
-            conn.execute(
-                "INSERT INTO groups(group_name, novel_id, pending_export) VALUES (?,?,?)",
-                (group_name, novel_id, pe),
-            )
-    conn.commit()
-
-
-def get_novel_group(novel_id: str) -> Optional[str]:
-    conn = _connection()
-    r = conn.execute(
-        "SELECT group_name FROM groups WHERE novel_id = ?", (novel_id,)
-    ).fetchone()
-    return r["group_name"] if r else None
-
-
-def add_novel_to_group(novel_id: str, group: str) -> bool:
-    """添加 novel_id 到指定组。已有则跳过。会先从旧组移除。"""
-    conn = _connection()
-    conn.execute("DELETE FROM groups WHERE novel_id = ? AND group_name != ?",
-                 (novel_id, group))
-    try:
-        conn.execute(
-            "INSERT INTO groups(group_name, novel_id, pending_export) VALUES (?,?,0)",
-            (group, novel_id),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-
-
-def ensure_novel_in_group(novel_id: str) -> None:
-    if get_novel_group(novel_id) is None:
-        add_novel_to_group(novel_id, "default")
-
-
-# ═══════════════════════════════ Favorites ═══════════════════════════════
-
-def load_favorites() -> list[str]:
-    """返回已收藏的 novel_id 列表。"""
-    conn = _connection()
-    return [r["novel_id"] for r in conn.execute(
-        "SELECT novel_id FROM favorites ORDER BY favorited_at DESC"
-    ).fetchall()]
-
-
-def add_favorite(novel_id: str) -> bool:
-    """添加收藏。返回 True 表示新收藏。"""
-    conn = _connection()
-    try:
-        conn.execute("INSERT INTO favorites(novel_id) VALUES (?)", (novel_id,))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-
-
-def remove_favorite(novel_id: str) -> bool:
-    """取消收藏。返回 True 表示确实删除了。"""
-    conn = _connection()
-    cur = conn.execute("DELETE FROM favorites WHERE novel_id = ?", (novel_id,))
-    conn.commit()
-    return cur.rowcount > 0
-
-
-def is_favorite(novel_id: str) -> bool:
-    conn = _connection()
-    return conn.execute(
-        "SELECT 1 FROM favorites WHERE novel_id = ?", (novel_id,)
-    ).fetchone() is not None
-
-
-# ═══════════════════════════════ Search History ═══════════════════════════════
 
 def add_search_history(source_name: str, keyword: str) -> None:
     conn = _connection()
@@ -253,7 +402,7 @@ def clear_search_history() -> None:
     conn.commit()
 
 
-# ═══════════════════════════════ Bookmarks ═══════════════════════════════
+# ═══════════════════════════════ Bookmarks（无调用者，待删） ═══════════════════════════════
 
 def add_bookmark(platform: str, novel_id: str, chapter_index: int,
                  chapter_title: str = None, note: str = None) -> bool:
@@ -291,52 +440,3 @@ def get_bookmarks(novel_id: str = None, platform: str = None) -> list[dict]:
             "SELECT * FROM bookmarks ORDER BY created_at DESC"
         ).fetchall()
     return [dict(r) for r in rows]
-
-
-# ═══════════════════════════════ Novel Sources ═══════════════════════════════
-
-def set_novel_source(novel_id: str, source_name: str) -> None:
-    """记录某本书的来源（UPSERT）。空 source_name 跳过，不建孤儿行。"""
-    if not source_name:
-        return
-    conn = _connection()
-    conn.execute(
-        """INSERT INTO novel_sources(novel_id, source_name, updated_at)
-           VALUES (?, ?, datetime('now','localtime'))
-           ON CONFLICT(novel_id)
-           DO UPDATE SET source_name = excluded.source_name,
-                         updated_at  = datetime('now','localtime')""",
-        (novel_id, source_name),
-    )
-    conn.commit()
-
-
-def get_novel_source(novel_id: str) -> Optional[str]:
-    """返回该书来源；无记录返回 None。"""
-    conn = _connection()
-    row = conn.execute(
-        "SELECT source_name FROM novel_sources WHERE novel_id = ?", (novel_id,)
-    ).fetchone()
-    return row["source_name"] if row else None
-
-
-def get_novel_sources(novel_ids: Sequence[str]) -> dict[str, str]:
-    """批量查询（供列表 join 用）。只返回命中的 id；空输入返回 {}。"""
-    ids = list(novel_ids)
-    if not ids:
-        return {}
-    conn = _connection()
-    marks = ",".join("?" * len(ids))
-    rows = conn.execute(
-        f"SELECT novel_id, source_name FROM novel_sources WHERE novel_id IN ({marks})",
-        ids,
-    ).fetchall()
-    return {r["novel_id"]: r["source_name"] for r in rows}
-
-
-def delete_novel_source(novel_id: str) -> bool:
-    """删书时清理。返回 True 表示确实删除了。"""
-    conn = _connection()
-    cur = conn.execute("DELETE FROM novel_sources WHERE novel_id = ?", (novel_id,))
-    conn.commit()
-    return cur.rowcount > 0
