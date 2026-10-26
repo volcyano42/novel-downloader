@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..sources.manifest import DuplicateSourceNameError, load_manifest, scan_source_names
 
-SRC = Path(__file__).parent.parent / "sources"
+SRC = Path(__file__).parent.parent / "sources" / "builtin"
 OUT = Path(__file__).parent / "_manifest.py"
 
 

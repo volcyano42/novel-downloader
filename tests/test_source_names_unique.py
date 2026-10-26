@@ -101,8 +101,10 @@ def _builtin_root(tmp_path: Path, *names: str) -> Path:
 def test_list_sources_raises_on_duplicate_builtin(tmp_path, monkeypatch):
     import novelbase.source as s
 
-    monkeypatch.setattr(s, "_SOURCES_DIR",
-                        _builtin_root(tmp_path, "demo-requests-default", "demo-requests-default"))
+    monkeypatch.setattr(
+        s, "_EXPLICIT_ROOTS",
+        [_builtin_root(tmp_path, "demo-requests-default", "demo-requests-default")],
+    )
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", None)
     with pytest.raises(DuplicateSourceNameError):
         s.list_sources()
@@ -112,8 +114,10 @@ def test_get_manifest_and_capabilities_raise_on_duplicate_builtin(tmp_path, monk
     """get_manifest 与 capabilities 都不得把撞名吞成空/第一个。"""
     import novelbase.source as s
 
-    monkeypatch.setattr(s, "_SOURCES_DIR",
-                        _builtin_root(tmp_path, "demo-requests-default", "demo-requests-default"))
+    monkeypatch.setattr(
+        s, "_EXPLICIT_ROOTS",
+        [_builtin_root(tmp_path, "demo-requests-default", "demo-requests-default")],
+    )
     monkeypatch.setattr(s, "_PRIVATE_SOURCES_ROOT", None)
     with pytest.raises(DuplicateSourceNameError):
         s.get_manifest("demo-requests-default")

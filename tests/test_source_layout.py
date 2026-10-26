@@ -6,7 +6,7 @@ import pytest
 from novelbase.sources.contracts import CAPABILITY_META
 from novelbase.sources.manifest import check_capability_files, load_manifest
 
-SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources"
+SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
 
 # 每个新书源目录的 mode 归属 = 其原 {platform}/{mode}/{variant} 路径里的 mode。
 # 这是「能力矩阵未被改坏」的真断言：4 个能力的 mode 必须与迁移前一致。

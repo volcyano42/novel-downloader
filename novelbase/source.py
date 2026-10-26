@@ -96,9 +96,6 @@ def _resolve_source_roots() -> list[Path]:
     if _PRIVATE_SOURCES_ROOT:
         roots.append(Path(_PRIVATE_SOURCES_ROOT))
     roots += list(_EXPLICIT_ROOTS)
-    # 过渡根（Task 3 迁移完成后删除）：迁移前 10 个源仍在 novelbase/sources/ 下，
-    # 迁移后该目录只剩 contracts.py / manifest.py，scan_source_names 扫不到源目录即无副作用。
-    roots.append(_SOURCES_DIR)
     roots.append(_SOURCES_DIR / "builtin")
     return [r for r in roots if r.is_dir()]
 
@@ -161,7 +158,7 @@ def capabilities(source_name: str) -> dict[str, str]:
 def _resolve_compiled(source_name: str, capability: str, dirname: str):
     """**仅编译模式**：产物里官方源的 `.py` 已被编译、文件系统无源文件，
     只能按包路径 `import_module`（详见 §5 的已知特例）。"""
-    module_path = f"novelbase.sources.{dirname}.{capability}"
+    module_path = f"novelbase.sources.builtin.{dirname}.{capability}"
     try:
         module = import_module(module_path)
     except ImportError as e:

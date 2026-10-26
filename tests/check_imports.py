@@ -34,7 +34,7 @@ import novelbase.sources as _sources_pkg
 
 from novelbase.sources.manifest import scan_source_names
 
-_builtin_root = Path(_sources_pkg.__file__).resolve().parent
+_builtin_root = Path(_sources_pkg.__file__).resolve().parent / "builtin"
 _declared = set(scan_source_names([_builtin_root]))
 _discovered = set(list_sources())
 _missing = _declared - _discovered

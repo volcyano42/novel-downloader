@@ -21,7 +21,7 @@ from pathlib import Path
 
 from novelbase.utils.urls import make_novel_id
 
-SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources"
+SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
 
 # {source_name: (典型 novel.url, make_novel_id(url))}
 STABLE = {
@@ -223,7 +223,7 @@ class _StubEngine:
 
 def test_92xs_novel_info_passes_url_through():
     """92xs novel_info 透传输入 url，不得把 /book/{id}.html 规范化为 /html/{id}/。"""
-    mod = importlib.import_module("novelbase.sources.92xs_requests_default.novel_info")
+    mod = importlib.import_module("novelbase.sources.builtin.92xs_requests_default.novel_info")
     url = "http://www.92xs.info/book/9999.html"
     novel = asyncio.run(mod.novel_info(url, _StubEngine()))
     assert novel.url == url

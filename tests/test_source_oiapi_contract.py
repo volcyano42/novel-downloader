@@ -106,7 +106,7 @@ def _chapter() -> Chapter:
 
 class TestOiApiNovelInfo:
     def test_maps_ids_response(self):
-        from novelbase.sources.fanqie_api_oiapi import novel_info as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import novel_info as mod
         engine = _engine(_IDS_RESPONSE)
 
         novel = asyncio.run(mod.novel_info(_NOVEL_URL, engine))
@@ -120,7 +120,7 @@ class TestOiApiNovelInfo:
         assert novel.url == _NOVEL_URL
 
     def test_cover_from_thumb_and_downloaded_via_engine(self):
-        from novelbase.sources.fanqie_api_oiapi import novel_info as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import novel_info as mod
         engine = _engine(_IDS_RESPONSE)
 
         novel = asyncio.run(mod.novel_info(_NOVEL_URL, engine))
@@ -134,7 +134,7 @@ class TestOiApiNovelInfo:
 
     def test_uses_ids_method_and_does_not_fetch_chapters(self):
         """method 必须是 ids，且不得再发起第二次 chapters 请求。"""
-        from novelbase.sources.fanqie_api_oiapi import novel_info as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import novel_info as mod
         engine = _engine(_IDS_RESPONSE)
 
         asyncio.run(mod.novel_info(_NOVEL_URL, engine))
@@ -145,7 +145,7 @@ class TestOiApiNovelInfo:
         assert post_data["type"] == "json"
 
     def test_raises_when_code_not_one(self):
-        from novelbase.sources.fanqie_api_oiapi import novel_info as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import novel_info as mod
         engine = _engine({"code": -5, "message": "default method: search, ids, chapter"})
 
         with pytest.raises(NovelNotFoundError):
@@ -155,7 +155,7 @@ class TestOiApiNovelInfo:
 class TestOiApiChapterList:
     def test_parses_volume_nested_list(self):
         """真实响应形态：data 为分卷嵌套 list[list[dict]]。"""
-        from novelbase.sources.fanqie_api_oiapi import chapter_list as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_list as mod
         engine = _engine(_CHAPTERS_VOLUME_RESPONSE)
 
         chapters = asyncio.run(mod.chapter_list(_NOVEL_URL, engine))
@@ -167,7 +167,7 @@ class TestOiApiChapterList:
 
     def test_parses_flat_list(self):
         """兼容形态：data 为扁平 list[dict]。"""
-        from novelbase.sources.fanqie_api_oiapi import chapter_list as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_list as mod
         engine = _engine(_CHAPTERS_RESPONSE)
 
         chapters = asyncio.run(mod.chapter_list(_NOVEL_URL, engine))
@@ -186,7 +186,7 @@ class TestOiApiChapterList:
         assert chapters[2].volume == "第二卷"
 
     def test_uses_chapters_method(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_list as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_list as mod
         engine = _engine(_CHAPTERS_RESPONSE)
 
         asyncio.run(mod.chapter_list(_NOVEL_URL, engine))
@@ -195,7 +195,7 @@ class TestOiApiChapterList:
         assert post_data["method"] == "chapters"
 
     def test_empty_data_raises(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_list as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_list as mod
         engine = _engine({"code": 1, "data": []})
 
         with pytest.raises(ChapterNotFoundError):
@@ -204,7 +204,7 @@ class TestOiApiChapterList:
 
 class TestOiApiChapterContent:
     def test_extracts_content_and_word_count_from_list(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_content as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_content as mod
         engine = _engine(_CHAPTER_CONTENT_RESPONSE)
 
         chapter = asyncio.run(mod.chapter_content(_chapter(), engine))
@@ -213,7 +213,7 @@ class TestOiApiChapterContent:
         assert chapter.count == 321
 
     def test_uses_chapter_method_with_order(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_content as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_content as mod
         engine = _engine(_CHAPTER_CONTENT_RESPONSE)
 
         asyncio.run(mod.chapter_content(_chapter(), engine))
@@ -223,14 +223,14 @@ class TestOiApiChapterContent:
         assert post_data["chapter"] == "1"
 
     def test_overflow_message_raises_chapter_not_found(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_content as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_content as mod
         engine = _engine(_CHAPTER_OVERFLOW_RESPONSE)
 
         with pytest.raises(ChapterNotFoundError):
             asyncio.run(mod.chapter_content(_chapter(), engine))
 
     def test_frequency_message_raises_anti_crawl(self):
-        from novelbase.sources.fanqie_api_oiapi import chapter_content as mod
+        from novelbase.sources.builtin.fanqie_api_oiapi import chapter_content as mod
         engine = _engine(_CHAPTER_FREQ_RESPONSE)
 
         with pytest.raises(AntiCrawlError):
