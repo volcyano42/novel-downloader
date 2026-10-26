@@ -1,8 +1,10 @@
 # 书源与 core 结构分离 — 设计
 
-> **状态**：已实施（2026-10-26）
+> **状态**：已实施（2026-10-26）。结构层与合规层**同日均已落地**。
 > **性质**：A1「core / 源分离」的**结构层**实现。它只搬骨架、不动契约。
-> **不在本次范围**：敏感源出仓（7 个源移出 private 仓库）、`docs/source-plugin.md` 的子进程 JSON-RPC 插件、合规示范源（I2）。
+> **合规层（同日追加）**：7 个红名单源已由 `scripts/migrate_private_sources_out.py` 搬出仓库到
+> `<APP_DATA>/sources/`（不进 git），`novelbase/sources/builtin/` 只剩 3 个可公开源。
+> **仍不在范围**：`docs/source-plugin.md` 的子进程 JSON-RPC 插件、合规示范源（I2）。
 
 ## 1. 背景与目标
 
@@ -107,3 +109,5 @@ module_name = f"nld_src_{tag}.{dirname}.{capability}"
 - `tests/check_imports.py` 通过（它校验「包内源清单 ⇔ 实际目录」）
 - 手工：`NLD_SOURCE_ROOTS=/tmp/x:/tmp/y python -c "from novelbase import list_sources; print(list_sources())"` 多根合并、撞名报错
 - 手工：两个根各放一个同名目录、不同 `source_name` → 各自 `resolve()` 拿到自己的函数（模块名隔离）
+- 出仓后两环境实测：**有源** 617 passed / 1 failed（已知 `test_detect_encoding_gbk`）；**无源**（模拟新机器/公开子集）479 passed / **136 skipped** / 1 failed —— 缺源由 `tests/conftest.py` 整模块 skip，不是红
+- 闸门：`scripts/check_public.py` 对 7 个红名单源 **0 误报**，白名单只剩 3 个可公开源
