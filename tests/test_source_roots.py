@@ -97,3 +97,20 @@ def test_source_outside_package_resolves(tmp_path, monkeypatch):
     _set_roots(monkeypatch, tmp_path / "outside")
     fn, mode = source_mod.resolve("outside-requests", "search")
     assert callable(fn) and mode == "requests"
+
+
+def test_capability_module_executed_once_per_root(tmp_path, monkeypatch):
+    """同一源多次 resolve 不应重复执行能力模块的顶层代码（模块按根标识缓存）。"""
+    d = _make_source(tmp_path / "a", "once_src", "once-requests")
+    marker = tmp_path / "exec_count.txt"
+    (d / "search.py").write_text(
+        "from pathlib import Path\n"
+        f"_p = Path({str(marker)!r})\n"
+        "_p.write_text(str(int(_p.read_text()) + 1) if _p.exists() else '1')\n"
+        "async def search(query, engine, **kwargs):\n    return None\n",
+        encoding="utf-8",
+    )
+    _set_roots(monkeypatch, tmp_path / "a")
+    source_mod.resolve("once-requests", "search")
+    source_mod.resolve("once-requests", "search")
+    assert marker.read_text(encoding="utf-8") == "1"

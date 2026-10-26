@@ -20,7 +20,9 @@
 不能作为内置源的替代实现。
 """
 
+import hashlib
 import os
+import sys
 from importlib import import_module
 from importlib import util as importlib_util
 from inspect import signature
@@ -114,12 +116,9 @@ def _source_dirs() -> dict[str, Path]:
     return scan_source_names(_resolve_source_roots())
 
 
-def _source_dir(source_name: str) -> tuple[Path, bool] | None:
-    """`(目录, 是否内置)`；未知 `source_name` 返回 `None`。"""
-    path = _source_dirs().get(source_name)
-    if path is None:
-        return None
-    return path, path.parent == _SOURCES_DIR
+def _source_dir(source_name: str) -> Path | None:
+    """源目录；未知 `source_name` 返回 `None`。"""
+    return _source_dirs().get(source_name)
 
 
 def list_sources() -> list[str]:
@@ -136,10 +135,9 @@ def get_manifest(source_name: str) -> dict:
         if dirname is None or dirname not in _compiled_sources():
             raise KeyError(f"unknown source: {source_name}")
         return _compiled_sources()[dirname]
-    entry = _source_dir(source_name)
-    if entry is None:
+    d = _source_dir(source_name)
+    if d is None:
         raise KeyError(f"unknown source: {source_name}")
-    d, _ = entry
     manifest = load_manifest(d)
     check_capability_files(d, manifest)  # spec 规则 1：能力段 ⇔ .py 文件双向一致
     return manifest
@@ -160,8 +158,9 @@ def capabilities(source_name: str) -> dict[str, str]:
     return {cap: section["mode"] for cap, section in manifest.get("default_config", {}).items()}
 
 
-def _resolve_import(source_name: str, capability: str, dirname: str):
-    """按目录名 import 能力模块并返回函数。"""
+def _resolve_compiled(source_name: str, capability: str, dirname: str):
+    """**仅编译模式**：产物里官方源的 `.py` 已被编译、文件系统无源文件，
+    只能按包路径 `import_module`（详见 §5 的已知特例）。"""
     module_path = f"novelbase.sources.{dirname}.{capability}"
     try:
         module = import_module(module_path)
@@ -173,17 +172,37 @@ def _resolve_import(source_name: str, capability: str, dirname: str):
     return fn
 
 
-def _resolve_private(d: Path, capability: str):
-    """私有源在包外（`NLD_PRIVATE_SOURCES`），必须走 spec_from_file_location（spec:163）。"""
-    candidate = d / f"{capability}.py"
+def _module_name(root: Path, dirname: str, capability: str) -> str:
+    """模块名必须含根标识：多根下同名目录否则会撞同一个 `sys.modules` key。"""
+    tag = hashlib.sha1(str(root.resolve()).encode()).hexdigest()[:8]
+    return f"nld_src_{tag}.{dirname}.{capability}"
+
+
+def _load_capability(source_dir: Path, capability: str) -> object:
+    """从源目录加载能力函数（不依赖包路径，包内包外同一条路径）。
+
+    模块按「根哈希 + 目录名 + 能力」注册进 `sys.modules`，避免同一源被反复
+    `exec_module`（每次章节下载都会 resolve）。
+    """
+    candidate = source_dir / f"{capability}.py"
     if not candidate.is_file():
-        raise ImportError(f"{d} 缺少能力文件 {candidate.name}")
-    module_name = f"novelbase_private.sources.{d.name}.{capability}"
-    spec = importlib_util.spec_from_file_location(module_name, str(candidate))
+        raise ImportError(f"{source_dir} 缺少能力文件 {candidate.name}")
+    name = _module_name(source_dir.parent, source_dir.name, capability)
+    cached = sys.modules.get(name)
+    if cached is not None:
+        fn = getattr(cached, capability, None)
+        if fn is not None:
+            return fn
+    spec = importlib_util.spec_from_file_location(name, str(candidate))
     if spec is None or spec.loader is None:
         raise ImportError(f"Failed to load spec from {candidate}")
     module = importlib_util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)   # 加载失败不留下半成品
+        raise
     fn = getattr(module, capability, None)
     if fn is None:
         raise ImportError(f"{candidate} 里没有名为 {capability} 的函数")
@@ -206,15 +225,14 @@ def resolve(source_name: str, capability: str):
         dirname = _compiled_dir_by_source().get(source_name)
         if dirname is None:
             raise ImportError(f"unknown source: {source_name}")
-        fn = _resolve_import(source_name, capability, dirname)
+        fn = _resolve_compiled(source_name, capability, dirname)
     else:
-        entry = _source_dir(source_name)
-        if entry is None:
+        d = _source_dir(source_name)
+        if d is None:
             raise ImportError(f"unknown source: {source_name}")
-        d, is_builtin = entry
-        # 全局唯一：每个 source_name 至多一个目录 → 无需「内置优先、私有补齐」循环
-        fn = (_resolve_import(source_name, capability, d.name) if is_builtin
-              else _resolve_private(d, capability))
+        # 全局唯一：每个 source_name 至多一个目录 → 无需「内置优先、私有补齐」循环；
+        # 加载路径也不再看「是否在包内」—— 官方源与用户源完全平等
+        fn = _load_capability(d, capability)
 
     sig = signature(fn)
     missing = [p for p in meta["required_params"] if p not in sig.parameters]

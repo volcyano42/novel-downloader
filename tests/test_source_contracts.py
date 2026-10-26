@@ -13,25 +13,26 @@ from novelbase.sources.contracts import CAPABILITY_META
 class TestSignatureValidation:
     """运行时签名校验：缺参数拒绝 / 未知能力拒绝。"""
 
-    def test_rejects_missing_params(self, monkeypatch):
-        def bad_search(q, engine):  # 用 q 而非 query
-            pass
+    def test_rejects_missing_params(self, tmp_path, monkeypatch):
+        """签名缺 required_params → resolve 抛 ValueError。
 
-        class FakeMod:
-            pass
-
-        fake_mod = FakeMod()
-        setattr(fake_mod, "search", bad_search)
-        original_import = _source_mod.import_module
-
-        def fake_import(name, package=None):
-            if name.endswith(".search"):
-                return fake_mod
-            return original_import(name, package=package)
-
-        monkeypatch.setattr(_source_mod, "import_module", fake_import)
+        2026-10-26：不再 monkeypatch `import_module` 注入假模块（该注入点随
+        「统一加载路径」删除），改为在磁盘上造一个签名错误的真实源。
+        """
+        d = tmp_path / "root" / "bad_src"
+        d.mkdir(parents=True)
+        (d / "__init__.py").write_text("", encoding="utf-8")
+        (d / "source.json").write_text(
+            '{"source_name": "bad-requests", "mode": "requests"}', encoding="utf-8"
+        )
+        (d / "search.py").write_text(
+            "async def search(q, engine):\n    return None\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("NLD_SOURCE_ROOTS", str(tmp_path / "root"))
+        monkeypatch.setattr(_source_mod, "_PRIVATE_SOURCES_ROOT", None)
+        monkeypatch.setattr(_source_mod, "_EXPLICIT_ROOTS", [])
         with pytest.raises(ValueError, match="query"):
-            resolve("92xs-requests-default", "search")
+            resolve("bad-requests", "search")
 
     def test_unknown_capability_raises(self):
         with pytest.raises(ValueError, match="unknown capability"):
