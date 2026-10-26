@@ -4,16 +4,19 @@
 > **性质**：§1 的现状事实全部**已实测**（依据标注在各条后）；§2 起为**建议**，不是承诺。
 > **目标假设**：按「**影响力 / 作品集**」编排路线图。若你的目标不同，见 [§8](#8-待补充信息剩余两项)。
 > **已定决策（2026-09-30）**：主仓库 `novel-downloader` **将从 public 转向 private** —— 公开面只保留一个仓库。不一致 A 据此收敛（§1.2 A），新出现的公开面选型见 §1.4，§3 / §4 / §5 的优先级已相应调整。
+>
+> **状态更新（2026-10-26 核对）**：三项前置**已完成** —— ① 迁移闸门已修（`pyproject.toml` 的 exclude 已改为扁平化后的实际目录名，见 §1.2 C）；② 主仓库已改回 **private**（2026-10-14，见 §1.2 A）；③ Docker 已落地（根目录 `Dockerfile` + `.dockerignore`，两阶段构建，见 §2.3 C5）。另有两条事实推翻原判断：`enabled` 字段已于 2026-09-27 **彻底废弃**（§2.2 B2 的原始动机失效）、用户侧账本已从 `user_data.db` 拆为 `books.yaml` + `search_history.jsonl`（§2.6 F4 的论据变化）。§1.1 表格数值已按本机实测刷新。**下文标注「✅ 已完成」的条目保留原始分析以便追溯，但不再是待办。**
 
 ---
 
 ## 0. 一页结论
 
 1. **核心架构已经收敛，内部债基本清完**——最近三批大动作全是「向内整理」（v4.5.0 书源扁平化 + 并发重做、v4.5.1 移除 Android 套壳、2026-09-27 `source_name` 全局唯一）。继续做内部重构的边际收益已经很低。
-2. **这个项目的真实瓶颈不在代码，在「外部」**：仓库已 public 但 0 star / 无 README / 无仓库描述 / 无 topics / 无 Docker —— 别人打不开、看不懂、装不上。
-3. **可见性已决：主仓库转 private**（2026-09-30）—— 公开面只剩一个仓库，方向是对的。但**顺序不能反**：必须**先修迁移闸门**，再执行转移，然后才谈公开面。闸门现状比「不拦截」更糟：旧路径让 4 个红名单书源被判成白名单**必需内容**，闸门会**报「缺失」并指挥你把它们补进 public**（实测 139 个问题、其中 61 个在 `novelbase/sources/` 下，见 §1.2 C）。转 private 本身很轻（实测 `fork: 0` ⇒ 无第三方副本），公开面怎么选是新出现的问题（§1.4）。
+2. **这个项目的真实瓶颈不在代码，在「外部」**：仓库现为 **private**（不再是「public 但 0 star」的尴尬状态），**Docker 已于 2026-10-14 补齐**；剩下的硬门槛只有两个 —— **仍无 README / 无仓库描述 / 无 topics**，以及公开面 `novel-crawler` 滞后。别人「打不开、看不懂」的根因现在只差 H1。
+3. **✅ 已完成：修迁移闸门 → 转 private**（2026-09-30 决定，均已落地）—— 顺序执行正确：闸门先修（exclude 已改为扁平化后目录名，`check_public.py` 现能真正命中红名单），主仓库随后改回 **private**（2026-10-14）。原始分析留档：闸门失效时的表现**不是**「不拦截」，而是**反向要求**——旧路径让 4 个红名单书源被判成白名单**必需内容**（实测 139 个问题、61 个在 `novelbase/sources/` 下，见 §1.2 C），照着「缺失」提示做就会把红名单实现主动复制进 public。公开面怎么选见 §1.4。
 4. **合规上唯一可行的公开形态**：core（引擎/存储/导出/阅读/CLI/WebUI）合法开源，**书源一律外置**，官方只随附公共领域 / 官方开放 API / 用户自有内容三类示范源。项目已有的 `NLD_PRIVATE_SOURCES` 与 `docs/source-plugin.md` 已把这条路铺了 80%。
-5. **最高性价比的动作**是「修迁移闸门（10 分钟）→ 转 private（5 分钟）→ 公开面 README + 边界声明 → 一个合规示范源跑通闭环」——半天到两天，比任何新功能都重要。
+5. **最高性价比的动作**是「~~修迁移闸门（10 分钟）→ 转 private（5 分钟）~~ ✅ 已完成 → 公开面 README + 边界声明 → 一个合规示范源跑通闭环」——**后两步仍待做**，半天到两天，比任何新功能都重要。
+6. **新增安全前置（2026-10-25 补充，优先级应压过一切规划项）**：git 历史里 `app_data/config/sites/fanqie.yaml` 曾长期被跟踪、存在**非空第三方 key** 的版本 → 文件虽已 untrack，历史 commit 仍可检出。**轮换 oiapi / rain.ink 的 key** 是当前唯一「已发生且不可撤回」的风险。原「`git filter-repo` 不必要」的结论对**可见性**成立（0 fork），对**密钥泄露**不成立 —— 不重写历史也必须换 key（详见 `EVALUATION.md` §使用建议）。
 
 ---
 
@@ -23,16 +26,16 @@
 
 | 项 | 实测值 | 依据 |
 |---|---|---|
-| 源码 | `novelbase` 6574 + `backend` 1956 + `cli` 1964 + `shared` 764 ≈ **11258 行**（不含测试与前端） | Python 遍历统计（`rglob` + `splitlines`） |
-| 测试 | **7571 行 / 52 文件 / 515 用例**（`python -m pytest tests -q`，2026-09-30 实测） | 本机实测 |
-| 前端 | `frontend/src` **4045 行** TS/TSX（React 19 + Tailwind + shadcn/ui） | `wc -l` |
-| 最大单文件 | `novelbase/core/engine.py` 698 / `backend/services/task_manager.py` 608 / `novelbase/exporters/epub.py` 596 | `wc -l` 排序 |
-| 功能闭环 | 搜索（全启用源并发）→ 下载（任务/书源/能力三层并发 + 队列）→ 存储（逐书 `.db` + SSE 推章节）→ 导出（txt/epub/img）→ 内置阅读器 → 设置（书源/格式/分组/收藏）/ 双 CLI | `backend/routers/*`、`docs/project/*` |
-| 书源 | **10 个内置**（6 enabled，4 个 `api` 类出厂禁用）；三引擎 `browser`(Playwright) / `requests`(httpx) / `api`(Rain.ink、oiapi 第三方代理) | `novelbase/sources/*/source.json` |
-| 部署 | Windows portable、Linux x64/arm64、Termux、Nuitka onefile；**无 Dockerfile / docker-compose** | `scripts/`、`.github/workflows/` |
+| 源码 | `novelbase` 6983 + `backend` 2245 + `cli` 1947 + `shared` 957 ≈ **12132 行**（不含测试与前端） | 2026-10-26 实测 |
+| 测试 | **54 文件 / 596 用例（595 passed, 1 failed，17.8s）**；失败项 = `tests/test_encoding.py::test_detect_encoding_gbk`（chardet 对短样本 GBK 误判，与 2026-10-14 `docs/project/development.md` 记录同源） | `python -m pytest tests/ -q`，2026-10-26 实测 |
+| 前端 | `frontend/src` **4437 行** TS/TSX（React 19 + Tailwind + shadcn/ui），**无前端测试** | 2026-10-26 实测 |
+| 最大单文件 | `novelbase/core/engine.py` 738 / `backend/services/task_manager.py` 607 / `novelbase/exporters/epub.py` 595 | `wc -l` 排序 |
+| 功能闭环 | 搜索（**全部**书源并发，`enabled` 已废弃）→ 下载（任务/书源/能力三层并发 + 队列）→ 存储（逐书 `.db` + SSE 推章节）→ 导出（txt/epub/img）→ 内置阅读器 → 设置（书源/格式/分组/收藏）/ 双 CLI | `backend/routers/*`、`docs/project/*` |
+| 书源 | **10 个内置**；`enabled` 字段已于 2026-09-27 **彻底废弃**（默认参与集 = 全部源，`shared.config.default_source_names()`）；三引擎 `browser`(Playwright) / `requests`(httpx) / `api`(Rain.ink、oiapi 第三方代理) | `novelbase/sources/*/source.json`、根 `AGENTS.md` |
+| 部署 | Windows portable、Linux x64/arm64、Termux、Nuitka onefile，**+ Docker（2026-10-14 落地：两阶段构建，`/data` 卷，非 root uid 1000）** | `scripts/`、`.github/workflows/`、`Dockerfile` |
 | CI | **仅 Linux**（Python 3.10/3.11/3.12，8 个 workflow） | `.github/workflows/ci.yml` |
-| LICENSE | MIT © 2026 volcyano42（`LICENSE` 与 `pyproject.toml` 的 `license = "MIT"` 一致） | 文件实读 |
-| 版本 | v4.5.1；`dev` 领先 `main` 一批提交未合并 | `git rev-list --count main..dev` |
+| LICENSE | MIT © 2026 volcyano42（`LICENSE` 与 `pyproject.toml` 的 `license = "MIT"` 一致；**纯 MIT 未附任何使用边界声明**） | 文件实读 |
+| 版本 | v4.5.2；`dev` 领先 `origin/main` **42 个提交**未合并 | `git rev-list --count origin/main..HEAD`，2026-10-26 实测 |
 
 **工程化程度高于这类工具的常态**（测试/源码 ≈ 0.67，三档 Python CI，双 CLI，四套打包路径）。这决定了后面所有建议的重心：**不是补工程能力，而是把它对外。**
 
@@ -53,6 +56,8 @@
 
 **结论**：「私有源隔离」在 GitHub 上**没有生效**——隔离实际是在第二仓库 `novel-crawler` 上做的，而主仓库虽然 public，一直被当作「私有工作仓库」使用（无 README、无描述、不宣传 → 靠**不被发现**）。这条路现实中能走，但它是**隐蔽性**（security by obscurity），不是隔离：关键词搜索、Star 推荐、爬虫索引都可能命中，而历史提交一旦公开就无法收回。
 
+> **✅ 已处置（2026-10-26 核对）**：主仓库已于 2026-10-14 改回 **private**（此前被发现意外处于 public 状态，见 `docs/session-prompt.md`）。本小节保留为决策依据的历史记录。⚠️ 但「历史提交一旦公开就无法收回」已具体化为**密钥泄露**：`app_data/config/sites/fanqie.yaml` 的历史版本含非空第三方 key（详见 `EVALUATION.md` §使用建议）→ 需轮换 key，见 §0 结论 6。
+
 > 这也说明：文档里说的「private 仓库」与 GitHub 的实际可见性不是一回事，需要在你自己的口径里统一。
 
 **处置（2026-09-30 用户决定）：主仓库 `novel-downloader` 将从 public 转向 private。**
@@ -63,7 +68,7 @@
 |---|---|
 | 敏感内容暴露面 | **解决**：转 private 后 GitHub 上不再对公众可见，code search 索引失效 |
 | 第三方副本 | **无风险**：实测 `fork: 0` / `star: 0`，没有 fork 副本需要处理 |
-| 历史提交 | **仍存在但不可见**；`git filter-repo` 重写历史**不必要**（0 fork + 无描述 + 无宣传 ⇒ 几乎无人 clone） |
+| 历史提交 | **仍存在但不可见**；`git filter-repo` 重写历史对**可见性**不必要（0 fork + 无描述 + 无宣传 ⇒ 几乎无人 clone）。⚠️ 但历史里有非空第三方 key ⇒ **key 必须轮换**（不换 = 泄露成立，与是否重写历史无关） |
 | 外部归档 | GitHub Archive 一类存档只记录 PushEvent 的 commit 元数据（sha / message），**不含文件内容**；实际危害可忽略 |
 | ⚠️ 关键前置 | **迁移闸门必须先修** —— 转 private 后公开面成为唯一出口，而闸门现在会把红名单书源判成白名单必需内容、**报「缺失」指挥你补进 public**（实测见不一致 C）；等于每次迁移都在赌 |
 
@@ -83,6 +88,8 @@
 
 也就是说：**你给世界的那个版本，停在 2026-09-24（落后主仓库数十个提交），还包含一个你已经放弃的技术方案**（Chaquopy 套壳）。
 
+> **2026-10-26 注**：本表基于 2026-09-27 的 GitHub API 实勘。当前开发机（Termux）**没有同级 `novel-crawler/` 目录**，两个仓库的可见性与滞后程度本次无法复核；但主仓库自身仍是“无 README / 无描述 / 无 topics”的状态（§9.1 实测）。
+
 #### ⚠️ 不一致 C：迁移白名单/黑名单已失效
 
 `PUBLIC_MANIFEST.md` 与 `pyproject.toml` 的 `[tool.novel-downloader.migration] exclude`（文件自称「`check_public.py` 的唯一数据源」）里的排除路径仍是**扁平化之前**的形式：`novelbase/sources/qidian/**`、`novelbase/sources/qimao/**`、`novelbase/sources/92xs/**`、`novelbase/sources/fanqie/api/rain/**`。
@@ -99,12 +106,14 @@
 
 **优先级变化（2026-09-30）**：转 private 之后，这道闸门从「待修的小漏洞」变成**唯一出口的安全阀**，因此从 P2 升为 **P0 前置**。
 
+> **✅ 已修复（2026-10-26 核对）**：`pyproject.toml` 的 `[tool.novel-downloader.migration] exclude` 已改为扁平化后的实际目录名（`novelbase/sources/qidian_requests_default/**` 等），注释里也写明了旧路径为何会反向报「缺失」。§1.4 第 4 条「闸门已于 2026-09-30 修好」与本节的「待修」措辞曾互相矛盾，现统一为**已修**。之后新增的悬空项：`docs/build/docker.md` 仍在 exclude 里（注释称「Docker 工作尚未提交」，但 `Dockerfile`/`.dockerignore` 现已提交并跟踪）→ **该排除项应复核后放开**。
+
 ### 1.3 合规基线（决定后面所有优先级）
 
 按「不碰破解 / DRM / 付费绕过 / 恶意反爬」的边界如实评估：
 
 - 内置书源指向的业务方中，**起点中文网、番茄小说、七猫免费小说**的内容以**授权付费 / 平台自有版权**为主；**92xs** 一类聚合站的合法性更弱。抓取 VIP / 付费章节会同时触及《著作权法》与平台 ToS。
-- `api` 类书源（`fanqie_api_rain`、`qimao_api_rain`）走 **Rain.ink 第三方代理 API**，`fanqie_api_oiapi` 走 oiapi —— 属于经第三方间接获取平台内容，**仍然是绕过平台前端**，不因「没有直接爬」而免责。这也是它们出厂 `enabled: false`、且被排除出 public 的原因。
+- `api` 类书源（`fanqie_api_rain`、`qimao_api_rain`）走 **Rain.ink 第三方代理 API**，`fanqie_api_oiapi` 走 oiapi —— 属于经第三方间接获取平台内容，**仍然是绕过平台前端**，不因「没有直接爬」而免责。这也是它们被排除出 public 的原因（原出厂 `enabled: false`；该字段已于 2026-09-27 废弃，现默认参与集 = 全部源）。
 - **个人自用 + 不传播**：现实风险低。**公开分发 + 带宣传的开源项目**：风险显著（DMCA / 律师函 / 仓库投诉下架 / 账号连带风险）。
 - **合规出路不是删功能，而是分层**：core 与书源在法律与架构上分开；官方源只做**公共领域 / 官方开放 API / 用户自有内容**（本地 EPUB 导入），其余作为**用户自带的扩展点**。
 
@@ -117,7 +126,7 @@
 1. **重刷内容**：它现在停在扁平化**之前**（`novelbase/sources/` 只有旧 `fanqie`），落后主仓库数十个提交
 2. **删掉 `android/`**：v4.5.1 已在主仓库整体移除该方案，公开面却还带着它
 3. **README / CONTRIBUTING 重写**：已有雏形，但需按新结构与新边界声明更新（含 §2.9 的 I3）
-4. **内容只含白名单**：重刷时**先跑 `check_public.py`**（闸门已于 2026-09-30 修好，见 §1.2 C）
+4. ✅ **内容只含白名单**：重刷时**先跑 `check_public.py`**（闸门已于 2026-09-30 修好，见 §1.2 C）—— 这一步的前置已满足，重刷本身仍待做
 
 **已知取舍（记录，便于将来重估）**：本报告原推荐新建一个 core-only 公开仓库 —— 理由是 `novel-crawler` 展示的是「不能公开的部分被挖掉后的空洞」，而 core-only 展示的是**完整、自洽、可被审查的架构**（三引擎抽象、三层并发、书源契约、SSE、导出链路、515 个用例）。选择「继续用 `novel-crawler`」的代价是**展示效果弱**，收益是**省一次搬迁**。若将来真要对外宣传而效果不理想，重提这个选项即可。
 
@@ -142,7 +151,7 @@
 | 方向 | 一句话描述 | 解决什么问题 | 目标用户 | 实现要点（含技术） | 难度 | 收益 | 风险 | 优先级 |
 |---|---|---|---|---|---|---|---|---|
 | B1 下载完整性校验 + 失败重试队列 | 远端章节数 vs 入库数对账；失败章节持久化重试 | 项目有过 838 章失败清单的痛史（2026-09-27 才清零） | 全部 | `chapters` 表加 `status` / `attempts`；任务收尾对账；独立重试路由 | 低 | **高** | 无 | **P0** |
-| B2 书源健康度探活 | 每日轻量探活，把 `enabled` 从静态声明变成实测状态 | 4 个 api 源常年禁用，不知道哪个还能用 | 全部 | 复用 `search` 能力做探针 + 结果落库 + 前端徽标 | 低 | 中高 | 探活本身也是请求，需限额 | **P1** |
+| B2 书源健康度探活 | 每日轻量探活，把「这个源现在还能用吗」变成实测状态 | 4 个 `api` 源依赖第三方代理，改版/封 key 即静默失效，无人察觉 | 全部 | 复用 `search` 能力做探针 + 结果落库 + 前端徽标。⚠️ **原动机「把 `enabled` 变成实测状态」已失效**：`enabled` 于 2026-09-27 彻底废弃，默认参与集 = 全部源 → 探活结果只能用于展示/告警，不能靠它隐藏或禁用源 | 低 | 中高 | 探活本身也是请求，需限额 | **P1** |
 | B3 断点续传 | 中断 / 重启后从已入库章节续下 | 长任务中断要重来 | 全部 | 已有 `chapters` 表可查断点，`task_manager` 恢复时跳过成功章节 | 低 | 中 | 需与「更新」语义分清 | **P1** |
 | B4 元数据补全与去重 | 标题 / 作者归一、同书多源合并、封面补全 | 同一本书不同源重复入库 | 收藏型用户 | 模糊匹配 + **人工确认 UI**（不要自动合并） | 中 | 中 | 误合并造成数据损失 | P2 |
 | B5 定时增量追更 | 定时检查更新 + 只下新增章节 | 手动检查更新 | 追更用户 | 已有「检查更新」路由，加调度 + 通知 | 低 | 中高 | 无人值守下的请求频率与封禁 | **P1** |
@@ -156,7 +165,7 @@
 | C2 CI 补 Windows | Windows job 跑测试 + portable 冒烟 | 主用户环境是 Windows，CI 却只在 Linux | 你自己 | `ci.yml` 加 `windows-latest` matrix | 低 | 中高 | CI 时长与成本 | **P1** |
 | C3 结构化日志 + 按书源指标 | 每源请求数 / 失败率 / 耗时聚合 | 出问题只能翻日志 | 你自己 | 扩展 `novelbase/utils/logger.py` 为结构化事件 + 前端诊断面板 | 低 | 中高 | 无 | **P1** |
 | C4 清理死配置与遗留 | `config.yaml` 的 `storage:` 死配置、`groups.yaml` 遗留 | 文档与实现不一致，误导后续 | 你自己 | 见 `docs/project/config.md:14`；删代码 + 改文档 | 低 | 低 | 无 | P2 |
-| C5 Docker 化 | 一条 `docker run` 起后端 + 前端 | 自托管用户的第一道门槛 | NAS / 服务器用户 | 多阶段构建 + 卷挂载 `app_data` | 低 | 中高 | Playwright 在容器内的镜像体积 | **P1** |
+| ✅ C5 Docker 化（**已完成 2026-10-14**） | 一条 `docker run` 起后端 + 前端 | 自托管用户的第一道门槛 | NAS / 服务器用户 | 已落地：`node:24-slim` 构建前端 → `python:3.12-slim` + chromium，`/data` 卷、非 root uid 1000、容器内强制 `headless: true`；文档 `docs/build/docker.md` | 低 | 中高 | Playwright 在容器内的镜像体积 | 已完成 |
 
 ### 2.4 AI 能力集成
 
@@ -231,7 +240,7 @@
 
 | # | 方向 | 理由 |
 |---|---|---|
-| 1 | **修闸门 → H2 执行 → 公开面 README**（§1.2 C + H2 + H1） | 顺序不能反：闸门是唯一出口的安全阀（10 分钟）→ 转 private（5 分钟）→ 公开面才有意义。这一条不动，后面所有「对外」的投入都建在流沙上 |
+| 1 | ~~修闸门~~ ✅ → ~~H2 转 private~~ ✅ → **公开面 README**（H1） | 前两步已完成（2026-10-26 核对）。**剩下的一步是真瓶颈**：根目录仍无 `README.md`、无描述、无 topics，陌生人打不开也看不懂；同时缺 `DISCLAIMER`（I3），MIT 原文明确允许商用分发 |
 | 2 | **I1 + C1**（core/源分离 = 插件化） | 转 private 之后这条**从「选项」变成「前提」**：公开面必须是 core-only（§1.4 选 B）。一条动作同时解决合规基线、公开面成立、社区生态入口。`NLD_PRIVATE_SOURCES` 与 `docs/source-plugin.md` 已完成约 80% 的设计 |
 | 3 | **I2 + I3**（合规示范源 + 边界声明） | 让分离后的 core 不是空壳：装完即可用合法内容跑通闭环，同时把责任边界写清 |
 | 4 | **B1 + F1**（完整性校验/失败重试 + 追更调度器） | 「工具好不好用」的真实战场，也是项目自身的历史痛点（838 章失败清单）。低难度、高收益、完全合规 |
@@ -245,7 +254,7 @@
 
 ### 3 个月 — 止血与亮相
 
-- **月 1**：修迁移闸门（10 分钟，**必须最先**）→ 主仓库转 private（5 分钟）→ 按 §1.4 重刷公开面 `novel-crawler`（同步新结构 + 删 `android/` + 重写 README/边界声明 + 补仓库描述与 topics）
+- **月 1**：✅ 修迁移闸门 → ✅ 主仓库转 private（均已完成）→ 按 §1.4 重刷公开面 `novel-crawler`（**仍待做**：同步新结构 + 删 `android/` + 重写 README/边界声明 + 补仓库描述与 topics）。⚠️ 本机当前**无同级 `novel-crawler/` 目录**，重刷需在具备该仓库的环境执行
 - **月 2**：C1 书源插件化（多 root 发现，契约不变）+ I2 合规示范源 2 个 + I3 边界声明 + C2 Windows CI
 - **月 3**：B1 完整性校验/重试 + F1 追更调度器 + B2 书源健康度探活；最后 H3 一次亮相（V2EX / 少数派 / r/selfhosted 任选其一）
 
@@ -269,10 +278,12 @@
 
 **MVP = 「让这个项目在合规前提下，被陌生人看懂并能跑起来」**，不是加功能：
 
-1. **修迁移排除清单**（10 分钟，**第一步**）：把 `PUBLIC_MANIFEST.md` 与 `pyproject.toml` 的 exclude 改成扁平化后的实际目录名，跑 `python scripts/check_public.py` 确认能真正命中红名单。转 private 后它是**唯一出口**，必须先修
-2. **执行转 private**（5 分钟）：GitHub `Settings → Change repository visibility`（0 fork ⇒ 无第三方副本需处理）
+1. ✅ **修迁移排除清单**（已完成 2026-09-30）：`PUBLIC_MANIFEST.md` 与 `pyproject.toml` 的 exclude 已改成扁平化后的实际目录名
+2. ✅ **执行转 private**（已完成 2026-10-14）：主仓库现为 private（0 fork ⇒ 无第三方副本需处理）
 3. **重刷公开面 + 写 README**（1 天）：按 §1.4 重刷 `novel-crawler`（同步新结构、删 `android/`）并写 README = 上手截图 + 「它做什么 / 不做什么」+ 边界声明。可复用 `docs/` 的 30 多篇文档
 4. **一个合规示范源跑通闭环**（1-2 天）：用 Project Gutenberg 或公版中文书，证明「搜索 → 下载 → 入库 → 导出 EPUB → OPDS 取走」这条路干净且完整
+
+> 前两步已于 2026-10-26 核对完毕，因此 **MVP 实际只剩第 3、4 项**。注意第 3 项需在具备 `novel-crawler` 仓库的环境执行（当前 Termux 工作区无同级副本）。
 
 这四件完成后，你就有了一个**能拿出手、能解释、不怕被问**的东西。之后的功能（校验 / 追更 / OPDS）才有意义。
 
@@ -326,8 +337,22 @@
 | 测试用例数与结果 | `python -m pytest tests -q` → 515 passed（2026-09-30 实测） |
 | 书源清单与 `enabled` | `novelbase/sources/*/source.json` |
 | CI 覆盖、workflow 数量 | `.github/workflows/`（8 个文件，`ci.yml` 仅 Linux） |
-| 无 Dockerfile | 仓库根目录列举 |
+| ~~无 Dockerfile~~ → **已有**（2026-10-14） | 仓库根目录列举 → `git ls-files Dockerfile .dockerignore` |
 | 迁移清单过时 | 对比 `PUBLIC_MANIFEST.md` / `pyproject.toml` 的 exclude 与实际 `novelbase/sources/` 目录名 |
 | 838 章失败清单已清零、13 本未迁移 | `docs/project/legacy-migration.md:21` |
 | `storage:` 死配置 | `docs/project/config.md:14` |
 | `source-plugin.md` Phase 2 未实现 | `docs/source-plugin.md` 状态声明 |
+
+### 9.1 2026-10-26 复核（本机实测，覆盖上文过时项）
+
+| 复核项 | 结果 | 方式 |
+|---|---|---|
+| 迁移闸门 exclude 已是扁平化后目录名 | ✅ 已修 | 实读 `pyproject.toml` 的 `[tool.novel-downloader.migration]` |
+| 主仓已转 private | ✅ 已执行（2026-10-14） | `docs/session-prompt.md` 记录 |
+| Docker 已落地并跟踪 | ✅ `Dockerfile` + `.dockerignore` 在 `git ls-files` 中 | `git ls-files Dockerfile .dockerignore` |
+| 测试 | ✅ **595 passed / 1 failed / 17.8s**（54 文件） | `python -m pytest tests/ -q` |
+| `enabled` 字段 | ✅ 已彻底不存在（10 个 `source.json` 无命中） | `grep '"enabled"' novelbase/sources/*/source.json` |
+| 出厂节流 | ⚠️ **10/10 个源 `delay` 仍为 `[0, 0]`**（不限速） | `grep -A2 '"delay"' novelbase/sources/*/source.json` |
+| UA | ⚠️ 仍是占位串 `"Mozilla/5.0 ..."` | `novelbase/core/options.py:18,86` |
+| 根目录 README / DISCLAIMER | ⚠️ **仍不存在** | `ls README* DISCLAIMER*` |
+| 公开面仓库 `novel-crawler` | ⚠️ 本机**无同级副本**，滞后状态本次未核实 | `ls ../novel-crawler` → 不存在 |
