@@ -18,7 +18,7 @@
 ### 书源与模式
 
 - `--source/-s`：书源名 `source_name`（如 `fanqie-requests-default`）。
-- **mode 默认由书源在 `source.json` 里声明，用户可逐能力覆盖**（`sites/{source_name}.yaml` 的 `{cap}.mode`，
+- **mode 默认由书源在 `source.json` 里声明，用户可逐能力覆盖**（`sources/{source_name}.yaml` 的 `{cap}.mode`，
   唯一入口 `shared.config.effective_capabilities()`；CLI 按有效 mode 建引擎（`_make_engine_getter(capability)`）后注入 core）——旧的 `--platform/-p`、
   `--mode/-m`、`--variant` 参数与「模式与 variant」选择规则**已全部删除**。非法的覆盖值被忽略并回退声明。
 - `search` 省略 `--source` 时**并发全部书源**（`shared.config.default_source_names()` = 全部书源，
@@ -26,7 +26,7 @@
   单个源失败不影响其它源，并在结果里标注来源 `source_name`。
 - `download` / `info` 的 `--source` 必填：core 已删 URL→书源推断，无法自动识别 URL 归属。
 - `dev new-source` 生成**一层结构**（`__init__.py` + `source.json` + 4 能力文件），默认同时写
-  `app_data/config/sites/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 已删除。
+  `app_data/config/sources/{source_name}.yaml`（`--no-config` 跳过）；`dev new-variant` 已删除。
 
 示例：
 

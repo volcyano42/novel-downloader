@@ -21,7 +21,7 @@ novelbase/sources/{dir}/
 
 - **目录名 `{dir}`**：合法标识符（下划线），如 `fanqie_requests_default`，仅在 `import_module` 时使用。
 - **`source_name`**：`source.json` 里的唯一 id（连字符），如 `fanqie-requests-default`——
-  是全部公共 API、后端/前端/CLI、`sites/{source_name}.yaml` 的键。两者解耦。
+  是全部公共 API、后端/前端/CLI、`sources/{source_name}.yaml` 的键。两者解耦。
 - **`source_name` 全局唯一**（2026-09-27）：内置根与私有根（`NLD_PRIVATE_SOURCES`）
   是**同一命名空间**，任何两个目录声明同一个 `source_name` 都会在加载期抛
   `DuplicateSourceNameError`（`ManifestError` 子类），检测点唯一：
@@ -70,10 +70,10 @@ novelbase/sources/{dir}/
 
 | 字段 | 含义 |
 |------|------|
-| `source_name` | 唯一 id；也是 `sites/{source_name}.yaml` 的文件名 |
-| `source_alias` | （**可选**）显示别名；`sites/{source_name}.yaml` 顶层可覆盖。缺省 = 未设，界面回落 `source_name` |
-| `source_group` | （**可选**）分组名（一个源一个组，`""` = 未分组）；`sites/{source_name}.yaml` 顶层可覆盖 |
-| `concurrency` | （**可选**）书源级并发额度，缺省 **1**；`sites/{source_name}.yaml` 顶层可覆盖（见下） |
+| `source_name` | 唯一 id；也是 `sources/{source_name}.yaml` 的文件名 |
+| `source_alias` | （**可选**）显示别名；`sources/{source_name}.yaml` 顶层可覆盖。缺省 = 未设，界面回落 `source_name` |
+| `source_group` | （**可选**）分组名（一个源一个组，`""` = 未分组）；`sources/{source_name}.yaml` 顶层可覆盖 |
+| `concurrency` | （**可选**）书源级并发额度，缺省 **1**；`sources/{source_name}.yaml` 顶层可覆盖（见下） |
 | `mode` | **必填**，`requests` / `browser` / `api` 之一 |
 | 其余字段 | 由 `mode` 决定，见下 |
 
@@ -96,7 +96,7 @@ novelbase/sources/{dir}/
   进程退出即失效，`deep_merge` 的空串会覆盖出厂默认）。
 - **元信息读取入口**（`shared.config`）：`source_group(name)` / `source_alias(name)`（用户层顶层覆盖出厂 `source.json` 顶层，空串 = 未设）/ `display_name(name)`（别名优先、未设回落 `source_name`）。`enabled` 已彻底废弃（2026-09-27）。
 
-### 用户层覆盖（`sites/{source_name}.yaml`）
+### 用户层覆盖（`sources/{source_name}.yaml`）
 
 用户层就是**顶层一套字段**，形状与 `source.json` 一致（不再有 `common` 段或能力段）：
 
@@ -121,7 +121,7 @@ delay: [3, 5]
 书源**同时最多几个请求在飞**，**跨任务共享**（同一书源的两个下载任务共用这一额度）。
 
 - **存储**：`source.json` **顶层**（与 `source_name` 同级，**可选**，缺省 1）；
-  用户层 `app_data/config/sites/{source_name}.yaml` **顶层**可覆盖（与 `source_alias` / `source_group` 同级）。
+  用户层 `app_data/config/sources/{source_name}.yaml` **顶层**可覆盖（与 `source_alias` / `source_group` 同级）。
   ⚠️ `concurrency` 是**元信息**、不是引擎字段，因此不在 `MODE_FIELDS` 里（引擎字段会按 mode 校验合法性）。
 - **读取**：唯一入口 `shared.config.source_concurrency(source_name)`——用户层顶层 `concurrency` 覆盖出厂顶层，
   缺省 1；非法值（非正整数）忽略回退 1；未知书源返回 1。
@@ -177,7 +177,7 @@ Novel.id = sha256(url)[:32]      # 32 位 hex，无前缀
 复用内置 id）都会在加载期抛 `DuplicateSourceNameError`——原「同名能力内置优先、
 内置缺失再用私有补齐」的机制已于 **2026-09-27 取消**。已有复用内置 id 的私有目录，
 升级后需改其 `source.json` 的 `source_name`（目录名可不变）并同步
-`app_data/config/sites/{新名}.yaml`。
+`app_data/config/sources/{新名}.yaml`。
 
 ```
 $NLD_PRIVATE_SOURCES/

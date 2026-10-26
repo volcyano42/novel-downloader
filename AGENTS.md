@@ -34,7 +34,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 - **novelbase 是预览版**：面向开发者且对外公开，但配置格式与公共 API **允许破坏性变更，不承诺向后兼容**。变更带日期写进 `docs/project/sources.md`；不留旧格式兼容代码。
 - **书源契约** 书源 = `novelbase/sources/{dir}/`，身份在 `source.json`，能力在 `{capability}.py`。
   对外 API：`list_sources()` / `get_manifest(name)` / `capabilities(name) -> {capability: mode}` / `resolve(name, capability) -> (fn, mode)`。
-  **一个书源只有一个 `mode` 和一套字段**（2026-10-25 起，不再按能力分化：无 `common` / `default_config`）；`sites/{source_name}.yaml` 用户层也是顶层一套字段。
+  **一个书源只有一个 `mode` 和一套字段**（2026-10-25 起，不再按能力分化：无 `common` / `default_config`）；`sources/{source_name}.yaml` 用户层也是顶层一套字段。
   **能力由文件系统发现**：目录里有哪几个能力 `.py`，就暴露哪几个能力（不在 manifest 里声明）。
   `source_name`（source.json 里）与目录名解耦；目录名是合法 Python 标识符，能力通过 `import_module("novelbase.sources.{dir}.{capability}")` 加载。
   `source_name` **全局唯一**（内置根 + 私有根同一命名空间）：撞名在加载期抛 `DuplicateSourceNameError`（`ManifestError` 子类），检测点 `novelbase/sources/manifest.py::scan_source_names()`；私有源须自带独立 `source_name`。

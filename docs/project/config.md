@@ -22,19 +22,19 @@ storage:                    # ⚠️ 遗留死配置，见下
   下调该值仅影响之后排队/启动的任务（已在跑的不受影响），最多 1 秒后生效（读取带 1s TTL 缓存）。
 - `download.notify`：下载完成/未完成通知。
 - **全局 `mode` 已删除**（2026-09-25）：mode 由书源在 `source.json` 里声明；用户层可**顶层覆盖**（2026-10-25 起不再逐能力）
-  （`sites/{source_name}.yaml` 的 `{cap}.mode`，见下）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
+  （`sources/{source_name}.yaml` 的 `{cap}.mode`，见下）；旧 `config.yaml` 里遗留的 `mode:` 键不再被读取。
 - ⚠️ **`storage` 段已不可配置（死配置）**：实现恒取 `shared.config.get_database_url()`
   （= `{APP_DATA}/storage/novels/`），backend 与 CLI 统一，与 `config.yaml` 内容无关。
   修改该段的 `backend` / `database_url` **不生效**；保留仅为兼容旧文件，新配置可省略。
 
-## sites/{source_name}.yaml（逐书源）
+## sources/{source_name}.yaml（逐书源）
 
 文件名是书源的 `source_name`（如 `fanqie-requests-default.yaml`）。配置**三层合并**后生效：
 
 ```
 系统默认（ENGINE_DEFAULTS[mode]，来自 novelbase/core/options.py 的 dataclass）
   → source.json 顶层字段（书源出厂）
-    → sites/{source_name}.yaml 顶层字段（用户层，只写差异）
+    → sources/{source_name}.yaml 顶层字段（用户层，只写差异）
 ```
 
 > **2026-10-25 起一个书源只有一个 `mode` 和一套参数**（不再按能力分化）。用户层是**顶层一套字段**，
@@ -64,7 +64,7 @@ proxies: {}
 - **引擎字段**：随**有效 mode** 而定（requests / browser / api 三套，见 [sources.md](sources.md)）。
 - **`delay`**：每个请求前的随机等待（`asyncio.sleep(random.uniform(delay))`，语义不变）；
   **出厂默认改为 `[0, 0]`（不设置 = 不限速；旧出厂值为 `[3,5]`）**。生效优先级：
-  `dataclass 默认 → source.json 顶层 → 用户层 sites yaml 顶层`。
+  `dataclass 默认 → source.json 顶层 → 用户层 sources yaml 顶层`。
   ⚠️ **历史写入过 `delay` 的老用户**（旧版曾在 `sites/*.yaml` 落过 `delay: [3,5]`）会因三层合并语义继续以用户层为准，
   如要提速需在设置页把相应书源的 `delay` 调下来或清掉该键。**当前出厂/模板已不再写 `delay`**（只保留 api 源的能力段 `key`），新用户不受影响。
 - **用户层覆盖 mode**：顶层 `mode`（合法值 `browser`/`requests`/`api`）优先于 `source.json` 声明；

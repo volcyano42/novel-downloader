@@ -60,7 +60,7 @@ app.py                ← 统一启动器（一键启动前后端，Ctrl+C 优�
 shared/               config.py, user_data.py（跨端共享：配置加载 / 用户数据库模板）
 
 app_data/
-  config/             config.yaml, sites/{source_name}.yaml, formats/*.yaml
+  config/             config.yaml, sources/{source_name}.yaml, formats/*.yaml
   storage/novels/       SQLite，每本小说一个独立 <id>.db 文件（id = sha256(url)[:32]）
   exports/            导出输出目录
 tests/                check_imports.py, test_downloader.py, test_export_config.py, test_models.py,

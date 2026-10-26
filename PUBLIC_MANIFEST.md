@@ -10,7 +10,7 @@
 
 - `novelbase/**`
   - **排除**（2026-09-30 按扁平化后的一层目录名修正）：`novelbase/sources/qidian_requests_default/**`、`novelbase/sources/qidian_browser_default/**`、`novelbase/sources/qimao_requests_default/**`、`novelbase/sources/qimao_browser_default/**`、`novelbase/sources/qimao_api_rain/**`、`novelbase/sources/92xs_requests_default/**`、`novelbase/sources/fanqie_api_rain/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
-  - **2026-10-14 变更**：`novelbase/sources/fanqie_api_oiapi/**` **移出排除、进入白名单**（用户决定公开）—— 它是公开第三方服务 `https://oiapi.net/api/FqRead` 的封装，`key` 由用户在 `sites/*.yaml` 自备（仓库内为空占位），**非逆向/破解实现**；同时放开它依赖的 `template/config/sites/fanqie-api-oiapi.yaml` 与 `tests/test_source_oiapi_contract.py`。其余 `api` 书源（`*/api_rain/**`）**仍排除**，与 `AGENTS.md` 的「不公开逆向/破解实现」一致
+  - **2026-10-14 变更**：`novelbase/sources/fanqie_api_oiapi/**` **移出排除、进入白名单**（用户决定公开）—— 它是公开第三方服务 `https://oiapi.net/api/FqRead` 的封装，`key` 由用户在 `sources/*.yaml` 自备（仓库内为空占位），**非逆向/破解实现**；同时放开它依赖的 `template/config/sources/fanqie-api-oiapi.yaml` 与 `tests/test_source_oiapi_contract.py`。其余 `api` 书源（`*/api_rain/**`）**仍排除**，与 `AGENTS.md` 的「不公开逆向/破解实现」一致
   - 保留：`novelbase/sources/fanqie_browser_default/**`、`novelbase/sources/fanqie_requests_default/**`、`novelbase/sources/fanqie_api_oiapi/**`（2026-10-14 起）
   - ⚠️ 排除项**必须**用扁平化后的实际目录名：旧的四层路径（如 `novelbase/sources/qidian/**`）在 `check_public.py` 的 `fnmatch` 下匹配不到任何文件，会让这些源被判成白名单**必需内容**，闸门反过来报「缺失」——照提示补齐即泄漏
 
@@ -26,7 +26,7 @@
   - **排除**（2026-10-14 按 public 侧实跑补齐；public 只保留 fanqie 系的源，下列文件整体失败）：`tests/test_source_async.py`、`tests/test_source_contracts.py`、`tests/test_browser_sources.py`、`tests/test_source_layout.py`、`tests/test_backend_download_routes.py`、`tests/test_backend_config_routes.py`、`tests/test_config_effective_mode.py`、`tests/test_cli_effective_mode.py`、`tests/test_source_api.py`、`tests/test_novel_id_stability.py`、`tests/test_task_manager_async.py`、`tests/test_source_names_unique.py`、`tests/test_delay_default.py`（`tests/test_source_oiapi_contract.py` 已随 oiapi 源进入白名单）
 - `init_config.py`（2026-10-14 补：运行必需 —— `backend/main.py` 的 lifespan 用它做首次配置初始化，`tests/test_paths.py` 也依赖它）
 - `template/**`（2026-10-14 补：配置模板，public 靠它初始化 `app_data/config`）
-  - **排除**（含未公开源名的站点配置）：`template/config/sites/92xs-requests-default.yaml`、`template/config/sites/fanqie-api-rain.yaml`、`template/config/sites/qidian-browser-default.yaml`、`template/config/sites/qidian-requests-default.yaml`、`template/config/sites/qimao-api-rain.yaml`、`template/config/sites/qimao-browser-default.yaml`、`template/config/sites/qimao-requests-default.yaml`（`fanqie-api-oiapi.yaml` 已随 oiapi 源进入白名单）
+  - **排除**（含未公开源名的站点配置）：`template/config/sources/92xs-requests-default.yaml`、`template/config/sources/fanqie-api-rain.yaml`、`template/config/sources/qidian-browser-default.yaml`、`template/config/sources/qidian-requests-default.yaml`、`template/config/sources/qimao-api-rain.yaml`、`template/config/sources/qimao-browser-default.yaml`、`template/config/sources/qimao-requests-default.yaml`（`fanqie-api-oiapi.yaml` 已随 oiapi 源进入白名单）
 
 ### workflow
 
