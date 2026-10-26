@@ -2,7 +2,7 @@
 import {BookOpen, FileDown, Folder, FolderPlus, Heart, MoreHorizontal, Trash2} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {useExport, useFavorites, useGroups, useSaveGroups, useToggleFavorite} from "@/hooks/index";
-import {ExportDialog} from "@/features/download/ExportDialog";
+import {ExportDialog, type ExportDialogResult} from "@/features/download/ExportDialog";
 import {useToast} from "@/components/toast-context";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
 import {
@@ -83,14 +83,23 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
     handleMoveToGroup(novelId, name);
   }, [handleMoveToGroup]);
 
-  const handleStartExport = useCallback(async (formats: string[]) => {
+  const handleStartExport = useCallback(async (result: ExportDialogResult) => {
     if (!novelId || exporting) return;
+    // 后端 `if body.chapter_id:` 会把空数组当「未指定」→ 导出整本，这里再做一道拦截
+    if (result.chapterIds.length === 0) {
+      toast("请至少选择一个已下载章节", "error");
+      return;
+    }
     setExporting(true);
     try {
-      const body: Record<string, unknown> = { novel_id: novelId, chapter_id: null };
-      if (formats.includes("txt")) body.txt = { enabled: true };
-      if (formats.includes("epub")) body.epub = { enabled: true };
-      if (formats.includes("img")) body.img = { enabled: true };
+      const body: Record<string, unknown> = {
+        novel_id: novelId,
+        chapter_id: result.chapterIds,
+      };
+      // 只带被勾选的格式；参数是弹窗里的**临时副本**，不写回 formats/*.yaml
+      for (const fmt of result.formats) {
+        body[fmt] = { enabled: true, ...result.options[fmt as "txt" | "epub" | "img"] };
+      }
       const task = await exportMut.mutateAsync(body);
       if (task.status === "completed" && task.task_id) {
         toast("导出成功，正在下载…", "success");
@@ -241,7 +250,7 @@ export function BookCard({ title, novelId, cover, onRead, className, groups = []
         </AlertDialogContent>
       </AlertDialog>
 
-      <ExportDialog open={showExport} onClose={() => setShowExport(false)} novelTitle={title} onExport={handleStartExport} />
+      <ExportDialog open={showExport} onClose={() => setShowExport(false)} novelId={novelId ?? ""} novelTitle={title} onExport={handleStartExport} />
     </>
   );
 }
