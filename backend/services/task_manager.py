@@ -170,7 +170,7 @@ async def _acquire_source_slot(source_name: str, task: dict, limit: int) -> bool
     队列位置都保留）。
 
     `limit` 由调用方在任务开始时取一次并缓存（`source_concurrency()` 会读
-    `sites/*.yaml` 与 `source.json`，不得进每请求热路径）。等待期间若任务被暂停，
+    `sources/*.yaml` 与 `source.json`，不得进每请求热路径）。等待期间若任务被暂停，
     则不占额度地停在 `paused`（优雅暂停：未开始的请求停住，已在飞的请求跑完）。
     """
     limit = max(1, limit)
@@ -291,7 +291,7 @@ async def _run_download_impl(task: dict, source_name: str):
     from shared.config import effective_capabilities
 
     # 书源并发额度：任务开始时取一次并缓存进闭包（`source_concurrency()` 会读
-    # sites/*.yaml 与 source.json，无缓存，不得进每请求/每章热路径）。该任务发出的
+    # sources/*.yaml 与 source.json，无缓存，不得进每请求/每章热路径）。该任务发出的
     # 所有请求（meta + 每章）共用这一额度。
     src_conc = max(1, source_concurrency(source_name))
 

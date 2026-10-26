@@ -12,7 +12,7 @@
     python cli.py sources list [--json]
     python cli.py info --source fanqie-requests-default --url "https://..."
     python cli.py dev new-source --name <name> | dev list-sources
-    python cli.py config init [--all | --main | --sites NAME | --formats FMT | --user-db]
+    python cli.py config init [--all | --main | --sources NAME | --formats FMT | --user-db]
 """
 
 import argparse
@@ -94,8 +94,8 @@ def _parse_args() -> argparse.Namespace:
     cf_init = cf_sub.add_parser("init", help="初始化缺失的配置文件（不覆盖已有）")
     cf_init.add_argument("--all", action="store_true", help="初始化全部（默认）")
     cf_init.add_argument("--main", action="store_true", help="只初始化 config.yaml")
-    cf_init.add_argument("--sites", default=None, metavar="NAME",
-                         help="只初始化 sites/NAME.yaml；NAME=all 表示全部")
+    cf_init.add_argument("--sources", default=None, metavar="NAME",
+                         help="只初始化 sources/NAME.yaml；NAME=all 表示全部")
     cf_init.add_argument("--formats", default=None, metavar="FMT",
                          help="只初始化 formats/FMT.yaml；FMT=all 表示全部")
     cf_init.add_argument("--user-db", action="store_true", help="只初始化 user_data.db")
@@ -108,7 +108,7 @@ def _parse_args() -> argparse.Namespace:
     ns.add_argument("--name", required=True, help="书源名 source_name（如 demo-requests-default）")
     ns.add_argument("--modes", default="requests", help="模式，逗号分隔 (requests,browser,api)")
     ns.add_argument("--no-config", action="store_true",
-                    help="不生成默认用户配置 app_data/config/sites/{source_name}.yaml")
+                    help="不生成默认用户配置 app_data/config/sources/{source_name}.yaml")
 
     ls = dv_sub.add_parser("list-sources", help="列出所有可用书源")
     ls.add_argument("--json", action="store_true", help="以 JSON 输出")
@@ -358,26 +358,26 @@ def cmd_source(args):
 def cmd_config(args):
     """配置管理（一期只提供 `config init`）：**只补缺失，绝不覆盖已有配置**。
 
-    实现要点：`init_config.init_main_config()` / `init_site_config(name)` /
+    实现要点：`init_config.init_main_config()` / `init_source_config(name)` /
     `init_export_config(fmt)` 内部是**无条件** `shutil.copy2`（模块注释也写明
     「初始化（不检查，直接复制）」），因此**不能**整体调用 —— 先由
     `check_config()` 取缺失清单，再按项（且只传单个名字）调用，只可能写入确实
     不存在的文件。`user_data.db` 的 `init_user_db()` 自带「不存在才复制」判断。
 
-    `--main` / `--sites` / `--formats` / `--user-db` 互斥；无参等价 `--all`。
+    `--main` / `--sources` / `--formats` / `--user-db` 互斥；无参等价 `--all`。
     """
     if args.config_command != "init":
         return
     import init_config
 
-    exclusive = [args.main, args.sites is not None,
+    exclusive = [args.main, args.sources is not None,
                  args.formats is not None, args.user_db]
     if sum(exclusive) > 1:
-        print("错误：--main / --sites / --formats / --user-db 只能选一个（不加参数则等价 --all）",
+        print("错误：--main / --sources / --formats / --user-db 只能选一个（不加参数则等价 --all）",
               file=sys.stderr)
         raise SystemExit(2)
 
-    missing = init_config.check_config()["missing"]  # ['config.yaml', 'sites/x.yaml', ...]
+    missing = init_config.check_config()["missing"]  # ['config.yaml', 'sources/x.yaml', ...]
     created: list[str] = []
 
     for item in missing:
@@ -388,25 +388,25 @@ def cmd_config(args):
             stem = fname[:-5] if fname.endswith(".yaml") else fname
         if args.main and kind != "main":
             continue
-        if args.sites is not None and kind != "sites":
+        if args.sources is not None and kind != "sources":
             continue
         if args.formats is not None and kind != "formats":
             continue
         if args.user_db:
             continue  # user_data.db 不在 yaml 缺失清单中，单独处理
-        if kind == "sites" and args.sites not in (None, "all") and stem != args.sites:
+        if kind == "sources" and args.sources not in (None, "all") and stem != args.sources:
             continue
         if kind == "formats" and args.formats not in (None, "all") and stem != args.formats:
             continue
         if kind == "main":
             created += init_config.init_main_config()
-        elif kind == "sites":
-            created += init_config.init_site_config(stem)
+        elif kind == "sources":
+            created += init_config.init_source_config(stem)
         elif kind == "formats":
             created += init_config.init_export_config(stem)
 
     # user_data.db：单独指定时只做它；未限定类别（无参 / --all）时顺带补齐
-    if args.user_db or (not args.main and args.sites is None and args.formats is None):
+    if args.user_db or (not args.main and args.sources is None and args.formats is None):
         created += init_config.init_user_db()
 
     if created:
@@ -456,7 +456,7 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
     - 目录名 = `name` 的下划线形式；`source.json.source_name` 用原名（连字符）。
     - 生成空 `__init__.py` + `source.json` + 4 个能力文件（`search` /
       `novel_info` / `chapter_list` / `chapter_content`）。
-    - `write_config=True` 时额外生成默认用户配置 `sites/{name}.yaml`。
+    - `write_config=True` 时额外生成默认用户配置 `sources/{name}.yaml`。
     """
     mode = (modes[0].strip() if modes else "") or "requests"
     source_dir = _SOURCES_ROOT / name.replace("-", "_")
@@ -475,14 +475,14 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
             _FUNC_TEMPLATE.format(fn=fn, source_name=name), encoding="utf-8")
 
     if write_config:
-        from shared.config import save_site_config
-        save_site_config(name, {"mode": mode})
+        from shared.config import save_source_config
+        save_source_config(name, {"mode": mode})
 
     print(f"书源脚手架已创建: novelbase/sources/{source_dir.name}/")
     print("  __init__.py, source.json, "
           + ", ".join(f"{fn}.py" for fn in _SCAFFOLD_FUNCTIONS))
     if write_config:
-        print(f"用户配置已创建: app_data/config/sites/{name}.yaml")
+        print(f"用户配置已创建: app_data/config/sources/{name}.yaml")
 
 
 

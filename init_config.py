@@ -56,7 +56,7 @@ def check_config() -> dict:
     """检查 app_data/config/ 配置完整性。
 
     Returns:
-        {'missing': ['sites/fanqie.yaml', ...], 'all_missing': True/False}
+        {'missing': ['sources/fanqie.yaml', ...], 'all_missing': True/False}
     """
     template = _template_dir()
     target = _target_dir()
@@ -67,13 +67,13 @@ def check_config() -> dict:
         if not (target / name).exists() and (template / name).exists():
             missing.append(name)
 
-    # 站点配置
-    tmpl_sites = template / "sites"
-    tgt_sites = target / "sites"
-    if tmpl_sites.is_dir():
-        for f in tmpl_sites.glob("*.yaml"):
-            if not (tgt_sites / f.name).exists():
-                missing.append(f"sites/{f.name}")
+    # 书源配置
+    tmpl_sources = template / "sources"
+    tgt_sources = target / "sources"
+    if tmpl_sources.is_dir():
+        for f in tmpl_sources.glob("*.yaml"):
+            if not (tgt_sources / f.name).exists():
+                missing.append(f"sources/{f.name}")
 
     # 格式配置
     tmpl_fmts = template / "formats"
@@ -113,17 +113,17 @@ def init_main_config() -> list[str]:
     return initialized
 
 
-def init_site_config(platform: str) -> list[str]:
-    """初始化 sites/{platform}.yaml。platform="all" 初始化全部。"""
-    template = _template_dir() / "sites"
-    target = _target_dir() / "sites"
+def init_source_config(source_name: str) -> list[str]:
+    """初始化 sources/{source_name}.yaml。source_name="all" 初始化全部。"""
+    template = _template_dir() / "sources"
+    target = _target_dir() / "sources"
     initialized: list[str] = []
     if not template.is_dir():
         return initialized
     files = (
         list(template.glob("*.yaml"))
-        if platform == "all"
-        else [template / f"{platform}.yaml"]
+        if source_name == "all"
+        else [template / f"{source_name}.yaml"]
     )
     for src in files:
         if src.exists():
@@ -166,10 +166,10 @@ def init_user_db() -> list[str]:
 
 
 def init_all_config() -> list[str]:
-    """初始化全部（main + all sites + all formats + user_data.db 模板）。"""
+    """初始化全部（main + all sources + all formats + user_data.db 模板）。"""
     result: list[str] = []
     result.extend(init_main_config())
-    result.extend(init_site_config("all"))
+    result.extend(init_source_config("all"))
     result.extend(init_export_config("all"))
     result.extend(init_user_db())
     return result

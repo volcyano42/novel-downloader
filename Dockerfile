@@ -67,7 +67,7 @@ for name in list_sources():
     targets = [cap for cap, mode in capabilities(name).items() if mode == "browser"]
     if not targets:
         continue
-    path = Path("/data/config/sites") / f"{name}.yaml"
+    path = Path("/data/config/sources") / f"{name}.yaml"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     if "headless:" in text:
         continue

@@ -38,7 +38,7 @@ INCLUDE_PATTERNS = [
     "LICENSE",
     "requirements.txt",
     "init_config.py",     # 运行必需：backend/main.py 的 lifespan 用它做首次配置初始化
-    "template/**",        # 配置模板（含未公开源名的 sites 配置由 pyproject exclude 排除）
+    "template/**",        # 配置模板（含未公开源名的 sources 配置由 pyproject exclude 排除）
     "docs/README.md",
     "docs/project/**",
     "docs/build/**",

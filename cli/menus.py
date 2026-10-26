@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from cli.config import (
     save_main_config, load_format_configs,
-    save_site_config, load_site_config, load_groups,
+    save_source_config, load_source_config, load_groups,
 )
 from cli.ui import _select, _text_input, _input_int, _input_float
 from shared.config import merged_source_config, effective_capabilities
@@ -102,9 +102,9 @@ def _settings_source_detail(cfg: dict, source_name: str) -> None:
 
 def _set_cap_field(source_name: str, capability: str, field: str, value) -> None:
     """写入用户层某能力段的单个字段。"""
-    user = load_site_config(source_name)
+    user = load_source_config(source_name)
     user.setdefault(capability, {})[field] = value
-    save_site_config(source_name, user)
+    save_source_config(source_name, user)
 
 
 def _edit_capability(source_name: str, capability: str, mode: str) -> None:
@@ -344,6 +344,6 @@ def _get_delay(source_name: str, capability: str) -> tuple[float, float]:
 
 def _set_delay(source_name: str, capability: str, lo: float, hi: float) -> None:
     """设置某书源某能力段的延迟范围（写入用户层）。"""
-    user = load_site_config(source_name)
+    user = load_source_config(source_name)
     user.setdefault(capability, {})["delay"] = [lo, hi]
-    save_site_config(source_name, user)
+    save_source_config(source_name, user)

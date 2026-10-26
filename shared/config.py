@@ -183,22 +183,22 @@ def save_main_config(cfg):
     with (CONFIG_DIR / "config.yaml").open("w", encoding="utf-8") as f:
         yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
 
-# ── sites ──
-def load_site_config(platform):
-    path = CONFIG_DIR / "sites" / f"{platform}.yaml"
+# ── sources ──
+def load_source_config(source_name):
+    path = CONFIG_DIR / "sources" / f"{source_name}.yaml"
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:
         return _resolve_paths(yaml.safe_load(f) or {})
 
-def save_site_config(platform, site_cfg):
-    (CONFIG_DIR / "sites").mkdir(parents=True, exist_ok=True)
-    with (CONFIG_DIR / "sites" / f"{platform}.yaml").open("w", encoding="utf-8") as f:
-        yaml.dump(site_cfg, f, allow_unicode=True, default_flow_style=False)
+def save_source_config(source_name, source_cfg):
+    (CONFIG_DIR / "sources").mkdir(parents=True, exist_ok=True)
+    with (CONFIG_DIR / "sources" / f"{source_name}.yaml").open("w", encoding="utf-8") as f:
+        yaml.dump(source_cfg, f, allow_unicode=True, default_flow_style=False)
 
-def _user_site_cfg(source_name: str) -> dict:
-    """读取用户层 sites/{source_name}.yaml（原始 dict，不做 app_data 路径解析）。"""
-    return load_yaml(CONFIG_DIR / "sites" / f"{source_name}.yaml")
+def _user_source_cfg(source_name: str) -> dict:
+    """读取用户层 sources/{source_name}.yaml（原始 dict，不做 app_data 路径解析）。"""
+    return load_yaml(CONFIG_DIR / "sources" / f"{source_name}.yaml")
 
 
 VALID_MODES = ("browser", "requests", "api")
@@ -206,11 +206,11 @@ VALID_MODES = ("browser", "requests", "api")
 # 用户层 yaml 的顶层「元数据」键：不是引擎参数，不参与引擎字段合并。
 # 2026-10-25 起一个书源只有一个 mode 和一套参数（不再按能力分化），
 # 所以引擎参数的来源就是 yaml 顶层（除去这几个键）。
-_SITE_META_KEYS = frozenset({"source_group", "source_alias", "concurrency", "enabled", "mode"})
+_SOURCE_META_KEYS = frozenset({"source_group", "source_alias", "concurrency", "enabled", "mode"})
 
 
 def effective_capabilities(source_name: str) -> dict[str, str]:
-    """有效 mode 映射：用户层 `sites/{source_name}.yaml` 顶层 `mode` 覆盖 `source.json` 声明。
+    """有效 mode 映射：用户层 `sources/{source_name}.yaml` 顶层 `mode` 覆盖 `source.json` 声明。
 
     **一个书源只有一个 mode，所有能力共享**（不再按能力分化）。返回形状仍是
     `{capability: mode}`（所有值相同），以保持公共 API 稳定。
@@ -222,7 +222,7 @@ def effective_capabilities(source_name: str) -> dict[str, str]:
     declared = capabilities(source_name)
     if not declared:
         return {}
-    override = _user_site_cfg(source_name).get("mode")
+    override = _user_source_cfg(source_name).get("mode")
     mode = override if override in VALID_MODES else next(iter(declared.values()))
     return {cap: mode for cap in declared}
 
@@ -237,7 +237,7 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     写法不必改动。
 
     三层（优先级从低到高）：
-    `ENGINE_DEFAULTS[mode]` → `source.json` 顶层字段 → `sites/{source_name}.yaml` 顶层字段。
+    `ENGINE_DEFAULTS[mode]` → `source.json` 顶层字段 → `sources/{source_name}.yaml` 顶层字段。
 
     不变量：输出的 `mode` 恒等于 `effective_capabilities()[cap]`，用户层的 `mode`
     （含非法值 / YAML `null`）不参与字段覆盖。
@@ -247,8 +247,8 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
     if not caps:
         return {}
     manifest = get_manifest(source_name)
-    user = _user_site_cfg(source_name)
-    user_fields = {k: v for k, v in user.items() if k not in _SITE_META_KEYS}
+    user = _user_source_cfg(source_name)
+    user_fields = {k: v for k, v in user.items() if k not in _SOURCE_META_KEYS}
     out: dict[str, dict] = {}
     for cap, mode in caps.items():
         base = deep_merge(ENGINE_DEFAULTS.get(mode, {}), manifest["default_config"][cap])
@@ -259,7 +259,7 @@ def merged_source_config(source_name: str) -> dict[str, dict]:
 
 def _user_top(source_name: str, key: str) -> str:
     """用户层顶层字符串字段（strip 后）；非字符串 / 缺失 → ""。"""
-    value = _user_site_cfg(source_name).get(key)
+    value = _user_source_cfg(source_name).get(key)
     return value.strip() if isinstance(value, str) else ""
 
 
@@ -318,7 +318,7 @@ def source_concurrency(source_name: str) -> int:
     from novelbase.source import get_manifest
     from novelbase.sources.manifest import ManifestError
 
-    user = _user_site_cfg(source_name)
+    user = _user_source_cfg(source_name)
     if _is_positive_int(user.get("concurrency")):
         return user["concurrency"]
     try:

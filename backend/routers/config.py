@@ -87,7 +87,7 @@ async def remove_favorite(novel_id: str):
 # 用户层 yaml 就是顶层一套字段（mode / timeout / headers / ...），
 # 因此原先的 common 段、能力段覆盖、converge 收敛机制全部删除。
 
-# 顶层元信息键：不是引擎字段（见 shared/config.py 的 _SITE_META_KEYS）
+# 顶层元信息键：不是引擎字段（见 shared/config.py 的 _SOURCE_META_KEYS）
 _META_KEYS = ("concurrency", "source_group", "source_alias", "mode")
 
 @router.get("/sources/{source_name}")
@@ -116,7 +116,7 @@ async def get_source_config(source_name: str):
 
 @router.put("/sources/{source_name}")
 async def save_source_config(source_name: str, body: dict):
-    """只写用户层 `sites/{source_name}.yaml` 的**顶层字段**。
+    """只写用户层 `sources/{source_name}.yaml` 的**顶层字段**。
 
     body 可含：`concurrency`、`source_group`、`source_alias`、`mode`、以及引擎字段
     （timeout / retry_times / delay / headers / key / …，随 mode 而变）。
@@ -125,7 +125,7 @@ async def save_source_config(source_name: str, body: dict):
     `mode: null` → 删除覆盖，恢复书源声明；字段传 `null` → 删除该键。
     """
     require_known_source(source_name)
-    path = config_service.CONFIG_DIR / "sites" / f"{source_name}.yaml"
+    path = config_service.CONFIG_DIR / "sources" / f"{source_name}.yaml"
     existing = config_service.load_yaml(path)
     if not isinstance(existing, dict):
         existing = {}

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Config loader: paths, config.yaml, groups.yaml, site configs."""
+"""Config loader: paths, config.yaml, groups, source configs."""
 
 from __future__ import annotations
 
@@ -113,22 +113,22 @@ def save_groups(groups: dict) -> None:
     _db_save(groups)
 
 
-def load_site_config(platform: str) -> dict:
-    """Load app_data/config/sites/{platform}.yaml."""
-    path = CONFIG_DIR / "sites" / f"{platform}.yaml"
+def load_source_config(source_name: str) -> dict:
+    """Load app_data/config/sources/{source_name}.yaml."""
+    path = CONFIG_DIR / "sources" / f"{source_name}.yaml"
     if not path.exists():
-        _log.warning("site config not found: %s", path)
+        _log.warning("source config not found: %s", path)
         return {}
     with path.open("r", encoding="utf-8") as f:
         return _resolve_paths(yaml.safe_load(f) or {})
 
 
-def save_site_config(platform: str, site_cfg: dict) -> None:
-    """Save app_data/config/sites/{platform}.yaml."""
-    (CONFIG_DIR / "sites").mkdir(parents=True, exist_ok=True)
-    path = CONFIG_DIR / "sites" / f"{platform}.yaml"
+def save_source_config(source_name: str, source_cfg: dict) -> None:
+    """Save app_data/config/sources/{source_name}.yaml."""
+    (CONFIG_DIR / "sources").mkdir(parents=True, exist_ok=True)
+    path = CONFIG_DIR / "sources" / f"{source_name}.yaml"
     with path.open("w", encoding="utf-8") as f:
-        yaml.dump(site_cfg, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump(source_cfg, f, allow_unicode=True, default_flow_style=False)
 
 
 def load_format_configs() -> dict[str, dict]:
