@@ -36,9 +36,16 @@ from .sources.manifest import (
 )
 
 __all__ = ["list_sources", "get_manifest", "capabilities", "resolve",
-           "resolve_book_url"]
+           "resolve_book_url", "add_source_root", "source_roots"]
 
 _PRIVATE_SOURCES_ROOT: str | None = os.environ.get("NLD_PRIVATE_SOURCES")
+
+# 多根源环境变量（`os.pathsep` 分隔）。与 `NLD_PRIVATE_SOURCES` 同在函数体内读取：
+# 测试用 `monkeypatch.setattr(_PRIVATE_SOURCES_ROOT, ...)` 依赖这一点，导入期快照会让它失效。
+_SOURCE_ROOTS_ENV = "NLD_SOURCE_ROOTS"
+
+# `add_source_root()` 注入的显式根（`shared` 层用它在 import 时加上 `<APP_DATA>/sources`）。
+_EXPLICIT_ROOTS: list[Path] = []
 
 _SOURCES_DIR = Path(__file__).parent / "sources"
 
@@ -60,19 +67,51 @@ def _compiled_dir_by_source() -> dict[str, str]:
     return _manifest.SOURCE_DIRS
 
 
+def add_source_root(path: str | Path) -> None:
+    """追加一个显式源根（重复追加同一路径无副作用）。
+
+    `novelbase` 不认识 `app_data` 布局（它是可 `pip install` 的纯库，不能反向
+    依赖 `shared`）。用户根由 `shared.config` 在 import 时调用本函数接线。
+    """
+    p = Path(path)
+    if p not in _EXPLICIT_ROOTS:
+        _EXPLICIT_ROOTS.append(p)
+
+
+def _resolve_source_roots() -> list[Path]:
+    """当前生效的有序源根（只保留真实存在的目录）。
+
+    顺序：`NLD_SOURCE_ROOTS` → 旧 `NLD_PRIVATE_SOURCES` → `add_source_root()`
+    注入 → 官方 `builtin` 根。
+
+    顺序**不改变语义**：`source_name` 跨根撞名一律抛
+    `DuplicateSourceNameError`，不退化成一占先得；顺序只影响报错消息里的
+    先占者/后来者。
+    """
+    roots: list[Path] = []
+    raw = os.environ.get(_SOURCE_ROOTS_ENV, "")
+    roots += [Path(p) for p in raw.split(os.pathsep) if p.strip()]
+    if _PRIVATE_SOURCES_ROOT:
+        roots.append(Path(_PRIVATE_SOURCES_ROOT))
+    roots += list(_EXPLICIT_ROOTS)
+    # 过渡根（Task 3 迁移完成后删除）：迁移前 10 个源仍在 novelbase/sources/ 下，
+    # 迁移后该目录只剩 contracts.py / manifest.py，scan_source_names 扫不到源目录即无副作用。
+    roots.append(_SOURCES_DIR)
+    roots.append(_SOURCES_DIR / "builtin")
+    return [r for r in roots if r.is_dir()]
+
+
+def source_roots() -> list[Path]:
+    """当前生效的有序源根（只读快照，供调用方展示/诊断）。"""
+    return _resolve_source_roots()
+
+
 def _source_dirs() -> dict[str, Path]:
-    """全局唯一书源表 `{source_name: 目录}`（内置根在前，私有根在后）。
+    """全局唯一书源表 `{source_name: 目录}`。
 
     任一 `source_name` 重复（含跨根）→ `DuplicateSourceNameError`。
     """
-    roots: list[Path] = []
-    if _SOURCES_DIR.is_dir():
-        roots.append(_SOURCES_DIR)
-    if _PRIVATE_SOURCES_ROOT:
-        p = Path(_PRIVATE_SOURCES_ROOT)
-        if p.is_dir():
-            roots.append(p)
-    return scan_source_names(roots)
+    return scan_source_names(_resolve_source_roots())
 
 
 def _source_dir(source_name: str) -> tuple[Path, bool] | None:
