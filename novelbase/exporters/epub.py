@@ -230,7 +230,12 @@ def _render_css(options: EPUBExportOptions) -> str:
     return raw
 
 
-def _render_chapter(chapter: Chapter) -> str:
+def _render_chapter(chapter: Chapter, body: str) -> str:
+    """把已渲染的正文片段包成完整 XHTML 文档（含章节标题、字数/更新时间、样式表）。
+
+    `body` 由调用方用 `_build_chapter_body(chapter, reg)` 渲染后传入 —— 图片注册表
+    是导出过程中的局部 dict，不能在这里重新构建，否则图片占位符对不上。
+    """
     title = html_lib.escape(chapter.title)
     update_time = ""
     if chapter.time:
@@ -240,7 +245,6 @@ def _render_chapter(chapter: Chapter) -> str:
         except (OSError, ValueError, OverflowError):
             update_time = str(chapter.time)
     word_count = chapter.count or 0
-    body = _build_chapter_body(chapter)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE html>\n'
@@ -562,7 +566,9 @@ def export(
     chapter_xhtml: list[tuple[Chapter, int, str]] = []
     for idx, ch in enumerate(chapters_list, start=1):
         html_body = _build_chapter_body(ch, reg)
-        chapter_xhtml.append((ch, idx, html_body))
+        # 写进 zip 的必须是完整 XHTML 文档：裸片段没有 <h1> 标题、没有 <html> 外壳，
+        # 也不会引用 css/style.css（样式表被打进 zip 却无人引用）
+        chapter_xhtml.append((ch, idx, _render_chapter(ch, html_body)))
 
     # 压缩
     comp_algo = _COMPRESSION_MAP.get(options.compression, zipfile.ZIP_DEFLATED)
