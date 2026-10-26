@@ -44,9 +44,12 @@
 | `resolve(source_name, capability)` | `(函数, 该能力的 mode)`；动态 import 并校验必需参数名 |
 | `resolve_book_url(raw)` | 把输入规范成完整 URL（仅接受 http(s)，否则 `ValueError`） |
 
-- 所有公开 API 均以 **`source_name` 为键**；目录名只在 `import_module` 时使用。
-- `resolve()` 动态 import `novelbase.sources.{dir}.{capability}` 并取同名函数，返回前用
-  `inspect.signature` 校验必需参数名（契约见 `novelbase/sources/contracts.py` 的 `CAPABILITY_META`）。
+- 所有公开 API 均以 **`source_name` 为键**；目录名只用于在源根下定位文件。
+- `resolve()` 按文件路径加载 `{源根}/{dir}/{capability}.py` 并取同名函数（`spec_from_file_location`，
+  包内包外同一条路径），返回前用 `inspect.signature` 校验必需参数名（契约见
+  `novelbase/sources/contracts.py` 的 `CAPABILITY_META`）。
+- **能力文件只可用绝对 import**：模块名形如 `nld_src_{根哈希}.{dir}.{capability}`，父包不注册进
+  `sys.modules`，`from ._helpers import x` 这类相对 import 会 `ImportError`。
 - 未知书源：`get_manifest()` 抛 `KeyError`；`capabilities()` 吞掉异常返回 `{}`（**撞名例外**：`source_name` 重复时直接抛 `DuplicateSourceNameError`，不吞成空能力）。
 
 ## `source.json` 规范

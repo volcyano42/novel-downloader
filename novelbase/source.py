@@ -126,6 +126,15 @@ def _merged_compiled_table() -> tuple[dict[str, dict], dict[str, Path]]:
     （不静默取一个）。
     """
     static = {m["source_name"]: m for m in _compiled_sources().values()}
+    dirs = _compiled_dir_by_source()
+    orphan = sorted(set(static) - set(dirs))
+    if orphan:
+        # 构建产物损坏：SOURCES 里有、SOURCE_DIRS 里没有 → 否则 get_manifest() 能用、
+        # resolve() 却抛 unknown source，一半可用比彻底坏更难查。
+        raise ManifestError(
+            f"编译静态表不一致：{orphan} 存在于 _manifest.SOURCES 但没有 SOURCE_DIRS 映射。"
+            f"请重新运行 python -m novelbase.utils.build_manifest"
+        )
     from_fs = scan_source_names(_resolve_source_roots())
     clash = sorted(set(static) & set(from_fs))
     if clash:

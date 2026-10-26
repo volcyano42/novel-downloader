@@ -428,7 +428,15 @@ def cmd_dev(args):
                          write_config=not args.no_config)
 
 
-_SOURCES_ROOT = Path(__file__).parent.parent / "novelbase" / "sources"
+def _sources_root() -> Path:
+    """脚手架写进**用户源根**（`<APP_DATA>/sources`）。
+
+    2026-10-26 起 `novelbase/sources/` 已不是源根（官方源在 `sources/builtin/`）：
+    写进安装包目录既不会被发现层扫到（静默失效），也会在升级/重装时被覆盖。
+    """
+    from shared.config import user_sources_dir
+
+    return user_sources_dir()
 
 # 脚手架函数清单与文件模板。
 # 必须保持 async def：novelbase/core/downloader.py 以 await fn(...) 调用书源函数。
@@ -451,7 +459,7 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
     - `write_config=True` 时额外生成默认用户配置 `sources/{name}.yaml`。
     """
     mode = (modes[0].strip() if modes else "") or "requests"
-    source_dir = _SOURCES_ROOT / name.replace("-", "_")
+    source_dir = _sources_root() / name.replace("-", "_")
     source_dir.mkdir(parents=True, exist_ok=True)
 
     (source_dir / "__init__.py").write_text("", encoding="utf-8")
@@ -470,7 +478,7 @@ def _scaffold_source(name: str, modes: list[str], write_config: bool = True):
         from shared.config import save_source_config
         save_source_config(name, {"mode": mode})
 
-    print(f"书源脚手架已创建: novelbase/sources/{source_dir.name}/")
+    print(f"书源脚手架已创建: {source_dir}/")
     print("  __init__.py, source.json, "
           + ", ".join(f"{fn}.py" for fn in _SCAFFOLD_FUNCTIONS))
     if write_config:

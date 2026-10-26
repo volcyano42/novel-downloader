@@ -162,3 +162,35 @@ def test_compiled_mode_detects_duplicate_between_table_and_filesystem(tmp_path, 
     )
     with pytest.raises(DuplicateSourceNameError):
         source_mod.list_sources()
+
+
+def test_scaffold_writes_into_user_sources_root(tmp_path, monkeypatch):
+    """`cli dev new-source` 必须写进用户源根，不能写进已不是源根的 novelbase/sources/。"""
+    import importlib
+
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path))
+    import shared.config as shared_config
+
+    importlib.reload(shared_config)
+    import cli.main as cli_main
+
+    importlib.reload(cli_main)
+    cli_main._scaffold_source("demo-requests", ["requests"], write_config=False)
+    assert (shared_config.user_sources_dir() / "demo_requests" / "source.json").is_file()
+
+
+def test_compiled_table_missing_dir_mapping_raises(monkeypatch):
+    """静态表与目录映射不一致（构建产物损坏）→ 显式报错，而非一个能用一个不能用。"""
+    from novelbase.sources.manifest import ManifestError
+
+    _set_roots(monkeypatch)
+    monkeypatch.setattr(source_mod, "_is_compiled", lambda: True)
+    monkeypatch.setattr(
+        source_mod,
+        "_compiled_sources",
+        lambda: {"bdir": {"source_name": "orphan-requests", "mode": "requests",
+                          "default_config": {"search": {"mode": "requests"}}}},
+    )
+    monkeypatch.setattr(source_mod, "_compiled_dir_by_source", lambda: {})
+    with pytest.raises(ManifestError):
+        source_mod.list_sources()

@@ -36,7 +36,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
   对外 API：`list_sources()` / `get_manifest(name)` / `capabilities(name) -> {capability: mode}` / `resolve(name, capability) -> (fn, mode)`。
   **一个书源只有一个 `mode` 和一套字段**（2026-10-25 起，不再按能力分化：无 `common` / `default_config`）；`sources/{source_name}.yaml` 用户层也是顶层一套字段。
   **能力由文件系统发现**：目录里有哪几个能力 `.py`，就暴露哪几个能力（不在 manifest 里声明）。
-  `source_name`（source.json 里）与目录名解耦；目录名是合法 Python 标识符，能力通过 `import_module("novelbase.sources.{dir}.{capability}")` 加载。
+  `source_name`（source.json 里）与目录名解耦；目录名是合法 Python 标识符，能力按**文件路径**加载（`spec_from_file_location`，包内包外同一条路径；2026-10-26 起不再用 `import_module`）。**能力文件只可用绝对 import**：模块名是 `nld_src_{根哈希}.{dir}.{cap}`，父包未注册，`from .x import y` 会 ImportError。
   `source_name` **全局唯一**（内置根 + 私有根同一命名空间）：撞名在加载期抛 `DuplicateSourceNameError`（`ManifestError` 子类），检测点 `novelbase/sources/manifest.py::scan_source_names()`；私有源须自带独立 `source_name`。
   新增书源：建目录 + 空 `__init__.py` + `source.json`（含 `mode`）+ 能力文件，无注册表改动。
 - **引擎三种模式** `browser`（Playwright）、`requests`（httpx）、`api`（Rain.ink 代理）

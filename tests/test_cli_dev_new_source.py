@@ -1,8 +1,9 @@
 """`dev new-source` 扁平脚手架测试（`new-variant` 已删除）。
 
-直接调用 `cli.main._scaffold_source`（不跑子进程），monkeypatch 注入 sources 根
-（`cli.main._SOURCES_ROOT`）与配置目录（`cli.config.CONFIG_DIR` /
-`shared.config.CONFIG_DIR`），全部为真实文件操作。
+直接调用 `cli.main._scaffold_source`（不跑子进程），monkeypatch 注入用户源根
+（`cli.main._sources_root`，2026-10-26 起指向 `<APP_DATA>/sources` 而非包内
+`sources/`）与配置目录（`cli.config.CONFIG_DIR` / `shared.config.CONFIG_DIR`），
+全部为真实文件操作。
 """
 
 import json
@@ -21,7 +22,7 @@ def _setup(monkeypatch, tmp_path):
     root.mkdir()
     cfg_dir = tmp_path / "config"
     cfg_dir.mkdir()
-    monkeypatch.setattr(cli.main, "_SOURCES_ROOT", root)
+    monkeypatch.setattr(cli.main, "_sources_root", lambda: root)
     monkeypatch.setattr(cli.config, "CONFIG_DIR", cfg_dir)
     monkeypatch.setattr("shared.config.CONFIG_DIR", cfg_dir)
     return root, cfg_dir
