@@ -65,3 +65,46 @@ export function formatRanges(orders: readonly number[]): string {
 
   return parts.join(", ");
 }
+
+/** 参与范围计算的章节最小字段集。 */
+export interface ChapterLike {
+  id: string;
+  order: number;
+  downloaded: boolean;
+}
+
+/**
+ * 范围文本 → 选中的章节 id 列表。
+ *
+ * 未下载章节**不参与**解析：即便文本覆盖了它们的 order，也不会被选中
+ * （它们导出出来只会是空章节）。
+ */
+export function parseRangesToIds(text: string, chapters: readonly ChapterLike[]): string[] {
+  const downloadedOrders: number[] = [];
+  const orderToId = new Map<number, string>();
+  for (const c of chapters) {
+    orderToId.set(c.order, c.id);
+    if (c.downloaded) downloadedOrders.push(c.order);
+  }
+  const ids: string[] = [];
+  for (const order of parseRanges(text, downloadedOrders)) {
+    const id = orderToId.get(order);
+    if (id !== undefined) ids.push(id);
+  }
+  return ids;
+}
+
+/** 选中的章节 id 列表 → 范围文本（按 `order` 排序后折叠连续段）。 */
+export function formatIdsAsRanges(
+  ids: readonly string[],
+  chapters: readonly ChapterLike[],
+): string {
+  const idToOrder = new Map<string, number>();
+  for (const c of chapters) idToOrder.set(c.id, c.order);
+  const orders: number[] = [];
+  for (const id of ids) {
+    const order = idToOrder.get(id);
+    if (order !== undefined) orders.push(order);
+  }
+  return formatRanges(orders);
+}
