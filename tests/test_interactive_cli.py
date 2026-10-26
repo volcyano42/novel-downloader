@@ -200,8 +200,8 @@ class TestMenus:
         monkeypatch.setattr(ccfg, "CONFIG_DIR", tmp_path)
         from cli import menus
         menus._set_delay("a-x-default", "search", 0.5, 1.5)
-        from cli.config import load_site_config
-        assert load_site_config("a-x-default")["search"]["delay"] == [0.5, 1.5]
+        from cli.config import load_source_config
+        assert load_source_config("a-x-default")["search"]["delay"] == [0.5, 1.5]
 
     def test_do_settings_download_threads(self, monkeypatch, tmp_path):
         import cli.config as ccfg
@@ -227,8 +227,8 @@ class TestMenus:
         inputs = iter(["2", "1", "2", "42", "0", "0", "0"])
         monkeypatch.setattr("builtins.input", lambda _="": next(inputs))
         menus.do_settings({})
-        from cli.config import load_site_config
-        assert load_site_config("a-x-default")["search"]["timeout"] == 42
+        from cli.config import load_source_config
+        assert load_source_config("a-x-default")["search"]["timeout"] == 42
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -247,7 +247,7 @@ def _isolate_engine_factory(monkeypatch, mod):
     """隔离引擎工厂：测试不真建引擎（`get` 一律返回 None），但保留 `.cache` 供收尾遍历。
 
     改造后引擎在调用处求值，凡走到 `_make_engine_getter` 的用例都必须隔离它，
-    否则会真建引擎（并受本机 `app_data/config/sites/*.yaml` 覆盖影响）。
+    否则会真建引擎（并受本机 `app_data/config/sources/*.yaml` 覆盖影响）。
     """
 
     def _make(*a, **kw):

@@ -12,9 +12,9 @@ KNOWN = "92xs-requests-default"
 
 def _override_search_browser(tmp_path):
     """在用户层把 KNOWN 源的 search.mode 覆盖为 browser。"""
-    sites = tmp_path / "sites"
-    sites.mkdir(parents=True, exist_ok=True)
-    (sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
+    sources = tmp_path / "sources"
+    sources.mkdir(parents=True, exist_ok=True)
+    (sources / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
 
 def test_cmd_source_list_shows_effective_mode(monkeypatch, tmp_path, capsys):
@@ -134,17 +134,17 @@ def test_cmd_config_only_touches_missing(monkeypatch, capsys):
         config_command = "init"
         all = False
         main = False
-        sites = None
+        sources = None
         formats = None
         user_db = False
 
     monkeypatch.setattr(init_config, "check_config",
-                        lambda: {"missing": ["config.yaml", "sites/demo-r-default.yaml"],
+                        lambda: {"missing": ["config.yaml", "sources/demo-r-default.yaml"],
                                  "all_missing": False})
     monkeypatch.setattr(init_config, "init_main_config",
                         lambda: (calls.append("main"), ["/tmp/config.yaml"])[1])
-    monkeypatch.setattr(init_config, "init_site_config",
-                        lambda name: (calls.append(f"sites:{name}"), [f"/tmp/sites/{name}.yaml"])[1])
+    monkeypatch.setattr(init_config, "init_source_config",
+                        lambda name: (calls.append(f"sources:{name}"), [f"/tmp/sources/{name}.yaml"])[1])
     monkeypatch.setattr(init_config, "init_user_db",
                         lambda: (calls.append("user-db"), [])[1])
 
@@ -155,6 +155,6 @@ def test_cmd_config_only_touches_missing(monkeypatch, capsys):
 
     cli_main.cmd_config(Args())
 
-    assert calls == ["main", "sites:demo-r-default", "user-db"]
+    assert calls == ["main", "sources:demo-r-default", "user-db"]
     out = capsys.readouterr().out
     assert "已初始化 2 个配置项" in out

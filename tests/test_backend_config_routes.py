@@ -12,16 +12,16 @@ KNOWN = "92xs-requests-default"          # 声明 mode = requests
 
 
 @pytest.fixture
-def isolated_sites(monkeypatch, tmp_path):
+def isolated_sources(monkeypatch, tmp_path):
     monkeypatch.setattr(config_service, "CONFIG_DIR", tmp_path)
-    sites = tmp_path / "sites"
-    sites.mkdir(parents=True, exist_ok=True)
+    sources = tmp_path / "sources"
+    sources.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(source_guard, "list_sources", lambda: [KNOWN])
-    return sites
+    return sources
 
 
-def test_get_source_config_returns_effective_and_declared(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
+def test_get_source_config_returns_effective_and_declared(isolated_sources):
+    (isolated_sources / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
     data = asyncio.run(cfg.get_source_config(KNOWN))
 
@@ -30,47 +30,47 @@ def test_get_source_config_returns_effective_and_declared(isolated_sites):
     assert data["config"]["search"]["mode"] == "browser"
 
 
-def test_put_source_config_writes_mode_override(isolated_sites):
+def test_put_source_config_writes_mode_override(isolated_sources):
     asyncio.run(cfg.save_source_config(KNOWN, {"mode": "browser"}))
 
-    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    saved = config_service.load_yaml(isolated_sources / f"{KNOWN}.yaml")
 
     assert saved["mode"] == "browser"
     assert config_service.effective_capabilities(KNOWN)["search"] == "browser"
 
 
-def test_put_source_config_mode_null_removes_override(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
+def test_put_source_config_mode_null_removes_override(isolated_sources):
+    (isolated_sources / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
     asyncio.run(cfg.save_source_config(KNOWN, {"mode": None}))
 
-    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    saved = config_service.load_yaml(isolated_sources / f"{KNOWN}.yaml")
     assert "mode" not in (saved.get("search") or {})
     assert config_service.effective_capabilities(KNOWN)["search"] == "requests"
 
 
-def test_download_sources_returns_effective_mode(isolated_sites):
-    (isolated_sites / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
+def test_download_sources_returns_effective_mode(isolated_sources):
+    (isolated_sources / f"{KNOWN}.yaml").write_text("mode: browser\n", encoding="utf-8")
 
     data = asyncio.run(dl.list_all_sources())
 
     assert data[KNOWN]["capabilities"]["search"] == "browser"
 
 
-def test_put_source_meta_group_and_alias(isolated_sites):
+def test_put_source_meta_group_and_alias(isolated_sources):
     """顶层 source_group / source_alias 写入用户层；空串删除该键。"""
     asyncio.run(cfg.save_source_config(KNOWN, {"source_group": " 番茄 ", "source_alias": "番茄·直连"}))
-    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    saved = config_service.load_yaml(isolated_sources / f"{KNOWN}.yaml")
     assert saved["source_group"] == "番茄"       # 已 strip
     assert saved["source_alias"] == "番茄·直连"
 
     asyncio.run(cfg.save_source_config(KNOWN, {"source_group": ""}))
-    saved = config_service.load_yaml(isolated_sites / f"{KNOWN}.yaml")
+    saved = config_service.load_yaml(isolated_sources / f"{KNOWN}.yaml")
     assert "source_group" not in saved
     assert saved["source_alias"] == "番茄·直连"
 
 
-def test_get_source_config_includes_meta(isolated_sites):
+def test_get_source_config_includes_meta(isolated_sources):
     asyncio.run(cfg.save_source_config(KNOWN, {"source_group": "番茄", "source_alias": "番茄·直连"}))
     data = asyncio.run(cfg.get_source_config(KNOWN))
     assert data["source_group"] == "番茄"

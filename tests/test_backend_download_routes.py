@@ -332,7 +332,7 @@ def test_save_source_config_writes_user_layer_only(monkeypatch, tmp_path):
         "demo-requests-default",
         {"timeout": 99},
     ))
-    path = tmp_path / "sites" / "demo-requests-default.yaml"
+    path = tmp_path / "sources" / "demo-requests-default.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert data["timeout"] == 99
     # 未提供的出厂字段不应被灌入用户层
@@ -345,12 +345,12 @@ def test_save_source_config_strips_legacy_enabled(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg.config_service, "CONFIG_DIR", tmp_path)
     _allow_sources(monkeypatch, "demo-requests-default")
     cfg.config_service.save_yaml(
-        tmp_path / "sites" / "demo-requests-default.yaml",
+        tmp_path / "sources" / "demo-requests-default.yaml",
         {"enabled": True, "timeout": 5},
     )
     asyncio.run(cfg.save_source_config(
         "demo-requests-default", {"timeout": 9}))
-    data = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
+    data = cfg.config_service.load_yaml(tmp_path / "sources" / "demo-requests-default.yaml")
     assert "enabled" not in data
     assert data["timeout"] == 9
 
@@ -362,7 +362,7 @@ def test_save_source_config_deep_merges_existing(monkeypatch, tmp_path):
     _allow_sources(monkeypatch, "demo-requests-default")
     asyncio.run(cfg.save_source_config("demo-requests-default", {"timeout": 99}))
     asyncio.run(cfg.save_source_config("demo-requests-default", {"retry_times": 7}))
-    merged = cfg.config_service.load_yaml(tmp_path / "sites" / "demo-requests-default.yaml")
+    merged = cfg.config_service.load_yaml(tmp_path / "sources" / "demo-requests-default.yaml")
     assert merged == {"timeout": 99, "retry_times": 7}
 
 

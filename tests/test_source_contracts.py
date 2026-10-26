@@ -195,7 +195,7 @@ def test_builtin_browser_sources_default_to_persistent_profile(tmp_path, monkeyp
     不落盘，表现为「每次启动登录态重置」。且 `deep_merge` 里用户层的空串会覆盖
     出厂值，所以这一层必须给出非空路径（只靠用户层自觉填不可靠）。
 
-    `CONFIG_DIR` 指向空目录以隔离本机 `app_data/config/sites` —— 只校验出厂层。
+    `CONFIG_DIR` 指向空目录以隔离本机 `app_data/config/sources` —— 只校验出厂层。
     """
     import shared.config as sc
 

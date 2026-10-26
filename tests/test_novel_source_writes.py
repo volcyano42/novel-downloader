@@ -22,7 +22,7 @@ def _stub_engine_getter(source_name: str, **kw):
     """测试用引擎 getter：不真建引擎（`get` 一律返回 None），但保留 `.cache` 供收尾遍历。
 
     改造后引擎在调用处求值，凡走到 `_make_engine_getter` 的用例都必须隔离它，
-    否则会真建引擎（并受本机 `app_data/config/sites/*.yaml` 覆盖影响）。
+    否则会真建引擎（并受本机 `app_data/config/sources/*.yaml` 覆盖影响）。
     """
 
     def get(capability):

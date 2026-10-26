@@ -34,7 +34,7 @@ def test_meta_declared_then_user_override(tmp_path, monkeypatch):
     assert sc.display_name("demo-requests-default") == "出厂别名"
     assert sc.source_group("demo-requests-default") == "出厂组"
 
-    sc.save_site_config("demo-requests-default", {"source_alias": "用户别名", "source_group": "用户组"})
+    sc.save_source_config("demo-requests-default", {"source_alias": "用户别名", "source_group": "用户组"})
     assert sc.display_name("demo-requests-default") == "用户别名"
     assert sc.source_group("demo-requests-default") == "用户组"
 
@@ -44,9 +44,9 @@ def test_meta_blank_user_value_falls_back(tmp_path, monkeypatch):
     monkeypatch.setattr(sc, "CONFIG_DIR", tmp_path)
     _patch_sources(monkeypatch, {"demo-requests-default": REQUESTS_CAPS},
                    {"demo-requests-default": {"source_alias": "出厂别名"}})
-    sc.save_site_config("demo-requests-default", {"source_alias": "用户别名"})
+    sc.save_source_config("demo-requests-default", {"source_alias": "用户别名"})
     assert sc.display_name("demo-requests-default") == "用户别名"
-    sc.save_site_config("demo-requests-default", {"source_alias": ""})
+    sc.save_source_config("demo-requests-default", {"source_alias": ""})
     assert sc.display_name("demo-requests-default") == "出厂别名"
 
 
@@ -109,5 +109,5 @@ def test_merged_source_config_three_layers(tmp_path, monkeypatch):
     merged = sc.merged_source_config("demo-requests-default")
     assert merged["search"]["mode"] == "requests"
     assert merged["search"]["timeout"] == 30          # 第 2 层
-    sc.save_site_config("demo-requests-default", {"timeout": 99})
+    sc.save_source_config("demo-requests-default", {"timeout": 99})
     assert sc.merged_source_config("demo-requests-default")["search"]["timeout"] == 99

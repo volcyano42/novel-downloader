@@ -35,7 +35,7 @@ def test_new_source_builds_flat_layout(monkeypatch, tmp_path):
     assert (d / "source.json").is_file()
     for fn in _FUNCS:
         assert (d / f"{fn}.py").is_file()
-    assert (cfg_dir / "sites" / "demo-requests-default.yaml").is_file()  # 默认建用户配置
+    assert (cfg_dir / "sources" / "demo-requests-default.yaml").is_file()  # 默认建用户配置
 
 
 def test_new_source_manifest_valid(monkeypatch, tmp_path):
@@ -109,7 +109,7 @@ def test_new_source_browser_common_blank_values_match_real_sources(monkeypatch, 
 def test_new_source_no_config_skips_user_config(monkeypatch, tmp_path):
     root, cfg_dir = _setup(monkeypatch, tmp_path)
     cli.main._scaffold_source("demo-requests-default", ["requests"], write_config=False)
-    assert not (cfg_dir / "sites" / "demo-requests-default.yaml").exists()
+    assert not (cfg_dir / "sources" / "demo-requests-default.yaml").exists()
 
 
 def test_new_source_async_template(monkeypatch, tmp_path):
