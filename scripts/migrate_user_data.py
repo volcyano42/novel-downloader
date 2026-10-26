@@ -43,16 +43,29 @@ def _read_title(novels_dir: Path, novel_id: str) -> str | None:
     return row[0] if row and row[0] else None
 
 
-def _collect(db_path: Path, novels_dir: Path) -> tuple[dict, list[dict]]:
-    """读旧库 → (books, history)。连接建立后立刻 checkpoint。
+def _collect(db_path: Path, novels_dir: Path, *, checkpoint: bool) -> tuple[dict, list[dict], int]:
+    """读旧库 → (books, history, bookmarks_rowcount)。
 
-    `PRAGMA wal_checkpoint(TRUNCATE)` 是**必须**的：WAL 里可能有还没合并进主库的
-    写入（进程被关掉时不会自动合并），而迁移收尾要 `shutil.copy2` 主库做备份 ——
-    不先 checkpoint，备份文件会缺掉那些行。
+    `checkpoint=True` 时先做 `PRAGMA wal_checkpoint(TRUNCATE)`：WAL 里可能有还没
+    合并进主库的写入（进程被关掉时不会自动合并），而收尾要 `shutil.copy2` 主库做
+    备份 —— 不先 checkpoint，备份文件会缺掉那些行。checkpoint 可能因其它连接而
+    busy，这时**必须报错而不是继续**（否则备份静默不完整）。
+
+    dry-run 传 `checkpoint=False`：读取视图本身就包含 WAL 内容，不需要也不应该
+    去改旧库。
     """
     conn = sqlite3.connect(str(db_path), timeout=15)
     try:
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        if checkpoint:
+            # checkpoint 最多等 2s 就放弃：库只有几十 KB，等这么久还没拿到锁说明
+            # 确实有别的进程在用，早点报错比静默写出残缺备份好
+            conn.execute("PRAGMA busy_timeout = 2000")
+            busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+            if busy:
+                raise RuntimeError(
+                    f"WAL checkpoint 未完成（busy={busy}）：可能有其它进程正在用 {db_path}"
+                    "（例如 backend / app.py）。关掉它再重试，否则备份会不完整。"
+                )
 
         books: dict[str, dict] = {}
 
@@ -95,10 +108,15 @@ def _collect(db_path: Path, novels_dir: Path) -> tuple[dict, list[dict]]:
                 "SELECT id, source_name, keyword, searched_at FROM search_history ORDER BY id"
             )
         ]
+
+        try:
+            bookmarks = conn.execute("SELECT COUNT(*) FROM bookmarks").fetchone()[0]
+        except sqlite3.Error:
+            bookmarks = 0            # 老库里没这张表
     finally:
         conn.close()
 
-    return books, history
+    return books, history, bookmarks
 
 
 def migrate(app_data: Path, apply: bool = False, force: bool = False) -> dict:
@@ -115,15 +133,19 @@ def migrate(app_data: Path, apply: bool = False, force: bool = False) -> dict:
     history_path = library_dir / "search_history.jsonl"
     backup_path = library_dir / "user_data.db.migrated"
 
-    result: dict = {"books": 0, "history": 0, "skipped": None, "written": []}
+    result: dict = {
+        "books": 0, "history": 0, "bookmarks_dropped": 0,
+        "skipped": None, "written": [],
+    }
 
     if not db_path.exists():
         result["skipped"] = f"旧库不存在：{db_path}"
         return result
 
-    books, history = _collect(db_path, novels_dir)
+    books, history, bookmarks = _collect(db_path, novels_dir, checkpoint=apply)
     result["books"] = len(books)
     result["history"] = len(history)
+    result["bookmarks_dropped"] = bookmarks
 
     if not apply:
         return result
@@ -154,6 +176,8 @@ def _print_report(result: dict, applied: bool) -> None:
         print(f"未迁移：{result['skipped']}")
         return
     print(f"读源：{result['books']} 本书 / {result['history']} 条搜索历史")
+    if result["bookmarks_dropped"]:
+        print(f"丢弃：{result['bookmarks_dropped']} 条 bookmarks（无任何调用者的死功能）")
     if not applied:
         print("（dry-run）加 --apply 才真正写入。")
         return

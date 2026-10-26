@@ -193,3 +193,57 @@ def test_apply_is_idempotent_when_no_source_db(tmp_path):
 
     assert result["skipped"] is not None
     assert not (app / "config").exists()
+
+
+# ── review 后的加固 ────────────────────────────────
+
+def test_apply_refuses_when_wal_checkpoint_busy(old_app):
+    """另一个连接持有写锁时 checkpoint 会 busy —— 必须报错，而不是写出残缺备份。"""
+    db = _old_db(old_app)
+    blocker = sqlite3.connect(str(db), timeout=1)
+    blocker.execute("PRAGMA journal_mode=WAL")
+    blocker.execute("BEGIN IMMEDIATE")          # 拿住写锁
+    try:
+        with pytest.raises(RuntimeError, match="checkpoint"):
+            migrate(old_app, apply=True)
+        assert not (old_app / "config" / "library" / "books.yaml").exists()
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+
+def test_dry_run_is_read_only_even_with_wal(old_app):
+    """dry-run 不该去 checkpoint（那是写操作），但仍能读到 WAL 里的完整数据。"""
+    db = _old_db(old_app)
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(
+        "INSERT INTO search_history(source_name, keyword, searched_at) "
+        "VALUES ('src-c', '新词', '2026-10-03 00:00:00')"
+    )
+    conn.commit()
+    try:
+        result = migrate(old_app)                       # dry-run
+        assert result["history"] == 3                   # 读到 WAL 里的那条
+        assert not (old_app / "config").exists()
+    finally:
+        conn.close()
+
+
+def test_bookmarks_are_dropped_and_reported(old_app):
+    db = _old_db(old_app)
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "CREATE TABLE bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "platform TEXT NOT NULL, novel_id TEXT NOT NULL, chapter_index INTEGER NOT NULL, "
+        "chapter_title TEXT, note TEXT, created_at TEXT, UNIQUE(platform, novel_id, chapter_index))"
+    )
+    conn.executemany(
+        "INSERT INTO bookmarks(platform, novel_id, chapter_index) VALUES (?,?,?)",
+        [("fanqie", "n1", 1), ("fanqie", "n1", 2)],
+    )
+    conn.commit()
+    conn.close()
+
+    result = migrate(old_app, apply=True)
+    assert result["bookmarks_dropped"] == 2
