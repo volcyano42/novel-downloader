@@ -8,6 +8,27 @@ def _isolate_nld_env(monkeypatch):
     """隔离 NLD_* 环境变量，防止跨用例泄漏。"""
     monkeypatch.delenv("NLD_APP_DATA", raising=False)
 
+
+@pytest.fixture(autouse=True)
+def _isolate_user_data_paths(monkeypatch, tmp_path):
+    """把 `shared.user_data` 的四个路径常量指到 tmp_path。
+
+    这里是 autouse 而不是让每个测试自带 fixture：曾经有过一次真实的翻车 ——
+    某个测试只隔离了新常量，而实现当时还走旧的 `DB_PATH`，结果对用户真实的
+    `app_data/storage/users/default/user_data.db` 执行了 `DELETE FROM
+    search_history`，清掉了 10 条搜索历史。默认隔离比“记得隔离”可靠。
+
+    各测试文件自己的 `lib` fixture 会再覆盖一遍（幂等，路径同源）。
+    """
+    from shared import user_data
+
+    library = tmp_path / "_isolated_library"
+    monkeypatch.setattr(user_data, "LIBRARY_DIR", library)
+    monkeypatch.setattr(user_data, "BOOKS_PATH", library / "books.yaml")
+    monkeypatch.setattr(user_data, "HISTORY_PATH", library / "search_history.jsonl")
+    monkeypatch.setattr(user_data, "NOVELS_DIR", tmp_path / "_isolated_novels")
+    monkeypatch.setattr(user_data, "_next_id_cache", None)
+
 # ── Illustration fixtures ─────────────────────────────────────
 
 @pytest.fixture
