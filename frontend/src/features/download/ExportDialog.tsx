@@ -103,7 +103,7 @@ export function ExportDialog({ open, onClose, novelId, novelTitle, onExport }: E
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/40 backdrop-blur-sm"
       onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}

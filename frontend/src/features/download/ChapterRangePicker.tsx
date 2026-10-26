@@ -176,7 +176,7 @@ export function ChapterRangePicker({ novelId, selected, onChange }: ChapterRange
 
       {/* 列表 */}
       {!collapsed && (
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-white/20 bg-white/40 dark:border-slate-600/30 dark:bg-slate-800/40">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-white/20 bg-white/40 dark:border-slate-600/30 dark:bg-slate-800/40">
           {visible.length === 0 ? (
             <p className="px-3 py-6 text-center text-[11px] text-slate-400">
               {streamError ? "章节流中断，请关闭重开" : streaming ? "加载中…" : "没有匹配的章节"}
@@ -206,18 +206,45 @@ function QuickBtn({ onClick, children }: { onClick: () => void; children: React.
   );
 }
 
-/** 行组件：memo 化，避免千章列表在勾选时全表重渲染。 */
+/**
+ * 行组件：memo 化，避免千章列表在勾选时全表重渲染。
+ *
+ * ⚠️ 这里**不能**用 `<label>` + `sr-only` 原生 checkbox：`sr-only` 是
+ * `position: absolute` 的 1px 元素，点击 label 让它获得焦点时，浏览器为
+ * 「保证聚焦元素可见」会滚动祖先链 —— 列表是 `overflow-y-auto`、弹窗是
+ * `fixed` 遮罩，于是点需要滚动才可见的行时**整个界面会偏移**。
+ * 项目里所有手绘复选框（ExportDialog 的格式卡、sourceConfigForm 的 Toggle）
+ * 都是 `<button>`/`role` 手绘，不用原生 input，此处保持一致。
+ */
 const ChapterRow = memo(function ChapterRow({ chapter, checked, onToggle }: {
   chapter: ChapterBrief;
   checked: boolean;
   onToggle: (id: string) => void;
 }) {
   const disabled = !chapter.downloaded;
+  const toggle = () => {
+    if (disabled) return; // 未下载：点不动，也不会被程序化选中
+    onToggle(chapter.id);
+  };
   return (
-    <label
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      onClick={toggle}
+      onKeyDown={e => {
+        if (disabled) return;
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault(); // 空格默认会滚动页面
+          toggle();
+        }
+      }}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 border-b border-white/10 px-3 py-1.5 last:border-b-0 dark:border-slate-700/20",
-        disabled ? "cursor-not-allowed opacity-45" : "hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10",
+        "flex items-center gap-2.5 border-b border-white/10 px-3 py-1.5 outline-none last:border-b-0 dark:border-slate-700/20",
+        disabled
+          ? "cursor-not-allowed opacity-45"
+          : "cursor-pointer hover:bg-indigo-50/60 focus-visible:bg-indigo-50/60 dark:hover:bg-indigo-500/10 dark:focus-visible:bg-indigo-500/10",
       )}>
       <span
         className={cn(
@@ -226,22 +253,12 @@ const ChapterRow = memo(function ChapterRow({ chapter, checked, onToggle }: {
         )}>
         {checked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
       </span>
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
-        disabled={disabled}
-        onChange={() => {
-          if (disabled) return; // 未下载：即使被程序化触发也不选中
-          onToggle(chapter.id);
-        }}
-      />
       <span className="w-10 shrink-0 text-[11px] tabular-nums text-slate-400">{chapter.order}</span>
       <span className="min-w-0 flex-1 truncate text-xs text-slate-700 dark:text-slate-200">{chapter.title}</span>
       {disabled && <span className="shrink-0 text-[10px] text-slate-400">未下载</span>}
       {!disabled && chapter.image_count > 0 && (
         <span className="shrink-0 text-[10px] text-slate-400">图{chapter.image_count}</span>
       )}
-    </label>
+    </div>
   );
 });
