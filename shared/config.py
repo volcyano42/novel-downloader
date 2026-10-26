@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from novelbase.core.options import BrowserOptions, RequestsOptions
+from novelbase.source import add_source_root as _add_source_root
 from shared.paths import exe_dir
 
 
@@ -49,6 +50,20 @@ def _copy_dir(src: Path, dst: Path, _max_depth: int = 10) -> None:
 
 APP_DATA = _get_app_data_dir()
 CONFIG_DIR = APP_DATA / "config"
+
+
+def user_sources_dir() -> Path:
+    """用户书源根：`<APP_DATA>/sources`（懒创建，与 `library/` 同约定）。
+
+    把源目录解压进去即生效，无需环境变量、无需重装——这是「书源与 core
+    结构分离」后官方源之外的正规扩展入口。
+    """
+    return APP_DATA / "sources"
+
+
+# 把用户源根接入 novelbase 的发现层（shared → novelbase 单向依赖）。
+# novelbase 不认识 app_data 布局，也不反向 import shared，保持可 pip install 的纯库定位。
+_add_source_root(user_sources_dir())
 
 # ── 默认值单一数据源：从 dataclass 字段默认值派生 ──
 def _dataclass_defaults(cls) -> dict:

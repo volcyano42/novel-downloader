@@ -114,3 +114,15 @@ def test_capability_module_executed_once_per_root(tmp_path, monkeypatch):
     source_mod.resolve("once-requests", "search")
     source_mod.resolve("once-requests", "search")
     assert marker.read_text(encoding="utf-8") == "1"
+
+
+def test_shared_registers_user_sources_root(monkeypatch):
+    """shared 层 import 时把 <APP_DATA>/sources 注册为显式源根（novelbase 不认识 app_data）。"""
+    import importlib
+
+    monkeypatch.setattr(source_mod, "_EXPLICIT_ROOTS", [])
+    import shared.config as shared_config
+
+    importlib.reload(shared_config)
+    assert shared_config.user_sources_dir() == shared_config.APP_DATA / "sources"
+    assert shared_config.user_sources_dir() in source_mod._EXPLICIT_ROOTS

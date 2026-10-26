@@ -141,9 +141,23 @@ def init_export_config(format: str) -> list[str]:
 
 
 def init_all_config() -> list[str]:
-    """初始化全部（main + all sources + all formats）。"""
+    """初始化全部（main + all sources + all formats + 用户书源根）。"""
     result: list[str] = []
     result.extend(init_main_config())
     result.extend(init_source_config("all"))
     result.extend(init_export_config("all"))
+    result.extend(init_user_sources_dir())
     return result
+
+
+def init_user_sources_dir() -> list[str]:
+    """确保 `<app_data>/sources/` 存在（用户书源根，不预置任何源）。
+
+    与 `config/sources/`（书源**配置**）是两回事：这里是用户自己放书源**代码**的根，
+    由 `shared.config.user_sources_dir()` 注册进 novelbase 的发现层。
+    """
+    d = _target_dir().parent / "sources"
+    if d.is_dir():
+        return []
+    d.mkdir(parents=True, exist_ok=True)
+    return [str(d)]
