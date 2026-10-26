@@ -141,18 +141,23 @@ delay: [3, 5]
 
 ## 内置书源
 
-| source_name | mode | source_alias | source_group |
-|-------------|:----:|--------------|--------------|
-| `92xs-requests-default` | requests | `92xs` | `92xs` |
-| `fanqie-requests-default` | requests | `番茄·直连` | `番茄` |
-| `fanqie-browser-default` | browser | `番茄·浏览器` | `番茄` |
-| `fanqie-api-rain` | api | `番茄·Rain API` | `番茄` |
-| `fanqie-api-oiapi` | api | `番茄·oiapi` | `番茄` |
-| `qidian-requests-default` | requests | `起点·直连` | `起点` |
-| `qidian-browser-default` | browser | `起点·浏览器` | `起点` |
-| `qimao-requests-default` | requests | `七猫·直连` | `七猫` |
-| `qimao-browser-default` | browser | `七猫·浏览器` | `七猫` |
-| `qimao-api-rain` | api | `七猫·Rain API` | `七猫` |
+官方源分两处（2026-10-26 起）：**能公开的随包发行在 `novelbase/sources/builtin/`**，
+**不能公开的（逆向/破解、第三方代理直取平台内容）留在用户源根 `<APP_DATA>/sources/`**，
+不进任何仓库（由 `scripts/migrate_private_sources_out.py` 搬出）。两者加载路径相同，
+对上层不可见——下表「位置」列只是给维护者看。
+
+| source_name | mode | source_alias | source_group | 位置 |
+|-------------|:----:|--------------|--------------|------|
+| `92xs-requests-default` | requests | `92xs` | `92xs` | 用户源根 |
+| `fanqie-requests-default` | requests | `番茄·直连` | `番茄` | `builtin/` |
+| `fanqie-browser-default` | browser | `番茄·浏览器` | `番茄` | `builtin/` |
+| `fanqie-api-rain` | api | `番茄·Rain API` | `番茄` | 用户源根 |
+| `fanqie-api-oiapi` | api | `番茄·oiapi` | `番茄` | `builtin/` |
+| `qidian-requests-default` | requests | `起点·直连` | `起点` | 用户源根 |
+| `qidian-browser-default` | browser | `起点·浏览器` | `起点` | 用户源根 |
+| `qimao-requests-default` | requests | `七猫·直连` | `七猫` | 用户源根 |
+| `qimao-browser-default` | browser | `七猫·浏览器` | `七猫` | 用户源根 |
+| `qimao-api-rain` | api | `七猫·Rain API` | `七猫` | 用户源根 |
 
 - 书源显示名 = 别名 `source_alias`（未设回落 `source_name`），由 `shared.config.display_name()`
   统一提供（界面、日志、CLI）；`source_name`（如 `fanqie-requests-default`）仍是唯一对外键。

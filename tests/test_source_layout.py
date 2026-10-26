@@ -6,7 +6,20 @@ import pytest
 from novelbase.sources.contracts import CAPABILITY_META
 from novelbase.sources.manifest import check_capability_files, load_manifest
 
-SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
+BUILTIN_SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
+
+
+def _source_dir_for(dirname: str) -> Path | None:
+    """按目录名在所有源根里找书源目录（2026-10-26 起源可分布在多个根）。
+
+    找不到返回 None —— 该源已出仓到用户根且当前环境未安装，调用方 skip。
+    """
+    from novelbase.source import _source_dirs
+
+    for d in _source_dirs().values():
+        if d.name == dirname:
+            return d
+    return None
 
 # 每个新书源目录的 mode 归属 = 其原 {platform}/{mode}/{variant} 路径里的 mode。
 # 这是「能力矩阵未被改坏」的真断言：4 个能力的 mode 必须与迁移前一致。
@@ -40,7 +53,9 @@ DIR_TO_SOURCE_NAME = {
 
 @pytest.mark.parametrize("dirname", sorted(EXPECTED_MODE))
 def test_source_dir_has_identity_and_capabilities(dirname):
-    d = SOURCES / dirname
+    d = _source_dir_for(dirname)
+    if d is None:
+        pytest.skip(f"书源目录 {dirname} 未安装（已出仓到用户源根）")
     assert d.is_dir(), f"缺少书源目录 {dirname}"
     manifest = load_manifest(d)
     assert manifest["source_name"] == DIR_TO_SOURCE_NAME[dirname]
@@ -51,7 +66,10 @@ def test_source_dir_has_identity_and_capabilities(dirname):
 @pytest.mark.parametrize("dirname", sorted(EXPECTED_MODE))
 def test_source_dir_mode_matches_legacy(dirname):
     """每个新书源的 4 个能力 mode 与迁移前目录层级一致（防能力矩阵改坏）。"""
-    manifest = load_manifest(SOURCES / dirname)
+    d = _source_dir_for(dirname)
+    if d is None:
+        pytest.skip(f"书源目录 {dirname} 未安装（已出仓到用户源根）")
+    manifest = load_manifest(d)
     assert set(manifest["default_config"]) == set(CAPABILITY_META), dirname
     for cap, section in manifest["default_config"].items():
         assert section["mode"] == EXPECTED_MODE[dirname], f"{dirname}.{cap}"
@@ -60,4 +78,4 @@ def test_source_dir_mode_matches_legacy(dirname):
 def test_no_legacy_platform_dirs():
     """旧的 {platform}/{mode}/{variant} 四层目录不再存在。"""
     for legacy in ("fanqie", "qidian", "qimao", "92xs"):
-        assert not (SOURCES / legacy).exists(), f"旧目录未删除: {legacy}"
+        assert not (BUILTIN_SOURCES / legacy).exists(), f"旧目录未删除: {legacy}"

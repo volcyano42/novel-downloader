@@ -16,12 +16,29 @@
 """
 import asyncio
 import ast
+
+import pytest
 import importlib
 from pathlib import Path
 
 from novelbase.utils.urls import make_novel_id
 
-SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
+BUILTIN_SOURCES = Path(__file__).resolve().parents[1] / "novelbase" / "sources" / "builtin"
+
+
+def _all_source_dirs() -> list[Path]:
+    """所有源根下的源目录（2026-10-26 起书源可分布在多个根，含出仓到用户根的那些）。"""
+    from novelbase.source import _source_dirs
+
+    return sorted(_source_dirs().values())
+
+
+def _collect_all() -> dict[str, list[str]]:
+    """逐源收集 url 模板字面量，键为 `{源目录名}/{文件名}`（跨根口径一致）。"""
+    out: dict[str, list[str]] = {}
+    for d in _all_source_dirs():
+        out.update(_collect_url_templates(d.parent, only=d))
+    return out
 
 # {source_name: (典型 novel.url, make_novel_id(url))}
 STABLE = {
@@ -151,10 +168,10 @@ EXPECTED_URL_TEMPLATES: dict[str, list[str]] = {
 PASSTHROUGH_NOVEL_INFO = ("qidian_requests_default",)
 
 
-def _collect_url_templates(root: Path) -> dict[str, list[str]]:
-    """用 ast 提取每个能力模块里的 url 模板。"""
+def _collect_url_templates(root: Path, only: Path | None = None) -> dict[str, list[str]]:
+    """用 ast 提取每个能力模块里的 url 模板（`only` 指定时只扫该源目录）。"""
     out: dict[str, list[str]] = {}
-    for p in sorted(root.rglob("*.py")):
+    for p in sorted((only or root).rglob("*.py")):
         if p.name == "__init__.py":
             continue
         tree = ast.parse(p.read_text(encoding="utf-8"))
@@ -189,7 +206,13 @@ def test_make_novel_id_stable_for_typical_urls():
 
 def test_source_url_templates_unchanged():
     """书源 url 生成逻辑（域名/路径模板）逐字不变。"""
-    actual = _collect_url_templates(SOURCES)
+    actual = _collect_all()
+    installed = set(actual)
+    if not set(EXPECTED_URL_TEMPLATES) <= installed:
+        pytest.skip(
+            "部分书源未安装（已出仓到用户源根或公开子集），无法比对整体快照："
+            f"{sorted(set(EXPECTED_URL_TEMPLATES) - installed)}"
+        )
     assert actual == EXPECTED_URL_TEMPLATES, (
         "书源 url 生成逻辑发生变化（会导致 novelty_id 漂移）:\n"
         f"新增/修改: {set(actual) ^ set(EXPECTED_URL_TEMPLATES) or '（键相同，比对值）'}"
@@ -203,10 +226,11 @@ def test_passthrough_novel_info_has_no_url_literal():
     常量断言：若该文件新增含 `://` 的字面量（即开始构造/规范化 novel.url），
     `scanned` 会包含该键 → 变红。
     """
-    scanned = _collect_url_templates(SOURCES)
+    scanned = _collect_all()
     for src in PASSTHROUGH_NOVEL_INFO:
         key = f"{src}/novel_info.py"
-        assert (SOURCES / key).is_file(), f"被检查的源码文件不存在：{SOURCES / key}"
+        if not any((d / "novel_info.py").is_file() and d.name == src for d in _all_source_dirs()):
+            pytest.skip(f"书源 {src} 未安装（已出仓到用户源根或公开子集）")
         assert key not in scanned, (
             f"{key} 含 url 模板，透传型书源不得构造/规范化 novel.url：{scanned.get(key)}"
         )
@@ -223,7 +247,9 @@ class _StubEngine:
 
 def test_92xs_novel_info_passes_url_through():
     """92xs novel_info 透传输入 url，不得把 /book/{id}.html 规范化为 /html/{id}/。"""
-    mod = importlib.import_module("novelbase.sources.builtin.92xs_requests_default.novel_info")
+    from tests.source_helpers import load_source_module
+
+    mod = load_source_module("92xs-requests-default", "novel_info")
     url = "http://www.92xs.info/book/9999.html"
     novel = asyncio.run(mod.novel_info(url, _StubEngine()))
     assert novel.url == url

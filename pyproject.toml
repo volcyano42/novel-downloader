@@ -46,6 +46,10 @@ dev = [
 # 非迁移文件清单（public 迁移排除项）——check_public.py 的唯一数据源
 # 与 PUBLIC_MANIFEST.md「白名单内排除」保持一致；两处修改需同步
 exclude = [
+    # 2026-10-26：下面这 7 个源已由 scripts/migrate_private_sources_out.py **搬出仓库**
+    # （移到用户源根 <APP_DATA>/sources，不进 git）。路径条目与对应的 7 份
+    # template/config/sources/*.yaml 条目**保留为防御性排除**：万一有人把它们
+    # 复制回仓库，闸门仍会拦住，而不是当成白名单必需内容反过来指挥你补齐。
     # 未公开书源：扁平化后书源是一层目录（2026-09-30 修正旧的四层路径）。
     # 旧路径（如 `qidian/**`）在 check_public.py 的 fnmatch 下匹配不到任何文件，
     # 会让这些源被判成「白名单必需内容」——闸门反而报「缺失」指挥你补进 public。

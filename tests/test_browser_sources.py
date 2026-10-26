@@ -1,11 +1,11 @@
 import asyncio
-from importlib import import_module
 
-# 注：browser/__init__.py 的 `from .search import search` 会让包属性 search
-# 被函数覆盖，`from ...browser import search` 拿到的是函数而非子模块，
-# 故用 import_module 直接加载子模块。
-qidian_search = import_module("novelbase.sources.builtin.qidian_browser_default.search")
-qimao_chapter_list = import_module("novelbase.sources.builtin.qimao_browser_default.chapter_list")
+from tests.source_helpers import load_source_module
+
+# 2026-10-26：qidian/qimao 已迁出仓库到用户源根，包路径不再存在 →
+# 按 source_name 走发现层加载（源不可用时 pytest.skip）。
+qidian_search = load_source_module("qidian-browser-default", "search", module_level=True)
+qimao_chapter_list = load_source_module("qimao-browser-default", "chapter_list", module_level=True)
 
 
 class FakePage:

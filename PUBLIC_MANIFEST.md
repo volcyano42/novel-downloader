@@ -12,6 +12,10 @@
   - **排除**（2026-09-30 按扁平化后的一层目录名修正）：`novelbase/sources/builtin/qidian_requests_default/**`、`novelbase/sources/builtin/qidian_browser_default/**`、`novelbase/sources/builtin/qimao_requests_default/**`、`novelbase/sources/builtin/qimao_browser_default/**`、`novelbase/sources/builtin/qimao_api_rain/**`、`novelbase/sources/builtin/92xs_requests_default/**`、`novelbase/sources/builtin/fanqie_api_rain/**`、`novelbase/utils/_manifest.py`（书源清单，含未公开书源信息）
   - **2026-10-14 变更**：`novelbase/sources/builtin/fanqie_api_oiapi/**` **移出排除、进入白名单**（用户决定公开）—— 它是公开第三方服务 `https://oiapi.net/api/FqRead` 的封装，`key` 由用户在 `sources/*.yaml` 自备（仓库内为空占位），**非逆向/破解实现**；同时放开它依赖的 `template/config/sources/fanqie-api-oiapi.yaml` 与 `tests/test_source_oiapi_contract.py`。其余 `api` 书源（`*/api_rain/**`）**仍排除**，与 `AGENTS.md` 的「不公开逆向/破解实现」一致
   - 保留：`novelbase/sources/builtin/fanqie_browser_default/**`、`novelbase/sources/builtin/fanqie_requests_default/**`、`novelbase/sources/builtin/fanqie_api_oiapi/**`（2026-10-14 起）
+  - **2026-10-26 第二变更（合规分离）**：7 个红名单书源已由 `scripts/migrate_private_sources_out.py`
+    **搬出仓库**到用户源根 `<APP_DATA>/sources/`（不进 git）。下面列出的这 7 条路径与对应的
+    7 份 `template/config/sources/*.yaml` 已**不存在于仓库**，条目保留为防御性排除——
+    若有人把它们复制回仓库，闸门仍会拦住。
   - **2026-10-26 变更**：官方书源整体下沉到 `novelbase/sources/builtin/`（「书源与 core 结构分离」），本节所有书源路径随之加一层 `builtin/`；`novelbase/sources/` 只保留 core 机制（`contracts.py` / `manifest.py`）并整体进入白名单；`scripts/migrate_sources_to_builtin.py` 与 `tests/test_migrate_sources_to_builtin.py` 属内部迁移工具，不进 public。
   - ⚠️ 排除项**必须**用当前结构的实际目录名：旧的四层路径（如 `novelbase/sources/qidian/**`）在 `check_public.py` 的 `fnmatch` 下匹配不到任何文件，会让这些源被判成白名单**必需内容**，闸门反过来报「缺失」——照提示补齐即泄漏
 
