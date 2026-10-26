@@ -45,7 +45,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 - **BS4 选择器** 只用 `select_one`/`select`（CSS 选择器），不用 `find`/`find_all`
 - **CSS flex 陷阱** flex column 中 `flex-1` 不约束宽度，需 `min-w-0` + `overflow-hidden`；flex row 子元素默认 `min-width: auto`
 - **提交** 中文消息，一个方面一条 commit，禁止 `git add -A`
-- **配置** `app_data/config/` 下全部 YAML，不提交到 git
+- **配置** `app_data/config/` 下：YAML 配置（`config.yaml` / `sources/` / `formats/`）+ `library/` 下的运行时账本（`books.yaml` 书维度、`search_history.jsonl`），不提交到 git
 - **文档** 一律写在 `docs/` 下（按子目录分类），**可提交到 private 仓库**（2026-08-21 起，原"不入 git"约定废弃）；公开迁移时 superpowers/session-prompt/learning 仍在红名单不迁 public
 
 ## Public 迁移约定（novel-crawler）

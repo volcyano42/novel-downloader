@@ -57,10 +57,12 @@ cli.py                ← 非交互 CLI 入口（委托 cli.main）
 main.py               ← 交互式 CLI 入口（委托 cli.interactive.main，2026-08-25 还原）
 app.py                ← 统一启动器（一键启动前后端，Ctrl+C 优雅关闭）
 
-shared/               config.py, user_data.py（跨端共享：配置加载 / 用户数据库模板）
+shared/               config.py, user_data.py（跨端共享：配置加载 / 书维度账本与搜索历史）
 
 app_data/
   config/             config.yaml, sources/{source_name}.yaml, formats/*.yaml
+  config/library/     books.yaml（书维度账本：分组/收藏/来源/书名）,
+                      search_history.jsonl（搜索历史）
   storage/novels/       SQLite，每本小说一个独立 <id>.db 文件（id = sha256(url)[:32]）
   exports/            导出输出目录
 tests/                check_imports.py, test_downloader.py, test_export_config.py, test_models.py,

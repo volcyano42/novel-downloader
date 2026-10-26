@@ -76,11 +76,75 @@ proxies: {}
 - **旧 `sites/{platform}.yaml`（`fanqie.yaml` / `qidian.yaml` / `qimao.yaml` / `92xs.yaml`）不迁移**，
   用户需按新书源名重配。
 
-## groups.yaml / 收藏
+## `library/` —— 书维度账本与搜索历史
 
-分组与收藏已迁移到 SQLite（`app_data/storage/users/.../user_data.db`）：
-`shared.user_data` 提供读写，后端 `/api/v2/config/groups`、`/api/v2/config/favorites` 暴露。
-`groups.yaml` 为遗留文件，不再作为分组数据源。
+两个**运行时账本**（程序写、也能手改），与配置分开放在 `library/` 子目录：
+
+```
+app_data/config/library/
+├── books.yaml              # 书维度：分组 / 收藏 / 来源 / 书名
+└── search_history.jsonl    # 搜索历史（append-only）
+```
+
+### books.yaml
+
+key 是 `novel_id`（`sha256(url)[:32]`），默认值一律省略：
+
+```yaml
+"037507eea3ae924dc1b506189e6535d9":
+  title: 时间循环：我成了杀害青梅的凶手
+  groups:
+    default: {}
+  favorite: true
+  favorited_at: "2026-09-20 10:00:00"
+  source: fanqie-api-rain
+
+"680fced7a0cef16dc19f37b1c191d75b":
+  groups:
+    TEST:
+      pending_export: true
+    default: {}
+```
+
+| 字段 | 缺省含义 |
+|---|---|
+| `title` | 未知书名 |
+| `groups` | 不属于任何组；**一本书可属多个组** |
+| `groups.<组名>.pending_export` | `false`（**组级**属性，不是书级） |
+| `favorite` | 未收藏 |
+| `favorited_at` | 未知收藏时间 |
+| `source` | 未知来源 |
+
+要点：
+
+- `title` 是**派生字段**：每次 `set_novel_source()`（下载 / 同步路径必经）从
+  `storage/novels/<id>.db` 的 `meta.title` 同步，**手改会被覆盖**
+- `groups` 是 **dict 不是列表** —— `pending_export` 属于 `(组, 书)` 这一对
+- **未知字段原样保留**：你可以自己加 `note:` 之类的备注字段，程序不会吃掉它
+- 写入走「临时文件 + fsync + `os.replace`」，写前把上一版留成 `books.yaml.bak`
+- **YAML 写坏（语法错 / 顶层不是映射）时程序报错而不会覆盖**：书架接口会报错，
+  错误信息带文件路径。修好文件或从 `.bak` 恢复即可 —— 程序绝不会用空数据盖掉它
+- 注释会被抹掉（PyYAML 不保留），但文件头注释每次重写都会重新注入
+
+### search_history.jsonl
+
+一行一条，只追加：
+
+```jsonl
+{"id": 1, "source_name": "fanqie-requests-default", "keyword": "斗罗", "searched_at": "2026-10-25 19:31:02"}
+```
+
+- 写入 O(1)，不需要读-改-写整个文件
+- 读取时按 `(source_name, keyword)` 去重保留最新，再按时间倒序（字符串序 = 时间序）
+- 超过 **250** 行自动压缩到最近 **200** 行
+- 由程序维护；**手改请保证每行有整数 `id`**，否则该行会被跳过
+
+### 已知边界
+
+- 并发保护是**进程内** `threading.Lock`（backend 单进程，`uvicorn.run(app)` 无
+  workers）。backend 与 `cli.py` 同时写会后者覆盖前者 —— 单人项目接受这个代价
+- `app_data/storage/` 下只剩 `novels/`（每本书一个 `<id>.db`）
+- 从旧版升级：`python scripts/migrate_user_data.py`（默认 dry-run，`--apply` 才写）
 
 ## formats/*.yaml
 
