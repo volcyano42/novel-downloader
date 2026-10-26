@@ -118,20 +118,44 @@ def _source_dir(source_name: str) -> Path | None:
     return _source_dirs().get(source_name)
 
 
+def _merged_compiled_table() -> tuple[dict[str, dict], dict[str, Path]]:
+    """编译模式的两张表：`{source_name: 静态 manifest}` + `{source_name: 目录}`。
+
+    官方源被编译进产物、文件系统里没有 `.py` → 只能读 `_manifest.py` 静态表；
+    用户源仍在文件系统源根里 → 照常扫描。**两表合并**，撞名口径与非编译模式一致
+    （不静默取一个）。
+    """
+    static = {m["source_name"]: m for m in _compiled_sources().values()}
+    from_fs = scan_source_names(_resolve_source_roots())
+    clash = sorted(set(static) & set(from_fs))
+    if clash:
+        raise DuplicateSourceNameError(
+            f"source_name {clash} 同时出现在编译静态表与文件系统源根："
+            f"目录 {from_fs[clash[0]]} 与静态表重复。请给其中一个书源换 source_name"
+        )
+    return static, from_fs
+
+
 def list_sources() -> list[str]:
-    """列出内置 + 私有书源的 source_name（排序；重名 → DuplicateSourceNameError）。"""
+    """列出全部书源的 source_name（排序；重名 → DuplicateSourceNameError）。"""
     if _is_compiled():
-        return sorted(m["source_name"] for m in _compiled_sources().values())
+        static, from_fs = _merged_compiled_table()
+        return sorted({*static, *from_fs})
     return sorted(_source_dirs())
 
 
 def get_manifest(source_name: str) -> dict:
     """返回书源的 `source.json` 内容（非编译模式校验能力段 ⇔ .py 文件）。"""
     if _is_compiled():
-        dirname = _compiled_dir_by_source().get(source_name)
-        if dirname is None or dirname not in _compiled_sources():
+        static, from_fs = _merged_compiled_table()
+        if source_name in static:
+            return static[source_name]
+        d = from_fs.get(source_name)
+        if d is None:
             raise KeyError(f"unknown source: {source_name}")
-        return _compiled_sources()[dirname]
+        manifest = load_manifest(d)
+        check_capability_files(d, manifest)
+        return manifest
     d = _source_dir(source_name)
     if d is None:
         raise KeyError(f"unknown source: {source_name}")
@@ -217,12 +241,19 @@ def resolve(source_name: str, capability: str):
         raise ValueError(f"{source_name} 未声明能力 {capability!r}")
 
     if _is_compiled():
-        # 编译模式：能力模块已被 --include-package=novelbase.sources 打进产物，
-        # 文件系统里没有 .py 可查，直接按目录名 import
-        dirname = _compiled_dir_by_source().get(source_name)
-        if dirname is None:
-            raise ImportError(f"unknown source: {source_name}")
-        fn = _resolve_compiled(source_name, capability, dirname)
+        # 编译模式：官方源的能力模块已被打进产物，文件系统里没有 .py 可查，
+        # 只能按包路径 import；用户源在文件系统里，照常走 _load_capability。
+        static, from_fs = _merged_compiled_table()
+        if source_name in static:
+            dirname = _compiled_dir_by_source().get(source_name)
+            if dirname is None:
+                raise ImportError(f"unknown source: {source_name}")
+            fn = _resolve_compiled(source_name, capability, dirname)
+        else:
+            d = from_fs.get(source_name)
+            if d is None:
+                raise ImportError(f"unknown source: {source_name}")
+            fn = _load_capability(d, capability)
     else:
         d = _source_dir(source_name)
         if d is None:

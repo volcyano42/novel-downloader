@@ -1,11 +1,14 @@
-"""构建时工具：扫描 sources/*/source.json 生成 _manifest.py 供 Nuitka onefile 模式使用。
+"""构建时工具：扫描 sources/builtin/*/source.json 生成 _manifest.py 供 Nuitka onefile 模式使用。
+
+只覆盖**随包发行的官方源**（`sources/builtin/`）；用户源根不参与编译静态表——
+它们在编译产物里仍从文件系统加载（`source.py::_merged_compiled_table`）。
 
 用法: python -m novelbase.utils.build_manifest
 
 onefile 产物无法扫描文件系统，`source.py` 在编译模式下改读本文件内嵌的
 `SOURCES`（目录名 → source.json 内容）与 `SOURCE_DIRS`（source_name → 目录名）。
 
-`sources/` 下 `source_name` 撞名时直接非零退出（编译模式的 `SOURCE_DIRS` 会静默
+`sources/builtin/` 下 `source_name` 撞名时直接非零退出（编译模式的 `SOURCE_DIRS` 会静默
 覆盖、`list_sources()` 会返回重复条目）。
 
 注意：`SOURCES` 存的是 `load_manifest()` 的结果（`common` 已并入各能力段），与

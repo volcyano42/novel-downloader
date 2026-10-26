@@ -126,3 +126,39 @@ def test_shared_registers_user_sources_root(monkeypatch):
     importlib.reload(shared_config)
     assert shared_config.user_sources_dir() == shared_config.APP_DATA / "sources"
     assert shared_config.user_sources_dir() in source_mod._EXPLICIT_ROOTS
+
+
+def test_compiled_mode_merges_static_table_with_filesystem_roots(tmp_path, monkeypatch):
+    """编译产物里官方源在静态表、用户源在文件系统 —— 两张表必须合并后一起可见。"""
+    _make_source(tmp_path / "user", "user_src", "user-requests")
+    _set_roots(monkeypatch, tmp_path / "user")
+    monkeypatch.setattr(source_mod, "_is_compiled", lambda: True)
+    monkeypatch.setattr(
+        source_mod,
+        "_compiled_sources",
+        lambda: {"bdir": {"source_name": "builtin-requests", "mode": "requests",
+                          "default_config": {"search": {"mode": "requests"}}}},
+    )
+    monkeypatch.setattr(
+        source_mod, "_compiled_dir_by_source", lambda: {"builtin-requests": "bdir"}
+    )
+    assert {"builtin-requests", "user-requests"} <= set(source_mod.list_sources())
+    assert source_mod.capabilities("user-requests") == {"search": "requests"}
+
+
+def test_compiled_mode_detects_duplicate_between_table_and_filesystem(tmp_path, monkeypatch):
+    """静态表与文件系统根撞名 → 同样抛 DuplicateSourceNameError（不静默取一个）。"""
+    _make_source(tmp_path / "user", "user_src", "clash-requests")
+    _set_roots(monkeypatch, tmp_path / "user")
+    monkeypatch.setattr(source_mod, "_is_compiled", lambda: True)
+    monkeypatch.setattr(
+        source_mod,
+        "_compiled_sources",
+        lambda: {"bdir": {"source_name": "clash-requests", "mode": "requests",
+                          "default_config": {"search": {"mode": "requests"}}}},
+    )
+    monkeypatch.setattr(
+        source_mod, "_compiled_dir_by_source", lambda: {"clash-requests": "bdir"}
+    )
+    with pytest.raises(DuplicateSourceNameError):
+        source_mod.list_sources()

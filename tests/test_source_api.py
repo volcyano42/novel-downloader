@@ -87,6 +87,9 @@ def test_compiled_mode_reads_manifest(monkeypatch):
     monkeypatch.setattr(s, "_compiled_sources", lambda: fake_sources)
     monkeypatch.setattr(s, "_compiled_dir_by_source",
                         lambda: {"demo-requests-default": "demo_requests_default"})
+    # 2026-10-26：编译模式改为「静态表 ∪ 文件系统源根」，两表合并后一起可见。
+    # 本用例只验静态表这条路径，故把文件系统根清空。
+    monkeypatch.setattr(s, "_resolve_source_roots", lambda: [])
 
     assert s.list_sources() == ["demo-requests-default"]
     assert s.capabilities("demo-requests-default") == {"search": "requests"}
