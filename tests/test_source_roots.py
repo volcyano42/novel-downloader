@@ -5,6 +5,7 @@
 
 import asyncio
 import os
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,24 @@ import pytest
 from novelbase import source as source_mod
 from novelbase.sources.manifest import DuplicateSourceNameError
 
+
+@contextmanager
+def _reload_shared_with_app_data(monkeypatch, tmp_path):
+    """把 shared.config.APP_DATA 临时指向 tmp_path 并 reload；退出时恢复原状。
+
+    reload 会重算模块级 APP_DATA，必须显式恢复，否则后续用例拿到已删除的临时目录。
+    """
+    import importlib
+
+    import shared.config as shared_config
+
+    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path))
+    importlib.reload(shared_config)
+    try:
+        yield shared_config
+    finally:
+        monkeypatch.delenv("NLD_APP_DATA", raising=False)
+        importlib.reload(shared_config)
 
 def _make_source(root: Path, dirname: str, source_name: str) -> Path:
     """在 root/dirname 下造一个最小可用书源（只有 search 能力）。"""
@@ -116,16 +135,12 @@ def test_capability_module_executed_once_per_root(tmp_path, monkeypatch):
     assert marker.read_text(encoding="utf-8") == "1"
 
 
-def test_shared_registers_user_sources_root(monkeypatch):
+def test_shared_registers_user_sources_root(tmp_path, monkeypatch):
     """shared 层 import 时把 <APP_DATA>/sources 注册为显式源根（novelbase 不认识 app_data）。"""
-    import importlib
-
     monkeypatch.setattr(source_mod, "_EXPLICIT_ROOTS", [])
-    import shared.config as shared_config
-
-    importlib.reload(shared_config)
-    assert shared_config.user_sources_dir() == shared_config.APP_DATA / "sources"
-    assert shared_config.user_sources_dir() in source_mod._EXPLICIT_ROOTS
+    with _reload_shared_with_app_data(monkeypatch, tmp_path) as shared_config:
+        assert shared_config.user_sources_dir() == shared_config.APP_DATA / "sources"
+        assert shared_config.user_sources_dir() in source_mod._EXPLICIT_ROOTS
 
 
 def test_compiled_mode_merges_static_table_with_filesystem_roots(tmp_path, monkeypatch):
@@ -168,15 +183,15 @@ def test_scaffold_writes_into_user_sources_root(tmp_path, monkeypatch):
     """`cli dev new-source` 必须写进用户源根，不能写进已不是源根的 novelbase/sources/。"""
     import importlib
 
-    monkeypatch.setenv("NLD_APP_DATA", str(tmp_path))
-    import shared.config as shared_config
+    with _reload_shared_with_app_data(monkeypatch, tmp_path) as shared_config:
+        import cli.main as cli_main
 
-    importlib.reload(shared_config)
-    import cli.main as cli_main
-
-    importlib.reload(cli_main)
-    cli_main._scaffold_source("demo-requests", ["requests"], write_config=False)
-    assert (shared_config.user_sources_dir() / "demo_requests" / "source.json").is_file()
+        importlib.reload(cli_main)
+        cli_main._scaffold_source("demo-requests", ["requests"], write_config=False)
+        assert (shared_config.user_sources_dir() / "demo_requests" / "source.json").is_file()
+        # 绝不能落到安装包目录里（旧实现的错误位置）
+        pkg_sources = Path(source_mod.__file__).parent / "sources"
+        assert not (pkg_sources / "demo_requests").exists()
 
 
 def test_compiled_table_missing_dir_mapping_raises(monkeypatch):
