@@ -32,7 +32,7 @@ npx tsc --noEmit --project tsconfig.app.json   # 类型检查
 
 - **API v2** 响应格式 `{ok, message, data}`，无分页
 - **novelbase 是预览版**：面向开发者且对外公开，但配置格式与公共 API **允许破坏性变更，不承诺向后兼容**。变更带日期写进 `docs/project/sources.md`；不留旧格式兼容代码。
-- **书源契约** 书源 = `novelbase/sources/{dir}/`，身份在 `source.json`，能力在 `{capability}.py`。
+- **书源契约** 书源 = `{源根}/{dir}/`：官方源随包于 `novelbase/sources/builtin/{dir}/`，用户源在任意源根（默认 `<APP_DATA>/sources/{dir}/`，由 `shared.config` 注册）。身份在 `source.json`，能力在 `{capability}.py`。两类源**结构相同、加载路径相同**（2026-10-26 起，`novelbase/sources/` 只留 `contracts.py` / `manifest.py`）。
   对外 API：`list_sources()` / `get_manifest(name)` / `capabilities(name) -> {capability: mode}` / `resolve(name, capability) -> (fn, mode)`。
   **一个书源只有一个 `mode` 和一套字段**（2026-10-25 起，不再按能力分化：无 `common` / `default_config`）；`sources/{source_name}.yaml` 用户层也是顶层一套字段。
   **能力由文件系统发现**：目录里有哪几个能力 `.py`，就暴露哪几个能力（不在 manifest 里声明）。

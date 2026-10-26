@@ -2,6 +2,13 @@
 
 配置目录 `app_data/config/`（首次运行从 `template/config/` 初始化）。
 
+`app_data/` 下与配置相邻的两个目录需要区分：
+
+| 目录 | 内容 |
+|---|---|
+| `app_data/config/sources/` | 书源**配置**（`{source_name}.yaml`，用户层覆盖） |
+| `app_data/sources/` | 书源**代码**（用户源根，把源目录解压进来即生效，2026-10-26 起） |
+
 ## config.yaml（全局）
 
 ```yaml

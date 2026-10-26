@@ -7,10 +7,11 @@
 
 ## 书源结构
 
-一个书源 = `novelbase/sources/{dir}/` 一层目录：
+一个书源 = `{源根}/{dir}/` 一层目录。官方源随包发行在 `novelbase/sources/builtin/{dir}/`，
+用户源放在任意源根（默认 `<APP_DATA>/sources/{dir}/`）——两者**结构完全相同、加载路径完全相同**。
 
 ```
-novelbase/sources/{dir}/
+{源根}/{dir}/
 ├── __init__.py          ← 空包标记
 ├── source.json          ← 身份 + 出厂配置（见「source.json 规范」）
 ├── search.py            ← 能力文件（按需；文件名 = 函数名 = 能力名）
@@ -19,14 +20,15 @@ novelbase/sources/{dir}/
 └── chapter_content.py
 ```
 
-- **目录名 `{dir}`**：合法标识符（下划线），如 `fanqie_requests_default`，仅在 `import_module` 时使用。
+- **目录名 `{dir}`**：合法标识符（下划线），如 `fanqie_requests_default`，仅用于在源根下定位文件。
 - **`source_name`**：`source.json` 里的唯一 id（连字符），如 `fanqie-requests-default`——
   是全部公共 API、后端/前端/CLI、`sources/{source_name}.yaml` 的键。两者解耦。
-- **`source_name` 全局唯一**（2026-09-27）：内置根与私有根（`NLD_PRIVATE_SOURCES`）
-  是**同一命名空间**，任何两个目录声明同一个 `source_name` 都会在加载期抛
+- **`source_name` 全局唯一**（2026-09-27，2026-10-26 扩展到全部源根）：**所有源根**
+  （env 多根 / `NLD_PRIVATE_SOURCES` / `<APP_DATA>/sources` / 官方 `builtin`）是
+  **同一命名空间**，任何两个目录声明同一个 `source_name` 都会在加载期抛
   `DuplicateSourceNameError`（`ManifestError` 子类），检测点唯一：
-  `novelbase/sources/manifest.py::scan_source_names()`。私有源必须自带独立
-  `source_name`，**不能**作为内置源的替代实现（「同名能力内置优先、内置缺失再用
+  `novelbase/sources/manifest.py::scan_source_names()`。用户源必须自带独立
+  `source_name`，**不能**作为官方源的替代实现（「同名能力内置优先、内置缺失再用
   私有补齐」的旧机制已取消）。
 - **不设 `_common.py`**：各书源自包含，共享逻辑内联进需要它的能力文件（接受书源间重复的代价）。
 
@@ -36,7 +38,7 @@ novelbase/sources/{dir}/
 
 | 函数 | 返回 |
 |------|------|
-| `list_sources()` | 全部书源 `source_name`（内置 + 私有，排序；重名抛 `DuplicateSourceNameError`） |
+| `list_sources()` | 全部书源 `source_name`（所有源根合并，排序；重名抛 `DuplicateSourceNameError`） |
 | `get_manifest(source_name)` | 该书的 `source.json` 内容，归一化后带 `default_config = {能力: 同一套完整字段}`（能力按目录里的 `.py` 发现）；非编译模式同时校验能力文件存在性 |
 | `capabilities(source_name)` | `{capability: mode}`，如 `{"search": "requests", "novel_info": "requests", ...}`；未知书源或声明非法返回 `{}`（**撞名例外**：直接抛 `DuplicateSourceNameError`，不吞成空能力） |
 | `resolve(source_name, capability)` | `(函数, 该能力的 mode)`；动态 import 并校验必需参数名 |
@@ -168,20 +170,28 @@ Novel.id = sha256(url)[:32]      # 32 位 hex，无前缀
   `BOOK_URL_TEMPLATE` / `get_source_for_id` 全部删除——**core 不再承载站点知识**。
 - `resolve_book_url(raw)` 仅接受 http(s) 输入，无法从 id 反推 url。
 
-## 私有源隔离（`NLD_PRIVATE_SOURCES`）
+## 源根（多根发现，2026-10-26）
 
-环境变量 `NLD_PRIVATE_SOURCES` 指向外部目录，镜像 `sources/{dir}/` 结构。
-`list_sources()` / `capabilities()` 合并内置与私有书源（私有目录在包外，走
-`importlib.util.spec_from_file_location` 加载）。
-**私有源须自带独立 `source_name`**：内置根与私有根是同一命名空间，任何重名（含私有源
-复用内置 id）都会在加载期抛 `DuplicateSourceNameError`——原「同名能力内置优先、
-内置缺失再用私有补齐」的机制已于 **2026-09-27 取消**。已有复用内置 id 的私有目录，
-升级后需改其 `source.json` 的 `source_name`（目录名可不变）并同步
-`app_data/config/sources/{新名}.yaml`。
+书源**不再要求待在 `novelbase/sources/` 包内**。发现层按有序列表扫源根，所有根下的源
+走**同一条加载路径**（`importlib.util.spec_from_file_location`），包内包外无差别：
+
+| 顺序 | 源根 | 用途 |
+|---|---|---|
+| 1 | `NLD_SOURCE_ROOTS`（`os.pathsep` 分隔，可多根） | 显式指定（CI、多套源切换） |
+| 2 | `NLD_PRIVATE_SOURCES` | 旧变量，保留为追加根（兼容既有用法） |
+| 3 | `add_source_root()` 注入 | `<APP_DATA>/sources` 由 `shared.config` 在 import 时注册 |
+| 4 | `novelbase/sources/builtin/` | 官方源，随 wheel 发行 |
+
+- **顺序不改变语义**：撞名一律抛 `DuplicateSourceNameError`，不退化成一占先得；顺序只影响报错消息里的先占者/后来者。
+- **`novelbase` 不认识 `app_data`**：它是可 `pip install` 的纯库，不能反向依赖 `shared`。用户根由 `shared.config.user_sources_dir()` 注册——直接用 novelbase 的第三方用户拿到的是「官方 `builtin` + env 根」。
+- **用户源安装**：把源目录解压进 `<APP_DATA>/sources/`（该目录由 `init_config` 首次运行创建），**无需环境变量、无需重装**。
+- **编译模式（Nuitka）是已知特例**：产物里 `builtin/` 下的 `.py` 已编译、文件系统无源文件，只能读 `utils/_manifest.py` 静态表（`python -m novelbase.utils.build_manifest` 生成，只覆盖 `builtin`）；用户源仍在文件系统里照常加载。两张表合并后才查撞名。
+- **改源文件内容需重启进程才生效**（模块按「根哈希 + 目录名 + 能力」缓存在 `sys.modules`）；但增删源目录是即时生效的（目录扫描不缓存）。
 
 ```
-$NLD_PRIVATE_SOURCES/
-└── fanqie_api_custom/       ← 镜像 sources/{dir}/ 结构
+<APP_DATA>/sources/
+└── my_source/               ← 结构镜像官方源
+    ├── __init__.py
     ├── source.json
     ├── search.py
     ├── novel_info.py
@@ -189,5 +199,5 @@ $NLD_PRIVATE_SOURCES/
     └── chapter_content.py
 ```
 
-- 未设置环境变量时行为完全不变；目录不存在时静默跳过。
-- 用途：公开仓库不含危险的逆向/破解实现，本地开发设好环境变量即可使用全部功能。
+- 根不存在 / 不是目录 / `_` 开头的子目录 → 静默跳过。
+- 用途：官方仓库只保留能公开的源；敏感实现（逆向/破解）放用户源根，不进任何仓库。

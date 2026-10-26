@@ -49,13 +49,13 @@ exclude = [
     # 未公开书源：扁平化后书源是一层目录（2026-09-30 修正旧的四层路径）。
     # 旧路径（如 `qidian/**`）在 check_public.py 的 fnmatch 下匹配不到任何文件，
     # 会让这些源被判成「白名单必需内容」——闸门反而报「缺失」指挥你补进 public。
-    "novelbase/sources/qidian_requests_default/**",
-    "novelbase/sources/qidian_browser_default/**",
-    "novelbase/sources/qimao_requests_default/**",
-    "novelbase/sources/qimao_browser_default/**",
-    "novelbase/sources/qimao_api_rain/**",
-    "novelbase/sources/92xs_requests_default/**",
-    "novelbase/sources/fanqie_api_rain/**",
+    "novelbase/sources/builtin/qidian_requests_default/**",
+    "novelbase/sources/builtin/qidian_browser_default/**",
+    "novelbase/sources/builtin/qimao_requests_default/**",
+    "novelbase/sources/builtin/qimao_browser_default/**",
+    "novelbase/sources/builtin/qimao_api_rain/**",
+    "novelbase/sources/builtin/92xs_requests_default/**",
+    "novelbase/sources/builtin/fanqie_api_rain/**",
     # fanqie_api_oiapi 2026-10-14 移出排除：它是公开第三方服务（https://oiapi.net/api/FqRead）的
     # 封装，key 由用户在 sources/*.yaml 自备（仓库内为空占位），非逆向/破解实现 —— 用户决定公开
     "novelbase/utils/_manifest.py",
@@ -63,6 +63,7 @@ exclude = [
     "frontend/dist/**",
     # 内部迁移工具（与 check_public.py 配合；public 不需要它）
     "scripts/migrate_public.py",
+    "scripts/migrate_sources_to_builtin.py",
     "docs/superpowers/**",
     "docs/session-prompt.md",
     "docs/learning/**",
@@ -76,6 +77,7 @@ exclude = [
     "tests/test_browser_sources.py",
     # 2026-10-14 按 public 侧实跑补齐：public 只保留 fanqie 两个源，以下文件整体失败（59 用例）
     "tests/test_source_layout.py",
+    "tests/test_migrate_sources_to_builtin.py",
     # test_source_oiapi_contract.py 2026-10-14 随 oiapi 源一起进入白名单（该源已公开）
     "tests/test_backend_download_routes.py",
     "tests/test_backend_config_routes.py",
