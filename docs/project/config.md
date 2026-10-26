@@ -144,6 +144,9 @@ key 是 `novel_id`（`sha256(url)[:32]`），默认值一律省略：
 - 并发保护是**进程内** `threading.Lock`（backend 单进程，`uvicorn.run(app)` 无
   workers）。backend 与 `cli.py` 同时写会后者覆盖前者 —— 单人项目接受这个代价
 - `app_data/storage/` 下只剩 `novels/`（每本书一个 `<id>.db`）
+- **`books.yaml` 被手改坏时没有上层兜底**：书架接口会报错，**下载任务也会因为
+  `set_novel_source()` 抛 `LibraryCorruptError` 而整体失败**。这是「宁可报错也不
+  静默覆盖」的代价 —— 修好文件（或从 `books.yaml.bak` 恢复）后重跑即可
 - 从旧版升级：`python scripts/migrate_user_data.py`（默认 dry-run，`--apply` 才写）
 
 ## formats/*.yaml

@@ -43,6 +43,9 @@ def _read_title(novels_dir: Path, novel_id: str) -> str | None:
     return row[0] if row and row[0] else None
 
 
+_CHECKPOINT_BUSY_TIMEOUT_MS = 2000   # checkpoint 最多等这么久就报 busy（库只几十 KB）
+
+
 def _collect(db_path: Path, novels_dir: Path, *, checkpoint: bool) -> tuple[dict, list[dict], int]:
     """读旧库 → (books, history, bookmarks_rowcount)。
 
@@ -59,7 +62,7 @@ def _collect(db_path: Path, novels_dir: Path, *, checkpoint: bool) -> tuple[dict
         if checkpoint:
             # checkpoint 最多等 2s 就放弃：库只有几十 KB，等这么久还没拿到锁说明
             # 确实有别的进程在用，早点报错比静默写出残缺备份好
-            conn.execute("PRAGMA busy_timeout = 2000")
+            conn.execute(f"PRAGMA busy_timeout = {_CHECKPOINT_BUSY_TIMEOUT_MS}")
             busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
             if busy:
                 raise RuntimeError(
@@ -111,8 +114,10 @@ def _collect(db_path: Path, novels_dir: Path, *, checkpoint: bool) -> tuple[dict
 
         try:
             bookmarks = conn.execute("SELECT COUNT(*) FROM bookmarks").fetchone()[0]
-        except sqlite3.Error:
-            bookmarks = 0            # 老库里没这张表
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc).lower():
+                raise           # locked / corrupt 不能当成「没有这张表」
+            bookmarks = 0       # 很老的库里没这张表
     finally:
         conn.close()
 
@@ -142,16 +147,18 @@ def migrate(app_data: Path, apply: bool = False, force: bool = False) -> dict:
         result["skipped"] = f"旧库不存在：{db_path}"
         return result
 
+    # 先判目标，再读旧库：--apply 但目标已存在时本来就啥都不做，
+    # 不该先去对旧库做 TRUNCATE checkpoint（旧库被占时用户会看到莫名其妙的 busy 错误）
+    if apply and not force and (books_path.exists() or history_path.exists()):
+        result["skipped"] = f"目标已存在（要覆盖请加 --force）：{library_dir}"
+        return result
+
     books, history, bookmarks = _collect(db_path, novels_dir, checkpoint=apply)
     result["books"] = len(books)
     result["history"] = len(history)
     result["bookmarks_dropped"] = bookmarks
 
     if not apply:
-        return result
-
-    if not force and (books_path.exists() or history_path.exists()):
-        result["skipped"] = f"目标已存在（要覆盖请加 --force）：{library_dir}"
         return result
 
     library_dir.mkdir(parents=True, exist_ok=True)

@@ -186,6 +186,7 @@ def test_id_never_collides_when_file_changed_externally(lib, monkeypatch):
 
 
 def test_empty_keyword_is_ignored(lib):
-    """空关键词写进去既读不出也删不掉 —— 直接不记。"""
+    """空关键词写进去既读不出也删不掉 —— 直接不记（连文件都不该建）。"""
     lib.add_search_history("a", "")
     assert lib.get_search_history() == []
+    assert not lib.HISTORY_PATH.exists()
