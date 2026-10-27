@@ -295,7 +295,10 @@ class LocalStorage(BaseStorage):
             novel = self.load_meta(novel_id)
             return (novel.cover,) if novel and novel.cover else ()
         ch = self.load_chapter(novel_id, owner_id)
-        return tuple(ch.images) if ch else ()
+        if not ch:
+            return ()
+        # 与 SQLite 的 ORDER BY insert_pos 对齐：按插入位置排序，None（无位置）排最前
+        return tuple(sorted(ch.images, key=lambda i: i.insert if i.insert is not None else -1))
 
 
 # ═══════════════════════════════════════════════════════════════════

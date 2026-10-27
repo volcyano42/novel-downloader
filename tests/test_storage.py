@@ -5,7 +5,7 @@ import gc
 import tempfile
 from pathlib import Path
 
-from novelbase.core.storage import SQLiteStorage
+from novelbase.core.storage import SQLiteStorage, LocalStorage
 from novelbase.core.options import StorageOptions
 from novelbase.models.novel import Novel, Chapter, Illustration
 
@@ -195,3 +195,16 @@ class TestLoadIllustrations:
     def test_missing_returns_empty(self):
         store = _make_storage()
         assert store.load_illustrations("n1", "chapter", "no_such") == ()
+
+    def test_localstorage_ordered_by_insert(self, tmp_path):
+        store = LocalStorage(str(tmp_path))
+        novel = _make_novel()
+        store.save_meta(novel)
+        ch = _make_chapter("ch1", 1)
+        ch.images = (
+            Illustration(raw_data=b"B", insert=1),
+            Illustration(raw_data=b"A", insert=0),
+        )
+        store.save_chapter(novel, ch)
+        imgs = store.load_illustrations("n1", "chapter", "ch1")
+        assert [i.insert for i in imgs] == [0, 1]
