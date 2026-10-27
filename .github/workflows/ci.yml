@@ -105,7 +105,7 @@ jobs:
           from novelbase.sources.manifest import scan_source_names
           assert not novelbase.__file__.startswith(sys.argv[1]), novelbase.__file__
           from novelbase import list_sources
-          expected = len(scan_source_names([Path(_pkg.__file__).resolve().parent]))
+          expected = len(scan_source_names([Path(_pkg.__file__).resolve().parent / "builtin"]))
           sources = list_sources()
           assert len(sources) == expected, f'wheel 缺书源清单（source.json 未打包）: {sources}'
           print(f'wheel 内书源 {len(sources)}/{expected}:', sources)
