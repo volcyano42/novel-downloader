@@ -20,9 +20,23 @@ def detect_encoding(content: bytes) -> str:
         result = chardet.detect(content)
         enc = result.get("encoding")
         if enc:
-            # chardet 返回 GB2312 时用 GB18030（超集）避免生僻字乱码
-            if enc.lower() in ("gb2312", "gbk"):
+            enc_lower = enc.lower()
+            # chardet 返回 GB2312/GBK 时用 GB18030（超集）避免生僻字乱码
+            if enc_lower in ("gb2312", "gbk"):
                 return "GB18030"
+            if enc_lower in ("utf-8", "utf_8", "utf8", "gb18030", "big5"):
+                return enc
+            # chardet 对短文本可能误判（confidence 低且非中文/UTF-8），如把 GBK
+            # 短文本判成 IBM855。低 confidence 时用 GB18030 试解码，成功且含 CJK
+            # 字符则认定为中文。
+            if result.get("confidence", 1.0) < 0.5:
+                try:
+                    text = content.decode("gb18030")
+                except UnicodeDecodeError:
+                    pass
+                else:
+                    if any("\u4e00" <= ch <= "\u9fff" for ch in text):
+                        return "GB18030"
             return enc
     except ImportError:
         pass
