@@ -73,30 +73,36 @@ def _write_image(base_dir: Path, raw_data: bytes, counter: int, options: IMGExpo
 
 
 def _convert_format(raw_data: bytes, target_fmt: str) -> bytes:
-    try:
-        from io import BytesIO
+    from io import BytesIO
 
+    try:
         from PIL import Image
-        from pillow_heif import register_heif_opener
-        register_heif_opener()
-        src = Image.open(BytesIO(raw_data))
-        buf = BytesIO()
-        save_kwargs: dict[str, Any] = {}
-        if target_fmt == "jpeg":
-            if src.mode in ("RGBA", "LA", "P"):
-                bg = Image.new("RGB", src.size, (255, 255, 255))
-                bg.paste(src, mask=src.split()[-1] if src.mode == "RGBA" else None)
-                src = bg
-            save_kwargs["quality"] = 95
-        elif target_fmt == "webp":
-            save_kwargs["quality"] = 90
-        src.save(buf, format=target_fmt.upper(), **save_kwargs)
-        return buf.getvalue()
     except ImportError:
         import logging
         logging.getLogger("novelbase.exporters.img").warning(
             "Pillow 未安装，跳过格式转换，保持原格式")
         return raw_data
+
+    # HEIF 支持是可选的：装不上只影响 HEIC 输入，不影响 PNG/JPEG/WebP 转换
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+    except ImportError:
+        pass
+
+    src = Image.open(BytesIO(raw_data))
+    buf = BytesIO()
+    save_kwargs: dict[str, Any] = {}
+    if target_fmt == "jpeg":
+        if src.mode in ("RGBA", "LA", "P"):
+            bg = Image.new("RGB", src.size, (255, 255, 255))
+            bg.paste(src, mask=src.split()[-1] if src.mode == "RGBA" else None)
+            src = bg
+        save_kwargs["quality"] = 95
+    elif target_fmt == "webp":
+        save_kwargs["quality"] = 90
+    src.save(buf, format=target_fmt.upper(), **save_kwargs)
+    return buf.getvalue()
 
 
 def _sanitize_filename(name: str) -> str:
