@@ -15,6 +15,7 @@ import sqlite3
 import threading
 from collections.abc import Sequence
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import yaml
