@@ -40,3 +40,68 @@ def test_cover_image_missing_404(monkeypatch):
     with pytest.raises(HTTPException) as e:
         asyncio.run(storage_router.get_cover_image("n1"))
     assert e.value.status_code == 404
+
+
+def _chapter_store(imgs):
+    class S(FakeStore):
+        def load_illustrations(self, novel_id, owner_type, owner_id):
+            if owner_type == "chapter":
+                return imgs.get(owner_id, ())
+            return ()
+    return S({})
+
+
+def test_image_length(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG), Illustration(raw_data=PNG))}))
+    assert asyncio.run(storage_router.get_chapter_image_length("n1", "ch1")) == 2
+
+
+def test_image_n_returns_bytes(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG), Illustration(raw_data=b"OTHER"))}))
+    resp = asyncio.run(storage_router.get_chapter_image("n1", "ch1", 1))
+    assert resp.body == b"OTHER"
+
+
+def test_image_n_hash_is_string(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG),)}))
+    got = asyncio.run(storage_router.get_chapter_image_hash("n1", "ch1", 0))
+    assert isinstance(got, str) and got == hashlib.sha256(PNG).hexdigest()[:32]
+
+
+def test_image_n_out_of_range_404(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG),)}))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(storage_router.get_chapter_image("n1", "ch1", 5))
+    assert e.value.status_code == 404
+
+
+def test_image_n_empty_raw_404(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=None),)}))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(storage_router.get_chapter_image_hash("n1", "ch1", 0))
+    assert e.value.status_code == 404
+
+
+def test_images_returns_json_list(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG, alt="a"),)}))
+    rows = asyncio.run(storage_router.get_chapter_images("n1", "ch1"))
+    assert len(rows) == 1 and rows[0]["alt"] == "a"
+
+
+def test_images_hash_returns_list(monkeypatch):
+    monkeypatch.setattr(storage_router, "_get_storage",
+        lambda: _chapter_store({"ch1": (Illustration(raw_data=PNG), Illustration(raw_data=b"B"))}))
+    got = asyncio.run(storage_router.get_chapter_images_hash("n1", "ch1"))
+    assert got == [hashlib.sha256(PNG).hexdigest()[:32], hashlib.sha256(b"B").hexdigest()[:32]]
+
+
+def test_image_length_route_before_image_n():
+    paths = [getattr(r, "path", "") for r in storage_router.router.routes]
+    assert paths.index("/api/v2/storage/novel/{novel_id}/chapter/{chapter_id}/image/length") < \
+           paths.index("/api/v2/storage/novel/{novel_id}/chapter/{chapter_id}/image/{n}")

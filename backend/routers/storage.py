@@ -246,3 +246,42 @@ async def get_cover_image_hash(novel_id: str):
     if not imgs or not imgs[0].raw_data:
         raise HTTPException(404, "封面不存在")
     return _image_hash(imgs[0].raw_data)
+
+
+@router.get("/novel/{novel_id}/chapter/{chapter_id}/image/length")
+async def get_chapter_image_length(novel_id: str, chapter_id: str):
+    imgs = tuple(i for i in _get_storage().load_illustrations(novel_id, "chapter", chapter_id)
+                 if i and i.raw_data)
+    return len(imgs)
+
+
+@router.get("/novel/{novel_id}/chapter/{chapter_id}/image/{n}")
+async def get_chapter_image(novel_id: str, chapter_id: str, n: int):
+    imgs = tuple(i for i in _get_storage().load_illustrations(novel_id, "chapter", chapter_id)
+                 if i and i.raw_data)
+    if n < 0 or n >= len(imgs):
+        raise HTTPException(404, "插图不存在")
+    return _image_response(imgs[n])
+
+
+@router.get("/novel/{novel_id}/chapter/{chapter_id}/image/{n}/hash")
+async def get_chapter_image_hash(novel_id: str, chapter_id: str, n: int):
+    imgs = tuple(i for i in _get_storage().load_illustrations(novel_id, "chapter", chapter_id)
+                 if i and i.raw_data)
+    if n < 0 or n >= len(imgs):
+        raise HTTPException(404, "插图不存在")
+    return _image_hash(imgs[n].raw_data)
+
+
+@router.get("/novel/{novel_id}/chapter/{chapter_id}/images")
+async def get_chapter_images(novel_id: str, chapter_id: str):
+    imgs = tuple(i for i in _get_storage().load_illustrations(novel_id, "chapter", chapter_id)
+                 if i and i.raw_data)
+    return [img.to_json() for img in imgs]
+
+
+@router.get("/novel/{novel_id}/chapter/{chapter_id}/images/hash")
+async def get_chapter_images_hash(novel_id: str, chapter_id: str):
+    imgs = tuple(i for i in _get_storage().load_illustrations(novel_id, "chapter", chapter_id)
+                 if i and i.raw_data)
+    return [_image_hash(img.raw_data) for img in imgs]
