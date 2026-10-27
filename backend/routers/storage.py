@@ -1,8 +1,9 @@
 """Storage 路由。"""
+import hashlib
 from base64 import b64decode, b64encode
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from backend.schemas import BackendSwitch, NovelMeta, ChapterData, ChapterBrief, SetSourceRequest
 from novelbase.core.options import StorageOptions
@@ -212,3 +213,36 @@ async def get_chapter(novel_id: str, chapter_id: str, include_images: bool = Que
 async def delete_chapter(novel_id: str, chapter_id: str):
     _get_storage().delete_chapter(novel_id, chapter_id)
     return {"status": "deleted"}
+
+
+# ── 插图二进制流 / hash ────────────────────────────────────────
+
+_MIME = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp",
+         "gif": "image/gif", "bmp": "image/bmp", "tiff": "image/tiff",
+         "heic": "image/heic", "heif": "image/heif"}
+
+
+def _image_hash(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()[:32]
+
+
+def _image_response(img: Illustration) -> Response:
+    fmt = img.image_format
+    mime = _MIME.get(fmt, "application/octet-stream") if fmt else "application/octet-stream"
+    return Response(content=img.raw_data, media_type=mime)
+
+
+@router.get("/novel/{novel_id}/meta/image")
+async def get_cover_image(novel_id: str):
+    imgs = _get_storage().load_illustrations(novel_id, "novel", novel_id)
+    if not imgs or not imgs[0].raw_data:
+        raise HTTPException(404, "封面不存在")
+    return _image_response(imgs[0])
+
+
+@router.get("/novel/{novel_id}/meta/image/hash")
+async def get_cover_image_hash(novel_id: str):
+    imgs = _get_storage().load_illustrations(novel_id, "novel", novel_id)
+    if not imgs or not imgs[0].raw_data:
+        raise HTTPException(404, "封面不存在")
+    return _image_hash(imgs[0].raw_data)
