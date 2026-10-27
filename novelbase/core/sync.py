@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 
@@ -82,7 +83,7 @@ class RemoteClient:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout, follow_redirects=True)
 
-    async def __aenter__(self) -> "RemoteClient":
+    async def __aenter__(self) -> RemoteClient:
         return self
 
     async def __aexit__(self, *exc: Any) -> None:
