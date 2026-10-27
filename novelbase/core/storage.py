@@ -123,6 +123,11 @@ class BaseStorage(ABC):
         """返回已下载（content 非空）的章节 id 集合，用于断点续传。"""
         ...
 
+    @abstractmethod
+    def load_illustrations(self, novel_id: str, owner_type: str, owner_id: str) -> tuple[Illustration, ...]:
+        """加载某所有者（novel 封面 / chapter 插图）的全部插图，按 insert_pos 排序。"""
+        ...
+
 
 class LocalStorage(BaseStorage):
     """本地 JSON 文件存储。
@@ -284,6 +289,13 @@ class LocalStorage(BaseStorage):
             except (json.JSONDecodeError, KeyError):
                 pass
         return result
+
+    def load_illustrations(self, novel_id: str, owner_type: str, owner_id: str) -> tuple[Illustration, ...]:
+        if owner_type == "novel":
+            novel = self.load_meta(novel_id)
+            return (novel.cover,) if novel and novel.cover else ()
+        ch = self.load_chapter(novel_id, owner_id)
+        return tuple(ch.images) if ch else ()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -486,6 +498,11 @@ class SQLiteStorage(BaseStorage):
             Illustration(raw_data=r[3], alt=r[0], insert=r[2], url=r[1])
             for r in rows
         )
+
+    def load_illustrations(self, novel_id: str, owner_type: str, owner_id: str) -> tuple[Illustration, ...]:
+        if not os.path.exists(self._novel_path(novel_id)):
+            return ()
+        return self._load_illustrations(novel_id, owner_type, owner_id)
 
     # ── 章节 ──
 

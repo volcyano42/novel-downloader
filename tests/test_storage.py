@@ -7,7 +7,7 @@ from pathlib import Path
 
 from novelbase.core.storage import SQLiteStorage
 from novelbase.core.options import StorageOptions
-from novelbase.models.novel import Novel, Chapter
+from novelbase.models.novel import Novel, Chapter, Illustration
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────
@@ -166,3 +166,32 @@ class TestDelete:
     def test_delete_nonexistent_no_error(self):
         store = _make_storage()
         store.delete_novel("no_such")  # 不应抛异常
+
+
+# ── 插图（load_illustrations） ─────────────────────────────────
+
+class TestLoadIllustrations:
+    def test_cover_zero_or_one(self):
+        store = _make_storage()
+        assert store.load_illustrations("n1", "novel", "n1") == ()
+        novel = _make_novel()
+        novel.cover = Illustration(raw_data=b"\x89PNG\r\n\x1a\n", alt="c", insert=0)
+        store.save_meta(novel)
+        imgs = store.load_illustrations("n1", "novel", "n1")
+        assert len(imgs) == 1 and imgs[0].alt == "c"
+
+    def test_chapter_ordered_by_insert(self):
+        store = _make_storage()
+        novel = _make_novel(); store.save_meta(novel)
+        ch = _make_chapter("ch1", 1)
+        ch.images = (
+            Illustration(raw_data=b"B", insert=1),
+            Illustration(raw_data=b"A", insert=0),
+        )
+        store.save_chapter(novel, ch)
+        imgs = store.load_illustrations("n1", "chapter", "ch1")
+        assert [i.insert for i in imgs] == [0, 1]
+
+    def test_missing_returns_empty(self):
+        store = _make_storage()
+        assert store.load_illustrations("n1", "chapter", "no_such") == ()
